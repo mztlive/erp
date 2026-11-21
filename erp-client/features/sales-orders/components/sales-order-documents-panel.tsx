@@ -1,15 +1,31 @@
 "use client"
 
-import { DocumentSection } from "@/components/business"
+import { DetailWorkspaceSection } from "@/components/business"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { SalesOrderContractSupplement } from "@/features/sales-orders/components/sales-order-contract-supplement"
 import { SalesOrderEvidenceAttachments } from "@/features/sales-orders/components/sales-order-evidence-attachments"
 
-function ContractField({ label, value }: { label: string; value: string }) {
+function ContractField({
+    label,
+    value,
+    numeric,
+}: {
+    label: string
+    value: string
+    numeric?: boolean
+}) {
     return (
-        <div className="min-w-0">
-            <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd className="mt-1 break-words text-body-compact">
+        <div className="min-w-0 space-y-1">
+            <dt className="text-xs font-medium text-muted-foreground">
+                {label}
+            </dt>
+            <dd
+                className={
+                    numeric
+                        ? "num break-words text-body-compact text-foreground"
+                        : "break-words text-body-compact text-foreground"
+                }
+            >
                 {value || "—"}
             </dd>
         </div>
@@ -30,31 +46,33 @@ export function SalesOrderDocumentsPanel({
               fileName: "开单凭证",
           }))
     return (
-        <div className="space-y-6">
-            <DocumentSection
+        <>
+            <DetailWorkspaceSection
+                width="form"
                 title="销售合同"
-                className="border-0 py-0 [&_h2]:text-body-compact [&>div:last-child]:pt-3"
-                description={
+                subtitle={
                     hasContract
                         ? "合同条款随销售版本锁定，补录合同不会改写历史版本。"
                         : evidenceFiles.length
                           ? "本单未关联合同，以开单凭证作为开单依据。"
                           : "本单尚未关联合同或归档开单凭证。"
                 }
-                action={<SalesOrderContractSupplement order={order} />}
+                actions={<SalesOrderContractSupplement order={order} />}
             >
                 {hasContract ? (
-                    <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+                    <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
                         <ContractField
                             label="合同编号"
                             value={
                                 order.contractNumber ||
                                 order.contractRevisionLabel
                             }
+                            numeric
                         />
                         <ContractField
                             label="合同修订"
                             value={order.contractRevisionLabel}
+                            numeric
                         />
                         <ContractField
                             label="合同客户"
@@ -68,11 +86,12 @@ export function SalesOrderDocumentsPanel({
                         当前销售版本未关联合同。
                     </p>
                 )}
-            </DocumentSection>
+            </DetailWorkspaceSection>
+
             <SalesOrderEvidenceAttachments
                 salesOrderId={order.id}
                 files={evidenceFiles}
             />
-        </div>
+        </>
     )
 }

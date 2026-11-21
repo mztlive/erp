@@ -28,7 +28,7 @@ import {
     ShoppingCartIcon,
     TicketIcon,
 } from "lucide-react"
-import { MoneyValue } from "@/components/business"
+import { MoneyValue, detailWorkspaceStyles } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
@@ -131,8 +131,11 @@ function Step({ step, data }: { step: ProcessStep; data: DiagramData }) {
                 {data.canOpen(step) ? (
                     <Button
                         id={`${data.prefix}-${step.id}-open`}
-                        className="nodrag nopan h-7 text-xs"
-                        variant="outline"
+                        className={cn(
+                            "nodrag nopan h-7 text-xs",
+                            detailWorkspaceStyles.subtleButton,
+                        )}
+                        variant="ghost"
                         size="sm"
                         aria-haspopup={
                             step.groups.length ? "dialog" : undefined
@@ -217,8 +220,9 @@ function ProcessNode({ id, data }: NodeProps<DiagramNode>) {
                 {data.canOpen(root) ? (
                     <Button
                         id={`${data.prefix}-sales-open`}
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
+                        className={detailWorkspaceStyles.subtleButton}
                         onClick={() => data.onOpen(root)}
                     >
                         查看审批
@@ -238,7 +242,7 @@ function ProcessNode({ id, data }: NodeProps<DiagramNode>) {
     return (
         <div
             ref={nodeRef}
-            className="grid min-h-[140px] items-start gap-x-4 border-t border-border/70 bg-background py-5"
+            className="grid min-h-[140px] items-start gap-x-4 border-t border-border/60 bg-card py-5"
             style={{
                 width: data.laneWidth,
                 gridTemplateColumns:
@@ -252,7 +256,7 @@ function ProcessNode({ id, data }: NodeProps<DiagramNode>) {
                 className="invisible"
                 style={{ top: 43 }}
             />
-            <div className="flex w-36 shrink-0 items-center gap-2 rounded-lg bg-muted/70 px-3 py-3 text-body-compact font-semibold">
+            <div className="flex w-36 shrink-0 items-center gap-2 rounded-lg bg-muted/45 px-3 py-3 text-body-compact font-semibold text-foreground">
                 <Icon className="size-5" aria-hidden="true" />
                 {data.lane.title}
             </div>
@@ -473,7 +477,7 @@ export function SalesOrderProcessDiagram({
                     当前无权读取交付明细；交付与验收节点仅展示已确认的总体状态。
                 </p>
             ) : null}
-            <div className="flex items-start gap-2 rounded-lg bg-muted/60 px-4 py-3 text-xs leading-6">
+            <div className="flex items-start gap-2 rounded-lg bg-muted/35 px-4 py-3 text-xs leading-6">
                 <InfoIcon
                     className="mt-1 size-4 shrink-0 text-muted-foreground"
                     aria-hidden="true"

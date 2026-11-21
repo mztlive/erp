@@ -1,9 +1,8 @@
 "use client"
 
-import { ArrangementButton } from "@/features/delivery-arrangements/components/arrangement-button"
-import { PermissionGuard } from "@/features/auth/components/permission-guard"
-
 import { ChevronDownIcon, FilePenLineIcon } from "lucide-react"
+
+import { detailWorkspaceStyles } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Popover,
@@ -11,6 +10,8 @@ import {
     PopoverTitle,
     PopoverTrigger,
 } from "@/components/ui/popover"
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+import { ArrangementButton } from "@/features/delivery-arrangements/components/arrangement-button"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { SalesOrderCancelApprovalButton } from "@/features/sales-orders/components/sales-order-cancel-approval-button"
 import { SalesOrderHandoverButton } from "@/features/sales-orders/components/sales-order-handover-button"
@@ -47,7 +48,7 @@ export function SalesOrderDetailSecondaryActions({
     )
 
     return (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
             {order.currentRevisionNo &&
             order.nature !== "card_voucher" &&
             !["已关闭", "已作废"].includes(order.primaryStatus.label) ? (
@@ -56,16 +57,64 @@ export function SalesOrderDetailSecondaryActions({
                         scope="sales-orders"
                         objectId={order.id}
                         label="收货安排"
+                        variant="ghost"
+                        className={detailWorkspaceStyles.subtleButton}
                     />
                 </PermissionGuard>
             ) : null}
+            <Popover>
+                <PopoverTrigger
+                    id="sales-orders-detail-more-actions"
+                    render={
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            className={detailWorkspaceStyles.quietButton}
+                        />
+                    }
+                >
+                    更多
+                    <ChevronDownIcon
+                        aria-hidden="true"
+                        data-icon="inline-end"
+                    />
+                </PopoverTrigger>
+                <PopoverContent
+                    align="end"
+                    keepMounted
+                    className="w-48 gap-1.5 p-2"
+                >
+                    <PopoverTitle className="px-2 pt-1 text-xs font-medium text-muted-foreground">
+                        销售单操作
+                    </PopoverTitle>
+                    <div className="flex flex-col gap-0.5">
+                        <SalesOrderCancelApprovalButton
+                            order={order}
+                            onResult={onApprovalResult}
+                            triggerVariant="ghost"
+                            triggerClassName="w-full justify-start font-normal"
+                        />
+                        <SalesOrderHandoverButton
+                            order={order}
+                            onResult={onApprovalResult}
+                            triggerVariant="ghost"
+                            triggerClassName="w-full justify-start font-normal"
+                        />
+                    </div>
+                </PopoverContent>
+            </Popover>
             {showChangeAction ? (
                 <PermissionGuard permission={"sales_change_order:create"}>
                     <Button
                         id="sales-orders-detail-start-change"
                         type="button"
                         size="sm"
-                        variant="outline"
+                        variant={canContinue ? "default" : "ghost"}
+                        className={
+                            canContinue
+                                ? "px-3.5"
+                                : detailWorkspaceStyles.subtleButton
+                        }
                         disabled={
                             (!startChangeGate.enabled && !canContinue) ||
                             changePending
@@ -85,33 +134,6 @@ export function SalesOrderDetailSecondaryActions({
                     </Button>
                 </PermissionGuard>
             ) : null}
-            <Popover>
-                <PopoverTrigger
-                    id="sales-orders-detail-more-actions"
-                    render={<Button size="sm" variant="outline" />}
-                >
-                    更多
-                    <ChevronDownIcon
-                        aria-hidden="true"
-                        data-icon="inline-end"
-                    />
-                </PopoverTrigger>
-                <PopoverContent align="end" keepMounted className="w-56 gap-3">
-                    <PopoverTitle className="text-section-title font-semibold tracking-tight">
-                        销售单操作
-                    </PopoverTitle>
-                    <div className="flex flex-col gap-2">
-                        <SalesOrderCancelApprovalButton
-                            order={order}
-                            onResult={onApprovalResult}
-                        />
-                        <SalesOrderHandoverButton
-                            order={order}
-                            onResult={onApprovalResult}
-                        />
-                    </div>
-                </PopoverContent>
-            </Popover>
         </div>
     )
 }

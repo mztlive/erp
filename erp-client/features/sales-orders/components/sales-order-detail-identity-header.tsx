@@ -3,11 +3,13 @@
 import * as React from "react"
 
 import {
-    DetailPageHeader,
-    type DetailPageHeaderProps,
-    MetricItem,
-    MetricStrip,
+    DetailWorkspaceChrome,
+    DetailWorkspaceDirtyBadge,
+    DetailWorkspaceMeta,
+    DetailWorkspaceMetricItem,
+    DetailWorkspaceMetrics,
     MoneyValue,
+    type DetailWorkspaceBackLink,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -22,139 +24,116 @@ export function SalesOrderIdentityHeader({
     identityOnly = false,
     primaryAction,
     secondaryActions,
+    tabs,
 }: {
-    back?: DetailPageHeaderProps["back"]
+    back?: DetailWorkspaceBackLink
     navigationMeta?: React.ReactNode
     order: SalesOrderDetailView
     identityOnly?: boolean
     primaryAction?: React.ReactNode
     secondaryActions?: React.ReactNode
+    tabs?: React.ReactNode
 }) {
     return (
-        <DetailPageHeader
+        <DetailWorkspaceChrome
             back={back}
             navigationMeta={navigationMeta}
             title={order.customerName}
-            titleExtra={
-                <Badge variant="secondary" className="font-normal">
-                    {NATURE_LABEL[order.nature]}
-                </Badge>
-            }
-            documentNumber={order.documentNumber}
-            version={
-                identityOnly
-                    ? undefined
-                    : order.currentRevisionNo == null
-                      ? "尚未生效"
-                      : `v${order.currentRevisionNo}`
-            }
             primaryStatus={{
                 label: order.primaryStatus.label,
                 tone: order.primaryStatus.tone,
             }}
+            titleExtra={
+                <>
+                    <Badge variant="secondary" className="font-normal">
+                        {NATURE_LABEL[order.nature]}
+                    </Badge>
+                    {!identityOnly && order.activeChangeOrder ? (
+                        <DetailWorkspaceDirtyBadge label="改单中" />
+                    ) : null}
+                </>
+            }
+            documentNumber={order.documentNumber}
+            version={
+                !identityOnly && order.currentRevisionNo != null
+                    ? `v${order.currentRevisionNo}`
+                    : undefined
+            }
             meta={
                 identityOnly ? undefined : (
-                    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span>
-                            销售负责人{" "}
-                            <span className="font-medium text-foreground">
-                                {order.ownerName}
-                            </span>
-                        </span>
-                        <span className="text-border" aria-hidden="true">
-                            ·
-                        </span>
-                        <span>{ORIGIN_LABEL[order.originSystem]}</span>
-                        <span className="text-border" aria-hidden="true">
-                            ·
-                        </span>
-                        <span className="inline-flex items-center gap-1.5">
-                            履约
-                            <StatusBadge
-                                tone={order.fulfillment.tone}
-                                label={order.fulfillment.label}
-                            />
-                        </span>
-                    </span>
+                    <DetailWorkspaceMeta
+                        items={[
+                            order.currentRevisionNo == null ? "尚未生效" : null,
+                            <span key="owner">
+                                销售负责人{" "}
+                                <span className="font-medium text-foreground">
+                                    {order.ownerName}
+                                </span>
+                            </span>,
+                            ORIGIN_LABEL[order.originSystem],
+                        ]}
+                    />
                 )
             }
             primaryAction={primaryAction}
             secondaryActions={secondaryActions}
-            summary={
-                identityOnly ? undefined : (
-                    <SalesOrderAmountSummary order={order} />
-                )
-            }
+            tabs={tabs}
         />
     )
 }
 
-function SalesOrderAmountSummary({ order }: { order: SalesOrderDetailView }) {
+/** 置于吸顶头下方的通栏无框金额摘要带：首屏即览，随页面自然滚走不挤占阅读空间。 */
+export function SalesOrderAmountSummary({
+    order,
+}: {
+    order: SalesOrderDetailView
+}) {
     const receivableLeft = remainingReceivableAmount(
         order.amountGross,
         order.receivedAmount,
     )
 
     return (
-        <MetricStrip
+        <DetailWorkspaceMetrics
             columns={4}
-            className="items-end py-3"
-            aria-label="销售单金额摘要"
+            variant="bar"
+            ariaLabel="销售单金额摘要"
         >
-            <MetricItem
+            <DetailWorkspaceMetricItem
+                emphasis="primary"
                 label="成交金额（含税）"
-                value={
-                    <MoneyValue
-                        value={order.amountGross}
-                        className="text-value-section font-semibold sm:text-value-summary tracking-tight"
-                    />
-                }
+                value={<MoneyValue value={order.amountGross} />}
             />
-            <MetricItem
+            <DetailWorkspaceMetricItem
                 label={
-                    <span className="flex flex-wrap items-center gap-2">
-                        已回款
+                    <>
+                        <span>已回款</span>
                         <StatusBadge
                             tone={order.collection.tone}
                             label={order.collection.label}
-                            className="border-0 bg-transparent px-0 shadow-none"
+                            appearance="text"
                         />
-                    </span>
+                    </>
                 }
-                value={
-                    <MoneyValue
-                        value={order.receivedAmount}
-                        className="font-semibold"
-                    />
-                }
+                value={<MoneyValue value={order.receivedAmount} />}
             />
-            <MetricItem
+            <DetailWorkspaceMetricItem
                 label="待回款"
-                value={
-                    <MoneyValue
-                        value={receivableLeft}
-                        className="font-semibold"
-                    />
-                }
+                value={<MoneyValue value={receivableLeft} />}
             />
-            <MetricItem
+            <DetailWorkspaceMetricItem
                 label={
-                    <span className="flex flex-wrap items-center gap-2">
-                        已开票
+                    <>
+                        <span>已开票</span>
                         <StatusBadge
                             tone={order.invoicing.tone}
                             label={order.invoicing.label}
-                            className="border-0 bg-transparent px-0 shadow-none"
+                            appearance="text"
                         />
-                    </span>
+                    </>
                 }
-                value={
-                    <MoneyValue
-                        value={order.invoicedAmount}
-                        className="font-semibold"
-                    />
-                }
+                value={<MoneyValue value={order.invoicedAmount} />}
             />
-        </MetricStrip>
+        </DetailWorkspaceMetrics>
     )
 }

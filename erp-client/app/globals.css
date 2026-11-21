@@ -643,7 +643,8 @@
     }
 }
 /* 飞书风格纯白通栏详情工作面：吸顶头部通栏、分区细线、12px 沉稳标签、柔底轻控件、无框内联编辑表 */
-.erp-detail-workspace-page [data-slot="detail-workspace-chrome"] {
+.erp-detail-workspace-page [data-slot="detail-workspace-chrome"],
+.erp-detail-workspace-page [data-slot="detail-workspace-summary"] {
     margin-inline: calc(var(--scaffold-px) * -1);
     padding-inline: var(--scaffold-px);
 }
@@ -655,6 +656,11 @@
     [data-slot="detail-workspace-section"]
     + [data-slot="detail-workspace-section"] {
     border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+}
+.erp-detail-workspace-page
+    [data-slot="detail-workspace-sub-tabs"]
+    + [data-slot="detail-workspace-section"] {
+    padding-top: 1rem;
 }
 .erp-detail-workspace-page
     [data-slot="detail-form-grid"]
@@ -1385,41 +1391,5 @@
         --spacing-overlay-padding: 1rem;
         --spacing-filter-max: 28rem;
         --spacing-filter-medium-max: 28rem;
-    }
-}
-
-.sales-order-detail-page {
-    padding-block: 1rem;
-}
-
-/* 工作页位于 iframe 内；按实际工作页高度切换，宽屏矮窗口也必须可读。 */
-@media (max-height: 860px) {
-    .sales-order-detail-page {
-        overflow-y: auto;
-        overscroll-behavior: contain;
-        display: block;
-    }
-
-    .sales-order-detail-page > * + * {
-        margin-top: 0.75rem;
-    }
-
-    .sales-order-detail-sections {
-        overflow: visible;
-        flex: none;
-    }
-
-    .sales-order-detail-sections [role="tablist"] {
-        position: sticky;
-        top: 0;
-    }
-
-    .sales-order-detail-sections [id$="-body-scroll"],
-    .sales-order-detail-sections [id$="-content-scroll"],
-    .sales-order-detail-sections [id$="-sidebar-scroll"] {
-        height: auto;
-        max-height: none;
-        overflow: visible;
-        grid-template-rows: auto;
     }
 }

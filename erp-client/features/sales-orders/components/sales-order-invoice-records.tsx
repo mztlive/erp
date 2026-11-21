@@ -1,13 +1,17 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { BusinessFailureState } from "@/components/business"
-import { DetailRecordSection } from "@/components/business/detail-presentation"
+
+import {
+    BusinessFailureState,
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
+import type { FinancialFile } from "@/features/file-assets/api/business-finance-files"
 import { FinancialFileList } from "@/features/file-assets/components/financial-file-list"
 import { useSalesInvoiceFiles } from "@/features/file-assets/hooks/business-finance-files"
-import type { FinancialFile } from "@/features/file-assets/api/business-finance-files"
 import type { useSalesOrderReceivable } from "../hooks/use-sales-order-receivable"
 import type { amountAllocatedToTargets } from "../lib/sales-order-receivable"
 
@@ -57,13 +61,20 @@ export function SalesOrderInvoiceRecords({
         state.profile.isPending ||
         (allowed && state.invoices.isPending) ||
         query.isPending
+    const totalCount =
+        allowed && state.invoices.isSuccess
+            ? state.invoices.data.total
+            : undefined
     return (
-        <DetailRecordSection
+        <DetailWorkspaceSection
+            width="full"
             title="已开发票"
-            count={
-                allowed && state.invoices.isSuccess
-                    ? state.invoices.data.total
-                    : undefined
+            badge={
+                totalCount != null && totalCount > 0 ? (
+                    <span className="num rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                        {totalCount}
+                    </span>
+                ) : null
             }
         >
             {pending ? (
@@ -85,66 +96,72 @@ export function SalesOrderInvoiceRecords({
                     onRetry={() => void query.refetch()}
                 />
             ) : null}
-            <div className="space-y-3">
-                {records.map((row) => (
-                    <article
-                        key={row.invoiceId}
-                        className="space-y-3 rounded-lg border border-border/70 p-3"
-                    >
-                        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-                            <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <h3 className="font-medium wrap-anywhere">
-                                        {row.invoiceNo}
-                                    </h3>
-                                    <span className="text-xs text-muted-foreground">
-                                        {row.invoiceKindLabel}
-                                    </span>
-                                    <StatusBadge
-                                        label={row.statusLabel}
-                                        tone={row.statusTone}
-                                        appearance="text"
-                                    />
+            {records.length > 0 || remainingFiles.length > 0 ? (
+                <div className="divide-y divide-border/60 border-y border-border/60">
+                    {records.map((row) => (
+                        <article
+                            key={row.invoiceId}
+                            className="space-y-3 py-4 first:pt-3.5 last:pb-3.5"
+                        >
+                            <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+                                <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <h3 className="num font-medium wrap-anywhere">
+                                            {row.invoiceNo}
+                                        </h3>
+                                        <span className="text-xs text-muted-foreground">
+                                            {row.invoiceKindLabel}
+                                        </span>
+                                        <StatusBadge
+                                            label={row.statusLabel}
+                                            tone={row.statusTone}
+                                            appearance="text"
+                                        />
+                                    </div>
+                                    {row.invoiceDate &&
+                                    row.invoiceDate !== "—" ? (
+                                        <p className="num mt-1 text-xs text-muted-foreground">
+                                            开票日期 {row.invoiceDate}
+                                        </p>
+                                    ) : null}
                                 </div>
-                                {row.invoiceDate && row.invoiceDate !== "—" ? (
-                                    <p className="mt-1 text-xs text-muted-foreground">
-                                        开票日期 {row.invoiceDate}
-                                    </p>
-                                ) : null}
+                                <div className="ml-auto flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+                                    <dl className="flex flex-wrap items-baseline justify-end gap-x-2 gap-y-1">
+                                        <dt className="text-xs text-muted-foreground">
+                                            本单开票金额
+                                        </dt>
+                                        <dd className="num text-body-compact font-semibold whitespace-nowrap">
+                                            {rowAmount(row.allocations)}
+                                        </dd>
+                                    </dl>
+                                    {previewButton(
+                                        row.invoiceId,
+                                        row.invoiceNo,
+                                    )}
+                                </div>
                             </div>
-                            <div className="ml-auto flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
-                                <dl className="flex flex-wrap items-baseline justify-end gap-x-2 gap-y-1">
-                                    <dt className="text-xs text-muted-foreground">
-                                        本单开票金额
-                                    </dt>
-                                    <dd className="num text-body-compact font-semibold whitespace-nowrap">
-                                        {rowAmount(row.allocations)}
-                                    </dd>
-                                </dl>
-                                {previewButton(row.invoiceId, row.invoiceNo)}
-                            </div>
-                        </div>
-                        {filesByInvoice.has(row.invoiceId) ? (
-                            fileList(filesByInvoice.get(row.invoiceId)!)
-                        ) : query.isSuccess ? (
-                            <p className="text-xs text-muted-foreground">
-                                未上传发票文件
-                            </p>
-                        ) : null}
-                    </article>
-                ))}
-                {remainingFiles.map(([id, files]) => (
-                    <article
-                        key={id}
-                        className="space-y-3 rounded-lg border border-border/70 p-3"
-                    >
-                        <h3 className="font-medium wrap-anywhere">
-                            {files[0]!.document_no || "发票附件"}
-                        </h3>
-                        {fileList(files)}
-                    </article>
-                ))}
-            </div>
+                            {filesByInvoice.has(row.invoiceId) ? (
+                                fileList(filesByInvoice.get(row.invoiceId)!)
+                            ) : query.isSuccess ? (
+                                <p className="text-xs text-muted-foreground">
+                                    未上传发票文件
+                                </p>
+                            ) : null}
+                        </article>
+                    ))}
+                    {remainingFiles.map(([id, files]) => (
+                        <article
+                            key={id}
+                            className="space-y-3 py-4 first:pt-3.5 last:pb-3.5"
+                        >
+                            <h3 className="font-medium wrap-anywhere">
+                                {files[0]!.document_no || "发票附件"}
+                            </h3>
+                            {fileList(files)}
+                        </article>
+                    ))}
+                </div>
+            ) : null}
             {!pending &&
             query.isSuccess &&
             !records.length &&
@@ -158,15 +175,16 @@ export function SalesOrderInvoiceRecords({
             {allowed &&
             state.invoices.data &&
             (state.invoices.data.total > 20 || state.invoicePage > 1) ? (
-                <div className="flex flex-wrap items-center justify-end gap-3 text-xs text-muted-foreground">
-                    <span>
+                <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground">
+                    <span className="num">
                         发票明细第 {state.invoicePage} 页 · 共{" "}
                         {state.invoices.data.total} 笔
                     </span>
                     <Button
                         id="sales-order-invoices-previous"
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
+                        className={detailWorkspaceStyles.subtleButton}
                         disabled={state.invoicePage === 1}
                         onClick={() =>
                             state.setInvoicePage(state.invoicePage - 1)
@@ -176,8 +194,9 @@ export function SalesOrderInvoiceRecords({
                     </Button>
                     <Button
                         id="sales-order-invoices-next"
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
+                        className={detailWorkspaceStyles.subtleButton}
                         disabled={
                             state.invoicePage * 20 >= state.invoices.data.total
                         }
@@ -189,6 +208,6 @@ export function SalesOrderInvoiceRecords({
                     </Button>
                 </div>
             ) : null}
-        </DetailRecordSection>
+        </DetailWorkspaceSection>
     )
 }

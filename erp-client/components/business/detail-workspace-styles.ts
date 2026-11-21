@@ -32,4 +32,16 @@ export const detailWorkspaceStyles = {
         "text-section-title font-semibold tracking-tight text-foreground",
     sectionSubtitle: "text-xs text-muted-foreground",
     inlineTableWrapper: "w-full max-w-full border-y border-border/70",
+    dataTableWrapper:
+        "w-full max-w-full overflow-x-auto border-y border-border/70",
+    summaryBar: "border-b border-border/60 bg-card",
+    subTabs:
+        "inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-lg bg-muted/55 p-0.5",
+    subTab: [
+        "inline-flex h-7 cursor-pointer items-center justify-center rounded-md px-2.5 text-body-compact font-normal text-muted-foreground transition-colors",
+        "hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary",
+        "data-[active=true]:bg-card data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:shadow-2xs",
+    ].join(" "),
+    inlineLinkButton:
+        "h-control-sm px-2 text-body-compact font-normal text-primary shadow-none hover:bg-sidebar-accent/70 hover:text-primary",
 } as const

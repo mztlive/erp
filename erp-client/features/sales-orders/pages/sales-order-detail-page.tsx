@@ -1,46 +1,51 @@
 "use client"
 
-import { SalesOrderRelatedProblems } from "../components/sales-order-related-problems"
-
 import * as React from "react"
-import { SalesChangeOrderEditDialog } from "../components/sales-change-order-edit-dialog"
-import type { SalesChangeOrderSummary } from "../types"
-import Link from "next/link"
 import { useQueryClient } from "@tanstack/react-query"
 
 import {
     BusinessFailureState,
+    DetailWorkspaceBody,
+    DetailWorkspaceChrome,
+    DetailWorkspacePage,
+    DetailWorkspaceSkeleton,
     FormalActionResult,
-    PageHeader,
-    PageScaffold,
-    surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { SalesChangeOrderApprovalSection } from "@/features/sales-orders/components/sales-change-order-approval-section"
+import { SalesChangeOrderEditDialog } from "@/features/sales-orders/components/sales-change-order-edit-dialog"
 import { SalesOrderDetailSecondaryActions } from "@/features/sales-orders/components/sales-order-detail-command-dialogs"
 import { SalesOrderEditableCenter } from "@/features/sales-orders/components/sales-order-detail-editable-center"
-import { SalesOrderIdentityHeader } from "@/features/sales-orders/components/sales-order-detail-panels"
-import { SalesOrderProcurementAlert } from "../components/sales-order-procurement-alert"
+import {
+    SalesOrderAmountSummary,
+    SalesOrderIdentityHeader,
+} from "@/features/sales-orders/components/sales-order-detail-panels"
 import { SalesOrderDetailSidebar } from "@/features/sales-orders/components/sales-order-detail-sidebar"
-import { SalesOrderDetailTabs } from "@/features/sales-orders/components/sales-order-detail-tabs"
+import {
+    SalesOrderDetailSectionContent,
+    SalesOrderDetailSectionTabs,
+} from "@/features/sales-orders/components/sales-order-detail-tabs"
+import { SalesOrderProcurementAlert } from "@/features/sales-orders/components/sales-order-procurement-alert"
+import { SalesOrderRelatedProblems } from "@/features/sales-orders/components/sales-order-related-problems"
 import {
     salesOrderKeys,
+    useSalesChangeOrderDetailQuery,
     useSalesOrderDeliveryProgressQuery,
     useSalesOrderDetailQuery,
-    useSalesChangeOrderDetailQuery,
 } from "@/features/sales-orders/hooks/queries"
 import { useSalesOrderDetailStartChange } from "@/features/sales-orders/hooks/use-sales-order-detail-commands"
 import { useSalesOrderDetailUrlState } from "@/features/sales-orders/hooks/use-sales-order-detail-url-state"
 import { deriveSalesOrderDetailState } from "@/features/sales-orders/lib/sales-order-detail-derived"
 import type { SalesOrderDetailActionResult } from "@/features/sales-orders/lib/sales-order-detail-model"
-import { mapWorkItemDto } from "@/features/work-items/types"
+import { salesOrderSectionGroup } from "@/features/sales-orders/lib/sales-order-detail-navigation"
+import { canSupplementSalesOrderContract } from "@/features/sales-orders/lib/sales-order-detail-permissions"
+import type { SalesChangeOrderSummary } from "@/features/sales-orders/types"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
-import { useAccountProfileQuery } from "@/features/auth/queries"
+import { mapWorkItemDto } from "@/features/work-items/types"
 import { FormalCommandKeyLedger } from "@/lib/formal-command"
 import { hasPermission } from "@/lib/permissions"
-import { canSupplementSalesOrderContract } from "@/features/sales-orders/lib/sales-order-detail-permissions"
-import { cn } from "@/lib/utils"
 
 /**
  * 销售单详情。实物/卡券销售单与销售变更单走通用审批区。
@@ -195,48 +200,58 @@ function SalesOrderDetailContent({
     const order = query.data
     if (query.isPending) {
         return (
-            <PageScaffold>
-                <PageHeader title="销售单" description="正在加载详情…" />
-                <div
-                    className={cn(surfacePanelClassName, "h-72 animate-pulse")}
-                    aria-busy="true"
-                    aria-label="加载中"
-                />
-            </PageScaffold>
+            <DetailWorkspaceSkeleton
+                title="销售单"
+                description="正在加载详情…"
+                summary
+                sidebar
+            />
         )
     }
 
     if (query.isError && !query.data) {
         return (
-            <PageScaffold>
-                <PageHeader title="销售单" />
-                <BusinessFailureState
-                    title="销售单加载失败"
-                    error={query.error}
-                    onRetry={() => {
-                        void query.refetch()
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome
+                    title="销售单"
+                    back={{
+                        id: "sales-orders-detail-error-back",
+                        label: backLabel,
+                        href: backHref,
                     }}
                 />
-            </PageScaffold>
+                <DetailWorkspaceBody>
+                    <div className="max-w-3xl py-6">
+                        <BusinessFailureState
+                            title="销售单加载失败"
+                            error={query.error}
+                            onRetry={() => {
+                                void query.refetch()
+                            }}
+                        />
+                    </div>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     }
 
     if (!order) {
         return (
-            <PageScaffold>
-                <PageHeader
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome
                     title="销售单不存在"
-                    description="未找到这张销售单。可能编号有误，或当前角色无权查看。"
-                    actions={
-                        <Button
-                            id="sales-orders-detail-not-found-back"
-                            render={<Link href="/sales/orders" />}
-                        >
-                            返回列表
-                        </Button>
+                    meta={
+                        <span>
+                            未找到这张销售单。可能编号有误，或当前角色无权查看。
+                        </span>
                     }
+                    back={{
+                        id: "sales-orders-detail-not-found-back",
+                        label: "返回列表",
+                        href: "/sales/orders",
+                    }}
                 />
-            </PageScaffold>
+            </DetailWorkspacePage>
         )
     }
 
@@ -272,79 +287,85 @@ function SalesOrderDetailContent({
         )
     }
 
+    const group = salesOrderSectionGroup(derived.navSection)
+
     return (
-        <PageScaffold
-            density="compact"
-            className="sales-order-detail-page min-h-0 overflow-hidden"
-        >
+        <DetailWorkspacePage>
             <SalesOrderRelatedProblems
                 order={order}
                 onRetry={() => query.refetch({ throwOnError: true })}
             />
-            <div className="shrink-0">
-                <SalesOrderIdentityHeader
-                    back={{
-                        id: "sales-orders-detail-back",
-                        label: backLabel,
-                        href: backHref,
-                    }}
-                    navigationMeta={
-                        fromQueue
-                            ? fromWorkspace === "W01" || fromWorkspace === "W09"
-                                ? "从履约处理打开 · 查阅后可点返回，回到列表原位"
-                                : fromWorkspace === "W08"
-                                  ? "从采购单打开 · 查阅后可点返回，回到列表原位"
-                                  : "从工作台打开 · 查阅后可点返回，回到列表原位"
-                            : undefined
-                    }
-                    order={order}
-                    secondaryActions={
-                        <SalesOrderDetailSecondaryActions
-                            order={order}
-                            showChangeAction={
-                                !order.activeChangeOrder ||
-                                derived.navSection !== "overview"
+            <SalesOrderIdentityHeader
+                back={{
+                    id: "sales-orders-detail-back",
+                    label: backLabel,
+                    href: backHref,
+                }}
+                navigationMeta={
+                    fromQueue
+                        ? fromWorkspace === "W01" || fromWorkspace === "W09"
+                            ? "从履约处理打开 · 查阅后可点返回，回到列表原位"
+                            : fromWorkspace === "W08"
+                              ? "从采购单打开 · 查阅后可点返回，回到列表原位"
+                              : "从工作台打开 · 查阅后可点返回，回到列表原位"
+                        : undefined
+                }
+                order={order}
+                secondaryActions={
+                    <SalesOrderDetailSecondaryActions
+                        order={order}
+                        showChangeAction={
+                            !order.activeChangeOrder ||
+                            derived.navSection !== "overview"
+                        }
+                        canStartChange={derived.canStartChange}
+                        changeBlocker={derived.changeBlocker}
+                        changePending={startChangeCommand.isPending}
+                        onOpenChangeConfirm={() => {
+                            if (
+                                order.activeChangeOrder?.statusCode === "DRAFT"
+                            ) {
+                                setEditingChange(order.activeChangeOrder)
+                                return
                             }
-                            canStartChange={derived.canStartChange}
-                            changeBlocker={derived.changeBlocker}
-                            changePending={startChangeCommand.isPending}
-                            onOpenChangeConfirm={() => {
-                                if (
-                                    order.activeChangeOrder?.statusCode ===
-                                    "DRAFT"
-                                ) {
-                                    setEditingChange(order.activeChangeOrder)
-                                    return
-                                }
-                                void startChangeCommand
-                                    .startChange({
-                                        order,
-                                        commandLedger,
-                                        onResult: handleActionResult,
-                                    })
-                                    .then((change) => {
-                                        if (change) setEditingChange(change)
-                                    })
-                                    .catch(() => undefined)
-                            }}
-                            onApprovalResult={handleActionResult}
-                        />
-                    }
-                />
-            </div>
-
-            <div className="shrink-0 space-y-3 empty:hidden">
-                {order.nature === "physical_service" &&
-                order.currentRevisionNo != null &&
-                order.primaryStatus.code !== "voided" ? (
-                    <SalesOrderProcurementAlert
-                        progress={order.related.procurementProgress}
+                            void startChangeCommand
+                                .startChange({
+                                    order,
+                                    commandLedger,
+                                    onResult: handleActionResult,
+                                })
+                                .then((change) => {
+                                    if (change) setEditingChange(change)
+                                })
+                                .catch(() => undefined)
+                        }}
+                        onApprovalResult={handleActionResult}
                     />
-                ) : null}
-            </div>
-            <SalesOrderDetailTabs
-                beforeContent={
-                    <div className="space-y-4 empty:hidden [&:not(:empty)]:mb-6">
+                }
+                tabs={
+                    <SalesOrderDetailSectionTabs
+                        order={order}
+                        section={section}
+                        navSection={derived.navSection}
+                        visibleNav={derived.visibleNav}
+                        canAccept={derived.canAccept}
+                        onSelectSection={selectSection}
+                    />
+                }
+            />
+
+            <DetailWorkspaceBody
+                summary={<SalesOrderAmountSummary order={order} />}
+                alerts={
+                    <>
+                        {order.nature === "physical_service" &&
+                        order.currentRevisionNo != null &&
+                        order.primaryStatus.code !== "voided" ? (
+                            <SalesOrderProcurementAlert
+                                progress={order.related.procurementProgress}
+                            />
+                        ) : null}
+
                         {result ? (
                             <FormalActionResult
                                 status={result.status}
@@ -424,26 +445,32 @@ function SalesOrderDetailContent({
                                 onResult={handleActionResult}
                             />
                         ) : null}
-                    </div>
+                    </>
                 }
-                order={order}
-
-                section={section}
-                navSection={derived.navSection}
-                visibleNav={derived.visibleNav}
-                canAccept={derived.canAccept}
-                canOperateAcceptance={canOperateAcceptance}
-                canReadDelivery={canReadDelivery}
-                deliveryQuery={deliveryQuery}
-                onSelectSection={selectSection}
-                onApprovalResult={handleActionResult}
                 sidebar={
-                    <SalesOrderDetailSidebar
-                        order={order}
-                        onSelectSection={selectSection}
-                    />
+                    group === "timeline" ? undefined : (
+                        <SalesOrderDetailSidebar
+                            order={order}
+                            onSelectSection={selectSection}
+                        />
+                    )
                 }
-            />
+                sidebarLabel={
+                    group === "timeline" ? undefined : "履约与票款进度"
+                }
+            >
+                <SalesOrderDetailSectionContent
+                    order={order}
+                    section={section}
+                    navSection={derived.navSection}
+                    visibleNav={derived.visibleNav}
+                    canOperateAcceptance={canOperateAcceptance}
+                    canReadDelivery={canReadDelivery}
+                    deliveryQuery={deliveryQuery}
+                    onSelectSection={selectSection}
+                    onApprovalResult={handleActionResult}
+                />
+            </DetailWorkspaceBody>
 
             {editingChange ? (
                 <SalesChangeOrderEditDialog
@@ -466,6 +493,6 @@ function SalesOrderDetailContent({
                     }}
                 />
             ) : null}
-        </PageScaffold>
+        </DetailWorkspacePage>
     )
 }

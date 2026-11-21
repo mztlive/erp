@@ -1,6 +1,7 @@
-export { SalesOrderIdentityHeader } from "@/features/sales-orders/components/sales-order-detail-identity-header"
-export { LifecycleRail } from "@/features/sales-orders/components/sales-order-detail-lifecycle-rail"
-export { RelatedLanes } from "@/features/sales-orders/components/sales-order-detail-related-lanes"
+export {
+    SalesOrderAmountSummary,
+    SalesOrderIdentityHeader,
+} from "@/features/sales-orders/components/sales-order-detail-identity-header"
 export { OverviewPanel } from "@/features/sales-orders/components/sales-order-detail-overview-panel"
 export { ApprovalPanel } from "@/features/sales-orders/components/sales-order-detail-approval-panel"
 export { PurchasePanel } from "@/features/sales-orders/components/sales-order-detail-purchase-panel"

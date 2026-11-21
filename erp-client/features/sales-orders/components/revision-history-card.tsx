@@ -4,7 +4,12 @@ import Link from "next/link"
 import type { ReactNode } from "react"
 import { ChevronDownIcon, HistoryIcon } from "lucide-react"
 
-import { BusinessEmptyState, MoneyValue } from "@/components/business"
+import {
+    BusinessEmptyState,
+    DetailWorkspaceSection,
+    MoneyValue,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -45,11 +50,11 @@ function SnapshotField({
     numeric?: boolean
 }) {
     return (
-        <div className="min-w-0">
+        <div className="min-w-0 space-y-0.5">
             <dt className="text-xs text-muted-foreground">{label}</dt>
             <dd
                 className={cn(
-                    "mt-0.5 truncate text-body-compact font-medium text-foreground",
+                    "truncate text-body-compact font-medium text-foreground",
                     numeric && "num",
                 )}
             >
@@ -88,43 +93,39 @@ function VersionRecord({
     return (
         <article
             className={cn(
-                "rounded-lg border px-3 py-3 sm:px-4",
+                "space-y-4 rounded-lg px-4 py-3.5",
                 isCurrent
-                    ? "border-primary/25 bg-primary/[0.03]"
-                    : "border-border bg-card",
+                    ? "border border-primary/20 bg-primary/[0.025]"
+                    : "bg-muted/25",
             )}
         >
-            <div className="rounded-md bg-muted/40 px-3 py-2.5">
-                <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <div className="min-w-0">
-                        <dt className="text-xs text-muted-foreground">
-                            当时成交金额
-                        </dt>
-                        <dd className="mt-0.5">
-                            <MoneyValue
-                                value={rev.amountGross || undefined}
-                                taxBasis="gross"
-                            />
-                        </dd>
-                    </div>
-                    <div className="min-w-0">
-                        <dt className="text-xs text-muted-foreground">
-                            不含税
-                        </dt>
-                        <dd className="mt-0.5">
-                            <MoneyValue value={rev.amountNet || undefined} />
-                        </dd>
-                    </div>
-                    <div className="min-w-0">
-                        <dt className="text-xs text-muted-foreground">税额</dt>
-                        <dd className="mt-0.5">
-                            <MoneyValue value={rev.taxAmount || undefined} />
-                        </dd>
-                    </div>
-                </dl>
-            </div>
+            <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="min-w-0">
+                    <dt className="text-xs text-muted-foreground">
+                        当时成交金额
+                    </dt>
+                    <dd className="mt-0.5 font-semibold text-foreground">
+                        <MoneyValue
+                            value={rev.amountGross || undefined}
+                            taxBasis="gross"
+                        />
+                    </dd>
+                </div>
+                <div className="min-w-0">
+                    <dt className="text-xs text-muted-foreground">不含税</dt>
+                    <dd className="mt-0.5 text-foreground">
+                        <MoneyValue value={rev.amountNet || undefined} />
+                    </dd>
+                </div>
+                <div className="min-w-0">
+                    <dt className="text-xs text-muted-foreground">税额</dt>
+                    <dd className="mt-0.5 text-foreground">
+                        <MoneyValue value={rev.taxAmount || undefined} />
+                    </dd>
+                </div>
+            </dl>
 
-            <dl className="mt-3 grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2 xl:grid-cols-4">
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-2.5 border-t border-border/60 pt-3 sm:grid-cols-2 xl:grid-cols-4">
                 <SnapshotField
                     label="当时客户"
                     value={displayText(rev.customerSnapshot)}
@@ -155,7 +156,7 @@ function VersionRecord({
                 ) : null}
             </dl>
 
-            <div className="mt-3 border-t border-grid pt-3">
+            <div className="border-t border-border/60 pt-3">
                 <div className="mb-1.5 flex items-baseline justify-between gap-2">
                     <h3 className="text-xs font-medium text-muted-foreground">
                         明细摘要
@@ -167,14 +168,14 @@ function VersionRecord({
                     ) : null}
                 </div>
                 {lines.length > 0 ? (
-                    <ul className="divide-y divide-grid rounded-md border border-grid">
+                    <ul className="divide-y divide-border/50">
                         {lines.map((line) => (
                             <li
                                 key={`${rev.revisionNo}-${line.lineNo}`}
-                                className="flex items-start justify-between gap-3 px-3 py-1.5 text-body-compact"
+                                className="flex items-start justify-between gap-3 py-2 text-body-compact first:pt-1 last:pb-0"
                             >
                                 <div className="min-w-0">
-                                    <div className="truncate font-medium">
+                                    <div className="truncate font-medium text-foreground">
                                         {line.name}
                                     </div>
                                     {line.spec || line.unit ? (
@@ -200,7 +201,7 @@ function VersionRecord({
             </div>
 
             {rev.businessRemark ? (
-                <p className="mt-3 text-xs text-muted-foreground">
+                <p className="border-t border-border/60 pt-2.5 text-xs text-muted-foreground">
                     {rev.businessRemark}
                 </p>
             ) : null}
@@ -232,7 +233,14 @@ function HistoricalVersion({
                 <CollapsibleTrigger
                     id={`sales-order-revision-v${rev.revisionNo}-toggle`}
                     className="group/revision"
-                    render={<Button type="button" variant="ghost" size="sm" />}
+                    render={
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className={detailWorkspaceStyles.quietButton}
+                        />
+                    }
                 >
                     查看当时内容
                     <ChevronDownIcon
@@ -263,23 +271,18 @@ export function RevisionHistoryCard({
     const ordered = [...revisions].sort((a, b) => b.revisionNo - a.revisionNo)
 
     return (
-        <section
-            aria-labelledby="sales-order-revisions-title"
-            className="space-y-4"
-        >
-            <div className="flex items-center gap-2">
-                <h2
-                    id="sales-order-revisions-title"
-                    className="text-section-title font-semibold tracking-tight"
-                >
-                    版本记录
-                </h2>
-                {ordered.length > 0 ? (
+        <DetailWorkspaceSection
+            width="form"
+            title="版本记录"
+            headingId="sales-order-revisions-title"
+            badge={
+                ordered.length > 0 ? (
                     <span className="num rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                         {ordered.length}
                     </span>
-                ) : null}
-            </div>
+                ) : null
+            }
+        >
             {ordered.length === 0 ? (
                 <BusinessEmptyState
                     kind="no-data"
@@ -323,7 +326,7 @@ export function RevisionHistoryCard({
                                             <Link
                                                 id={`sales-orders-revision-${rev.revisionNo}-change-link`}
                                                 href={`?${new URLSearchParams({ section: "change-review", changeOrderId: rev.changeOrderId })}`}
-                                                className="text-xs font-normal text-muted-foreground underline underline-offset-2"
+                                                className="text-xs font-normal text-primary underline underline-offset-2"
                                             >
                                                 查看改单
                                             </Link>
@@ -360,6 +363,6 @@ export function RevisionHistoryCard({
                     })}
                 </Timeline>
             )}
-        </section>
+        </DetailWorkspaceSection>
     )
 }

@@ -467,33 +467,62 @@ export function DetailWorkspaceSection({
  * 详情工作面主体容器：
  * - 单栏模式：内部 `DetailWorkspaceSection` 自动以 `border-t border-border/60` 分隔；
  * - 双栏模式（传入 `sidebar`）：在 `xl` 宽屏以 `1px` 竖线分出右侧摘要栏，零套娃卡片；
+ * - 可选 `summary` 槽位：置于吸顶头部正下方、不吸顶通栏铺开（适用于单据类金额 KPI 摘要带）；
  * - 底部悬浮保存胶囊开启时自动追加底部留白，保证滚动到最末行仍完全可点。
  */
 export function DetailWorkspaceBody({
+    summary,
     alerts,
     sidebar,
+    sidebarLabel,
     saveDockOpen = false,
     children,
     className,
 }: {
+    summary?: React.ReactNode
     alerts?: React.ReactNode
     sidebar?: React.ReactNode
+    sidebarLabel?: string
     saveDockOpen?: boolean
     children: React.ReactNode
     className?: string
 }) {
-    if (sidebar != null) {
-        return (
-            <div
-                data-slot="detail-workspace-body"
-                className={cn(
-                    styles.body,
-                    "grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_320px] 2xl:grid-cols-[minmax(0,1fr)_360px]",
-                    saveDockOpen && "pb-20",
-                    className,
-                )}
-            >
-                <div className="min-w-0">
+    return (
+        <div
+            data-slot="detail-workspace-body"
+            className={cn(styles.body, saveDockOpen && "pb-20", className)}
+        >
+            {summary != null ? (
+                <div
+                    data-slot="detail-workspace-summary"
+                    className={styles.summaryBar}
+                >
+                    {summary}
+                </div>
+            ) : null}
+
+            {sidebar != null ? (
+                <div className="grid items-start gap-x-8 gap-y-0 xl:grid-cols-[minmax(0,1fr)_320px] 2xl:grid-cols-[minmax(0,1fr)_360px]">
+                    <div className="min-w-0">
+                        {alerts ? (
+                            <div
+                                data-slot="detail-workspace-alerts"
+                                className="space-y-2.5 pt-4 empty:hidden"
+                            >
+                                {alerts}
+                            </div>
+                        ) : null}
+                        {children}
+                    </div>
+                    <aside
+                        aria-label={sidebarLabel}
+                        className="min-w-0 border-t border-border/60 py-5 xl:self-stretch xl:border-t-0 xl:border-l xl:border-border/60 xl:pl-6"
+                    >
+                        {sidebar}
+                    </aside>
+                </div>
+            ) : (
+                <>
                     {alerts ? (
                         <div
                             data-slot="detail-workspace-alerts"
@@ -503,29 +532,150 @@ export function DetailWorkspaceBody({
                         </div>
                     ) : null}
                     {children}
-                </div>
-                <aside className="min-w-0 py-5 xl:border-l xl:border-border/60 xl:pl-6">
-                    {sidebar}
-                </aside>
-            </div>
-        )
-    }
+                </>
+            )}
+        </div>
+    )
+}
 
+const metricsColumnsClass: Record<2 | 3 | 4, string> = {
+    2: "grid-cols-1 sm:grid-cols-2 sm:[&>*+*]:border-l sm:[&>*+*]:border-border/60 sm:[&>*+*]:pl-6",
+    3: "grid-cols-1 sm:grid-cols-3 sm:[&>*+*]:border-l sm:[&>*+*]:border-border/60 sm:[&>*+*]:pl-6",
+    4: "grid-cols-2 lg:grid-cols-4 lg:[&>*+*]:border-l lg:[&>*+*]:border-border/60 lg:[&>*+*]:pl-6",
+}
+
+/**
+ * 详情工作面无框 KPI 指标条：
+ * - `variant="bar"`：用于吸顶头下方通栏金额摘要（零边框零投影，随页面自然滚走）；
+ * - `variant="inline"`：用于分区顶部轻量汇总（如收款、开票、验收、附加费用合计）。
+ */
+export function DetailWorkspaceMetrics({
+    columns = 4,
+    variant = "bar",
+    ariaLabel,
+    children,
+    className,
+}: {
+    columns?: 2 | 3 | 4
+    variant?: "bar" | "inline"
+    ariaLabel?: string
+    children: React.ReactNode
+    className?: string
+}) {
     return (
         <div
-            data-slot="detail-workspace-body"
-            className={cn(styles.body, saveDockOpen && "pb-20", className)}
+            data-slot="detail-workspace-metrics"
+            data-variant={variant}
+            aria-label={ariaLabel}
+            className={cn(
+                "grid gap-x-6 gap-y-3.5",
+                metricsColumnsClass[columns],
+                variant === "bar" ? "py-3.5" : "py-1",
+                className,
+            )}
         >
-            {alerts ? (
-                <div
-                    data-slot="detail-workspace-alerts"
-                    className="space-y-2.5 pt-4 empty:hidden"
-                >
-                    {alerts}
-                </div>
-            ) : null}
             {children}
         </div>
+    )
+}
+
+/** 详情工作面无框 KPI 单项：标签 12px 退后，主金额 24px / 辅指标 20px（均带 `.num`）。 */
+export function DetailWorkspaceMetricItem({
+    label,
+    value,
+    detail,
+    emphasis = "default",
+    className,
+}: {
+    label: React.ReactNode
+    value: React.ReactNode
+    detail?: React.ReactNode
+    emphasis?: "primary" | "default"
+    className?: string
+}) {
+    return (
+        <div
+            data-slot="detail-workspace-metric-item"
+            className={cn("min-w-0", className)}
+        >
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                {label}
+            </div>
+            <div
+                className={cn(
+                    "num mt-1 max-w-full wrap-anywhere font-semibold tracking-tight text-foreground",
+                    emphasis === "primary"
+                        ? "text-value-section"
+                        : "text-value-compact",
+                )}
+            >
+                {value}
+            </div>
+            {detail != null ? (
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                    {detail}
+                </div>
+            ) : null}
+        </div>
+    )
+}
+
+export type DetailWorkspaceSubTabItem = Readonly<{
+    id: string
+    label: React.ReactNode
+    title?: string
+}>
+
+/**
+ * 详情工作面二级分段切换条：
+ * 用于主分区下包含多个子业务面的场景，柔底胶囊区分于一级通栏线型 Tab 与页面操作按钮。
+ */
+export function DetailWorkspaceSubTabs({
+    value,
+    onValueChange,
+    items,
+    ariaLabel = "当前分区内容",
+    idPrefix,
+    className,
+}: {
+    value: string
+    onValueChange: (value: string) => void
+    items: readonly DetailWorkspaceSubTabItem[]
+    ariaLabel?: string
+    idPrefix?: string
+    className?: string
+}) {
+    if (items.length < 2) return null
+    return (
+        <nav
+            aria-label={ariaLabel}
+            data-slot="detail-workspace-sub-tabs"
+            className={cn("pt-4", className)}
+        >
+            <div className={styles.subTabs}>
+                {items.map((item) => {
+                    const active = value === item.id
+                    return (
+                        <button
+                            key={item.id}
+                            id={
+                                idPrefix
+                                    ? `${idPrefix}-${toAutomationIdSegment(item.id)}`
+                                    : undefined
+                            }
+                            type="button"
+                            aria-pressed={active}
+                            data-active={active ? "true" : undefined}
+                            title={item.title}
+                            className={styles.subTab}
+                            onClick={() => onValueChange(item.id)}
+                        >
+                            {item.label}
+                        </button>
+                    )
+                })}
+            </div>
+        </nav>
     )
 }
 
@@ -630,32 +780,71 @@ export function DetailWorkspaceSaveDock({
 export function DetailWorkspaceSkeleton({
     title,
     description,
+    summary = false,
+    sidebar = false,
 }: {
     title: string
     description?: string
+    summary?: boolean
+    sidebar?: boolean
 }) {
+    const mainSkeleton = (
+        <div className="max-w-4xl space-y-6 py-6" aria-busy="true">
+            <div className="space-y-3">
+                <div className="h-5 w-24 animate-pulse rounded bg-muted" />
+                <div className="grid gap-4 sm:grid-cols-12">
+                    <div className="h-9 animate-pulse rounded-md bg-muted sm:col-span-8" />
+                    <div className="h-9 animate-pulse rounded-md bg-muted sm:col-span-4" />
+                    <div className="h-9 animate-pulse rounded-md bg-muted sm:col-span-4" />
+                    <div className="h-9 animate-pulse rounded-md bg-muted sm:col-span-4" />
+                    <div className="h-9 animate-pulse rounded-md bg-muted sm:col-span-4" />
+                </div>
+            </div>
+            <div className="border-t border-border/60 pt-6">
+                <div className="h-5 w-28 animate-pulse rounded bg-muted" />
+                <div className="mt-4 h-36 animate-pulse rounded-md bg-muted/70" />
+            </div>
+        </div>
+    )
     return (
         <PageScaffold density="compact" className={styles.page}>
             <DetailWorkspaceChrome
                 title={title}
                 meta={description ? <span>{description}</span> : undefined}
             />
-            <div className="max-w-4xl space-y-6 py-6" aria-busy="true">
-                <div className="space-y-3">
-                    <div className="h-5 w-24 animate-pulse rounded bg-muted" />
-                    <div className="grid gap-4 sm:grid-cols-12">
-                        <div className="h-9 animate-pulse rounded-md bg-muted sm:col-span-8" />
-                        <div className="h-9 animate-pulse rounded-md bg-muted sm:col-span-4" />
-                        <div className="h-9 animate-pulse rounded-md bg-muted sm:col-span-4" />
-                        <div className="h-9 animate-pulse rounded-md bg-muted sm:col-span-4" />
-                        <div className="h-9 animate-pulse rounded-md bg-muted sm:col-span-4" />
-                    </div>
-                </div>
-                <div className="border-t border-border/60 pt-6">
-                    <div className="h-5 w-28 animate-pulse rounded bg-muted" />
-                    <div className="mt-4 h-36 animate-pulse rounded-md bg-muted/70" />
-                </div>
-            </div>
+            {summary || sidebar ? (
+                <DetailWorkspaceBody
+                    summary={
+                        summary ? (
+                            <div
+                                className="grid grid-cols-2 gap-6 py-3.5 lg:grid-cols-4"
+                                aria-hidden="true"
+                            >
+                                {Array.from({ length: 4 }, (_, index) => (
+                                    <div key={index} className="space-y-2">
+                                        <div className="h-3.5 w-20 animate-pulse rounded bg-muted" />
+                                        <div className="h-7 w-32 animate-pulse rounded bg-muted" />
+                                    </div>
+                                ))}
+                            </div>
+                        ) : undefined
+                    }
+                    sidebar={
+                        sidebar ? (
+                            <div className="space-y-4" aria-hidden="true">
+                                <div className="h-5 w-28 animate-pulse rounded bg-muted" />
+                                <div className="h-16 animate-pulse rounded-md bg-muted/70" />
+                                <div className="h-16 animate-pulse rounded-md bg-muted/70" />
+                                <div className="h-16 animate-pulse rounded-md bg-muted/70" />
+                            </div>
+                        ) : undefined
+                    }
+                >
+                    {mainSkeleton}
+                </DetailWorkspaceBody>
+            ) : (
+                mainSkeleton
+            )}
         </PageScaffold>
     )
 }

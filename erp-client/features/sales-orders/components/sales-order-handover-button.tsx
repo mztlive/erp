@@ -15,8 +15,8 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { OptionCombobox } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea"
 import { fetchCustomerAcceptanceWorkspace } from "@/features/sales-orders/api/acceptance"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
@@ -42,9 +42,13 @@ import { getErrorPresentation } from "@/lib/api/errors"
 export function SalesOrderHandoverButton({
     order,
     onResult,
+    triggerVariant = "outline",
+    triggerClassName,
 }: {
     order: SalesOrderDetailView
     onResult?: (result: SalesOrderDetailActionResult) => void
+    triggerVariant?: React.ComponentProps<typeof Button>["variant"]
+    triggerClassName?: string
 }) {
     const [open, setOpen] = React.useState(false)
     const [targetUserId, setTargetUserId] = React.useState("")
@@ -87,7 +91,8 @@ export function SalesOrderHandoverButton({
                 id="sales-orders-detail-handover-trigger"
                 type="button"
                 size="sm"
-                variant="outline"
+                variant={triggerVariant}
+                className={triggerClassName}
                 onClick={() => {
                     setTargetUserId("")
                     setReason("")
@@ -150,32 +155,24 @@ export function SalesOrderHandoverButton({
                                 接收销售人员
                                 <RequiredMark />
                             </label>
-                            <NativeSelect
+                            <OptionCombobox
                                 id={`sales-orders-detail-handover-target-${orderSegment}`}
-                                value={targetUserId}
-                                onChange={(event) =>
-                                    setTargetUserId(event.target.value)
+                                options={candidates}
+                                value={targetUserId || null}
+                                onValueChange={(next) =>
+                                    setTargetUserId(next ?? "")
                                 }
-                                disabled={
-                                    handoverMutation.isPending ||
+                                loading={candidatesQuery.isPending}
+                                disabled={handoverMutation.isPending}
+                                placeholder={
                                     candidatesQuery.isPending
-                                }
-                                className="w-full"
-                            >
-                                <NativeSelectOption value="">
-                                    {candidatesQuery.isPending
                                         ? "正在加载候选人…"
-                                        : "选择接收人"}
-                                </NativeSelectOption>
-                                {candidates.map((item) => (
-                                    <NativeSelectOption
-                                        key={item.value}
-                                        value={item.value}
-                                    >
-                                        {item.label}
-                                    </NativeSelectOption>
-                                ))}
-                            </NativeSelect>
+                                        : "选择接收人"
+                                }
+                                emptyLabel="暂无可交接候选人"
+                                className="w-full"
+                                inputClassName="w-full"
+                            />
                             {candidatesQuery.isError ? (
                                 <p
                                     className="text-body-compact text-destructive"

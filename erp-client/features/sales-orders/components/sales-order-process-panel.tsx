@@ -1,8 +1,9 @@
 "use client"
 
 import { useState } from "react"
+
+import { DetailWorkspaceSection, OptionCombobox } from "@/components/business"
 import { NativeCheckbox } from "@/components/ui/checkbox"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import {
     SalesTimeline,
     timelineCategories,
@@ -11,9 +12,14 @@ import type { TimelineCategory } from "@/features/document-timeline/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { SalesOrderDetailView } from "../api/sales-orders"
 import type { NavSectionId } from "../lib/sales-order-detail-model"
-import { SalesOrderProcessDiagram } from "./sales-order-process-diagram"
 import type { DeliveryProgressQuery } from "./sales-order-delivery-overview"
 import { ApprovalPanel } from "./sales-order-detail-approval-panel"
+import { SalesOrderProcessDiagram } from "./sales-order-process-diagram"
+
+const PROCESS_CATEGORY_OPTIONS = [
+    { value: "all", label: "全部记录" },
+    ...timelineCategories,
+] as const
 
 /** 全流程共用一个记录筛选；保留 section=approval 的原有定位入口。 */
 export function SalesOrderProcessPanel({
@@ -35,61 +41,51 @@ export function SalesOrderProcessPanel({
     const [includeDetails, setIncludeDetails] = useState(false)
     const selected = section === "approval" ? "approval" : category
     const prefix = `sales-order-process-${toAutomationIdSegment(order.id)}`
+
     return (
-        <section aria-label="销售单全流程" className="space-y-8">
-            <SalesOrderProcessDiagram
-                order={order}
-                deliveryQuery={deliveryQuery}
-                canReadDelivery={canReadDelivery}
-                visibleSections={visibleSections}
-                onSelectSection={onSelectSection}
-            />
-            <section aria-label="流程记录" className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="text-section-title font-semibold tracking-tight">
-                        流程记录
-                    </h2>
+        <>
+            <DetailWorkspaceSection width="full">
+                <SalesOrderProcessDiagram
+                    order={order}
+                    deliveryQuery={deliveryQuery}
+                    canReadDelivery={canReadDelivery}
+                    visibleSections={visibleSections}
+                    onSelectSection={onSelectSection}
+                />
+            </DetailWorkspaceSection>
+
+            <DetailWorkspaceSection
+                width="full"
+                title="流程记录"
+                actions={
                     <div className="flex flex-wrap items-center gap-3">
-                        <label
-                            htmlFor={`${prefix}-category`}
-                            className="text-xs text-muted-foreground"
-                        >
-                            记录类型
-                        </label>
-                        <NativeSelect
+                        <OptionCombobox
                             id={`${prefix}-category`}
-                            value={selected ?? ""}
-                            onChange={(event) => {
-                                const next = event.target.value as
-                                    | TimelineCategory
-                                    | ""
-                                setCategory(
-                                    next === "approval"
+                            options={PROCESS_CATEGORY_OPTIONS}
+                            value={selected ?? "all"}
+                            onValueChange={(value) => {
+                                const next =
+                                    !value || value === "all"
                                         ? undefined
-                                        : next || undefined,
+                                        : (value as TimelineCategory)
+                                setCategory(
+                                    next === "approval" ? undefined : next,
                                 )
                                 if (next === "approval")
                                     onSelectSection("approval")
                                 else if (section === "approval")
                                     onSelectSection("timeline")
                             }}
-                        >
-                            <NativeSelectOption value="">
-                                全部记录
-                            </NativeSelectOption>
-                            {timelineCategories.map((item) => (
-                                <NativeSelectOption
-                                    key={item.value}
-                                    value={item.value}
-                                >
-                                    {item.label}
-                                </NativeSelectOption>
-                            ))}
-                        </NativeSelect>
+                            allowClear={false}
+                            size="sm"
+                            aria-label="记录类型"
+                            className="w-36"
+                            inputClassName="w-36"
+                        />
                         {selected !== "approval" ? (
                             <label
                                 htmlFor={`${prefix}-details`}
-                                className="inline-flex items-center gap-2 text-xs text-muted-foreground"
+                                className="inline-flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"
                             >
                                 <NativeCheckbox
                                     id={`${prefix}-details`}
@@ -102,21 +98,26 @@ export function SalesOrderProcessPanel({
                             </label>
                         ) : null}
                     </div>
-                </div>
+                }
+            >
                 {selected === "approval" ? (
-                    <ApprovalPanel order={order} />
+                    <div className="max-w-4xl">
+                        <ApprovalPanel order={order} />
+                    </div>
                 ) : (
-                    <SalesTimeline
-                        salesOrderId={order.id}
-                        idPrefix={`${prefix}-timeline`}
-                        fixedCategory={selected}
-                        embedded
-                        includeDetails={includeDetails}
-                        groupByDocument
-                        plainApprovalReasons
-                    />
+                    <div className="max-w-4xl">
+                        <SalesTimeline
+                            salesOrderId={order.id}
+                            idPrefix={`${prefix}-timeline`}
+                            fixedCategory={selected}
+                            embedded
+                            includeDetails={includeDetails}
+                            groupByDocument
+                            plainApprovalReasons
+                        />
+                    </div>
                 )}
-            </section>
-        </section>
+            </DetailWorkspaceSection>
+        </>
     )
 }

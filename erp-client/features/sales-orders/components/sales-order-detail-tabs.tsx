@@ -1,33 +1,14 @@
 "use client"
 
-import type { ReactNode } from "react"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import {
-    ObjectSectionTabs,
-    ObjectSectionTabsPanel,
+    DetailWorkspaceSection,
+    DetailWorkspaceSubTabs,
+    DetailWorkspaceTabs,
 } from "@/components/business"
 import { SalesTimeline } from "@/features/document-timeline/components/sales-timeline"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { SalesOrderDetailView } from "../api/sales-orders"
-import { SalesOrderProcessPanel } from "./sales-order-process-panel"
-import {
-    AcceptancePanel,
-    CollaborationPanel,
-    OverviewPanel,
-    PurchasePanel,
-    VersionsPanel,
-} from "./sales-order-detail-panels"
-import { AcceptanceWorkspace } from "./acceptance-workspace"
-import { SalesOrderCustomerFinancePanel } from "./sales-order-detail-receivable-panel"
-import { SalesOrderDocumentsPanel } from "./sales-order-documents-panel"
-import { ExtraCostPanel } from "./sales-order-extra-cost-panel"
-import type { DeliveryProgressQuery } from "./sales-order-delivery-overview"
 import { getProcurementAttention } from "../lib/procurement-attention"
-import {
-    SALES_ORDER_SECTION_GROUPS,
-    salesOrderSectionGroup,
-} from "../lib/sales-order-detail-navigation"
 import {
     isSalesOrderApprovalInProgress,
     isWorkSection,
@@ -35,42 +16,49 @@ import {
     type SalesOrderDetailActionResult,
     type WorkSectionId,
 } from "../lib/sales-order-detail-model"
+import {
+    SALES_ORDER_SECTION_GROUPS,
+    salesOrderSectionGroup,
+} from "../lib/sales-order-detail-navigation"
+import { AcceptanceWorkspace } from "./acceptance-workspace"
+import type { DeliveryProgressQuery } from "./sales-order-delivery-overview"
+import {
+    AcceptancePanel,
+    CollaborationPanel,
+    OverviewPanel,
+    PurchasePanel,
+    VersionsPanel,
+} from "./sales-order-detail-panels"
+import { SalesOrderCustomerFinancePanel } from "./sales-order-detail-receivable-panel"
+import { SalesOrderDocumentsPanel } from "./sales-order-documents-panel"
+import { ExtraCostPanel } from "./sales-order-extra-cost-panel"
+import { SalesOrderProcessPanel } from "./sales-order-process-panel"
 
-/** 主分区按销售任务组织，原 URL 继续定位到各业务面。 */
-export function SalesOrderDetailTabs({
+export type SalesOrderVisibleNavItem = {
+    id: NavSectionId
+    label: string
+    hint: string
+    show: boolean
+}
+
+/** 置于 DetailWorkspaceChrome 底部的一体化通栏分区导航。 */
+export function SalesOrderDetailSectionTabs({
     order,
     section,
     navSection,
     visibleNav,
     canAccept,
-    canOperateAcceptance,
-    canReadDelivery,
-    deliveryQuery,
     onSelectSection,
-    onApprovalResult,
-    sidebar,
-    beforeContent,
 }: {
     order: SalesOrderDetailView
     section?: string
     navSection: NavSectionId
-    visibleNav: Array<{
-        id: NavSectionId
-        label: string
-        hint: string
-        show: boolean
-    }>
+    visibleNav: SalesOrderVisibleNavItem[]
     canAccept: boolean
-    canOperateAcceptance: boolean
-    canReadDelivery: boolean
-    deliveryQuery: DeliveryProgressQuery
     onSelectSection: (
         next: NavSectionId | WorkSectionId,
         extras?: { mode?: "register" },
     ) => void
-    onApprovalResult: (result: SalesOrderDetailActionResult) => void
-    sidebar?: ReactNode
-    beforeContent?: ReactNode
 }) {
     const group = salesOrderSectionGroup(navSection)
     const isCard = order.nature === "card_voucher"
@@ -80,6 +68,7 @@ export function SalesOrderDetailTabs({
         order.primaryStatus.code !== "voided" &&
         getProcurementAttention(order.related.procurementProgress)
             .needsAttention
+
     const items = SALES_ORDER_SECTION_GROUPS.filter((item) =>
         visibleNav.some((nav) => salesOrderSectionGroup(nav.id) === item.id),
     ).map((item) => {
@@ -98,31 +87,20 @@ export function SalesOrderDetailTabs({
                       ? "历史版本"
                       : item.label,
             badge:
-                warning || changing || pending || approving ? (
-                    <Badge
-                        variant={warning || changing ? "warning" : "info"}
-                        className="h-5 px-1.5 text-xs font-normal"
-                    >
-                        {warning
-                            ? "异常"
-                            : changing
-                              ? "改单中"
-                              : pending
-                                ? "待验收"
-                                : "审批中"}
-                    </Badge>
+                warning || changing ? (
+                    <span className="rounded-sm bg-warning-soft px-1.5 py-0.5 text-tiny leading-3.5 font-medium text-warning-soft-foreground">
+                        {warning ? "异常" : "改单中"}
+                    </span>
+                ) : pending || approving ? (
+                    <span className="rounded-sm bg-info-soft px-1.5 py-0.5 text-tiny leading-3.5 font-medium text-info-soft-foreground">
+                        {pending ? "待验收" : "审批中"}
+                    </span>
                 ) : undefined,
         }
     })
-    const subitems = visibleNav.filter(
-        (item) =>
-            salesOrderSectionGroup(item.id) === group &&
-            !(isCard && item.id === "collaboration"),
-    )
-    const prefix = toAutomationIdSegment(order.id)
+
     return (
-        <ObjectSectionTabs
-            id={`sales-orders-detail-tabs-${order.id}`}
+        <DetailWorkspaceTabs
             value={group}
             onValueChange={(value) => {
                 const next = value as NavSectionId
@@ -130,94 +108,124 @@ export function SalesOrderDetailTabs({
                     onSelectSection(next)
             }}
             items={items}
-            listLabel="销售单分区"
-            listClassName="border-border/70"
-            sidebar={group === "timeline" ? undefined : sidebar}
-            className="sales-order-detail-sections"
-            scrollMode="panels"
-            scrollResetKey={navSection}
-            beforeContent={beforeContent}
-        >
-            <ObjectSectionTabsPanel value={group}>
-                {group !== "timeline" && subitems.length > 1 ? (
-                    <nav
-                        aria-label="当前分区内容"
-                        className="flex flex-wrap gap-2"
-                    >
-                        {subitems.map((item) => (
-                            <Button
-                                key={item.id}
-                                id={`sales-order-section-${item.id}`}
-                                variant={
-                                    navSection === item.id
-                                        ? "secondary"
-                                        : "ghost"
-                                }
-                                size="sm"
-                                aria-pressed={navSection === item.id}
-                                title={item.hint}
-                                onClick={() => onSelectSection(item.id)}
-                            >
-                                {item.id === "fulfillment"
-                                    ? "销售明细与交付"
-                                    : item.id === "acceptance"
-                                      ? "客户验收"
-                                      : item.label}
-                            </Button>
-                        ))}
-                    </nav>
-                ) : null}
-                {navSection === "overview" ? (
-                    <OverviewPanel
+            ariaLabel="销售单分区"
+            tabIdPrefix={`sales-orders-detail-tabs-${toAutomationIdSegment(order.id)}-tab`}
+        />
+    )
+}
+
+/** 销售单分区正文：二级柔底分段切换 + 无框水平细线分区内容。 */
+export function SalesOrderDetailSectionContent({
+    order,
+    section,
+    navSection,
+    visibleNav,
+    canOperateAcceptance,
+    canReadDelivery,
+    deliveryQuery,
+    onSelectSection,
+    onApprovalResult,
+}: {
+    order: SalesOrderDetailView
+    section?: string
+    navSection: NavSectionId
+    visibleNav: SalesOrderVisibleNavItem[]
+    canOperateAcceptance: boolean
+    canReadDelivery: boolean
+    deliveryQuery: DeliveryProgressQuery
+    onSelectSection: (
+        next: NavSectionId | WorkSectionId,
+        extras?: { mode?: "register" },
+    ) => void
+    onApprovalResult: (result: SalesOrderDetailActionResult) => void
+}) {
+    const group = salesOrderSectionGroup(navSection)
+    const isCard = order.nature === "card_voucher"
+    const subitems = visibleNav.filter(
+        (item) =>
+            salesOrderSectionGroup(item.id) === group &&
+            !(isCard && item.id === "collaboration"),
+    )
+    const prefix = toAutomationIdSegment(order.id)
+
+    return (
+        <>
+            {group !== "timeline" && subitems.length > 1 ? (
+                <DetailWorkspaceSubTabs
+                    value={navSection}
+                    onValueChange={(next) =>
+                        onSelectSection(next as NavSectionId)
+                    }
+                    ariaLabel="当前分区内容"
+                    idPrefix="sales-order-section"
+                    items={subitems.map((item) => ({
+                        id: item.id,
+                        title: item.hint,
+                        label:
+                            item.id === "fulfillment"
+                                ? "销售明细与交付"
+                                : item.id === "acceptance"
+                                  ? "客户验收"
+                                  : item.label,
+                    }))}
+                />
+            ) : null}
+
+            {navSection === "overview" ? (
+                <OverviewPanel
+                    order={order}
+                    related={
+                        <DetailWorkspaceSection width="form">
+                            <SalesTimeline
+                                salesOrderId={order.id}
+                                idPrefix={`sales-overview-timeline-${prefix}`}
+                                compact
+                                onOpenFull={() => onSelectSection("timeline")}
+                            />
+                        </DetailWorkspaceSection>
+                    }
+                />
+            ) : null}
+
+            {group === "timeline" ? (
+                <SalesOrderProcessPanel
+                    deliveryQuery={deliveryQuery}
+                    canReadDelivery={canReadDelivery}
+                    visibleSections={visibleNav
+                        .filter((item) => item.show)
+                        .map((item) => item.id)}
+                    key={order.id}
+                    order={order}
+                    section={navSection}
+                    onSelectSection={onSelectSection}
+                />
+            ) : null}
+
+            {navSection === "fulfillment" ? (
+                isCard ? (
+                    <CollaborationPanel order={order} />
+                ) : (
+                    <PurchasePanel
                         order={order}
-                        related={
-                            <section className="min-w-0 rounded-lg border border-border/70 p-4 md:p-5">
-                                <SalesTimeline
-                                    salesOrderId={order.id}
-                                    idPrefix={`sales-overview-timeline-${prefix}`}
-                                    compact
-                                    onOpenFull={() =>
-                                        onSelectSection("timeline")
-                                    }
-                                />
-                            </section>
-                        }
-                    />
-                ) : null}
-                {group === "timeline" ? (
-                    <SalesOrderProcessPanel
                         deliveryQuery={deliveryQuery}
                         canReadDelivery={canReadDelivery}
-                        visibleSections={visibleNav
-                            .filter((item) => item.show)
-                            .map((item) => item.id)}
-                        key={order.id}
-                        order={order}
-                        section={navSection}
-                        onSelectSection={onSelectSection}
                     />
-                ) : null}
-                {navSection === "fulfillment" ? (
-                    isCard ? (
-                        <CollaborationPanel order={order} />
-                    ) : (
-                        <PurchasePanel
-                            order={order}
-                            deliveryQuery={deliveryQuery}
-                            canReadDelivery={canReadDelivery}
-                        />
-                    )
-                ) : null}
-                {navSection === "collaboration" ? (
-                    <CollaborationPanel order={order} />
-                ) : null}
-                {navSection === "extra-cost" ? (
-                    <ExtraCostPanel order={order} />
-                ) : null}
-                {navSection === "acceptance" ? (
-                    canReadDelivery ? (
-                        canOperateAcceptance &&
-                        order.allowedActions.includes("REGISTER_ACCEPTANCE") ? (
+                )
+            ) : null}
+
+            {navSection === "collaboration" ? (
+                <CollaborationPanel order={order} />
+            ) : null}
+
+            {navSection === "extra-cost" ? (
+                <ExtraCostPanel order={order} />
+            ) : null}
+
+            {navSection === "acceptance" ? (
+                canReadDelivery ? (
+                    canOperateAcceptance &&
+                    order.allowedActions.includes("REGISTER_ACCEPTANCE") ? (
+                        <DetailWorkspaceSection width="full">
                             <AcceptanceWorkspace
                                 key={order.id}
                                 salesOrderId={order.id}
@@ -238,43 +246,51 @@ export function SalesOrderDetailTabs({
                                     })
                                 }
                             />
-                        ) : (
-                            <AcceptancePanel order={order} />
-                        )
+                        </DetailWorkspaceSection>
                     ) : (
+                        <AcceptancePanel order={order} />
+                    )
+                ) : (
+                    <DetailWorkspaceSection width="form">
                         <p className="text-xs text-muted-foreground">
                             当前无法读取客户验收资料，请核对账号权限。
                         </p>
-                    )
-                ) : null}
-                {navSection === "receivable" ||
-                navSection === "receipt" ||
-                navSection === "invoice" ? (
-                    <SalesOrderCustomerFinancePanel
-                        key={order.id}
-                        order={order}
-                        section={navSection}
-                    />
-                ) : null}
-                {navSection === "documents" ? (
-                    <SalesOrderDocumentsPanel order={order} />
-                ) : null}
-                {navSection === "versions" ? (
-                    <VersionsPanel
-                        showActiveChange={section !== "change-review"}
-                        order={order}
-                        onApprovalResult={onApprovalResult}
-                    />
-                ) : null}
-                {navSection === "returns" ? (
+                    </DetailWorkspaceSection>
+                )
+            ) : null}
+
+            {navSection === "receivable" ||
+            navSection === "receipt" ||
+            navSection === "invoice" ? (
+                <SalesOrderCustomerFinancePanel
+                    key={order.id}
+                    order={order}
+                    section={navSection}
+                />
+            ) : null}
+
+            {navSection === "documents" ? (
+                <SalesOrderDocumentsPanel order={order} />
+            ) : null}
+
+            {navSection === "versions" ? (
+                <VersionsPanel
+                    showActiveChange={section !== "change-review"}
+                    order={order}
+                    onApprovalResult={onApprovalResult}
+                />
+            ) : null}
+
+            {navSection === "returns" ? (
+                <DetailWorkspaceSection width="form">
                     <SalesTimeline
                         key={`returns-${order.id}`}
                         salesOrderId={order.id}
                         idPrefix={`sales-returns-timeline-${prefix}`}
                         fixedCategory="returns"
                     />
-                ) : null}
-            </ObjectSectionTabsPanel>
-        </ObjectSectionTabs>
+                </DetailWorkspaceSection>
+            ) : null}
+        </>
     )
 }

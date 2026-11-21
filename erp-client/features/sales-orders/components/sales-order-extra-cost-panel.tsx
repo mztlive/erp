@@ -4,11 +4,14 @@ import * as React from "react"
 
 import {
     BusinessFailureState,
-    DocumentSection,
+    DetailWorkspaceMetricItem,
+    DetailWorkspaceMetrics,
+    DetailWorkspaceSection,
     MoneyValue,
+    detailWorkspaceStyles,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Table,
     TableBody,
@@ -17,6 +20,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { downloadFileAsset } from "@/features/file-assets/api/file-assets"
 import type { SalesExtraCost } from "@/features/sales-orders/api/sales-order-extra-costs"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
@@ -30,7 +34,6 @@ import {
     formatOccurredDate,
     formatTaxRate,
 } from "@/features/sales-orders/lib/extra-cost"
-import { useAccountProfileQuery } from "@/features/auth/queries"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import { hasPermission } from "@/lib/permissions"
@@ -54,53 +57,62 @@ export function ExtraCostPanel({ order }: { order: SalesOrderDetailView }) {
 
     if (query.isPending) {
         return (
-            <div
-                className="h-48 animate-pulse rounded-lg bg-muted"
-                aria-busy="true"
-                aria-label="加载本单附加费用"
-            />
+            <DetailWorkspaceSection width="form">
+                <div
+                    className="h-36 animate-pulse rounded-md bg-muted/70"
+                    aria-busy="true"
+                    aria-label="加载本单附加费用"
+                />
+            </DetailWorkspaceSection>
         )
     }
     if (query.isError) {
         return (
-            <BusinessFailureState
-                id="sales-orders-extra-cost-retry"
-                title="附加费用加载失败"
-                error={query.error}
-                onRetry={() => {
-                    void query.refetch()
-                }}
-            />
+            <DetailWorkspaceSection width="form">
+                <BusinessFailureState
+                    id="sales-orders-extra-cost-retry"
+                    title="附加费用加载失败"
+                    error={query.error}
+                    onRetry={() => {
+                        void query.refetch()
+                    }}
+                />
+            </DetailWorkspaceSection>
         )
     }
     const list = query.data
     return (
-        <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4 rounded-lg border bg-muted/30 px-4 py-3 sm:max-w-md">
-                <div>
-                    <p className="text-xs text-muted-foreground">
-                        已发生（扣除冲减）
-                    </p>
-                    <MoneyValue
-                        value={list.occurredGrossTotal}
-                        size="summary"
+        <>
+            <DetailWorkspaceSection width="full">
+                <DetailWorkspaceMetrics
+                    columns={2}
+                    variant="inline"
+                    ariaLabel="附加费用摘要"
+                    className="max-w-xl"
+                >
+                    <DetailWorkspaceMetricItem
+                        emphasis="primary"
+                        label="已发生（扣除冲减）"
+                        value={<MoneyValue value={list.occurredGrossTotal} />}
                     />
-                </div>
-                <div>
-                    <p className="text-xs text-muted-foreground">待发生</p>
-                    <MoneyValue value={list.pendingGrossTotal} size="summary" />
-                </div>
-            </div>
-            <DocumentSection
+                    <DetailWorkspaceMetricItem
+                        label="待发生"
+                        value={<MoneyValue value={list.pendingGrossTotal} />}
+                    />
+                </DetailWorkspaceMetrics>
+            </DetailWorkspaceSection>
+
+            <DetailWorkspaceSection
+                width="full"
                 title="费用明细"
-                className="border-0 py-0 [&_h2]:text-body-compact [&>div:last-child]:pt-3"
-                description="已发生的费用计入本单实际经营盈亏；待发生的采购费用确认发生后才计入。"
-                action={
+                subtitle="已发生的费用计入本单实际经营盈亏；待发生的采购费用确认发生后才计入。"
+                actions={
                     canCreate && effective ? (
                         <Button
                             id="sales-orders-extra-cost-register"
                             type="button"
                             size="sm"
+                            className="px-3.5"
                             onClick={() => setRegisterOpen(true)}
                         >
                             登记费用
@@ -109,45 +121,49 @@ export function ExtraCostPanel({ order }: { order: SalesOrderDetailView }) {
                 }
             >
                 {list.items.length === 0 ? (
-                    <p className="py-6 text-xs text-muted-foreground">
+                    <p className="py-4 text-xs text-muted-foreground">
                         本单还没有附加费用。
                     </p>
                 ) : (
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>费用</TableHead>
-                                <TableHead>归属</TableHead>
-                                <TableHead className="text-right">
-                                    含税金额
-                                </TableHead>
-                                <TableHead>状态</TableHead>
-                                <TableHead className="text-right">
-                                    操作
-                                </TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {list.items.map((item) => (
-                                <ExtraCostRow
-                                    key={`${item.source}-${item.id}`}
-                                    item={item}
-                                    lineName={
-                                        item.salesOrderLineId
-                                            ? (lineNames.get(
-                                                  item.salesOrderLineId,
-                                              ) ?? "明细已移除")
-                                            : "整张销售单"
-                                    }
-                                    canReduce={canCreate}
-                                    canDownload={canDownload}
-                                    onReduce={() => setReducing(item)}
-                                />
-                            ))}
-                        </TableBody>
-                    </Table>
+                    <div
+                        data-slot="detail-inline-table"
+                        className={detailWorkspaceStyles.dataTableWrapper}
+                    >
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>费用</TableHead>
+                                    <TableHead>归属</TableHead>
+                                    <TableHead data-align="end">
+                                        含税金额
+                                    </TableHead>
+                                    <TableHead>状态</TableHead>
+                                    <TableHead data-align="end">操作</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {list.items.map((item) => (
+                                    <ExtraCostRow
+                                        key={`${item.source}-${item.id}`}
+                                        item={item}
+                                        lineName={
+                                            item.salesOrderLineId
+                                                ? (lineNames.get(
+                                                      item.salesOrderLineId,
+                                                  ) ?? "明细已移除")
+                                                : "整张销售单"
+                                        }
+                                        canReduce={canCreate}
+                                        canDownload={canDownload}
+                                        onReduce={() => setReducing(item)}
+                                    />
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
                 )}
-            </DocumentSection>
+            </DetailWorkspaceSection>
+
             <RegisterExtraCostDialog
                 order={order}
                 open={registerOpen}
@@ -160,7 +176,7 @@ export function ExtraCostPanel({ order }: { order: SalesOrderDetailView }) {
                     if (!open) setReducing(null)
                 }}
             />
-        </div>
+        </>
     )
 }
 
@@ -190,16 +206,16 @@ function ExtraCostRow({
                         {EXTRA_COST_CATEGORY_LABEL[item.category]}：
                         {item.description}
                     </div>
-                    <div className="text-xs break-all text-muted-foreground">
+                    <div className="num text-xs break-all text-muted-foreground">
                         {item.source === "registration"
                             ? "财务登记"
                             : `采购单 ${item.purchaseNo ?? "—"}`}
                     </div>
                 </TableCell>
                 <TableCell className="whitespace-nowrap">{lineName}</TableCell>
-                <TableCell className="text-right whitespace-nowrap">
+                <TableCell data-align="end" className="whitespace-nowrap">
                     <MoneyValue value={item.grossAmount} />
-                    <p className="text-xs text-muted-foreground">
+                    <p className="num text-xs text-muted-foreground">
                         税率 {formatTaxRate(item.inputTaxRate)}
                         {item.reductions.length > 0
                             ? ` · 已冲减 ${item.reducedGrossAmount}`
@@ -208,15 +224,16 @@ function ExtraCostRow({
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
                     {item.status === "occurred" ? (
-                        <Badge variant="secondary">
-                            已发生 · {formatOccurredDate(item.occurredAt)}
-                        </Badge>
+                        <StatusBadge
+                            tone="success"
+                            label={`已发生 · ${formatOccurredDate(item.occurredAt)}`}
+                        />
                     ) : (
-                        <Badge variant="warning">待发生</Badge>
+                        <StatusBadge tone="warning" label="待发生" />
                     )}
                 </TableCell>
-                <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
+                <TableCell data-align="end">
+                    <div className="flex justify-end gap-1">
                         {canDownload && item.evidenceAttachmentId ? (
                             <EvidenceButton
                                 id={`sales-orders-extra-cost-evidence-${key}`}
@@ -229,7 +246,8 @@ function ExtraCostRow({
                                 id={`sales-orders-extra-cost-reduce-${key}`}
                                 type="button"
                                 size="sm"
-                                variant="secondary"
+                                variant="ghost"
+                                className={detailWorkspaceStyles.subtleButton}
                                 onClick={onReduce}
                             >
                                 冲减
@@ -241,7 +259,7 @@ function ExtraCostRow({
             {item.reductions.map((reduction) => (
                 <TableRow
                     key={reduction.costEntryId}
-                    className="bg-muted/30 text-muted-foreground"
+                    className="bg-muted/25 text-muted-foreground"
                 >
                     <TableCell
                         className="min-w-56 whitespace-normal"
@@ -249,13 +267,13 @@ function ExtraCostRow({
                     >
                         冲减：{reduction.description}
                     </TableCell>
-                    <TableCell className="text-right whitespace-nowrap">
+                    <TableCell data-align="end" className="whitespace-nowrap">
                         −<MoneyValue value={reduction.grossAmount} />
                     </TableCell>
-                    <TableCell className="whitespace-nowrap">
+                    <TableCell className="num whitespace-nowrap">
                         {formatOccurredDate(reduction.occurredAt)}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell data-align="end">
                         {canDownload && reduction.evidenceAttachmentId ? (
                             <EvidenceButton
                                 id={`sales-orders-extra-cost-evidence-${toAutomationIdSegment(reduction.costEntryId)}`}
@@ -287,6 +305,7 @@ function EvidenceButton({
             type="button"
             size="sm"
             variant="ghost"
+            className={detailWorkspaceStyles.inlineLinkButton}
             disabled={pending}
             title={
                 failed ? "凭证下载失败，请确认有文件查看权限后重试" : undefined

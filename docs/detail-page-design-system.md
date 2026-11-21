@@ -1,6 +1,6 @@
 # ERP 详情页设计系统（Detail Workspace Design System）
 
-> **设计基准标杆**：[`erp-client/features/master-data/pages/product-detail-page.tsx`](../erp-client/features/master-data/pages/product-detail-page.tsx)（商品详情）  
+> **设计基准标杆**：主数据编辑型 [`erp-client/features/master-data/pages/product-detail-page.tsx`](../erp-client/features/master-data/pages/product-detail-page.tsx)（商品详情）；单据双栏型 [`erp-client/features/sales-orders/pages/sales-order-detail-page.tsx`](../erp-client/features/sales-orders/pages/sales-order-detail-page.tsx)（销售单详情）  
 > **主题体系**：飞书 Universe Design / 纯白通栏工作面（与 [`docs/list-table-design-system.md`](./list-table-design-system.md) 100% 同源）  
 > **适用范围**：所有桌面端对象详情与详情编辑页（主数据编辑中心：商品、供应商、客户、仓库；以及正式单据详情中心：销售单、采购单、合同、供给资料等）。
 
@@ -98,7 +98,9 @@
 | `DetailWorkspaceMeta` | 12px 元信息行，自动插入 `·` 分隔符并过滤空项 |
 | `DetailWorkspaceDirtyBadge` | 琥珀色 `● 有未保存修改` 微胶囊 |
 | `DetailWorkspaceTabs` | 贴底通栏 `line` Tabs，对齐 `--scaffold-px`，`<2` 项自动隐藏 |
-| `DetailWorkspaceBody` | 承载告警槽、纵向细线分隔分区，支持 `sidebar` 宽屏竖线双栏 |
+| `DetailWorkspaceSubTabs` | 柔底二级分段胶囊切换条（用于合并主分区内的多子视图，区别于一级线型 Tab 与业务操作按钮） |
+| `DetailWorkspaceBody` | 承载非吸顶通栏 `summary`、告警槽、纵向细线分隔分区，支持 `sidebar` + `sidebarLabel` 宽屏单竖线双栏 |
+| `DetailWorkspaceMetrics` / `DetailWorkspaceMetricItem` | 无框纯白 KPI 指标条（`variant="bar"` 通栏金额摘要带 / `variant="inline"` 分区汇总） |
 | `DetailWorkspaceSection` | 无边框纯白分区，支持 `width="form"`（`max-w-4xl`）与 `width="full"` |
 | `DetailWorkspaceSaveDock` | 脏状态底部居中悬浮保存胶囊（与列表页 `list-selection-dock` 同源，退场冻结计数防闪 `0`） |
 | `DetailWorkspaceSkeleton` | 纯白骨架屏，防止加载期间闪出浅灰底 |
@@ -165,9 +167,9 @@
 ## 5. 全站详情页迁移路线与验收清单
 
 ### 分批迁移参考
-1. **标杆页（已完成）**：商品详情页（`product-detail-page.tsx`）。
+1. **标杆页（已完成）**：主数据编辑型——商品详情页（`product-detail-page.tsx`）；单据双栏型——销售单详情页（`sales-order-detail-page.tsx`）。
 2. **编辑型主数据详情页**：供应商详情（`supplier-detail-page.tsx`）、客户详情（`customer-detail-page.tsx`）、仓库/分类对象中心（`object-center-view.tsx`）——直接迁入 `DetailWorkspacePage` + `DetailWorkspaceChrome` + `DetailWorkspaceBody`。
-3. **单据型详情页**：合同详情（`contract-detail-page.tsx`，顺带消除外层 `surfacePanelClassName` 与 `ObjectSectionTabs` 双层边框）、采购单详情（`purchase-order-detail-page.tsx`）、销售单详情（`sales-order-detail-page.tsx`）、供应商供给详情（`supplier-offering-detail-page.tsx`）——采用 `DetailWorkspaceBody sidebar={...}` 单竖线双栏布局。
+3. **其余单据型详情页**：合同详情（`contract-detail-page.tsx`，顺带消除外层 `surfacePanelClassName` 与 `ObjectSectionTabs` 双层边框）、采购单详情（`purchase-order-detail-page.tsx`）、供应商供给详情（`supplier-offering-detail-page.tsx`）——对齐销售单详情，采用 `DetailWorkspaceBody summary={...} sidebar={...}` 通栏摘要 + 单竖线双栏布局。
 
 ### 视觉与交互验收清单（QA Checklist）
 - [ ] **零套娃与单基准对齐**：整页纯白通栏，无外层圆角白卡套内层灰底再套分区白卡；头部媒体/标题、Tabs、分区标题、表单首列、内嵌表首列严丝合缝对齐 `--scaffold-px`。

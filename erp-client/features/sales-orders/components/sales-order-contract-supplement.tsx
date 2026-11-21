@@ -7,6 +7,7 @@ import { useSelector } from "@tanstack/react-form"
 import { useQueryClient } from "@tanstack/react-query"
 import { z } from "zod"
 
+import { detailWorkspaceStyles } from "@/components/business"
 import { useAppForm, toFieldErrors } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
@@ -101,8 +102,9 @@ export function SalesOrderContractSupplement({
             <Button
                 id="sales-order-documents-supplement-contract"
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="sm"
+                className={detailWorkspaceStyles.subtleButton}
                 onClick={() => {
                     form.reset()
                     mutation.reset()

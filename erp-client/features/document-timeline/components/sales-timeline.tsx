@@ -1,9 +1,12 @@
 "use client"
 import { useState } from "react"
+import {
+    OptionCombobox,
+    QuickPreviewSheet,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { NativeCheckbox } from "@/components/ui/checkbox"
-import { QuickPreviewSheet } from "@/components/business"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { useTimelineQuery } from "../hooks/queries"
 import type { TimelineCategory, TimelineSource } from "../types"
@@ -65,17 +68,18 @@ export function SalesTimeline({
         >
             {!embedded ? (
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h3 className="font-medium">
+                    <h2 className="text-section-title font-semibold tracking-tight text-foreground">
                         {compact
                             ? "最近动态"
                             : fixedCategory === "returns"
                               ? "售后与调整记录"
                               : "全流程时间线"}
-                    </h3>
+                    </h2>
                     <Button
                         id={`${idPrefix}-refresh`}
                         variant="ghost"
                         size="sm"
+                        className={detailWorkspaceStyles.quietButton}
                         disabled={query.isFetching}
                         onClick={() => void query.refetch()}
                     >
@@ -85,35 +89,29 @@ export function SalesTimeline({
             ) : null}
             {!embedded && !compact && !fixedCategory && (
                 <div className="flex flex-wrap items-center gap-3">
-                    <label htmlFor={`${idPrefix}-category`} className="text-xs">
-                        业务环节
-                    </label>
-                    <NativeSelect
+                    <OptionCombobox
                         id={`${idPrefix}-category`}
-                        value={category ?? ""}
-                        onChange={(event) =>
+                        options={[
+                            { value: "all", label: "全部环节" },
+                            ...timelineCategories,
+                        ]}
+                        value={category ?? "all"}
+                        onValueChange={(value) =>
                             setCategory(
-                                (event.target.value || undefined) as
-                                    | TimelineCategory
-                                    | undefined,
+                                !value || value === "all"
+                                    ? undefined
+                                    : (value as TimelineCategory),
                             )
                         }
-                    >
-                        <NativeSelectOption value="">
-                            全部环节
-                        </NativeSelectOption>
-                        {timelineCategories.map((item) => (
-                            <NativeSelectOption
-                                key={item.value}
-                                value={item.value}
-                            >
-                                {item.label}
-                            </NativeSelectOption>
-                        ))}
-                    </NativeSelect>
+                        allowClear={false}
+                        size="sm"
+                        aria-label="业务环节"
+                        className="w-36"
+                        inputClassName="w-36"
+                    />
                     <label
                         htmlFor={`${idPrefix}-details`}
-                        className="inline-flex items-center gap-2 text-xs"
+                        className="inline-flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"
                     >
                         <NativeCheckbox
                             id={`${idPrefix}-details`}

@@ -1,6 +1,9 @@
 "use client"
 
-import { DocumentSection } from "@/components/business"
+import {
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { useSalesOrderEvidenceDownload } from "@/features/sales-orders/hooks/use-sales-order-evidence"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -15,26 +18,27 @@ export function SalesOrderEvidenceAttachments({
 }) {
     const download = useSalesOrderEvidenceDownload(salesOrderId)
     return (
-        <DocumentSection
+        <DetailWorkspaceSection
+            width="form"
             title="开单凭证"
-            className="border-0 py-0 [&_h2]:text-body-compact [&>div:last-child]:pt-3"
-            description="随本单归档的开单依据，供履约与审批核对。"
+            subtitle="随本单归档的开单依据，供履约与审批核对。"
         >
             {files.length ? (
-                <ul className="divide-y divide-border/60">
+                <ul className="divide-y divide-border/60 border-y border-border/60">
                     {files.map((file) => (
                         <li
                             key={file.id}
-                            className="flex flex-wrap items-center justify-between gap-2 py-3 text-body-compact first:pt-0 last:pb-0"
+                            className="flex flex-wrap items-center justify-between gap-2 py-3 text-body-compact"
                         >
-                            <span className="min-w-0 break-all">
+                            <span className="min-w-0 break-all text-foreground">
                                 {file.fileName}
                             </span>
                             <LoadingButton
                                 id={`sales-order-evidence-${toAutomationIdSegment(file.id)}-download`}
                                 type="button"
-                                variant="outline"
+                                variant="ghost"
                                 size="sm"
+                                className={detailWorkspaceStyles.subtleButton}
                                 loading={
                                     download.isPending &&
                                     download.variables?.id === file.id
@@ -52,6 +56,6 @@ export function SalesOrderEvidenceAttachments({
                     本单没有开单凭证。
                 </p>
             )}
-        </DocumentSection>
+        </DetailWorkspaceSection>
     )
 }

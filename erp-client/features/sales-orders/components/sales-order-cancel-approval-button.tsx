@@ -1,5 +1,7 @@
 "use client"
 
+import type { ComponentProps } from "react"
+import type { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { DocumentWithdrawApprovalButton } from "@/features/approval-workflow/components/document-withdraw-approval-button"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
@@ -22,9 +24,13 @@ import { hasPermission } from "@/lib/permissions"
 export function SalesOrderCancelApprovalButton({
     order,
     onResult,
+    triggerVariant,
+    triggerClassName,
 }: {
     order: SalesOrderDetailView
     onResult?: (result: SalesOrderDetailActionResult) => void
+    triggerVariant?: ComponentProps<typeof Button>["variant"]
+    triggerClassName?: string
 }) {
     const profileQuery = useAccountProfileQuery()
     const permissions = useSalesOrderDetailPermissions()
@@ -90,6 +96,8 @@ export function SalesOrderCancelApprovalButton({
             }
             reference={order.documentNumber}
             onResult={onResult}
+            triggerVariant={triggerVariant}
+            triggerClassName={triggerClassName}
         />
     )
 }

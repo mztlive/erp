@@ -1,12 +1,13 @@
 "use client"
 
-import { DeliveryPackingDetails } from "@/features/fulfillment-operations/components/delivery-packing-details"
-import { toAutomationIdSegment } from "@/lib/automation-id"
+import type { ReactNode } from "react"
 
 import {
     BusinessFailureState,
+    DetailWorkspaceSection,
     MoneyValue,
     QuantityValue,
+    detailWorkspaceStyles,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -18,10 +19,12 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import { DeliveryPackingDetails } from "@/features/fulfillment-operations/components/delivery-packing-details"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import { compareDecimal, subtractFixed } from "@/lib/fixed-decimal"
 import type { SalesOrderDetailView } from "../api/sales-orders"
 import type { useSalesOrderDeliveryProgressQuery } from "../hooks/queries"
 import type { AcceptanceLineProgress } from "../lib/acceptance-model"
-import { compareDecimal, subtractFixed } from "@/lib/fixed-decimal"
 import { SalesOrderDeliverySummary } from "./sales-order-delivery-summary"
 
 export type DeliveryProgressQuery = ReturnType<
@@ -33,10 +36,14 @@ export function SalesOrderDeliveryOverview({
     order,
     query,
     canRead,
+    actions,
+    footer,
 }: {
     order: SalesOrderDetailView
     query: DeliveryProgressQuery
     canRead: boolean
+    actions?: ReactNode
+    footer?: ReactNode
 }) {
     const lines = new Map(
         !canRead || order.currentRevisionNo == null || query.isError
@@ -44,22 +51,18 @@ export function SalesOrderDeliveryOverview({
             : query.data?.lines.map((line) => [line.salesOrderLineId, line]),
     )
     return (
-        <section
-            aria-labelledby="sales-order-delivery-overview-heading"
-            className="min-w-0 space-y-4"
-        >
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h2
-                    id="sales-order-delivery-overview-heading"
-                    className="text-section-title font-semibold tracking-tight"
-                >
-                    销售明细与交付
-                </h2>
-                <span className="text-xs text-muted-foreground">
+        <DetailWorkspaceSection
+            width="full"
+            title="销售明细与交付"
+            headingId="sales-order-delivery-overview-heading"
+            badge={
+                <span className="num text-xs text-muted-foreground">
                     共 {order.lineItems.length} 项
                 </span>
-            </div>
-            <p className="text-xs text-muted-foreground">
+            }
+            actions={actions}
+        >
+            <p className="-mt-1 text-xs text-muted-foreground">
                 已交付数量按实际已发货或已完成服务的记录统计；货到后请及时办理客户验收。
             </p>
             <DeliveryProgressNotice
@@ -67,7 +70,10 @@ export function SalesOrderDeliveryOverview({
                 query={query}
                 canRead={canRead}
             />
-            <div className="min-w-0 overflow-x-auto">
+            <div
+                data-slot="detail-inline-table"
+                className={detailWorkspaceStyles.dataTableWrapper}
+            >
                 <Table data-density="comfortable" className="min-w-[60rem]">
                     <TableHeader>
                         <TableRow>
@@ -99,7 +105,7 @@ export function SalesOrderDeliveryOverview({
                                             ) : null}
                                         </div>
                                         {line.sku && line.sku !== "无规格" ? (
-                                            <p className="mt-1 text-xs text-muted-foreground">
+                                            <p className="num mt-0.5 text-xs text-muted-foreground">
                                                 {line.sku}
                                             </p>
                                         ) : null}
@@ -113,7 +119,7 @@ export function SalesOrderDeliveryOverview({
                                                     key={fact.fulfillmentLineId}
                                                     className="mt-2"
                                                 >
-                                                    <p className="text-xs text-muted-foreground">
+                                                    <p className="num text-xs text-muted-foreground">
                                                         {fact.fulfillmentNo} ·{" "}
                                                         {
                                                             fact.netSuccessfulQuantity
@@ -144,7 +150,7 @@ export function SalesOrderDeliveryOverview({
                                             value={line.unitPriceGross}
                                         />
                                         {line.procurementSupplyPrice ? (
-                                            <div className="mt-1 text-xs text-muted-foreground">
+                                            <div className="mt-0.5 text-xs text-muted-foreground">
                                                 采购供给价{" "}
                                                 <MoneyValue
                                                     value={
@@ -198,7 +204,7 @@ export function SalesOrderDeliveryOverview({
                                             "—"
                                         )}
                                     </TableCell>
-                                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                                    <TableCell className="num whitespace-nowrap text-muted-foreground">
                                         {line.dueDate || "—"}
                                     </TableCell>
                                     <TableCell>
@@ -218,14 +224,17 @@ export function SalesOrderDeliveryOverview({
                     </TableBody>
                 </Table>
             </div>
-            <div className="flex items-baseline justify-end gap-5 text-body-compact">
-                <span className="text-muted-foreground">合计（含税）</span>
+            <div className="flex items-baseline justify-end gap-4 pt-1 text-body-compact">
+                <span className="text-xs text-muted-foreground">
+                    合计（含税）
+                </span>
                 <MoneyValue
                     value={order.amountGross}
                     className="text-value-compact font-semibold tracking-tight"
                 />
             </div>
-        </section>
+            {footer}
+        </DetailWorkspaceSection>
     )
 }
 

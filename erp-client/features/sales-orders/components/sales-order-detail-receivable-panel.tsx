@@ -1,19 +1,17 @@
 "use client"
 
-import { SalesOrderInvoiceRecords } from "./sales-order-invoice-records"
-import { InvoiceRequestPanel } from "@/features/invoice-requests/components/request-panel"
 import type { ReactNode } from "react"
-import {
-    DetailHint,
-    DetailRecordSection,
-    DetailSummary,
-    DetailSummaryItem,
-} from "@/components/business/detail-presentation"
+
 import {
     BusinessFailureState,
+    DetailWorkspaceMetricItem,
+    DetailWorkspaceMetrics,
+    DetailWorkspaceSection,
     MoneyValue,
     QuickPreviewSheet,
+    detailWorkspaceStyles,
 } from "@/components/business"
+import { DetailHint } from "@/components/business/detail-presentation"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import {
@@ -29,14 +27,16 @@ import {
     ReceiptDetailBody,
     ReceivableDetailBody,
 } from "@/features/customer-receivables/components/detail-bodies"
+import { InvoiceRequestPanel } from "@/features/invoice-requests/components/request-panel"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { useSalesOrderReceivable } from "@/features/sales-orders/hooks/use-sales-order-receivable"
 import {
     amountAllocatedToTargets,
     receivableTargetIds,
 } from "@/features/sales-orders/lib/sales-order-receivable"
-import { sumFixed } from "@/lib/fixed-decimal"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { sumFixed } from "@/lib/fixed-decimal"
+import { SalesOrderInvoiceRecords } from "./sales-order-invoice-records"
 
 /** 分区展示本单应收、回款或发票，保留各自的权限与记录预览。 */
 export function SalesOrderCustomerFinancePanel({
@@ -85,11 +85,6 @@ export function SalesOrderCustomerFinancePanel({
         ) : (
             <MoneyValue value={value} />
         )
-    const receiptsEmpty =
-        canRead("customer_receipt:list") &&
-        !receipts.isLoading &&
-        !receipts.error &&
-        receipts.data?.total === 0
     const previewButton = (
         kind: "receivable" | "receipt" | "invoice",
         id: string,
@@ -105,7 +100,8 @@ export function SalesOrderCustomerFinancePanel({
             <Button
                 id={`sales-order-${kind}-${toAutomationIdSegment(id)}-view`}
                 size="sm"
-                variant="secondary"
+                variant="ghost"
+                className={detailWorkspaceStyles.inlineLinkButton}
                 aria-label={`查看${label}`}
                 onClick={() => state.setPreview({ kind, id })}
             >
@@ -130,180 +126,200 @@ export function SalesOrderCustomerFinancePanel({
                   order.nature === "card_voucher" ? "卡券" : "实物与服务",
           }
         : undefined
+    const receiptTotalCount =
+        canRead("customer_receipt:list") && !receipts.error
+            ? receipts.data?.total
+            : undefined
     return (
-        <div className="space-y-6">
-            {section !== "invoice" && (
-                <DetailSummary className="sm:grid-cols-1" label="本单收款摘要">
-                    <DetailSummaryItem
-                        title={section === "receivable" ? "应收" : "回款"}
-                        label="待收金额"
-                        value={summaryAmount(total("openTotal"))}
-                        detail={
-                            <>
-                                已核销回款{" "}
-                                <span className="font-medium text-foreground">
-                                    {summaryAmount(
-                                        total("settledTotal") ??
-                                            order.receivedAmount,
-                                    )}
-                                </span>
-                            </>
-                        }
-                        hint={
-                            <DetailHint
-                                id="sales-order-receipt-summary-hint"
-                                label="收款金额"
-                            >
-                                只统计核销到本单的已过账净额。审批中的拟核销金额不计入已核销回款。
-                            </DetailHint>
-                        }
-                    />
-                </DetailSummary>
-            )}
+        <>
+            {section !== "invoice" ? (
+                <DetailWorkspaceSection width="full">
+                    <DetailWorkspaceMetrics
+                        columns={2}
+                        variant="inline"
+                        ariaLabel="本单收款摘要"
+                        className="max-w-xl"
+                    >
+                        <DetailWorkspaceMetricItem
+                            emphasis="primary"
+                            label={
+                                <>
+                                    <span>待收金额</span>
+                                    <DetailHint
+                                        id="sales-order-receipt-summary-hint"
+                                        label="收款金额"
+                                    >
+                                        只统计核销到本单的已过账净额。审批中的拟核销金额不计入已核销回款。
+                                    </DetailHint>
+                                </>
+                            }
+                            value={summaryAmount(total("openTotal"))}
+                        />
+                        <DetailWorkspaceMetricItem
+                            label="已核销回款"
+                            value={summaryAmount(
+                                total("settledTotal") ?? order.receivedAmount,
+                            )}
+                        />
+                    </DetailWorkspaceMetrics>
+                </DetailWorkspaceSection>
+            ) : null}
+
             {state.profile.isError ? (
-                <BusinessFailureState
-                    title="票款权限读取失败"
-                    error={state.profile.error}
-                    onRetry={() => void state.profile.refetch()}
+                <DetailWorkspaceSection width="form">
+                    <BusinessFailureState
+                        title="票款权限读取失败"
+                        error={state.profile.error}
+                        onRetry={() => void state.profile.refetch()}
+                    />
+                </DetailWorkspaceSection>
+            ) : null}
+
+            {section === "invoice" ? (
+                <InvoiceRequestPanel
+                    salesSummary={{
+                        invoiced: summaryAmount(
+                            total("invoicedTotal") ?? order.invoicedAmount,
+                        ),
+                        uninvoiced: summaryAmount(
+                            total("openInvoiceableTotal"),
+                        ),
+                    }}
+                    invoiceRecords={
+                        <SalesOrderInvoiceRecords
+                            salesOrderId={order.id}
+                            state={state}
+                            rowAmount={rowAmount}
+                            previewButton={(id, label) =>
+                                previewButton("invoice", id, label)
+                            }
+                        />
+                    }
+                    salesOrderId={order.id}
+                    accountId={
+                        readableAccounts?.length === 1
+                            ? readableAccounts[0]?.accountId
+                            : undefined
+                    }
+                    accountIds={readableAccounts?.map(
+                        (account) => account.accountId,
+                    )}
                 />
             ) : null}
-            {section === "invoice" && (
-                <>
-                    <InvoiceRequestPanel
-                        salesSummary={{
-                            invoiced: summaryAmount(
-                                total("invoicedTotal") ?? order.invoicedAmount,
-                            ),
-                            uninvoiced: summaryAmount(
-                                total("openInvoiceableTotal"),
-                            ),
-                        }}
-                        invoiceRecords={
-                            <SalesOrderInvoiceRecords
-                                salesOrderId={order.id}
-                                state={state}
-                                rowAmount={rowAmount}
-                                previewButton={(id, label) =>
-                                    previewButton("invoice", id, label)
-                                }
-                            />
-                        }
-                        salesOrderId={order.id}
-                        accountId={
-                            readableAccounts?.length === 1
-                                ? readableAccounts[0]?.accountId
-                                : undefined
-                        }
-                        accountIds={readableAccounts?.map(
-                            (account) => account.accountId,
-                        )}
-                    />
-                </>
-            )}
-            <div className="divide-y divide-border/70">
-                {section === "receivable" &&
-                    canRead("receivable_account:list") && (
-                        <DetailRecordSection
-                            title="应收明细"
-                            count={readableAccounts?.length}
-                        >
-                            <ReadState
-                                pending={
-                                    state.profile.isPending ||
-                                    accounts.isLoading
-                                }
-                                error={accounts.error}
-                                retry={() => void accounts.refetch()}
-                            >
-                                {!readableAccounts?.length ? (
-                                    <p className="text-xs text-muted-foreground">
-                                        {order.currentRevisionNo == null
-                                            ? "本单尚未生效，尚未形成应收。"
-                                            : "本单已生效，当前可见范围未查到应收记录。"}
-                                    </p>
-                                ) : (
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>应收</TableHead>
-                                                <TableHead>结算主体</TableHead>
-                                                <TableHead>到期日</TableHead>
-                                                <TableHead>状态</TableHead>
-                                                <TableHead data-align="end">
-                                                    待收金额
-                                                </TableHead>
-                                                <TableHead>操作</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {readableAccounts.map((row) => (
-                                                <TableRow key={row.accountId}>
-                                                    <TableCell>
-                                                        子账 #{row.accountSeq}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {
-                                                            row.counterpartyPartyName
-                                                        }
-                                                    </TableCell>
-                                                    <TableCell className="num">
-                                                        {row.dueDate ||
-                                                            "未约定"}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <StatusBadge
-                                                            label={
-                                                                row.statusLabel
-                                                            }
-                                                            tone={
-                                                                row.statusTone
-                                                            }
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell data-align="end">
-                                                        <MoneyValue
-                                                            value={
-                                                                row.openTotal
-                                                            }
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {previewButton(
-                                                            "receivable",
-                                                            row.accountId,
-                                                            `应收子账${row.accountSeq}`,
-                                                        )}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                )}
-                            </ReadState>
-                        </DetailRecordSection>
-                    )}
-                {section === "receipt" && canRead("customer_receipt:list") && (
-                    <DetailRecordSection
-                        title="回款记录"
-                        count={
-                            canRead("customer_receipt:list") && !receipts.error
-                                ? receipts.data?.total
-                                : undefined
-                        }
-                        compact={receiptsEmpty}
+
+            {section === "receivable" && canRead("receivable_account:list") ? (
+                <DetailWorkspaceSection
+                    width="full"
+                    title="应收明细"
+                    badge={
+                        readableAccounts?.length ? (
+                            <span className="num rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                                {readableAccounts.length}
+                            </span>
+                        ) : null
+                    }
+                >
+                    <ReadState
+                        pending={state.profile.isPending || accounts.isLoading}
+                        error={accounts.error}
+                        retry={() => void accounts.refetch()}
                     >
-                        <ReadState
-                            pending={
-                                state.profile.isPending || receipts.isLoading
-                            }
-                            error={receipts.error}
-                            retry={() => void receipts.refetch()}
-                        >
-                            {!receipts.data?.items.length ? (
-                                <p className="text-xs text-muted-foreground">
-                                    暂无回款记录
-                                </p>
-                            ) : (
+                        {!readableAccounts?.length ? (
+                            <p className="text-xs text-muted-foreground">
+                                {order.currentRevisionNo == null
+                                    ? "本单尚未生效，尚未形成应收。"
+                                    : "本单已生效，当前可见范围未查到应收记录。"}
+                            </p>
+                        ) : (
+                            <div
+                                data-slot="detail-inline-table"
+                                className={
+                                    detailWorkspaceStyles.dataTableWrapper
+                                }
+                            >
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>应收</TableHead>
+                                            <TableHead>结算主体</TableHead>
+                                            <TableHead>到期日</TableHead>
+                                            <TableHead>状态</TableHead>
+                                            <TableHead data-align="end">
+                                                待收金额
+                                            </TableHead>
+                                            <TableHead data-align="end">
+                                                操作
+                                            </TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {readableAccounts.map((row) => (
+                                            <TableRow key={row.accountId}>
+                                                <TableCell className="num font-medium">
+                                                    子账 #{row.accountSeq}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {row.counterpartyPartyName}
+                                                </TableCell>
+                                                <TableCell className="num text-muted-foreground">
+                                                    {row.dueDate || "未约定"}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <StatusBadge
+                                                        label={row.statusLabel}
+                                                        tone={row.statusTone}
+                                                    />
+                                                </TableCell>
+                                                <TableCell data-align="end">
+                                                    <MoneyValue
+                                                        value={row.openTotal}
+                                                    />
+                                                </TableCell>
+                                                <TableCell data-align="end">
+                                                    {previewButton(
+                                                        "receivable",
+                                                        row.accountId,
+                                                        `应收子账${row.accountSeq}`,
+                                                    )}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        )}
+                    </ReadState>
+                </DetailWorkspaceSection>
+            ) : null}
+
+            {section === "receipt" && canRead("customer_receipt:list") ? (
+                <DetailWorkspaceSection
+                    width="full"
+                    title="回款记录"
+                    badge={
+                        receiptTotalCount != null && receiptTotalCount > 0 ? (
+                            <span className="num rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                                {receiptTotalCount}
+                            </span>
+                        ) : null
+                    }
+                >
+                    <ReadState
+                        pending={state.profile.isPending || receipts.isLoading}
+                        error={receipts.error}
+                        retry={() => void receipts.refetch()}
+                    >
+                        {!receipts.data?.items.length ? (
+                            <p className="text-xs text-muted-foreground">
+                                暂无回款记录
+                            </p>
+                        ) : (
+                            <div
+                                data-slot="detail-inline-table"
+                                className={
+                                    detailWorkspaceStyles.dataTableWrapper
+                                }
+                            >
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
@@ -330,15 +346,19 @@ export function SalesOrderCustomerFinancePanel({
                                                     </DetailHint>
                                                 </span>
                                             </TableHead>
-                                            <TableHead>操作</TableHead>
+                                            <TableHead data-align="end">
+                                                操作
+                                            </TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {receipts.data.items.map((row) => (
                                             <TableRow key={row.receiptId}>
                                                 <TableCell>
-                                                    {row.receiptNo}
-                                                    <div className="text-xs text-muted-foreground">
+                                                    <span className="num font-medium">
+                                                        {row.receiptNo}
+                                                    </span>
+                                                    <div className="num text-xs text-muted-foreground">
                                                         {row.receivedAt.slice(
                                                             0,
                                                             10,
@@ -401,7 +421,7 @@ export function SalesOrderCustomerFinancePanel({
                                                         "—"
                                                     )}
                                                 </TableCell>
-                                                <TableCell>
+                                                <TableCell data-align="end">
                                                     {previewButton(
                                                         "receipt",
                                                         row.receiptId,
@@ -412,21 +432,21 @@ export function SalesOrderCustomerFinancePanel({
                                         ))}
                                     </TableBody>
                                 </Table>
-                            )}
-                            {receipts.data &&
-                            (receipts.data.total > 20 ||
-                                state.receiptPage > 1) ? (
-                                <RecordPages
-                                    id="sales-order-receipts"
-                                    page={state.receiptPage}
-                                    total={receipts.data.total}
-                                    onPage={state.setReceiptPage}
-                                />
-                            ) : null}
-                        </ReadState>
-                    </DetailRecordSection>
-                )}
-            </div>
+                            </div>
+                        )}
+                        {receipts.data &&
+                        (receipts.data.total > 20 || state.receiptPage > 1) ? (
+                            <RecordPages
+                                id="sales-order-receipts"
+                                page={state.receiptPage}
+                                total={receipts.data.total}
+                                onPage={state.setReceiptPage}
+                            />
+                        ) : null}
+                    </ReadState>
+                </DetailWorkspaceSection>
+            ) : null}
+
             <QuickPreviewSheet
                 id="sales-order-finance-preview"
                 open={state.preview != null}
@@ -479,7 +499,7 @@ export function SalesOrderCustomerFinancePanel({
                     </p>
                 )}
             </QuickPreviewSheet>
-        </div>
+        </>
     )
 }
 
@@ -523,24 +543,26 @@ function RecordPages({
     onPage: (page: number) => void
 }) {
     return (
-        <div className="mt-3 flex items-center justify-end gap-3 text-xs text-muted-foreground">
-            <span>共 {total} 笔</span>
+        <div className="mt-3 flex items-center justify-end gap-2 text-xs text-muted-foreground">
+            <span className="num">共 {total} 笔</span>
             {total > 20 || page > 1 ? (
                 <>
                     <Button
                         id={`${id}-previous`}
                         size="sm"
-                        variant="outline"
+                        variant="ghost"
+                        className={detailWorkspaceStyles.subtleButton}
                         disabled={page === 1}
                         onClick={() => onPage(page - 1)}
                     >
                         上一页
                     </Button>
-                    <span>第 {page} 页</span>
+                    <span className="num">第 {page} 页</span>
                     <Button
                         id={`${id}-next`}
                         size="sm"
-                        variant="outline"
+                        variant="ghost"
+                        className={detailWorkspaceStyles.subtleButton}
                         disabled={page * 20 >= total}
                         onClick={() => onPage(page + 1)}
                     >

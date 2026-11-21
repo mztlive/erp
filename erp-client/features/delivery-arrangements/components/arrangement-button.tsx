@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useRef, useState } from "react"
+import { type ComponentProps, useEffect, useRef, useState } from "react"
 import { MapPinIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { FormValidationSummary, useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
@@ -35,6 +35,8 @@ type Props = {
     objectId: string
     disabled?: boolean
     label?: string
+    variant?: ComponentProps<typeof Button>["variant"]
+    className?: string
     hasUnsavedChanges?: boolean
     onSaved?: () => void | Promise<void>
 }
@@ -44,6 +46,8 @@ export function ArrangementButton({
     objectId,
     disabled,
     label = "收货安排",
+    variant = "outline",
+    className,
     hasUnsavedChanges,
     onSaved,
 }: Props) {
@@ -61,8 +65,9 @@ export function ArrangementButton({
             <Button
                 id={`${prefix}-open`}
                 type="button"
-                variant="outline"
+                variant={variant}
                 size="sm"
+                className={className}
                 disabled={disabled}
                 onClick={() => {
                     setEditingData(null)

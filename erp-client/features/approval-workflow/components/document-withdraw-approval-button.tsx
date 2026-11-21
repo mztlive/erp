@@ -54,6 +54,8 @@ export function DocumentWithdrawApprovalButton<TCommand>({
     successHref,
     reference,
     onResult,
+    triggerVariant = "outline",
+    triggerClassName,
 }: {
     visible: boolean
     permitted: boolean
@@ -78,6 +80,8 @@ export function DocumentWithdrawApprovalButton<TCommand>({
     successHref?: string
     reference?: string
     onResult?: (result: WithdrawResult) => void
+    triggerVariant?: React.ComponentProps<typeof Button>["variant"]
+    triggerClassName?: string
 }) {
     const router = useRouter()
     const [open, setOpen] = React.useState(false)
@@ -98,7 +102,8 @@ export function DocumentWithdrawApprovalButton<TCommand>({
                 id={ids.trigger}
                 type="button"
                 size="sm"
-                variant="outline"
+                variant={triggerVariant}
+                className={triggerClassName}
                 disabled={!gate.enabled}
                 title={gate.reason}
                 onClick={() => {

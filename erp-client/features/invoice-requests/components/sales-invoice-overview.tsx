@@ -1,9 +1,15 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { Button } from "@/components/ui/button"
-import { MoneyValue } from "@/components/business"
+
+import {
+    DetailWorkspaceMetricItem,
+    DetailWorkspaceMetrics,
+    DetailWorkspaceSection,
+    MoneyValue,
+} from "@/components/business"
 import { DetailHint } from "@/components/business/detail-presentation"
+import { Button } from "@/components/ui/button"
 import { sumFixed } from "@/lib/fixed-decimal"
 import type { useInvoiceRequestAvailability } from "../hooks/queries"
 
@@ -39,26 +45,23 @@ export function SalesInvoiceOverview({
         ),
     ).join("；")
     return (
-        <section
-            aria-label="开票概况"
-            className="rounded-xl border border-border/70 bg-muted/35 px-5 py-4"
-        >
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-1">
-                    <h2 className="text-section-title font-semibold tracking-tight">
-                        开票概况
-                    </h2>
-                    <DetailHint
-                        id="sales-order-invoice-summary-hint"
-                        label="开票金额"
-                    >
-                        已开票净额只统计分配到本单的含税净额，已扣除冲减金额。未开票金额包含审批中及待财务开票的金额；可申请金额已扣除这些占用。开票与回款分别统计。
-                    </DetailHint>
-                </div>
-                {canSubmit ? (
+        <DetailWorkspaceSection
+            width="full"
+            title="开票概况"
+            badge={
+                <DetailHint
+                    id="sales-order-invoice-summary-hint"
+                    label="开票金额"
+                >
+                    已开票净额只统计分配到本单的含税净额，已扣除冲减金额。未开票金额包含审批中及待财务开票的金额；可申请金额已扣除这些占用。开票与回款分别统计。
+                </DetailHint>
+            }
+            actions={
+                canSubmit ? (
                     <Button
                         id="invoice-request-create"
                         size="sm"
+                        className="px-3.5"
                         disabled={!onCreate}
                         title={
                             !onCreate ? blockedReason || undefined : undefined
@@ -67,25 +70,28 @@ export function SalesInvoiceOverview({
                     >
                         申请开票
                     </Button>
-                ) : null}
-            </div>
-            <dl className="mt-3 grid grid-cols-2 gap-4">
-                {[
-                    ["已开票净额", summary.invoiced],
-                    ["未开票金额", summary.uninvoiced],
-                ].map(([label, value], index) => (
-                    <div key={index} className="min-w-0">
-                        <dt className="text-xs text-muted-foreground">
-                            {label}
-                        </dt>
-                        <dd className="num mt-1 text-value-section font-semibold wrap-anywhere tracking-tight">
-                            {value}
-                        </dd>
-                    </div>
-                ))}
-            </dl>
+                ) : null
+            }
+        >
+            <DetailWorkspaceMetrics
+                columns={2}
+                variant="inline"
+                ariaLabel="开票概况"
+                className="max-w-xl"
+            >
+                <DetailWorkspaceMetricItem
+                    emphasis="primary"
+                    label="已开票净额"
+                    value={summary.invoiced}
+                />
+                <DetailWorkspaceMetricItem
+                    label="未开票金额"
+                    value={summary.uninvoiced}
+                />
+            </DetailWorkspaceMetrics>
+
             {canRead ? (
-                <div className="mt-4 border-t border-border/70 pt-3">
+                <div className="space-y-2 border-t border-border/60 pt-3">
                     <dl className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-muted-foreground">
                         {metrics.map(([label, field]) => (
                             <div
@@ -93,7 +99,7 @@ export function SalesInvoiceOverview({
                                 className="flex items-baseline gap-2"
                             >
                                 <dt>{label}</dt>
-                                <dd className="text-foreground">
+                                <dd className="num font-medium text-foreground">
                                     {complete ? (
                                         <MoneyValue
                                             value={sumFixed(
@@ -113,7 +119,7 @@ export function SalesInvoiceOverview({
                     </dl>
                     {failed ? (
                         <div
-                            className="mt-2 flex items-center gap-2 text-xs"
+                            className="flex items-center gap-2 text-xs text-destructive"
                             role="alert"
                         >
                             <span>申请额度读取失败</span>
@@ -121,6 +127,7 @@ export function SalesInvoiceOverview({
                                 id="sales-invoice-amounts-retry"
                                 variant="link"
                                 size="sm"
+                                className="h-auto p-0"
                                 onClick={() =>
                                     void Promise.all(
                                         availability.map((query) =>
@@ -134,17 +141,17 @@ export function SalesInvoiceOverview({
                         </div>
                     ) : null}
                     {complete && canSubmit && !onCreate && blockedReason ? (
-                        <p className="mt-2 text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             {blockedReason}
                         </p>
                     ) : null}
                     {onCreate ? (
-                        <p className="mt-2 text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             销售单生效后即可申请，无需等待回款或发货。审批通过后由财务开票。
                         </p>
                     ) : null}
                 </div>
             ) : null}
-        </section>
+        </DetailWorkspaceSection>
     )
 }
