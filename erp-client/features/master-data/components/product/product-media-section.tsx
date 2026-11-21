@@ -71,7 +71,7 @@ function ProductMediaSection({
                     }
                 />
             </section>
-            <div className="border-t border-border" />
+            <div className="border-t border-border/60" />
             <section className="space-y-3">
                 <MediaListEditor
                     readOnly={!canRevise}

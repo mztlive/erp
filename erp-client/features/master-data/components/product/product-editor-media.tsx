@@ -26,12 +26,14 @@ function MoneyInput({
     value,
     onChange,
     disabled = false,
+    align = "start",
     "aria-label": ariaLabel,
     id,
 }: {
     value: string
     onChange: (next: string) => void
     disabled?: boolean
+    align?: "start" | "end"
     "aria-label": string
     id?: string
 }) {
@@ -39,13 +41,18 @@ function MoneyInput({
     return (
         <div className="relative">
             {showPrefix ? (
-                <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground/70">
                     ¥
                 </span>
             ) : null}
             <Input
                 id={id}
-                className={cn("h-control-sm", showPrefix && "pl-6")}
+                inputMode="decimal"
+                className={cn(
+                    "h-control-sm num",
+                    showPrefix && "pl-6",
+                    align === "end" && "text-right",
+                )}
                 value={value}
                 disabled={disabled}
                 onChange={(event) =>
@@ -149,15 +156,17 @@ function MediaListEditor({
     return (
         <div className="space-y-3">
             <div className="flex items-center justify-between gap-2">
-                <div>
-                    <Label className="text-sm font-medium">{label}</Label>
-                    <p className="mt-1 text-xs text-muted-foreground">
+                <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+                    <Label className="text-section-title font-semibold text-foreground">
+                        {label}
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
                         {hint ?? masterDataCopy.mediaUploadHint}
                     </p>
                 </div>
-                <Badge variant="secondary">
+                <span className="num rounded-sm bg-muted/80 px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
                     {masterDataCopy.mediaCount(value.length)}
-                </Badge>
+                </span>
             </div>
             <div
                 className={cn(
@@ -179,7 +188,7 @@ function MediaListEditor({
                     return (
                         <div
                             key={`${name}-${index}`}
-                            className="group relative overflow-hidden rounded-xl border border-border bg-surface-sunken"
+                            className="group relative overflow-hidden rounded-lg border border-border/75 bg-surface-sunken/60"
                         >
                             <button
                                 id={`${base}-preview`}
@@ -440,7 +449,7 @@ function SkuMainImageField({
             label={masterDataCopy.fMainImage}
             description="1:1"
             density="tile"
-            className="w-16"
+            className="w-12"
             controlClassName="aspect-square"
             selectedDescription={fileUploadText.pendingSave}
             readOnly={disabled}

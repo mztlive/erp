@@ -1,10 +1,14 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { BoxesIcon, ChevronDownIcon, SlidersHorizontalIcon } from "lucide-react"
 
+import {
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
+} from "@/components/business/detail-workspace"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { ProductSpecDraftsEditor } from "@/features/master-data/components/product/product-spec-drafts"
 import { ProductSkuTable } from "@/features/master-data/components/product/product-sku-table"
@@ -19,6 +23,7 @@ import type {
     ProductSkuFields,
     ProductSpecDimension,
 } from "@/features/master-data/types"
+import { cn } from "@/lib/utils"
 
 type ProductSkuSectionProps = {
     idPrefix?: string
@@ -87,56 +92,55 @@ function ProductSkuSection({
     }, [specsPending])
     const showInventory = fields.productKind === "PHYSICAL"
     const prefix = idPrefix ?? "master-data-product-sku"
+    const specSummary =
+        activeSpecs
+            .map((spec) => `${spec.name}：${spec.values.join("、")}`)
+            .join(" · ") || "默认规格"
+
     return (
-        <section
+        <DetailWorkspaceSection
             id="product-section-sku"
-            aria-labelledby={`${prefix}-heading`}
-            className="min-w-0 max-w-full scroll-mt-4 space-y-4 [&>fieldset]:min-w-0"
-        >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <h2
-                            id={`${prefix}-heading`}
-                            className="text-base font-semibold tracking-tight"
-                        >
-                            规格与 SKU
-                        </h2>
-                        <Badge variant="secondary">
-                            {fields.skus.length} 个 SKU
-                        </Badge>
-                        {specsPending ? (
-                            <Badge variant="secondary">规格待应用</Badge>
-                        ) : null}
-                    </div>
-                    <p className="break-words text-sm text-muted-foreground">
-                        {activeSpecs
-                            .map(
-                                (spec) =>
-                                    `${spec.name}：${spec.values.join("、")}`,
-                            )
-                            .join(" · ") || "默认规格"}
-                    </p>
+            title="规格与 SKU"
+            headingId={`${prefix}-heading`}
+            width="full"
+            badge={
+                <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="num rounded-sm bg-muted/80 px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+                        {fields.skus.length} 个 SKU
+                    </span>
+                    {specsPending ? (
+                        <Badge variant="warning">规格待应用</Badge>
+                    ) : null}
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+            }
+            subtitle={specSummary}
+            actions={
+                <>
                     <Button
                         id={`${prefix}-spec-toggle`}
                         type="button"
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
+                        className={detailWorkspaceStyles.subtleButton}
                         aria-expanded={specOpen}
                         aria-controls={`${prefix}-spec-content`}
                         onClick={() => setSpecOpen(!specOpen)}
                     >
+                        <SlidersHorizontalIcon
+                            data-icon="inline-start"
+                            className="size-3.5"
+                            aria-hidden
+                        />
                         {specOpen
                             ? "收起规格"
                             : canRevise
                               ? "修改规格"
                               : "查看规格"}
                         <ChevronDownIcon
-                            className={
-                                specOpen ? "size-4 rotate-180" : "size-4"
-                            }
+                            className={cn(
+                                "size-3.5 transition-transform duration-150",
+                                specOpen && "rotate-180",
+                            )}
                             aria-hidden
                         />
                     </Button>
@@ -144,8 +148,9 @@ function ProductSkuSection({
                         <Button
                             id={`${prefix}-bulk-toggle`}
                             type="button"
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
+                            className={detailWorkspaceStyles.subtleButton}
                             aria-expanded={bulkOpen}
                             onClick={() => setBulkOpen(!bulkOpen)}
                         >
@@ -156,8 +161,9 @@ function ProductSkuSection({
                         <Button
                             id={`${prefix}-inventory`}
                             type="button"
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
+                            className={detailWorkspaceStyles.subtleButton}
                             disabled={Boolean(inventoryActionHint)}
                             title={inventoryActionHint}
                             onClick={(event) =>
@@ -167,15 +173,21 @@ function ProductSkuSection({
                                 )
                             }
                         >
+                            <BoxesIcon
+                                data-icon="inline-start"
+                                className="size-3.5"
+                                aria-hidden
+                            />
                             查看商品库存
                         </Button>
                     ) : null}
-                </div>
-            </div>
+                </>
+            }
+        >
             <div
                 id={`${prefix}-spec-content`}
                 hidden={!specOpen}
-                className="rounded-lg border border-border bg-muted/20 p-3"
+                className="rounded-lg border border-border/70 bg-surface-sunken/70 p-4"
             >
                 <ProductSpecDraftsEditor
                     idPrefix={`${prefix}-spec`}
@@ -191,21 +203,22 @@ function ProductSkuSection({
                     <p
                         id={`${prefix}-spec-error`}
                         role="alert"
-                        className="mt-3 text-sm text-destructive"
+                        className="mt-3 text-xs text-destructive"
                     >
                         {specError}
                     </p>
                 ) : null}
                 {canRevise && specsPending ? (
-                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
-                        <p className="w-full text-sm text-muted-foreground sm:w-auto sm:min-w-0 sm:flex-1">
+                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
+                        <p className="w-full text-xs text-muted-foreground sm:w-auto sm:min-w-0 sm:flex-1">
                             规格修改尚未应用，SKU 表保留已应用的内容。
                         </p>
                         <Button
                             id={`${prefix}-spec-reset`}
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant="ghost"
+                            className={detailWorkspaceStyles.quietButton}
                             onClick={() => {
                                 resetSpecDrafts()
                                 setSpecError(null)
@@ -239,7 +252,7 @@ function ProductSkuSection({
                 />
             ) : null}
             {fields.skus.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="py-4 text-body-compact text-muted-foreground">
                     {masterDataCopy.productNoSkus}
                 </p>
             ) : (
@@ -254,7 +267,7 @@ function ProductSkuSection({
                     onOpenInventory={onOpenInventory}
                 />
             )}
-        </section>
+        </DetailWorkspaceSection>
     )
 }
 

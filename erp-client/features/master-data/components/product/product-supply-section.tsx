@@ -13,10 +13,11 @@ import {
     BusinessFailureState,
     MoneyValue,
     QuantityValue,
+    detailWorkspaceStyles,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Table,
     TableBody,
@@ -150,20 +151,27 @@ function OfferingRows({
                         ) : null}
                         <TableCell>
                             <div className="flex flex-wrap items-center gap-2">
-                                <Badge
-                                    variant={
+                                <StatusBadge
+                                    tone={
                                         offering.availability_status ===
                                         "AVAILABLE"
                                             ? "success"
-                                            : "outline"
+                                            : "neutral"
                                     }
-                                >
-                                    {offering.availability_status
-                                        ? AVAILABILITY_STATUS_LABELS[
-                                              offering.availability_status
-                                          ]
-                                        : "未更新"}
-                                </Badge>
+                                    appearance={
+                                        offering.availability_status ===
+                                        "AVAILABLE"
+                                            ? "quiet"
+                                            : "badge"
+                                    }
+                                    label={
+                                        offering.availability_status
+                                            ? AVAILABILITY_STATUS_LABELS[
+                                                  offering.availability_status
+                                              ]
+                                            : "未更新"
+                                    }
+                                />
                                 <span className="text-xs text-muted-foreground">
                                     {offering.available_quantity != null ? (
                                         <QuantityValue
@@ -176,19 +184,27 @@ function OfferingRows({
                                 </span>
                             </div>
                         </TableCell>
-                        <TableCell className="text-sm whitespace-normal wrap-anywhere">
-                            {offering.delivery_template?.display_name ?? "—"}
+                        <TableCell className="whitespace-normal wrap-anywhere">
+                            {offering.delivery_template?.display_name ?? (
+                                <span className="text-muted-foreground/60">
+                                    —
+                                </span>
+                            )}
                         </TableCell>
                         <TableCell>
-                            <Badge
-                                variant={
+                            <StatusBadge
+                                tone={
                                     offering.status === "ACTIVE"
                                         ? "success"
-                                        : "secondary"
+                                        : "neutral"
                                 }
-                            >
-                                {OFFERING_STATUS_LABELS[offering.status]}
-                            </Badge>
+                                appearance={
+                                    offering.status === "ACTIVE"
+                                        ? "quiet"
+                                        : "badge"
+                                }
+                                label={OFFERING_STATUS_LABELS[offering.status]}
+                            />
                         </TableCell>
                         <PermissionGuard permission="supplier_offering:detail">
                             {" "}
@@ -254,9 +270,9 @@ function SkuSupplyGroup({
     return (
         <section
             aria-labelledby={`master-data-product-supply-${segment}-title`}
-            className="min-w-0 overflow-hidden rounded-lg border bg-card"
+            className="min-w-0 overflow-hidden rounded-lg border border-border/75 bg-card"
         >
-            <header className="flex flex-col gap-4 bg-muted/30 px-5 py-5 lg:flex-row lg:items-start lg:justify-between">
+            <header className="flex flex-col gap-3 bg-surface-sunken/70 px-4 py-3.5 lg:flex-row lg:items-center lg:justify-between">
                 <ProductSupplyIdentity
                     sku={sku}
                     fields={fields}
@@ -264,26 +280,27 @@ function SkuSupplyGroup({
                     titleId={`master-data-product-supply-${segment}-title`}
                     differingDimensions={differingDimensions}
                 />
-                <div className="flex shrink-0 flex-wrap items-center gap-3 lg:pt-1">
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
                     {loading || failed ? null : (
-                        <Badge
-                            variant={
-                                activeSuppliers > 0 ? "outline" : "warning"
+                        <StatusBadge
+                            tone={activeSuppliers > 0 ? "success" : "warning"}
+                            appearance={activeSuppliers > 0 ? "quiet" : "badge"}
+                            label={
+                                activeSuppliers > 0
+                                    ? `有效供给：${activeSuppliers} 家`
+                                    : offerings.length === 0
+                                      ? "尚未添加供给"
+                                      : "暂无有效供给"
                             }
-                        >
-                            {activeSuppliers > 0
-                                ? `有效供给：${activeSuppliers} 家`
-                                : offerings.length === 0
-                                  ? "尚未添加供给"
-                                  : "暂无有效供给"}
-                        </Badge>
+                        />
                     )}
                     {canCreate ? (
                         <Button
                             id={`master-data-product-sku-${segment}-add-supply`}
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant="ghost"
+                            className={detailWorkspaceStyles.subtleButton}
                             onClick={onAdd}
                         >
                             <PlusIcon data-icon="inline-start" aria-hidden />
@@ -396,25 +413,25 @@ export function ProductSupplySection({
     ).length
     return (
         <div className="min-w-0 space-y-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-1">
-                    <div className="flex flex-wrap items-baseline gap-3">
-                        <h2 className="text-base font-semibold">供应商供给</h2>
-                        <span className="text-sm text-muted-foreground">
-                            共 {savedSkus.length} 个已保存规格
-                        </span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                    <h2 className={detailWorkspaceStyles.sectionTitle}>
+                        供应商供给
+                    </h2>
+                    <span className="num rounded-sm bg-muted/80 px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+                        {savedSkus.length} 个已保存规格
+                    </span>
+                    <span className="text-xs text-muted-foreground">
                         供给单独保存，不随商品资料的「保存更新」提交。
-                    </p>
+                    </span>
                 </div>
                 {query.isSuccess && savedSkus.length > 0 ? (
                     <p
                         role="status"
                         className={
                             missing > 0
-                                ? "text-sm text-warning-soft-foreground"
-                                : "text-sm text-muted-foreground"
+                                ? "text-xs font-medium text-warning-soft-foreground"
+                                : "text-xs text-muted-foreground"
                         }
                     >
                         {missing > 0

@@ -56,18 +56,18 @@ function SkuBulkPriceBar({
         },
     ]
     return (
-        <div className="grid gap-2 rounded-xl border border-border bg-surface-sunken p-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 rounded-lg border border-border/70 bg-surface-sunken/70 p-3.5 sm:grid-cols-2 lg:grid-cols-5">
             {fields.map((field) => (
                 <div key={field.key} className="space-y-1">
                     <Label
                         htmlFor={`master-data-product-sku-bulk-${field.key}`}
-                        className="text-xs"
+                        className="text-xs font-medium text-foreground/70"
                     >
                         {field.label}
                     </Label>
                     <Input
                         id={`master-data-product-sku-bulk-${field.key}`}
-                        className="h-control-sm bg-background"
+                        className="h-control-sm num bg-card text-right"
                         inputMode="decimal"
                         value={field.value}
                         disabled={!canRevise}
@@ -79,7 +79,7 @@ function SkuBulkPriceBar({
             <Button
                 id="master-data-product-product-sku-bulk-bar-button-1"
                 type="button"
-                variant="secondary"
+                variant="default"
                 size="sm"
                 className="self-end"
                 disabled={

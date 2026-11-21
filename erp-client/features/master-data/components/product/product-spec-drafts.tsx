@@ -38,7 +38,7 @@ function ProductSpecDraftsEditor({
                     return (
                         <div
                             key={draft.draftId}
-                            className="grid min-w-0 gap-3 rounded-lg border border-border bg-muted/20 p-3 sm:grid-cols-[10rem_minmax(0,1fr)_auto]"
+                            className="grid min-w-0 gap-3 rounded-lg border border-border/75 bg-card p-3 sm:grid-cols-[10rem_minmax(0,1fr)_auto]"
                         >
                             <div className="min-w-0 space-y-1.5">
                                 <Label
@@ -85,7 +85,7 @@ function ProductSpecDraftsEditor({
                                                 >
                                                     <Input
                                                         id={valueId}
-                                                        className="h-control-sm bg-background"
+                                                        className="h-control-sm bg-muted/35 focus-visible:bg-card"
                                                         value={specValue}
                                                         onChange={(event) => {
                                                             const nextValues = [

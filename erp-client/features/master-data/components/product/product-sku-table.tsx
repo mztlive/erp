@@ -1,17 +1,14 @@
 "use client"
 
-import { RequiredMark } from "@/components/ui/required-mark"
-
-import { useChangeConfirmation } from "../../hooks/use-change-confirmation"
-
 import { CircleHelpIcon } from "lucide-react"
 
 import { DetailHint } from "@/components/business/detail-presentation"
-import { Label } from "@/components/ui/label"
-
-import { Badge } from "@/components/ui/badge"
+import { detailWorkspaceStyles } from "@/components/business/detail-workspace"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { RequiredMark } from "@/components/ui/required-mark"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Switch } from "@/components/ui/switch"
 import {
     Table,
@@ -32,10 +29,12 @@ import type {
     ProductSpecDimension,
 } from "@/features/master-data/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { useChangeConfirmation } from "../../hooks/use-change-confirmation"
 
 type SkuRowProps = {
     sku: ProductSkuFields
     index: number
+    showRowInventory: boolean
     canRevise: boolean
     canEditLifecycle: boolean
     name: string
@@ -52,6 +51,7 @@ type SkuRowProps = {
 function SkuRow({
     sku,
     index,
+    showRowInventory,
     canRevise,
     canEditLifecycle,
     name,
@@ -67,7 +67,7 @@ function SkuRow({
     const disableConfirmation = useChangeConfirmation(
         `master-data-product-sku-${skuSegment}-disable`,
     )
-    const cellPad = "whitespace-normal align-top"
+    const cellPad = "whitespace-normal py-3 align-top"
     const skuName = sku.name || name || "未填写 SKU 名称"
     const specText = activeSpecs.length
         ? activeSpecs
@@ -79,10 +79,10 @@ function SkuRow({
         : "默认规格"
     return (
         <TableRow>
-            <TableCell className="sticky left-0 z-10 whitespace-normal bg-card align-top transition-colors group-hover/row:bg-row-hover">
-                <div className="flex items-start gap-3">
+            <TableCell className="sticky left-0 z-10 whitespace-normal bg-card py-3 align-top transition-colors group-hover/row:bg-row-hover">
+                <div className="flex items-start gap-2.5">
                     <div
-                        className="w-16 shrink-0"
+                        className="w-12 shrink-0"
                         role="group"
                         aria-label={`${sku.name || sku.specLabel} 主图`}
                     >
@@ -136,14 +136,14 @@ function SkuRow({
                             />
                         ) : (
                             <p
-                                className="truncate text-sm font-medium leading-5"
+                                className="truncate pt-1 font-medium leading-5 text-foreground"
                                 title={skuName}
                             >
                                 {skuName}
                             </p>
                         )}
                         <p
-                            className="truncate text-xs leading-4 text-muted-foreground"
+                            className="truncate pl-2.5 text-xs leading-4 text-muted-foreground"
                             title={specText}
                         >
                             {specText}
@@ -156,7 +156,7 @@ function SkuRow({
                     {sku.skuNo ? (
                         <p
                             id={`master-data-product-sku-${skuSegment}-code`}
-                            className="num flex h-control-sm items-center truncate text-sm"
+                            className="num truncate pl-2.5 text-xs leading-5 text-muted-foreground"
                             title="SKU 编码：系统生成，不可修改"
                         >
                             {sku.skuNo}
@@ -178,11 +178,12 @@ function SkuRow({
                     />
                 </div>
             </TableCell>
-            <TableCell className={cellPad}>
+            <TableCell data-align="end" className={cellPad}>
                 <MoneyInput
                     id={`master-data-product-sku-${skuSegment}-sale-price`}
                     value={sku.salePrice ?? ""}
                     disabled={!canRevise}
+                    align="end"
                     onChange={(next) =>
                         updateSku(index, {
                             salePrice: next || undefined,
@@ -191,21 +192,22 @@ function SkuRow({
                     aria-label={`${sku.specLabel} 一件代发价`}
                 />
             </TableCell>
-            <TableCell className={cellPad}>
+            <TableCell data-align="end" className={cellPad}>
                 <MoneyInput
                     id={`master-data-product-sku-${skuSegment}-bulk-price`}
                     value={sku.bulkPriceGross ?? ""}
                     disabled={!canRevise}
+                    align="end"
                     onChange={(next) =>
                         updateSku(index, { bulkPriceGross: next || undefined })
                     }
                     aria-label={`${sku.specLabel} 集采价`}
                 />
             </TableCell>
-            <TableCell className={cellPad}>
+            <TableCell data-align="end" className={cellPad}>
                 <Input
                     id={`master-data-product-sku-${skuSegment}-bulk-min-quantity`}
-                    className="h-control-sm num"
+                    className="h-control-sm num text-right"
                     inputMode="decimal"
                     value={sku.bulkMinQuantity ?? ""}
                     disabled={!canRevise}
@@ -217,11 +219,12 @@ function SkuRow({
                     aria-label={`${sku.specLabel} 集采起订量`}
                 />
             </TableCell>
-            <TableCell className={cellPad}>
+            <TableCell data-align="end" className={cellPad}>
                 <MoneyInput
                     id={`master-data-product-sku-${skuSegment}-market-price`}
                     value={sku.marketPrice ?? ""}
                     disabled={!canRevise}
+                    align="end"
                     onChange={(next) =>
                         updateSku(index, {
                             marketPrice: next || undefined,
@@ -231,22 +234,19 @@ function SkuRow({
                 />
             </TableCell>
             <TableCell className={cellPad}>
-                <div className="flex flex-col items-start gap-1.5">
-                    <div className="flex items-center gap-2">
-                        <Badge
-                            variant={
-                                sku.listingStatus === "LISTED"
-                                    ? "success"
-                                    : "secondary"
-                            }
-                        >
-                            {sku.listingStatus === "LISTED"
-                                ? "已上架"
-                                : "已下架"}
-                        </Badge>
-                    </div>
+                <div className="flex flex-col items-start gap-2 pt-0.5">
+                    <StatusBadge
+                        tone={
+                            sku.listingStatus === "LISTED"
+                                ? "success"
+                                : "neutral"
+                        }
+                        label={
+                            sku.listingStatus === "LISTED" ? "已上架" : "已下架"
+                        }
+                    />
                     {canEditLifecycle ? (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                             <Switch
                                 id={`master-data-product-sku-${skuSegment}-enable`}
                                 size="sm"
@@ -292,14 +292,16 @@ function SkuRow({
                                 : "SKU 已停用"}
                         </span>
                     )}
-                    {fields.productKind === "PHYSICAL" && onOpenInventory ? (
+                    {showRowInventory &&
+                    fields.productKind === "PHYSICAL" &&
+                    onOpenInventory ? (
                         sku.skuId ? (
                             <Button
                                 id={`master-data-product-sku-${skuSegment}-inventory`}
                                 type="button"
                                 variant="link"
                                 size="xs"
-                                className="h-auto px-0 text-xs"
+                                className="h-auto px-0 text-xs font-normal"
                                 onClick={(event) =>
                                     onOpenInventory(
                                         sku.skuId,
@@ -310,7 +312,7 @@ function SkuRow({
                                 查看库存
                             </Button>
                         ) : (
-                            <span className="text-xs text-muted-foreground">
+                            <span className="text-xs text-muted-foreground/75">
                                 保存后可查看库存
                             </span>
                         )
@@ -346,20 +348,24 @@ function ProductSkuTable({
     rememberSkuFile,
     onOpenInventory,
 }: ProductSkuTableProps) {
+    const showRowInventory = fields.skus.length > 1
     return (
-        <div className="w-full max-w-full overflow-hidden rounded-lg border">
+        <div
+            data-slot="detail-inline-table"
+            className={detailWorkspaceStyles.inlineTableWrapper}
+        >
             <Table
                 data-density="comfortable"
-                className="min-w-[64rem] table-fixed [--table-cell-inline:0.75rem] [&_thead_th]:!static"
+                className="min-w-[60rem] table-fixed [--table-cell-inline:0.625rem] [&_thead_th]:!static"
             >
                 <colgroup>
-                    <col className="w-[23.5%]" />
-                    <col className="w-[15%]" />
-                    <col className="w-[14.5%]" />
-                    <col className="w-[11.5%]" />
-                    <col className="w-[11.5%]" />
-                    <col className="w-[11.5%]" />
-                    <col className="w-[12.5%]" />
+                    <col className="w-[31%]" />
+                    <col className="w-[16%]" />
+                    <col className="w-[10.5%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[9.5%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[13%]" />
                 </colgroup>
                 <TableHeader>
                     <TableRow>
@@ -384,8 +390,8 @@ function ProductSkuTable({
                                 </DetailHint>
                             </span>
                         </TableHead>
-                        <TableHead>
-                            <span className="inline-flex items-center gap-1">
+                        <TableHead data-align="end">
+                            <span className="inline-flex items-center justify-end gap-1">
                                 代发价（含税）
                                 <DetailHint
                                     id="master-data-product-sku-price-hint"
@@ -401,9 +407,9 @@ function ProductSkuTable({
                                 </DetailHint>
                             </span>
                         </TableHead>
-                        <TableHead>集采价（含税）</TableHead>
-                        <TableHead>集采起订量</TableHead>
-                        <TableHead>市场价（含税）</TableHead>
+                        <TableHead data-align="end">集采价（含税）</TableHead>
+                        <TableHead data-align="end">集采起订量</TableHead>
+                        <TableHead data-align="end">市场价（含税）</TableHead>
                         <TableHead>状态</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -417,6 +423,7 @@ function ProductSkuTable({
                             }
                             sku={sku}
                             index={index}
+                            showRowInventory={showRowInventory}
                             canRevise={canRevise}
                             canEditLifecycle={canEditLifecycle}
                             name={name}

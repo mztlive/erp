@@ -43,8 +43,8 @@ export function ProductSupplyIdentity({
     const hasDifferences = differingDimensions.some(Boolean)
 
     return (
-        <div className="min-w-0 flex-1 space-y-3">
-            <h3 id={titleId} className="flex flex-wrap gap-x-8 gap-y-3">
+        <div className="min-w-0 flex-1 space-y-2">
+            <h3 id={titleId} className="flex flex-wrap gap-x-6 gap-y-2">
                 {dimensions.length > 0 ? (
                     dimensions.map((dimension) => (
                         <span
@@ -56,7 +56,7 @@ export function ProductSupplyIdentity({
                             </span>
                             <span
                                 className={cn(
-                                    "mt-1 block text-2xl leading-snug text-foreground wrap-anywhere",
+                                    "mt-0.5 block text-section-title leading-snug text-foreground wrap-anywhere",
                                     dimension.differs || !hasDifferences
                                         ? "font-semibold"
                                         : "font-normal",
@@ -71,24 +71,26 @@ export function ProductSupplyIdentity({
                         <span className="block text-xs font-normal text-muted-foreground">
                             规格
                         </span>
-                        <span className="mt-1 block text-2xl leading-snug font-semibold wrap-anywhere">
+                        <span className="mt-0.5 block text-section-title leading-snug font-semibold wrap-anywhere">
                             {sku.specLabel.trim() || "默认规格"}
                         </span>
                     </span>
                 )}
             </h3>
-            <div className="flex min-w-0 items-center gap-3">
+            <div className="flex min-w-0 items-center gap-2.5">
                 {hasDistinctImage ? (
                     // eslint-disable-next-line @next/next/no-img-element -- 复用商品页已解析的 SKU 图片地址。
                     <img
                         src={sku.mainImagePreviewUrl}
                         alt={sku.name || sku.specLabel}
-                        className="size-10 shrink-0 rounded-md object-cover"
+                        className="size-9 shrink-0 rounded-md border border-border/70 object-cover"
                     />
                 ) : null}
-                <div className="min-w-0 space-y-1">
+                <div className="min-w-0 space-y-0.5">
                     {showName ? (
-                        <p className="text-sm wrap-anywhere">{sku.name}</p>
+                        <p className="text-body-compact text-foreground/90 wrap-anywhere">
+                            {sku.name}
+                        </p>
                     ) : null}
                     <p className="num text-xs text-muted-foreground wrap-anywhere select-text">
                         SKU 编号：{sku.skuNo}

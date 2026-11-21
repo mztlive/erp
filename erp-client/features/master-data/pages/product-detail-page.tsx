@@ -1,37 +1,34 @@
 "use client"
 
-import { useChangeConfirmation } from "../hooks/use-change-confirmation"
-
 import * as React from "react"
-import { hasPermission } from "@/lib/permissions"
 import { useSearchParams } from "next/navigation"
+
 import {
+    DetailWorkspaceBody,
+    DetailWorkspacePage,
+    DetailWorkspaceSection,
     DiscardConfirmDialog,
-    PageScaffold,
-    surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import {
-    ProductBasicSection,
-    ProductHistorySection,
-    ProductMediaSection,
-} from "@/features/master-data/components/product/product-editor-sections"
-import { ProductSkuSection } from "@/features/master-data/components/product/product-sku-section"
-import { ProductSupplySection } from "@/features/master-data/components/product/product-supply-section"
 import { ProductDetailDialogs } from "@/features/master-data/components/product/product-detail-dialogs"
 import { ProductDetailEntryGate } from "@/features/master-data/components/product/product-detail-entry-gate"
 import { ProductDetailFeedback } from "@/features/master-data/components/product/product-detail-feedback"
 import { ProductDetailHeader } from "@/features/master-data/components/product/product-detail-header"
 import { ProductSectionTabs } from "@/features/master-data/components/product/product-detail-navigation"
+import {
+    ProductBasicSection,
+    ProductHistorySection,
+    ProductMediaSection,
+} from "@/features/master-data/components/product/product-editor-sections"
 import { ProductSaveDialog } from "@/features/master-data/components/product/product-save-dialog"
+import { ProductSkuSection } from "@/features/master-data/components/product/product-sku-section"
 import { ProductSourceDiff } from "@/features/master-data/components/product/product-source-diff"
-import { createProductFormBindings } from "@/features/master-data/lib/product-form-bindings"
-import { productChangeSummary } from "@/features/master-data/lib/product-change-summary"
+import { ProductSupplySection } from "@/features/master-data/components/product/product-supply-section"
 import { useProductEditor } from "@/features/master-data/hooks/use-product-editor"
-import { cn } from "@/lib/utils"
-
-/** 商品资料分区卡片：基础信息与规格各成一块，避免整页平铺。 */
-const productCardClassName = "rounded-lg border bg-card p-5 md:p-6"
+import { productChangeSummary } from "@/features/master-data/lib/product-change-summary"
+import { createProductFormBindings } from "@/features/master-data/lib/product-form-bindings"
+import { hasPermission } from "@/lib/permissions"
+import { useChangeConfirmation } from "../hooks/use-change-confirmation"
 
 export function ProductDetailPage({ stableId }: { stableId: string }) {
     const sourceDiffRequested = useSearchParams().get("sourceDiff") === "true"
@@ -180,6 +177,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                         initialFormValues,
                         values,
                     )
+                    const hasUnsavedChanges = changes.length > 0
                     const closeSave = (open: boolean) => {
                         setSaveOpen(open)
                         if (!open && activeSection === "effective")
@@ -201,10 +199,10 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                         />
                     )
                     return (
-                        <PageScaffold density="compact">
+                        <DetailWorkspacePage>
                             <form
                                 id="product-detail-form"
-                                className="min-w-0 space-y-5"
+                                className="flex min-w-0 flex-1 flex-col"
                                 onSubmit={(event) => {
                                     event.preventDefault()
                                     if (!sourceProcessing) requestSave(values)
@@ -220,212 +218,183 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                     setDisableOpen={setDisableOpen}
                                     canRevise={canRevise}
                                     pending={saving}
+                                    hasUnsavedChanges={hasUnsavedChanges}
                                     onBack={() => navigateAway(listHref)}
                                     onMedia={() => setActiveSection("media")}
                                     onSave={() => requestSave(values)}
                                     onReset={
-                                        changes.length > 0
+                                        hasUnsavedChanges
                                             ? () => setResetOpen(true)
                                             : undefined
                                     }
+                                    tabs={
+                                        <ProductSectionTabs
+                                            value={section}
+                                            isCreate={isCreate}
+                                            canReadSupply={canReadSupply}
+                                            onValueChange={setActiveSection}
+                                        />
+                                    }
                                 />
-                                {!showSave ? feedback : null}
-                                <ProductSourceDiff
-                                    key={stableId}
-                                    productId={stableId}
-                                    enabled={!isCreate && Boolean(data)}
-                                    canResolve={hasUpdatePermission}
-                                    canRevise={canRevise}
-                                    dirty={isDirty}
-                                    busy={saving}
-                                    openRequested={sourceDiffRequested}
-                                    onProcessingChange={setSourceProcessing}
-                                />
-                                <div
-                                    className={cn(
-                                        surfacePanelClassName,
-                                        "min-w-0",
-                                    )}
+
+                                <DetailWorkspaceBody
+                                    alerts={
+                                        <>
+                                            {!showSave ? feedback : null}
+                                            <ProductSourceDiff
+                                                key={stableId}
+                                                productId={stableId}
+                                                enabled={
+                                                    !isCreate && Boolean(data)
+                                                }
+                                                canResolve={hasUpdatePermission}
+                                                canRevise={canRevise}
+                                                dirty={isDirty}
+                                                busy={saving}
+                                                openRequested={
+                                                    sourceDiffRequested
+                                                }
+                                                onProcessingChange={
+                                                    setSourceProcessing
+                                                }
+                                            />
+                                        </>
+                                    }
                                 >
-                                    <ProductSectionTabs
-                                        value={section}
-                                        isCreate={isCreate}
-                                        canReadSupply={canReadSupply}
-                                        onValueChange={setActiveSection}
-                                    />
-                                    <div
-                                        className={cn(
-                                            "min-w-0 p-4 md:p-6",
-                                            section === "basic" &&
-                                                "bg-muted/20",
-                                        )}
-                                    >
-                                        {section === "basic" ? (
-                                            <div className="space-y-5">
-                                                <div
-                                                    className={
-                                                        productCardClassName
-                                                    }
-                                                >
-                                                    <ProductBasicSection
-                                                        canSelectUnit={
-                                                            canSelectUnit
-                                                        }
-                                                        canSelectCategory={
-                                                            canSelectCategory
-                                                        }
-                                                        canSelectBrand={
-                                                            canSelectBrand
-                                                        }
-                                                        onRefreshUnits={() =>
-                                                            unitOptionsQuery.refetch(
-                                                                {
-                                                                    throwOnError: true,
-                                                                },
-                                                            )
-                                                        }
-                                                        onRefreshCategories={() =>
-                                                            categoryListQuery.refetch(
-                                                                {
-                                                                    throwOnError: true,
-                                                                },
-                                                            )
-                                                        }
-                                                        onRefreshBrands={() =>
-                                                            brandListQuery.refetch(
-                                                                {
-                                                                    throwOnError: true,
-                                                                },
-                                                            )
-                                                        }
-                                                        idPrefix="master-data-product-detail-basic"
-                                                        isCreate={isCreate}
-                                                        canRevise={
-                                                            canRevise &&
-                                                            !sourceProcessing
-                                                        }
-                                                        name={name}
-                                                        setName={setName}
-                                                        fields={fields}
-                                                        setFields={setFields}
-                                                        unitOptions={
-                                                            unitOptionsQuery.data
-                                                        }
-                                                        categoryOptions={
-                                                            categoryOptions
-                                                        }
-                                                        brandOptions={
-                                                            brandOptions
-                                                        }
-                                                        categoryLoading={
-                                                            categoryListQuery.isFetching
-                                                        }
-                                                        brandLoading={
-                                                            brandListQuery.isFetching
-                                                        }
-                                                    />
-                                                </div>
-                                                <div
-                                                    className={
-                                                        productCardClassName
-                                                    }
-                                                >
-                                                    <ProductSkuSection
-                                                        canEditLifecycle={
-                                                            isCreate
-                                                                ? canCreate
-                                                                : hasUpdatePermission
-                                                        }
-                                                        idPrefix="master-data-product-detail-sku"
-                                                        isCreate={isCreate}
-                                                        canRevise={
-                                                            canRevise &&
-                                                            !sourceProcessing
-                                                        }
-                                                        name={name}
-                                                        fields={fields}
-                                                        specDrafts={specDrafts}
-                                                        activeSpecs={
-                                                            activeSpecs
-                                                        }
-                                                        inventoryPreviewSkus={
-                                                            inventoryPreviewSkus
-                                                        }
-                                                        syncSpecDrafts={
-                                                            syncSpecDrafts
-                                                        }
-                                                        applySpecDrafts={
-                                                            applySpecDrafts
-                                                        }
-                                                        resetSpecDrafts={
-                                                            resetSpecDrafts
-                                                        }
-                                                        updateSku={updateSku}
-                                                        batchBulkPrice={
-                                                            values.batchBulkPrice
-                                                        }
-                                                        batchBulkMinQuantity={
-                                                            values.batchBulkMinQuantity
-                                                        }
-                                                        setBatchBulkPrice={(
-                                                            next,
-                                                        ) =>
-                                                            form.setFieldValue(
-                                                                "batchBulkPrice",
-                                                                next,
-                                                            )
-                                                        }
-                                                        setBatchBulkMinQuantity={(
-                                                            next,
-                                                        ) =>
-                                                            form.setFieldValue(
-                                                                "batchBulkMinQuantity",
-                                                                next,
-                                                            )
-                                                        }
-                                                        batchSalePrice={
-                                                            values.batchSalePrice
-                                                        }
-                                                        batchMarketPrice={
-                                                            values.batchMarketPrice
-                                                        }
-                                                        setBatchSalePrice={(
-                                                            next,
-                                                        ) =>
-                                                            form.setFieldValue(
-                                                                "batchSalePrice",
-                                                                next,
-                                                            )
-                                                        }
-                                                        setBatchMarketPrice={(
-                                                            next,
-                                                        ) =>
-                                                            form.setFieldValue(
-                                                                "batchMarketPrice",
-                                                                next,
-                                                            )
-                                                        }
-                                                        onApplyBatchReferencePrices={
-                                                            applyBatchReferencePrices
-                                                        }
-                                                        inventoryActionHint={
-                                                            inventoryActionHint
-                                                        }
-                                                        onOpenInventory={
-                                                            canReadInventory
-                                                                ? openInventoryPreview
-                                                                : undefined
-                                                        }
-                                                        rememberSkuFile={
-                                                            rememberSkuFile
-                                                        }
-                                                    />
-                                                </div>
-                                            </div>
-                                        ) : null}
-                                        {section === "supply" &&
-                                        !isCreate &&
-                                        canReadSupply ? (
+                                    {section === "basic" ? (
+                                        <>
+                                            <ProductBasicSection
+                                                canSelectUnit={canSelectUnit}
+                                                canSelectCategory={
+                                                    canSelectCategory
+                                                }
+                                                canSelectBrand={canSelectBrand}
+                                                onRefreshUnits={() =>
+                                                    unitOptionsQuery.refetch({
+                                                        throwOnError: true,
+                                                    })
+                                                }
+                                                onRefreshCategories={() =>
+                                                    categoryListQuery.refetch({
+                                                        throwOnError: true,
+                                                    })
+                                                }
+                                                onRefreshBrands={() =>
+                                                    brandListQuery.refetch({
+                                                        throwOnError: true,
+                                                    })
+                                                }
+                                                idPrefix="master-data-product-detail-basic"
+                                                isCreate={isCreate}
+                                                canRevise={
+                                                    canRevise &&
+                                                    !sourceProcessing
+                                                }
+                                                name={name}
+                                                setName={setName}
+                                                fields={fields}
+                                                setFields={setFields}
+                                                unitOptions={
+                                                    unitOptionsQuery.data
+                                                }
+                                                categoryOptions={
+                                                    categoryOptions
+                                                }
+                                                brandOptions={brandOptions}
+                                                categoryLoading={
+                                                    categoryListQuery.isFetching
+                                                }
+                                                brandLoading={
+                                                    brandListQuery.isFetching
+                                                }
+                                            />
+                                            <ProductSkuSection
+                                                canEditLifecycle={
+                                                    isCreate
+                                                        ? canCreate
+                                                        : hasUpdatePermission
+                                                }
+                                                idPrefix="master-data-product-detail-sku"
+                                                isCreate={isCreate}
+                                                canRevise={
+                                                    canRevise &&
+                                                    !sourceProcessing
+                                                }
+                                                name={name}
+                                                fields={fields}
+                                                specDrafts={specDrafts}
+                                                activeSpecs={activeSpecs}
+                                                inventoryPreviewSkus={
+                                                    inventoryPreviewSkus
+                                                }
+                                                syncSpecDrafts={syncSpecDrafts}
+                                                applySpecDrafts={
+                                                    applySpecDrafts
+                                                }
+                                                resetSpecDrafts={
+                                                    resetSpecDrafts
+                                                }
+                                                updateSku={updateSku}
+                                                batchBulkPrice={
+                                                    values.batchBulkPrice
+                                                }
+                                                batchBulkMinQuantity={
+                                                    values.batchBulkMinQuantity
+                                                }
+                                                setBatchBulkPrice={(next) =>
+                                                    form.setFieldValue(
+                                                        "batchBulkPrice",
+                                                        next,
+                                                    )
+                                                }
+                                                setBatchBulkMinQuantity={(
+                                                    next,
+                                                ) =>
+                                                    form.setFieldValue(
+                                                        "batchBulkMinQuantity",
+                                                        next,
+                                                    )
+                                                }
+                                                batchSalePrice={
+                                                    values.batchSalePrice
+                                                }
+                                                batchMarketPrice={
+                                                    values.batchMarketPrice
+                                                }
+                                                setBatchSalePrice={(next) =>
+                                                    form.setFieldValue(
+                                                        "batchSalePrice",
+                                                        next,
+                                                    )
+                                                }
+                                                setBatchMarketPrice={(next) =>
+                                                    form.setFieldValue(
+                                                        "batchMarketPrice",
+                                                        next,
+                                                    )
+                                                }
+                                                onApplyBatchReferencePrices={
+                                                    applyBatchReferencePrices
+                                                }
+                                                inventoryActionHint={
+                                                    inventoryActionHint
+                                                }
+                                                onOpenInventory={
+                                                    canReadInventory
+                                                        ? openInventoryPreview
+                                                        : undefined
+                                                }
+                                                rememberSkuFile={
+                                                    rememberSkuFile
+                                                }
+                                            />
+                                        </>
+                                    ) : null}
+
+                                    {section === "supply" &&
+                                    !isCreate &&
+                                    canReadSupply ? (
+                                        <DetailWorkspaceSection width="full">
                                             <ProductSupplySection
                                                 fields={fields}
                                                 name={name}
@@ -433,8 +402,11 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                                     setSupplierDialogSku
                                                 }
                                             />
-                                        ) : null}
-                                        {section === "media" ? (
+                                        </DetailWorkspaceSection>
+                                    ) : null}
+
+                                    {section === "media" ? (
+                                        <DetailWorkspaceSection width="full">
                                             <ProductMediaSection
                                                 idPrefix="master-data-product-detail-media"
                                                 disabled={
@@ -447,26 +419,31 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                                     rememberPendingFiles
                                                 }
                                             />
-                                        ) : null}
-                                        {section === "history" && !isCreate ? (
+                                        </DetailWorkspaceSection>
+                                    ) : null}
+
+                                    {section === "history" && !isCreate ? (
+                                        <DetailWorkspaceSection width="form">
                                             <ProductHistorySection
                                                 data={data}
                                             />
-                                        ) : null}
-                                    </div>
-                                </div>
+                                        </DetailWorkspaceSection>
+                                    ) : null}
+                                </DetailWorkspaceBody>
                             </form>
+
                             {changeConfirmation.dialog}
                             {canRevise && priceUndo ? (
                                 <div
                                     role="status"
-                                    className="fixed bottom-20 right-6 z-40 flex items-center gap-3 rounded-lg border bg-background p-3 shadow-md"
+                                    className="fixed bottom-6 right-6 z-40 flex items-center gap-3 rounded-xl border border-border/90 bg-popover/95 px-3.5 py-2 text-body-compact shadow-lg backdrop-blur-md"
                                 >
-                                    批量价格已应用
+                                    <span>批量价格已应用</span>
                                     <Button
                                         id="master-data-product-price-undo"
                                         size="sm"
-                                        variant="outline"
+                                        variant="ghost"
+                                        className="h-control-sm text-primary hover:bg-sidebar-accent/70 hover:text-primary"
                                         onClick={() => {
                                             priceUndo.undo()
                                             setPriceUndo(null)
@@ -530,7 +507,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                 setPendingNav={setPendingNav}
                                 router={router}
                             />
-                        </PageScaffold>
+                        </DetailWorkspacePage>
                     )
                 }}
             </form.Subscribe>

@@ -1,0 +1,579 @@
+"use client"
+
+import * as React from "react"
+import Link from "next/link"
+import { ArrowLeftIcon } from "lucide-react"
+
+import { detailWorkspaceStyles } from "@/components/business/detail-workspace-styles"
+import type { DocumentHeaderProps } from "@/components/business/document"
+import { PageScaffold } from "@/components/business/page"
+import { useWorkspaceTab } from "@/components/layout/workspace-tab-context"
+import { Button, buttonVariants } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import { cn } from "@/lib/utils"
+
+export { detailWorkspaceStyles }
+
+const styles = detailWorkspaceStyles
+
+export type DetailWorkspaceBackLink = {
+    id: string
+    label: string
+} & ({ href: string; onClick?: never } | { href?: never; onClick: () => void })
+
+export type DetailWorkspaceTabItem = Readonly<{
+    id: string
+    label: React.ReactNode
+    title?: string
+    badge?: React.ReactNode
+}>
+
+/**
+ * 详情页元信息行：统一 12px 灰字 + 自动插入极淡 `·` 分隔符，
+ * 过滤掉 falsy 项，避免页面手写空格拼接导致视觉松散。
+ */
+export function DetailWorkspaceMeta({
+    items,
+    className,
+}: {
+    items: readonly (React.ReactNode | false | null | undefined)[]
+    className?: string
+}) {
+    const visible = items.filter(
+        (item): item is React.ReactNode =>
+            item !== null &&
+            item !== undefined &&
+            item !== false &&
+            item !== "",
+    )
+    if (visible.length === 0) return null
+    return (
+        <div className={cn(styles.meta, className)}>
+            {visible.map((item, index) => (
+                <React.Fragment key={index}>
+                    {index > 0 ? (
+                        <span
+                            aria-hidden="true"
+                            className="select-none text-muted-foreground/40"
+                        >
+                            ·
+                        </span>
+                    ) : null}
+                    <span className="min-w-0 wrap-anywhere">{item}</span>
+                </React.Fragment>
+            ))}
+        </div>
+    )
+}
+
+/**
+ * 未保存修改微胶囊：复用列表页 `● 待查询` 的柔和琥珀色胶囊语言。
+ */
+export function DetailWorkspaceDirtyBadge({
+    label = "有未保存修改",
+    className,
+}: {
+    label?: string
+    className?: string
+}) {
+    return (
+        <span
+            role="status"
+            className={cn(
+                "inline-flex items-center gap-1.5 rounded-full bg-warning-soft px-2 py-0.5 text-tiny leading-4 font-medium text-warning-soft-foreground",
+                className,
+            )}
+        >
+            <span
+                aria-hidden="true"
+                className="size-1.5 shrink-0 rounded-full bg-warning"
+            />
+            {label}
+        </span>
+    )
+}
+
+/**
+ * 详情工作面一体化吸顶纯白通栏分区导航：
+ * 置于 `DetailWorkspaceChrome` 底部，与页头共用纯白表面与底线，
+ * 激活蓝条压盖在通栏底线上，左右外沿严格对齐 `--scaffold-px`。
+ */
+export function DetailWorkspaceTabs({
+    value,
+    onValueChange,
+    items,
+    ariaLabel = "详情分区",
+    tabIdPrefix,
+    className,
+}: {
+    value: string
+    onValueChange: (value: string) => void
+    items: readonly DetailWorkspaceTabItem[]
+    ariaLabel?: string
+    tabIdPrefix?: string
+    className?: string
+}) {
+    if (items.length < 2) return null
+    return (
+        <Tabs
+            value={value}
+            onValueChange={(next) => {
+                if (next) onValueChange(next)
+            }}
+            className={cn("gap-0", className)}
+        >
+            <TabsList
+                variant="line"
+                aria-label={ariaLabel}
+                className={styles.tabsList}
+            >
+                {items.map((item) => (
+                    <TabsTrigger
+                        key={item.id}
+                        id={
+                            tabIdPrefix
+                                ? `${tabIdPrefix}-${toAutomationIdSegment(item.id)}`
+                                : undefined
+                        }
+                        value={item.id}
+                        title={item.title}
+                        className={styles.tab}
+                    >
+                        {item.label}
+                        {item.badge != null ? item.badge : null}
+                    </TabsTrigger>
+                ))}
+            </TabsList>
+        </Tabs>
+    )
+}
+
+export type DetailWorkspaceChromeProps = {
+    title: string
+    headingProps?: React.ComponentProps<"h1">
+    back?: DetailWorkspaceBackLink
+    navigationMeta?: React.ReactNode
+    media?: React.ReactNode
+    documentNumber?: string
+    numberLabel?: string
+    version?: string | number
+    primaryStatus?: DocumentHeaderProps["primaryStatus"]
+    statuses?: DocumentHeaderProps["statuses"]
+    titleExtra?: React.ReactNode
+    meta?: React.ReactNode
+    secondaryActions?: React.ReactNode
+    primaryAction?: React.ReactNode
+    summary?: React.ReactNode
+    tabs?: React.ReactNode
+    children?: React.ReactNode
+    className?: string
+}
+
+/**
+ * 详情工作面纯白通栏吸顶头部：
+ * - 将返回行（工作页签内自动隐藏）、身份信息、操作动作与通栏分区 Tabs 融为一体；
+ * - 静止态极净扁平无阴影，滚动发生遮挡时自动浮现极轻底影（`data-scrolled="true"`）。
+ */
+export function DetailWorkspaceChrome({
+    title,
+    headingProps,
+    back: backNavigation,
+    navigationMeta,
+    media,
+    documentNumber,
+    numberLabel = "单号",
+    version,
+    primaryStatus,
+    statuses = [],
+    titleExtra,
+    meta,
+    secondaryActions,
+    primaryAction,
+    summary,
+    tabs,
+    children,
+    className,
+}: DetailWorkspaceChromeProps) {
+    const inWorkspaceTab = useWorkspaceTab()
+    const back = inWorkspaceTab ? undefined : backNavigation
+    const sentinelRef = React.useRef<HTMLDivElement>(null)
+    const [scrolled, setScrolled] = React.useState(false)
+
+    React.useEffect(() => {
+        const sentinel = sentinelRef.current
+        if (!sentinel || typeof IntersectionObserver === "undefined") return
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                setScrolled(!entry.isIntersecting)
+            },
+            { threshold: [0, 1] },
+        )
+        observer.observe(sentinel)
+        return () => observer.disconnect()
+    }, [])
+
+    const hasInlineMeta =
+        documentNumber != null || version != null || meta != null
+
+    return (
+        <>
+            <div
+                ref={sentinelRef}
+                aria-hidden="true"
+                className="pointer-events-none h-px w-full shrink-0"
+            />
+            <header
+                data-slot="detail-workspace-chrome"
+                data-scrolled={scrolled ? "true" : undefined}
+                className={cn(styles.chrome, className)}
+            >
+                {back || navigationMeta ? (
+                    <div className="flex min-w-0 flex-wrap items-center gap-3 pt-2.5">
+                        {back?.href != null ? (
+                            <Link
+                                id={back.id}
+                                href={back.href}
+                                className={cn(
+                                    buttonVariants({
+                                        variant: "ghost",
+                                        size: "xs",
+                                    }),
+                                    "-ml-2 text-muted-foreground hover:text-foreground",
+                                )}
+                            >
+                                <ArrowLeftIcon aria-hidden="true" />
+                                {back.label}
+                            </Link>
+                        ) : back ? (
+                            <Button
+                                id={back.id}
+                                type="button"
+                                variant="ghost"
+                                size="xs"
+                                className="-ml-2 text-muted-foreground hover:text-foreground"
+                                onClick={back.onClick}
+                            >
+                                <ArrowLeftIcon aria-hidden="true" />
+                                {back.label}
+                            </Button>
+                        ) : null}
+                        {navigationMeta ? (
+                            <div className="min-w-0 text-xs text-muted-foreground">
+                                {navigationMeta}
+                            </div>
+                        ) : null}
+                    </div>
+                ) : null}
+
+                <div
+                    className={cn(
+                        styles.header,
+                        tabs && "pb-2.5",
+                        (back || navigationMeta) && "pt-2",
+                    )}
+                >
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                        {media}
+                        <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <h1
+                                    {...headingProps}
+                                    className={cn(
+                                        styles.title,
+                                        headingProps?.className,
+                                    )}
+                                >
+                                    {title}
+                                </h1>
+                                {primaryStatus ? (
+                                    <StatusBadge {...primaryStatus} />
+                                ) : null}
+                                {titleExtra}
+                            </div>
+                            {hasInlineMeta ? (
+                                <div className={styles.meta}>
+                                    {documentNumber != null ? (
+                                        <span
+                                            className="num"
+                                            data-workspace-document-number={
+                                                documentNumber
+                                            }
+                                        >
+                                            {numberLabel}：{documentNumber}
+                                        </span>
+                                    ) : null}
+                                    {documentNumber != null &&
+                                    version != null ? (
+                                        <span
+                                            aria-hidden="true"
+                                            className="select-none text-muted-foreground/40"
+                                        >
+                                            ·
+                                        </span>
+                                    ) : null}
+                                    {version != null ? (
+                                        <span className="num">
+                                            版本 {version}
+                                        </span>
+                                    ) : null}
+                                    {(documentNumber != null ||
+                                        version != null) &&
+                                    meta != null ? (
+                                        <span
+                                            aria-hidden="true"
+                                            className="select-none text-muted-foreground/40"
+                                        >
+                                            ·
+                                        </span>
+                                    ) : null}
+                                    {meta}
+                                </div>
+                            ) : null}
+                        </div>
+                    </div>
+
+                    {secondaryActions || primaryAction ? (
+                        <div
+                            data-slot="detail-page-header-actions"
+                            className={styles.headerActions}
+                        >
+                            {secondaryActions}
+                            {primaryAction}
+                        </div>
+                    ) : null}
+                </div>
+
+                {statuses.length > 0 ? (
+                    <div
+                        role="list"
+                        aria-label="业务状态"
+                        className="flex flex-wrap items-center gap-x-4 gap-y-1.5 pb-2.5"
+                    >
+                        {statuses.map((track) => (
+                            <div
+                                key={track.id}
+                                role="listitem"
+                                className="flex items-center gap-1.5"
+                            >
+                                <span className="text-xs text-muted-foreground">
+                                    {track.label}
+                                </span>
+                                <StatusBadge {...track.status} />
+                            </div>
+                        ))}
+                    </div>
+                ) : null}
+
+                {summary != null ? (
+                    <div
+                        data-slot="detail-page-header-summary"
+                        className="pb-3"
+                    >
+                        {summary}
+                    </div>
+                ) : null}
+
+                {children ? (
+                    <div className="space-y-2 pb-2.5">{children}</div>
+                ) : null}
+
+                {tabs ? (
+                    <div data-slot="detail-workspace-tabs" className="mt-0.5">
+                        {tabs}
+                    </div>
+                ) : null}
+            </header>
+        </>
+    )
+}
+
+/**
+ * 详情工作面正文分区：纯白无边框、靠顶部细线与留白建立秩序。
+ * - `width="form"`：把表单区收敛到舒适阅读宽度（`max-w-4xl`），避免宽屏拉出超长空输入条；
+ * - `width="full"`：宽表格/媒体画廊铺满整行。
+ */
+export function DetailWorkspaceSection({
+    id,
+    title,
+    headingId,
+    badge,
+    subtitle,
+    actions,
+    width = "full",
+    children,
+    className,
+    contentClassName,
+}: {
+    id?: string
+    title?: React.ReactNode
+    headingId?: string
+    badge?: React.ReactNode
+    subtitle?: React.ReactNode
+    actions?: React.ReactNode
+    width?: "form" | "full"
+    children: React.ReactNode
+    className?: string
+    contentClassName?: string
+}) {
+    const hasHeader = title != null || actions != null
+    return (
+        <section
+            id={id}
+            data-slot="detail-workspace-section"
+            aria-labelledby={headingId}
+            className={cn(styles.section, "scroll-mt-28", className)}
+        >
+            <div
+                className={cn(
+                    "min-w-0 space-y-4",
+                    width === "form" && "max-w-4xl",
+                    contentClassName,
+                )}
+            >
+                {hasHeader ? (
+                    <div className={styles.sectionHeader}>
+                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                            {title != null ? (
+                                <h2
+                                    id={headingId}
+                                    className={styles.sectionTitle}
+                                >
+                                    {title}
+                                </h2>
+                            ) : null}
+                            {badge}
+                            {subtitle ? (
+                                <span className={styles.sectionSubtitle}>
+                                    {subtitle}
+                                </span>
+                            ) : null}
+                        </div>
+                        {actions ? (
+                            <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                                {actions}
+                            </div>
+                        ) : null}
+                    </div>
+                ) : null}
+                {children}
+            </div>
+        </section>
+    )
+}
+
+/**
+ * 详情工作面主体容器：
+ * - 单栏模式：内部 `DetailWorkspaceSection` 自动以 `border-t border-border/60` 分隔；
+ * - 双栏模式（传入 `sidebar`）：在 `xl` 宽屏以 `1px` 竖线分出右侧摘要栏，零套娃卡片。
+ */
+export function DetailWorkspaceBody({
+    alerts,
+    sidebar,
+    children,
+    className,
+}: {
+    alerts?: React.ReactNode
+    sidebar?: React.ReactNode
+    children: React.ReactNode
+    className?: string
+}) {
+    if (sidebar != null) {
+        return (
+            <div
+                data-slot="detail-workspace-body"
+                className={cn(
+                    styles.body,
+                    "grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_320px] 2xl:grid-cols-[minmax(0,1fr)_360px]",
+                    className,
+                )}
+            >
+                <div className="min-w-0">
+                    {alerts ? (
+                        <div
+                            data-slot="detail-workspace-alerts"
+                            className="space-y-2.5 pt-4 empty:hidden"
+                        >
+                            {alerts}
+                        </div>
+                    ) : null}
+                    {children}
+                </div>
+                <aside className="min-w-0 py-5 xl:border-l xl:border-border/60 xl:pl-6">
+                    {sidebar}
+                </aside>
+            </div>
+        )
+    }
+
+    return (
+        <div
+            data-slot="detail-workspace-body"
+            className={cn(styles.body, className)}
+        >
+            {alerts ? (
+                <div
+                    data-slot="detail-workspace-alerts"
+                    className="space-y-2.5 pt-4 empty:hidden"
+                >
+                    {alerts}
+                </div>
+            ) : null}
+            {children}
+        </div>
+    )
+}
+
+/**
+ * 详情页首屏纯白骨架屏：避免加载期间闪出浅灰底或孤立灰块。
+ */
+export function DetailWorkspaceSkeleton({
+    title,
+    description,
+}: {
+    title: string
+    description?: string
+}) {
+    return (
+        <PageScaffold density="compact" className={styles.page}>
+            <DetailWorkspaceChrome
+                title={title}
+                meta={description ? <span>{description}</span> : undefined}
+            />
+            <div className="max-w-4xl space-y-6 py-6" aria-busy="true">
+                <div className="space-y-3">
+                    <div className="h-5 w-24 animate-pulse rounded bg-muted" />
+                    <div className="grid gap-4 sm:grid-cols-12">
+                        <div className="h-9 animate-pulse rounded-md bg-muted sm:col-span-8" />
+                        <div className="h-9 animate-pulse rounded-md bg-muted sm:col-span-4" />
+                        <div className="h-9 animate-pulse rounded-md bg-muted sm:col-span-4" />
+                        <div className="h-9 animate-pulse rounded-md bg-muted sm:col-span-4" />
+                        <div className="h-9 animate-pulse rounded-md bg-muted sm:col-span-4" />
+                    </div>
+                </div>
+                <div className="border-t border-border/60 pt-6">
+                    <div className="h-5 w-28 animate-pulse rounded bg-muted" />
+                    <div className="mt-4 h-36 animate-pulse rounded-md bg-muted/70" />
+                </div>
+            </div>
+        </PageScaffold>
+    )
+}
+
+/**
+ * 飞书风格纯白通栏详情工作面页壳（对应列表页的 `ListWorkspacePage`）。
+ */
+export function DetailWorkspacePage({
+    children,
+    className,
+}: {
+    children: React.ReactNode
+    className?: string
+}) {
+    return (
+        <PageScaffold density="compact" className={cn(styles.page, className)}>
+            {children}
+        </PageScaffold>
+    )
+}

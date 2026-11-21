@@ -3,6 +3,7 @@ export const themeTextNames = [
     "2xs",
     "tiny",
     "body-compact",
+    "section-title",
     "page-title",
     "value-summary",
     "value-hero",

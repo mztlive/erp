@@ -98,14 +98,14 @@ export function DetailPageHeader({
                     ) : null}
                 </div>
             ) : null}
-            <div className="flex flex-wrap items-center gap-4 pb-2">
+            <div className="flex flex-wrap items-center gap-3.5 pb-1">
                 {media}
-                <div className="min-w-0 flex-1 basis-56 space-y-2">
+                <div className="min-w-0 flex-1 basis-56 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                         <h1
                             {...headingProps}
                             className={cn(
-                                "min-w-0 max-w-full break-words text-xl font-semibold tracking-tight md:text-2xl",
+                                "min-w-0 max-w-full break-words text-page-title font-semibold tracking-tight text-foreground",
                                 headingProps?.className,
                             )}
                         >
@@ -117,9 +117,10 @@ export function DetailPageHeader({
                         {titleExtra}
                     </div>
                     {documentNumber != null || version != null || meta ? (
-                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground [&>*]:min-w-0 [&>*]:wrap-anywhere">
+                        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-muted-foreground [&>*]:min-w-0 [&>*]:wrap-anywhere">
                             {documentNumber != null ? (
                                 <span
+                                    className="num"
                                     data-workspace-document-number={
                                         documentNumber
                                     }
@@ -128,7 +129,7 @@ export function DetailPageHeader({
                                 </span>
                             ) : null}
                             {version != null ? (
-                                <span>版本 {version}</span>
+                                <span className="num">版本 {version}</span>
                             ) : null}
                             {meta}
                         </div>
@@ -137,7 +138,7 @@ export function DetailPageHeader({
                 {secondaryActions || primaryAction ? (
                     <div
                         data-slot="detail-page-header-actions"
-                        className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2"
+                        className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-1.5"
                     >
                         {secondaryActions}
                         {primaryAction}

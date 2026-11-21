@@ -208,6 +208,8 @@
     --text-tiny: 0.6875rem; /* 11px */
     --text-body-compact: 0.8125rem; /* 13px */
     --text-body-compact--line-height: 1.25rem; /* 20px */
+    --text-section-title: 0.9375rem; /* 15px 详情页分区标题 */
+    --text-section-title--line-height: 1.375rem; /* 22px */
     --text-page-title: 1.125rem; /* 18px 飞书精致页面主标题 */
     --text-page-title--line-height: 1.625rem; /* 26px */
     --text-value-summary: 1.75rem; /* 28px */
@@ -618,20 +620,144 @@
         --scaffold-pt: var(--spacing-page-block-lg);
     }
 }
-[data-slot="page-scaffold"].erp-list-workspace-page {
+[data-slot="page-scaffold"].erp-list-workspace-page,
+[data-slot="page-scaffold"].erp-detail-workspace-page {
     --scaffold-px: var(--spacing-workspace-inline);
     --scaffold-pt: 0px;
 }
 @media (min-width: 48rem) {
-    [data-slot="page-scaffold"].erp-list-workspace-page {
+    [data-slot="page-scaffold"].erp-list-workspace-page,
+    [data-slot="page-scaffold"].erp-detail-workspace-page {
         --scaffold-px: var(--spacing-page-inline);
         --scaffold-pt: 0px;
     }
 }
 @media (min-width: 75rem) {
-    [data-slot="page-scaffold"].erp-list-workspace-page {
+    [data-slot="page-scaffold"].erp-list-workspace-page,
+    [data-slot="page-scaffold"].erp-detail-workspace-page {
         --scaffold-px: var(--spacing-page-inline-lg);
     }
+}
+/* 飞书风格纯白通栏详情工作面：吸顶头部通栏、分区细线、12px 沉稳标签、柔底轻控件、无框内联编辑表 */
+.erp-detail-workspace-page [data-slot="detail-workspace-chrome"] {
+    margin-inline: calc(var(--scaffold-px) * -1);
+    padding-inline: var(--scaffold-px);
+}
+.erp-detail-workspace-page
+    [data-slot="detail-workspace-chrome"][data-scrolled="true"] {
+    box-shadow: 0 2px 8px -2px rgb(31 35 41 / 0.06);
+}
+.erp-detail-workspace-page
+    [data-slot="detail-workspace-section"]
+    + [data-slot="detail-workspace-section"] {
+    border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+}
+/* 详情页表单区：12px 克制标签让 13px 输入值成为主角；微柔底轻描边替代生硬白框 */
+.erp-detail-workspace-page [data-slot="detail-form-grid"] [data-slot="label"] {
+    font-size: var(--text-xs);
+    line-height: 1rem;
+    font-weight: 500;
+    color: color-mix(in oklab, var(--foreground) 72%, transparent);
+}
+.erp-detail-workspace-page
+    [data-slot="detail-form-grid"]
+    :is(
+        [data-slot="input"],
+        [data-slot="textarea"],
+        [data-slot="input-group"]
+    ):not(:disabled):not([data-disabled]):not([aria-invalid="true"]):not(
+        :has([aria-invalid="true"])
+    ):not(:has(> input:disabled)):not(:has(> textarea:disabled)):not(
+        [data-slot="input-group-control"]
+    ) {
+    border-color: color-mix(in oklab, var(--border) 95%, transparent);
+    background-color: color-mix(in oklab, var(--muted) 26%, transparent);
+}
+.erp-detail-workspace-page
+    [data-slot="detail-form-grid"]
+    :is(
+        [data-slot="input"],
+        [data-slot="textarea"],
+        [data-slot="input-group"]
+    ):not(:disabled):not([data-disabled]):not([aria-invalid="true"]):not(
+        :has([aria-invalid="true"])
+    ):not(:has(> input:disabled)):not(:has(> textarea:disabled)):not(
+        [data-slot="input-group-control"]
+    ):hover {
+    border-color: color-mix(in oklab, var(--primary) 42%, transparent);
+    background-color: color-mix(in oklab, var(--muted) 42%, transparent);
+}
+.erp-detail-workspace-page
+    [data-slot="detail-form-grid"]
+    :is(
+        [data-slot="input"]:focus-visible,
+        [data-slot="textarea"]:focus-visible,
+        [data-slot="input-group"]:focus-within
+    ):not([aria-invalid="true"]):not(:has([aria-invalid="true"])):not(
+        [data-slot="input-group-control"]
+    ) {
+    border-color: var(--primary);
+    background-color: var(--card);
+}
+/* 详情页内嵌可编辑表格（如 SKU 矩阵）：纯白表头、无四周边框、单元格内输入框静止无框柔底，聚焦亮蓝 */
+.erp-detail-workspace-page [data-slot="detail-inline-table"] {
+    --table-header: var(--card);
+}
+.erp-detail-workspace-page
+    [data-slot="detail-inline-table"]
+    [data-slot="table-header"]
+    tr {
+    border-bottom-color: color-mix(in oklab, var(--border) 80%, transparent);
+}
+.erp-detail-workspace-page
+    [data-slot="detail-inline-table"]
+    [data-slot="table-head"]:hover {
+    background-color: transparent;
+    color: color-mix(in oklab, var(--foreground) 65%, transparent);
+}
+.erp-detail-workspace-page
+    [data-slot="detail-inline-table"]
+    [data-slot="table-body"]
+    [data-slot="table-row"] {
+    border-bottom-color: color-mix(in oklab, var(--grid) 75%, transparent);
+}
+.erp-detail-workspace-page
+    [data-slot="detail-inline-table"]
+    :is([data-slot="table-head"], [data-slot="table-cell"]):first-child {
+    padding-inline-start: 0;
+}
+.erp-detail-workspace-page
+    [data-slot="detail-inline-table"]
+    :is([data-slot="table-head"], [data-slot="table-cell"]):last-child {
+    padding-inline-end: 0;
+}
+.erp-detail-workspace-page
+    [data-slot="detail-inline-table"]
+    [data-slot="table-body"]
+    [data-slot="input"]:not(:disabled) {
+    border-color: transparent;
+    background-color: color-mix(in oklab, var(--muted) 52%, transparent);
+}
+.erp-detail-workspace-page
+    [data-slot="detail-inline-table"]
+    [data-slot="table-body"]
+    [data-slot="input"]:not(:disabled):hover {
+    background-color: color-mix(in oklab, var(--muted) 85%, transparent);
+}
+.erp-detail-workspace-page
+    [data-slot="detail-inline-table"]
+    [data-slot="table-body"]
+    [data-slot="input"]:not(:disabled):focus-visible {
+    border-color: color-mix(in oklab, var(--primary) 65%, transparent);
+    background-color: var(--card);
+    box-shadow: 0 0 0 3px var(--ring);
+}
+.erp-detail-workspace-page
+    [data-slot="detail-inline-table"]
+    [data-slot="table-body"]
+    [data-slot="input"]:disabled {
+    border-color: transparent;
+    background-color: transparent;
 }
 [data-slot="page-scaffold"].erp-embedded-scaffold {
     --scaffold-px: 0px;

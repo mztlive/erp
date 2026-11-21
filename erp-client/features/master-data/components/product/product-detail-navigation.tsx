@@ -1,12 +1,11 @@
 "use client"
 
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { DetailWorkspaceTabs } from "@/components/business/detail-workspace"
 import { MasterDataSummaryStrip } from "@/features/master-data/components/shared/summary-strip"
 import {
     PRODUCT_EDITOR_SECTIONS,
     type ProductEditorSectionId,
 } from "@/features/master-data/lib/product-editor-model"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 
 function ProductSummaryStrip({
     rows,
@@ -27,41 +26,28 @@ function ProductSectionTabs({
     canReadSupply: boolean
     onValueChange: (value: ProductEditorSectionId) => void
 }) {
+    const items = PRODUCT_EDITOR_SECTIONS.filter(
+        (section) =>
+            section.id !== "effective" &&
+            section.id !== "sku" &&
+            (section.id !== "supply" || canReadSupply) &&
+            (!isCreate ||
+                (section.id !== "history" && section.id !== "supply")),
+    ).map((section) => ({
+        id: section.id,
+        label: section.label,
+    }))
+
     return (
-        <Tabs
+        <DetailWorkspaceTabs
             value={value}
-            onValueChange={(nextValue) => {
-                if (nextValue) {
-                    onValueChange(nextValue as ProductEditorSectionId)
-                }
-            }}
-            className="gap-0"
-        >
-            <TabsList
-                variant="line"
-                aria-label="商品编辑分区"
-                className="sticky top-0 z-10 h-auto w-full flex-nowrap justify-start gap-6 overflow-x-auto rounded-none border-b border-border bg-card px-0 py-0"
-            >
-                {PRODUCT_EDITOR_SECTIONS.filter(
-                    (section) =>
-                        section.id !== "effective" &&
-                        section.id !== "sku" &&
-                        (section.id !== "supply" || canReadSupply) &&
-                        (!isCreate ||
-                            (section.id !== "history" &&
-                                section.id !== "supply")),
-                ).map((section) => (
-                    <TabsTrigger
-                        key={section.id}
-                        id={`master-data-product-editor-tab-${toAutomationIdSegment(section.id)}`}
-                        value={section.id}
-                        className="h-object-tab flex-none"
-                    >
-                        {section.label}
-                    </TabsTrigger>
-                ))}
-            </TabsList>
-        </Tabs>
+            onValueChange={(nextValue) =>
+                onValueChange(nextValue as ProductEditorSectionId)
+            }
+            items={items}
+            ariaLabel="商品编辑分区"
+            tabIdPrefix="master-data-product-editor-tab"
+        />
     )
 }
 

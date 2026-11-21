@@ -238,6 +238,11 @@ function FileUpload({
                     type="button"
                     variant="secondary"
                     size={previewActions === "overlay" ? "icon-xs" : "icon-sm"}
+                    className={
+                        previewActions === "overlay"
+                            ? "size-5 rounded-sm bg-card/90 text-foreground shadow-xs hover:bg-card"
+                            : undefined
+                    }
                     title={fileUploadText.replace}
                     disabled={disabled}
                     aria-describedby={describedBy}
@@ -258,6 +263,11 @@ function FileUpload({
                     type="button"
                     variant="secondary"
                     size={previewActions === "overlay" ? "icon-xs" : "icon-sm"}
+                    className={
+                        previewActions === "overlay"
+                            ? "size-5 rounded-sm bg-card/90 text-foreground shadow-xs hover:bg-card"
+                            : undefined
+                    }
                     title={`${fileUploadText.remove} ${activePreview?.name ?? ""}`}
                     disabled={disabled}
                     aria-label={`移除 ${activePreview?.name ?? ""}`}
@@ -295,7 +305,7 @@ function FileUpload({
                 data-slot="file-upload"
                 data-dragging={dragging || undefined}
                 className={cn(
-                    "relative flex min-w-0 items-center justify-center rounded-lg border border-dashed bg-surface-sunken transition-colors data-dragging:border-ring data-dragging:bg-accent",
+                    "group/upload relative flex min-w-0 items-center justify-center rounded-lg border border-dashed bg-surface-sunken transition-colors data-dragging:border-ring data-dragging:bg-accent",
                     effectiveDensity === "hero"
                         ? "min-h-64 flex-col gap-5 px-5 py-10 text-center sm:min-h-72 lg:min-h-90"
                         : effectiveDensity === "button"
@@ -305,7 +315,8 @@ function FileUpload({
                             : effectiveDensity === "compact"
                               ? "flex-row gap-2 p-2 text-left"
                               : "flex-col gap-3 p-6 text-center",
-                    activePreview && "overflow-hidden p-0",
+                    activePreview &&
+                        "overflow-hidden border-solid border-border/80 bg-card p-0",
                     !activePreview &&
                         effectiveDensity !== "button" &&
                         "has-[button:enabled:hover]:border-ring has-[button:enabled:hover]:bg-accent has-[button:focus-visible]:border-ring has-[button:focus-visible]:ring-2 has-[button:focus-visible]:ring-ring",
@@ -419,8 +430,8 @@ function FileUpload({
                             ) : null}
                         </button>
                         {previewActions === "overlay" && !readOnly ? (
-                            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-center justify-end gap-1 bg-gradient-to-t from-overlay/70 via-overlay/20 to-transparent p-1">
-                                <div className="pointer-events-auto flex items-center gap-1">
+                            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-center justify-end gap-0.5 bg-gradient-to-t from-overlay/65 via-overlay/20 to-transparent p-1 opacity-0 transition-opacity duration-150 group-hover/upload:opacity-100 group-focus-within/upload:opacity-100 [@media(hover:none)]:opacity-100">
+                                <div className="pointer-events-auto flex items-center gap-0.5">
                                     {previewActionButtons}
                                 </div>
                             </div>

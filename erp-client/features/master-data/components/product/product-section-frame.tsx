@@ -2,6 +2,8 @@
 
 import * as React from "react"
 
+import { detailWorkspaceStyles } from "@/components/business/detail-workspace"
+
 function ProductSectionFrame({
     id,
     title,
@@ -20,23 +22,17 @@ function ProductSectionFrame({
     children: React.ReactNode
 }) {
     return (
-        <fieldset id={id} disabled={disabled} className="space-y-5">
+        <fieldset id={id} disabled={disabled} className="min-w-0 space-y-4">
             <legend className="sr-only">{title}</legend>
             {showHeading || extra ? (
-                <div
-                    className={
-                        showHeading
-                            ? "flex flex-wrap items-start justify-between gap-3 border-b border-grid pb-3"
-                            : "flex flex-wrap items-center justify-between gap-3"
-                    }
-                >
+                <div className="flex flex-wrap items-center justify-between gap-3">
                     {showHeading ? (
-                        <div className="min-w-0 space-y-1">
-                            <div className="text-base font-semibold tracking-tight">
+                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                            <h2 className={detailWorkspaceStyles.sectionTitle}>
                                 {title}
-                            </div>
+                            </h2>
                             {description ? (
-                                <p className="max-w-3xl text-sm leading-5 text-muted-foreground">
+                                <p className="text-xs leading-4.5 text-muted-foreground">
                                     {description}
                                 </p>
                             ) : null}
