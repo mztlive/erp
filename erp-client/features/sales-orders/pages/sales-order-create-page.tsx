@@ -59,7 +59,7 @@ export function SalesOrderCreatePage({
             <PageScaffold>
                 <PageHeader title={title} />
                 {account.isPending ? (
-                    <p role="status" className="text-sm text-muted-foreground">
+                    <p role="status" className="text-xs text-muted-foreground">
                         正在核对权限…
                     </p>
                 ) : account.isError ? (

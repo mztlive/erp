@@ -144,12 +144,15 @@ export function VoucherCategoryStatusDialog({
                             : "启用后，该类目及关联商品、SKU 恢复启用。SKU 保持下架，需要销售时请在商品资料中重新上架。"}
                     </DialogDescription>
                 </DialogHeader>
-                <p className="break-words text-sm">
+                <p className="break-words text-body-compact">
                     <span className="num">{target?.stableNo}</span> ·{" "}
                     {target?.name}
                 </p>
                 {error ? (
-                    <p role="alert" className="text-sm text-destructive">
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
                         {error}
                     </p>
                 ) : null}

@@ -51,7 +51,7 @@ export function CustomerDetailContactSections({
                     <DetailRecordColumns>
                         <DetailRecordColumn label="有效联系人">
                             {customer.contacts.length === 0 ? (
-                                <p className="py-2 text-sm text-muted-foreground">
+                                <p className="py-2 text-xs text-muted-foreground">
                                     暂无联系人
                                 </p>
                             ) : (
@@ -107,7 +107,7 @@ export function CustomerDetailContactSections({
                         </DetailRecordColumn>
                         <DetailRecordColumn label="地址">
                             {customer.addresses.length === 0 ? (
-                                <p className="py-2 text-sm text-muted-foreground">
+                                <p className="py-2 text-xs text-muted-foreground">
                                     暂无地址
                                 </p>
                             ) : (
@@ -152,7 +152,7 @@ export function CustomerDetailContactSections({
                 title="银行账户"
             >
                 {customer.bankAccounts.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         暂无银行账户
                     </p>
                 ) : (

@@ -82,7 +82,7 @@ export function SalesOrderContractPickerDialog({
                 </form.AppField>
                 <div aria-live="polite">
                     {contractId && query.isFetching ? (
-                        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <p className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Spinner />
                             正在读取合同信息…
                         </p>
@@ -90,7 +90,7 @@ export function SalesOrderContractPickerDialog({
                         <div className="space-y-3">
                             <p
                                 role="alert"
-                                className="text-sm text-destructive"
+                                className="text-body-compact text-destructive"
                             >
                                 合同信息加载失败，请重试或选择其他合同。
                             </p>
@@ -105,7 +105,7 @@ export function SalesOrderContractPickerDialog({
                         </div>
                     ) : contract ? (
                         <div className="space-y-3">
-                            <dl className="grid grid-cols-1 gap-4 rounded-lg bg-muted/40 p-4 text-sm sm:grid-cols-2">
+                            <dl className="grid grid-cols-1 gap-4 rounded-lg bg-muted/40 p-4 text-body-compact sm:grid-cols-2">
                                 {[
                                     ["客户", contract.customer.displayName],
                                     [
@@ -150,7 +150,7 @@ export function SalesOrderContractPickerDialog({
                             {!contract.selectableForNewSalesOrder ? (
                                 <p
                                     role="alert"
-                                    className="text-sm text-destructive"
+                                    className="text-body-compact text-destructive"
                                 >
                                     {contract.selectableBlocker ||
                                         "该合同暂不可用于新建销售单，请选择其他有效合同。"}

@@ -20,7 +20,7 @@ export default function HomePage() {
     }, [router])
 
     return (
-        <div className="flex min-h-svh items-center justify-center bg-background text-sm text-muted-foreground">
+        <div className="flex min-h-svh items-center justify-center bg-background text-body-compact text-muted-foreground">
             正在进入系统…
         </div>
     )

@@ -36,7 +36,7 @@ export function useSellableSkuPickerColumns() {
                                 label={label}
                             />
                             <div className="min-w-0">
-                                <div className="truncate text-sm font-medium">
+                                <div className="truncate font-medium">
                                     {label}
                                 </div>
                                 <div className="truncate text-xs text-muted-foreground">

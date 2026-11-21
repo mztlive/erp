@@ -16,7 +16,7 @@ export function OfferingField({
     return (
         <div className="flex min-w-0 items-baseline justify-between gap-5">
             <dt className="shrink-0 text-xs text-muted-foreground">{label}</dt>
-            <dd className="min-w-0 break-words text-right text-sm">
+            <dd className="min-w-0 break-words text-right text-body-compact">
                 {children}
             </dd>
         </div>
@@ -40,7 +40,7 @@ export function OfferingTerms({
     deliveryTemplateName?: string
 }) {
     return (
-        <div className="space-y-6 text-sm">
+        <div className="space-y-6 text-body-compact">
             <section className="border-b border-border pb-6">
                 {canViewCosts && (
                     <div className="grid grid-cols-2 gap-4">

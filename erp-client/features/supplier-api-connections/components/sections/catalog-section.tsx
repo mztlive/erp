@@ -177,7 +177,7 @@ export function CatalogSection({
                     {query.isPending ? (
                         <p
                             role="status"
-                            className="py-8 text-center text-sm text-muted-foreground"
+                            className="py-8 text-center text-xs text-muted-foreground"
                         >
                             正在读取同步记录…
                         </p>
@@ -301,7 +301,7 @@ export function CatalogSection({
                                     >
                                         <p
                                             id="supplier-catalog-empty-sync-blocker"
-                                            className="text-sm text-muted-foreground"
+                                            className="text-xs text-muted-foreground"
                                         >
                                             {syncBlocker}
                                         </p>

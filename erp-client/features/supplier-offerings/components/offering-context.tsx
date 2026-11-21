@@ -17,7 +17,7 @@ export function OfferingAvailability({
     offering: SupplierOfferingView
 }) {
     return (
-        <section className="space-y-3 text-sm">
+        <section className="space-y-3 text-body-compact">
             <h3 className="font-medium">当前可供</h3>
             <dl className="space-y-3">
                 <OfferingField label="可供状态">
@@ -51,7 +51,7 @@ export function OfferingAvailability({
                     </span>
                 </OfferingField>
             </dl>
-            <p className="text-xs leading-5 text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 关系状态、条款有效期与当前可供分别核对；采购时以最新校验结果为准。
             </p>
         </section>

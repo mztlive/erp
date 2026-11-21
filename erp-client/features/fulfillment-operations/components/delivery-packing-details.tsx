@@ -51,7 +51,7 @@ export function DeliveryPackingDetails({
                 {open ? "收起收货地址与包裹" : "查看收货地址与包裹"}
             </Button>
             {open && (
-                <div className="space-y-3 rounded-lg border p-3 text-sm">
+                <div className="space-y-3 rounded-lg border p-3 text-body-compact">
                     {query.isPending && (
                         <p className="text-muted-foreground">
                             正在读取发货记录…

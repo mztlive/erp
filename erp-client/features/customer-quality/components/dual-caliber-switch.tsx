@@ -57,7 +57,7 @@ export function DualCaliberSwitch({
                                 : "border-border hover:border-muted-foreground/40",
                         )}
                     >
-                        <div className="truncate text-sm font-semibold">
+                        <div className="truncate text-body-compact font-semibold">
                             {tab.title}
                         </div>
                         <div className="mt-0.5 truncate text-xs text-muted-foreground">

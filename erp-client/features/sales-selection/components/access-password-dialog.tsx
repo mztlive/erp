@@ -73,7 +73,7 @@ export function AccessPasswordDialog({
                         <p
                             id="sales-selection-access-password-disabled-reason"
                             role="status"
-                            className="text-sm text-muted-foreground"
+                            className="text-xs text-muted-foreground"
                         >
                             {disabledReason}
                         </p>

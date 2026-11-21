@@ -327,7 +327,7 @@ function BatchItemEditor({
                         disabled={busy || readOnly}
                         className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5"
                     >
-                        <div className="flex flex-wrap items-center gap-3 text-sm">
+                        <div className="flex flex-wrap items-center gap-3 text-body-compact">
                             <span className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted">
                                 {item.images?.[0] ? (
                                     <CatalogSourceImage
@@ -379,7 +379,7 @@ function BatchItemEditor({
                                 <dt className="text-xs text-muted-foreground">
                                     接口采购报价
                                 </dt>
-                                <dd className="mt-1 text-lg font-semibold">
+                                <dd className="num mt-1 text-value-compact font-semibold tracking-tight">
                                     {item.purchase_price !== null ? (
                                         <MoneyValue
                                             value={item.purchase_price}
@@ -421,7 +421,7 @@ function BatchItemEditor({
                                 公司销售参考价（含税）
                             </h3>
                             {existing ? (
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-xs text-muted-foreground">
                                     保留已有 SKU 的原价、上架状态与展示资料。
                                 </p>
                             ) : null}
@@ -629,7 +629,7 @@ function BatchItemEditor({
                             <details className="rounded-lg border border-grid px-4 py-3">
                                 <summary
                                     id={`${prefix}-more-details`}
-                                    className="cursor-pointer text-sm"
+                                    className="cursor-pointer text-body-compact"
                                 >
                                     更多资料与供给条件
                                 </summary>
@@ -695,13 +695,13 @@ function BatchItemEditor({
                     {saveError ? (
                         <p
                             role="alert"
-                            className="border-t border-grid px-6 py-3 text-sm text-destructive"
+                            className="border-t border-grid px-6 py-3 text-body-compact text-destructive"
                         >
                             {saveError}
                         </p>
                     ) : null}
                     {confirmDiscard ? (
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-grid bg-warning-soft px-6 py-3 text-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-grid bg-warning-soft px-6 py-3 text-body-compact">
                             <span>尚有未保存调整，确认放弃？</span>
                             <div className="flex gap-2">
                                 <Button

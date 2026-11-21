@@ -102,7 +102,7 @@ export function WorkspaceAccountMenu() {
                         <DropdownMenuGroup>
                             <DropdownMenuLabel>
                                 <div className="flex flex-col gap-0.5">
-                                    <span className="text-sm font-medium text-foreground">
+                                    <span className="text-body-compact font-medium text-foreground">
                                         {displayName}
                                     </span>
                                     <span className="text-xs font-normal text-muted-foreground">

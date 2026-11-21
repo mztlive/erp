@@ -156,7 +156,7 @@ export function PurchaseDirectReturnDialog({
                                 className="grid gap-3 py-4 sm:grid-cols-[1fr_10rem] sm:items-start"
                             >
                                 <div>
-                                    <p className="text-sm font-medium">
+                                    <p className="text-body-compact font-medium">
                                         {line.item_name}
                                     </p>
                                     <p className="mt-1 text-xs text-muted-foreground">
@@ -212,7 +212,7 @@ export function PurchaseDirectReturnDialog({
                             errors.length ? (
                                 <p
                                     role="alert"
-                                    className="text-sm text-destructive"
+                                    className="text-body-compact text-destructive"
                                 >
                                     请核对实际退回数量、原因及收货凭据后提交。
                                 </p>
@@ -220,12 +220,15 @@ export function PurchaseDirectReturnDialog({
                         }
                     />
                     {error ? (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {error}
                         </p>
                     ) : null}
                     {unknown ? (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             登记结果尚未确认，请保持内容不变，点击“核对登记结果”。
                         </p>
                     ) : null}

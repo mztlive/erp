@@ -110,7 +110,7 @@ export function SalesOrderHandoverButton({
                     </AlertDialogHeader>
                     <div
                         id={`sales-orders-detail-handover-summary-${orderSegment}`}
-                        className="rounded-md border p-3 text-sm"
+                        className="rounded-md border p-3 text-body-compact"
                     >
                         <p className="font-medium">
                             {order.documentNumber} · {order.primaryStatus.label}{" "}
@@ -145,7 +145,7 @@ export function SalesOrderHandoverButton({
                         <div className="space-y-2">
                             <label
                                 htmlFor={`sales-orders-detail-handover-target-${orderSegment}`}
-                                className="text-sm font-medium"
+                                className="text-xs font-medium"
                             >
                                 接收销售人员
                                 <RequiredMark />
@@ -178,7 +178,7 @@ export function SalesOrderHandoverButton({
                             </NativeSelect>
                             {candidatesQuery.isError ? (
                                 <p
-                                    className="text-sm text-destructive"
+                                    className="text-body-compact text-destructive"
                                     role="alert"
                                 >
                                     候选人加载失败，请关闭后重试。
@@ -188,7 +188,7 @@ export function SalesOrderHandoverButton({
                         <div className="space-y-2">
                             <label
                                 htmlFor={`sales-orders-detail-handover-reason-${orderSegment}`}
-                                className="text-sm font-medium"
+                                className="text-xs font-medium"
                             >
                                 交接原因
                                 <RequiredMark />
@@ -206,7 +206,7 @@ export function SalesOrderHandoverButton({
                         </div>
                         {confirmError ? (
                             <p
-                                className="text-sm text-destructive"
+                                className="text-body-compact text-destructive"
                                 role="alert"
                             >
                                 {confirmError}

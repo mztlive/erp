@@ -36,7 +36,7 @@ export const InquiryDemandDetails = withForm({
                                 selector={(state) => state.values.draft.note}
                             >
                                 {(note) => (
-                                    <p className="flex gap-2 text-sm text-muted-foreground">
+                                    <p className="flex gap-2 text-xs text-muted-foreground">
                                         <span className="shrink-0">
                                             需求说明
                                         </span>
@@ -50,7 +50,9 @@ export const InquiryDemandDetails = withForm({
                                 )}
                             </form.Subscribe>
                         ) : (
-                            <h2 className="text-sm font-semibold">基本信息</h2>
+                            <h2 className="text-section-title font-semibold tracking-tight">
+                                基本信息
+                            </h2>
                         )}
                     </div>
                     <CollapsibleTrigger

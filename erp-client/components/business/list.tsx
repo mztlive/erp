@@ -222,7 +222,7 @@ function BusinessTableFrame({
                         >
                             <div className="flex min-h-row-comfortable flex-col gap-2 border-b border-border/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                                 <div className="min-w-0">
-                                    <Heading className="text-base font-semibold text-foreground">
+                                    <Heading className="text-section-title font-semibold tracking-tight text-foreground">
                                         {title}
                                     </Heading>
                                     {description ? (
@@ -327,7 +327,7 @@ function QuickPreviewSheet({
                 </div>
             ) : null}
             <SheetTitle
-                className={headerMedia ? "text-base leading-6" : undefined}
+                className={headerMedia ? "text-section-title" : undefined}
             >
                 {title}
             </SheetTitle>

@@ -215,7 +215,10 @@ export function ConnectionCreateDialog({
                         )}
                     />
                     {connectorTypes.isError ? (
-                        <div role="alert" className="text-sm text-destructive">
+                        <div
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             接口类型加载失败，请重试。
                             <Button
                                 id="supplier-api-connections-create-types-retry"

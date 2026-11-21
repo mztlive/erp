@@ -106,7 +106,7 @@ export function SourcingAddressEditor({
                     >
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                                <h4 className="text-sm font-medium">
+                                <h4 className="text-body-compact font-medium">
                                     交付地址 · {rows.length}
                                 </h4>
                                 <p
@@ -134,7 +134,7 @@ export function SourcingAddressEditor({
                             />
                         </div>
                         {rows.length === 0 ? (
-                            <p className="border-y border-dashed border-border py-4 text-center text-sm text-muted-foreground">
+                            <p className="border-y border-dashed border-border py-4 text-center text-xs text-muted-foreground">
                                 尚未安排交付地址，请添加本来源负责的地址。
                             </p>
                         ) : (
@@ -179,7 +179,7 @@ export function SourcingAddressEditor({
                                                     className="col-span-2 min-w-0 space-y-1 @min-[560px]/sourcing:col-span-1"
                                                 >
                                                     <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                                                        <span className="text-sm font-medium">
+                                                        <span className="text-body-compact font-medium">
                                                             {row.recipient} ·{" "}
                                                             {row.phone}
                                                         </span>
@@ -198,7 +198,7 @@ export function SourcingAddressEditor({
                                                                 : ""}
                                                         </span>
                                                     </span>
-                                                    <span className="block break-words text-sm text-muted-foreground">
+                                                    <span className="block break-words text-body-compact text-muted-foreground">
                                                         {fullDeliveryAddress(
                                                             row,
                                                         )}
@@ -301,7 +301,7 @@ export function SourcingAddressEditor({
                                                             field.handleBlur()
                                                         }}
                                                     />
-                                                    <span className="shrink-0 text-sm">
+                                                    <span className="shrink-0 text-body-compact">
                                                         {product.unit}
                                                     </span>
                                                 </div>

@@ -9,8 +9,10 @@ export function NatureDimensionList({
 }) {
     return (
         <div className="border-t pt-3">
-            <p className="mb-2 text-sm font-medium">{dimension.title}</p>
-            <ul className="grid gap-1 text-sm sm:grid-cols-2">
+            <p className="mb-2 text-body-compact font-medium">
+                {dimension.title}
+            </p>
+            <ul className="grid gap-1 text-body-compact sm:grid-cols-2">
                 {dimension.items.map((item) => (
                     <li
                         key={item.code}

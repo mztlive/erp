@@ -35,7 +35,7 @@ export function IntegrationDirectReconciliation({
 }) {
     return (
         <div className="space-y-3 rounded-xl border border-dashed p-3">
-            <p className="text-sm font-medium">登记对账结论</p>
+            <p className="text-body-compact font-medium">登记对账结论</p>
             <p className="text-xs text-muted-foreground">
                 请选择差异原因并核对关联凭证后，确认该笔对账结果。
             </p>

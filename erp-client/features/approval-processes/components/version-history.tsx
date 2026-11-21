@@ -19,7 +19,7 @@ export function VersionHistory({
 }) {
     if (!versions.length)
         return (
-            <p className="p-6 text-sm text-muted-foreground">
+            <p className="p-6 text-xs text-muted-foreground">
                 还没有历史版本。
             </p>
         )

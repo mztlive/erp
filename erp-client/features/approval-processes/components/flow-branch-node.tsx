@@ -75,7 +75,7 @@ export function FlowBranchNode({
         )
     if (data.kind === "split")
         return (
-            <div className="flex h-10 items-center justify-center gap-2 rounded-lg border border-info-border bg-card text-sm font-medium text-info-soft-foreground shadow-sm">
+            <div className="flex h-10 items-center justify-center gap-2 rounded-lg border border-info-border bg-card text-body-compact font-medium text-info-soft-foreground shadow-sm">
                 {input}
                 <GitForkIcon className="size-4" />
                 或签

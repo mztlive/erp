@@ -99,7 +99,7 @@ export function MyTransferPreview({
                     }
                 />
             ) : job ? (
-                <div className="space-y-4 text-sm">
+                <div className="space-y-4 text-body-compact">
                     <DataTransferTaskResult
                         key={job.id}
                         job={job}

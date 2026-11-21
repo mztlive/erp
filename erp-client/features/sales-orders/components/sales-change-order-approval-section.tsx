@@ -192,7 +192,7 @@ export function SalesChangeOrderApprovalSection({
                 >
                     {phase === "draft" ? (
                         <>
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 {canSubmit
                                     ? "请继续编辑并提交审批；不再需要修改时，可以放弃本次改单。"
                                     : "等待有权限的销售人员编辑并提交审批。"}

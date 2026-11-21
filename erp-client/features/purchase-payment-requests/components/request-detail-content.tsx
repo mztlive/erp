@@ -45,8 +45,8 @@ function PaymentInformation({
         <section className="space-y-5" aria-label="申请与收款信息">
             {!fullPage && (
                 <div className="space-y-3">
-                    <h3 className="text-sm font-semibold">申请信息</h3>
-                    <dl className="grid gap-x-8 gap-y-3 text-sm @min-[640px]/payment-detail:grid-cols-2">
+                    <h3 className="font-semibold">申请信息</h3>
+                    <dl className="grid gap-x-8 gap-y-3 text-body-compact @min-[640px]/payment-detail:grid-cols-2">
                         <Field label="申请人">{request.applicant_name}</Field>
                         <Field label="希望付款日">
                             <span className="num">
@@ -68,16 +68,14 @@ function PaymentInformation({
                         fullPage ? "space-y-3" : "space-y-3 border-t pt-5"
                     }
                 >
-                    <h3 className="text-sm font-semibold">
-                        付款方式：供应商预存款
-                    </h3>
-                    <p className="text-sm">
+                    <h3 className="font-semibold">付款方式：供应商预存款</h3>
+                    <p className="text-body-compact">
                         人民币预存款
                         {request.deposit_account?.identity.external_account_ref
                             ? ` · 账户标识 ****${request.deposit_account.identity.external_account_ref.slice(-4)}`
                             : "账户已冻结"}
                     </p>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         使用提交时已冻结的同主体、同供应商预存款账户。批准后按采购执行组占用，实际扣款核实后才核销，不登记本次银行付款。
                     </p>
                 </div>
@@ -87,8 +85,8 @@ function PaymentInformation({
                         fullPage ? "space-y-3" : "space-y-3 border-t pt-5"
                     }
                 >
-                    <h3 className="text-sm font-semibold">收款信息</h3>
-                    <dl className="grid gap-x-8 gap-y-3 text-sm @min-[640px]/payment-detail:grid-cols-2">
+                    <h3 className="font-semibold">收款信息</h3>
+                    <dl className="grid gap-x-8 gap-y-3 text-body-compact @min-[640px]/payment-detail:grid-cols-2">
                         <Field label="收款户名">
                             {request.payment_recipient?.account_name ??
                                 "未记录"}
@@ -177,20 +175,20 @@ export function RequestDetailContent({
                                 >
                                     {label}
                                 </dt>
-                                <dd className="text-base font-medium">
+                                <dd className="text-body-compact font-medium">
                                     <MoneyValue value={value} />
                                 </dd>
                             </div>
                         ))}
                     </dl>
                     {showClosed && (
-                        <div className="space-y-1 border-t pt-3 text-sm">
+                        <div className="space-y-1 border-t pt-3 text-body-compact">
                             <p>
                                 已关闭未付：
                                 <MoneyValue value={request.closed_amount} />
                             </p>
                             {request.status === "closed" && (
-                                <p className="text-xs leading-5 text-muted-foreground">
+                                <p className="text-xs text-muted-foreground">
                                     本申请已终止后续付款：
                                     {request.close_reason || "未记录原因"}
                                     。已付记录继续保留，后续即使冲正也不会恢复付款资格。
@@ -274,7 +272,7 @@ export function RequestDetailContent({
                             className="[&>section:first-child]:border-t-0 [&>section:first-child]:pt-0"
                         >
                             {approval ?? (
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-xs text-muted-foreground">
                                     尚未提交财务审核。
                                 </p>
                             )}

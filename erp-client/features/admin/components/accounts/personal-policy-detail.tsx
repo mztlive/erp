@@ -36,7 +36,7 @@ export function PersonalPolicyDetail({
                     <p className="text-xs text-muted-foreground">{category}</p>
                     <h3
                         id={`person-scope-${segment}-title`}
-                        className="text-lg font-semibold"
+                        className="text-body-compact font-semibold"
                     >
                         {resourceLabel(business.resource)}
                     </h3>
@@ -58,7 +58,7 @@ export function PersonalPolicyDetail({
             </div>
             <div className="space-y-3 rounded-lg bg-muted/40 p-5">
                 <h4 className="text-xs text-muted-foreground">{scopeTitle}</h4>
-                <p className="text-lg leading-relaxed font-medium wrap-anywhere">
+                <p className="text-body-compact leading-relaxed font-medium wrap-anywhere">
                     {summary}
                 </p>
                 {groups.length > 1 && (
@@ -79,12 +79,12 @@ export function PersonalPolicyDetail({
                     </ul>
                 )}
                 {!configurable && (
-                    <p className="text-sm leading-6 text-muted-foreground">
+                    <p className="text-body-compact leading-6 text-muted-foreground">
                         无需单独配置范围。{business.policy_description}
                     </p>
                 )}
                 {configurable && otherActions.length > 0 && (
-                    <p className="text-xs leading-5 text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         此范围适用于 {business.configurable_actions.length}{" "}
                         项操作；另有 {otherActions.length} 项按业务规则校验。
                     </p>
@@ -116,7 +116,7 @@ export function PersonalPolicyDetail({
                                 </li>
                             ))}
                         </ul>
-                        <p className="text-xs leading-5 text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             操作权限由角色授予，执行时仍须符合本业务的访问方式和处理规则。
                         </p>
                     </div>
@@ -129,7 +129,7 @@ export function PersonalPolicyDetail({
                         >
                             范围说明
                         </summary>
-                        <div className="space-y-2 pb-4 text-sm leading-6 text-muted-foreground">
+                        <div className="space-y-2 pb-4 text-body-compact leading-6 text-muted-foreground">
                             <p>{business.policy_description}</p>
                             {!!otherActions.length && (
                                 <p>

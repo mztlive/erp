@@ -54,7 +54,9 @@ export function DifferencesWorkspace({
                 className={cn(surfaceInsetClassName, "shadow-none ring-0")}
             >
                 <CardHeader className="rounded-t-lg border-b border-grid py-3">
-                    <CardTitle className="text-base">差异列表</CardTitle>
+                    <CardTitle className="text-section-title font-semibold tracking-tight">
+                        差异列表
+                    </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-1 p-2">
                     {differences.map((d) => (
@@ -63,7 +65,7 @@ export function DifferencesWorkspace({
                             id={`supplier-settlements-differences-item-${toAutomationIdSegment(d.differenceId)}`}
                             type="button"
                             className={cn(
-                                "flex w-full flex-col rounded-md px-2 py-2 text-left text-sm hover:bg-foreground/5",
+                                "flex w-full flex-col rounded-md px-2 py-2 text-left text-body-compact hover:bg-foreground/5",
                                 activeDiff?.differenceId === d.differenceId
                                     ? "bg-card font-medium shadow-sm ring-1 ring-foreground/10"
                                     : "text-muted-foreground",
@@ -103,13 +105,13 @@ export function DifferencesWorkspace({
                         <CardHeader className="rounded-t-lg border-b border-grid py-3">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                                 <div>
-                                    <CardTitle className="text-base">
+                                    <CardTitle className="text-section-title font-semibold tracking-tight">
                                         {activeDiff.typeLabel}
                                     </CardTitle>
                                     <CardDescription>
                                         {activeDiff.amountDirectionLabel}
                                         {activeDiff.amountGross ? (
-                                            <span className="mt-1 block text-base font-semibold text-warning-soft-foreground">
+                                            <span className="mt-1 block text-body-compact font-semibold text-warning-soft-foreground">
                                                 <MoneyValue
                                                     value={
                                                         activeDiff.amountGross
@@ -134,7 +136,7 @@ export function DifferencesWorkspace({
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-3 pt-4">
-                            <div className="grid gap-2 sm:grid-cols-2 text-sm">
+                            <div className="grid gap-2 sm:grid-cols-2 text-body-compact">
                                 <div
                                     className={cn(surfaceInsetClassName, "p-3")}
                                 >
@@ -180,11 +182,11 @@ export function DifferencesWorkspace({
                             />
 
                             <div>
-                                <h4 className="mb-2 text-sm font-medium">
+                                <h4 className="mb-2 text-body-compact font-medium">
                                     已登记证据
                                 </h4>
                                 {activeDiff.evidence.length === 0 ? (
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         尚无采购/供应商证据
                                         {activeDiff.requiresProcurementEvidence
                                             ? "（本差异需要采购协同）"
@@ -197,7 +199,7 @@ export function DifferencesWorkspace({
                                                 key={e.evidenceId}
                                                 className={cn(
                                                     surfaceInsetClassName,
-                                                    "px-3 py-2 text-sm",
+                                                    "px-3 py-2 text-body-compact",
                                                 )}
                                             >
                                                 <div className="font-medium">

@@ -51,7 +51,7 @@ export function SalesOrderDeliveryOverview({
             <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2
                     id="sales-order-delivery-overview-heading"
-                    className="text-lg font-semibold"
+                    className="text-section-title font-semibold tracking-tight"
                 >
                     销售明细与交付
                 </h2>
@@ -59,7 +59,7 @@ export function SalesOrderDeliveryOverview({
                     共 {order.lineItems.length} 项
                 </span>
             </div>
-            <p className="text-xs leading-5 text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 已交付数量按实际已发货或已完成服务的记录统计；货到后请及时办理客户验收。
             </p>
             <DeliveryProgressNotice
@@ -218,11 +218,11 @@ export function SalesOrderDeliveryOverview({
                     </TableBody>
                 </Table>
             </div>
-            <div className="flex items-baseline justify-end gap-5 text-sm">
+            <div className="flex items-baseline justify-end gap-5 text-body-compact">
                 <span className="text-muted-foreground">合计（含税）</span>
                 <MoneyValue
                     value={order.amountGross}
-                    className="text-xl font-semibold"
+                    className="text-value-compact font-semibold tracking-tight"
                 />
             </div>
         </section>
@@ -288,11 +288,11 @@ function DeliveryProgressNotice({
     return (
         <>
             {order.currentRevisionNo == null ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     销售单生效后显示交付与验收进度。
                 </p>
             ) : !canRead ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     当前无法读取交付进度；商品约定仍可查阅。
                 </p>
             ) : query.isError ? (
@@ -303,7 +303,7 @@ function DeliveryProgressNotice({
                     onRetry={() => void query.refetch()}
                 />
             ) : query.isPending ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     正在读取交付进度…
                 </p>
             ) : null}

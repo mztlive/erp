@@ -199,7 +199,7 @@ export function WorkspaceInvoiceTask({
                             </AlertDescription>
                         )}
                     </Alert>
-                    <dl className="grid gap-3 rounded-lg border border-grid p-4 text-sm sm:grid-cols-2">
+                    <dl className="grid gap-3 rounded-lg border border-grid p-4 text-body-compact sm:grid-cols-2">
                         <div>
                             <dt className="text-muted-foreground">申请金额</dt>
                             <dd className="mt-1">
@@ -313,13 +313,13 @@ function WorkspaceInvoiceSession({
                         key={label}
                         className="min-w-0 space-y-2 border-grid @min-[420px]/invoice:border-l @min-[420px]/invoice:px-5 @min-[420px]/invoice:first:border-l-0 @min-[420px]/invoice:first:pl-0 @min-[420px]/invoice:last:pr-0"
                     >
-                        <dt className="text-sm text-muted-foreground">
+                        <dt className="text-xs text-muted-foreground">
                             {label}
                         </dt>
                         <dd className="overflow-x-auto">
                             <MoneyValue
                                 value={value}
-                                className="text-xl font-semibold leading-tight"
+                                className="text-value-compact font-semibold tracking-tight"
                             />
                         </dd>
                     </div>
@@ -353,18 +353,20 @@ function AppliedInvoiceDetails({
             className="flex min-w-0 flex-col gap-3"
         >
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h3 className="text-base font-semibold">已批准开票资料</h3>
+                <h3 className="text-body-compact font-semibold">
+                    已批准开票资料
+                </h3>
                 {request.request_no ? (
                     canOpenRequest ? (
                         <Link
                             id={`workspace-invoice-linked-request-${toAutomationIdSegment(request.id)}`}
                             href={`/finance/customer-accounts/invoice-requests?requestId=${encodeURIComponent(request.id)}`}
-                            className="text-sm underline-offset-4 hover:underline"
+                            className="text-body-compact underline-offset-4 hover:underline"
                         >
                             开票申请 {request.request_no}
                         </Link>
                     ) : (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             开票申请 {request.request_no}
                         </p>
                     )

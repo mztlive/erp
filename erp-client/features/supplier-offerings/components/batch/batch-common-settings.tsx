@@ -114,7 +114,7 @@ export function BatchCommonSettings({ editor }: { editor: BatchEditor }) {
                         <editor.form.AppField name="common.quantityMode">
                             {(field) => (
                                 <label
-                                    className="flex items-center gap-2 text-sm"
+                                    className="flex items-center gap-2 text-xs"
                                     htmlFor="batch-supply-common-unknown"
                                 >
                                     <Checkbox

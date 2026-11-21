@@ -34,7 +34,7 @@ export function PortalCommandConflict({
     if (commandFailureDisposition(error) !== "conflict") return null
     return (
         <div className="space-y-2 rounded-lg border p-3">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 资料已变化。输入继续保留；请核对最新状态，再修改或重新保存。
             </p>
             <PortalError error={recheck.error} />
@@ -50,7 +50,7 @@ export function PortalCommandConflict({
             {ready && (
                 <>
                     {currentSummary && (
-                        <p className="whitespace-pre-line text-sm">
+                        <p className="whitespace-pre-line text-body-compact">
                             {currentSummary}
                         </p>
                     )}

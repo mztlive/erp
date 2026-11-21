@@ -125,13 +125,13 @@ export function SupplierOrdersListPreviewSheet({
             }
         >
             {previewPending ? (
-                <div className="px-7 py-6 text-sm text-muted-foreground">
+                <div className="px-7 py-6 text-body-compact text-muted-foreground">
                     加载预览…
                 </div>
             ) : preview ? (
                 <SupplierOrderPreviewPanel order={preview} />
             ) : (
-                <div className="px-7 py-6 text-sm text-muted-foreground">
+                <div className="px-7 py-6 text-body-compact text-muted-foreground">
                     未找到该供应商订单
                 </div>
             )}

@@ -90,7 +90,7 @@ function DocumentAttachmentList({
             {...props}
         >
             <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-medium">{title}</h3>
+                <h3 className="text-body-compact font-medium">{title}</h3>
                 <span className="num text-xs text-muted-foreground">
                     {attachments.length} 个文件
                 </span>
@@ -165,7 +165,9 @@ function DocumentAttachmentList({
                     ))}
                 </AttachmentGroup>
             ) : (
-                <p className="text-sm text-muted-foreground">尚未上传附件</p>
+                <p className="text-body-compact text-muted-foreground">
+                    尚未上传附件
+                </p>
             )}
 
             {onFilesSelected ? (

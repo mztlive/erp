@@ -45,7 +45,7 @@ export function ReceiptSessionFields({
                             }
                             required
                             inputMode="decimal"
-                            inputClassName="num h-control-lg text-base font-semibold"
+                            inputClassName="num h-control-lg font-semibold"
                             placeholder="请输入到账金额"
                             disabled={locked}
                         />
@@ -124,7 +124,7 @@ export function ReceiptSessionFields({
             ) : null}
             {receiptId ? (
                 <div className="space-y-2">
-                    <h3 className="text-sm font-medium">已保存凭证</h3>
+                    <h3 className="font-medium">已保存凭证</h3>
                     <ReceiptFiles receiptId={receiptId} draft />
                 </div>
             ) : null}

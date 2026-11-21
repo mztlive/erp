@@ -49,7 +49,7 @@ export function RequestDepositExecution({
                     </Button>
                 )}
             </div>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 将从该供应商预存款账户中冻结本次批准的付款额度，供采购单下单扣款使用；待供应商实际扣款核实后自动完成核销。
             </p>
             {mutation.isSuccess && (

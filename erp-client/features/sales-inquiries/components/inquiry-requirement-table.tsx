@@ -138,7 +138,7 @@ export function InquiryRequirementTable({
                                                 <p className="font-medium leading-5 wrap-anywhere">
                                                     {line.product_name}
                                                 </p>
-                                                <p className="mt-1 text-xs leading-5 text-muted-foreground wrap-anywhere">
+                                                <p className="mt-1 text-xs text-muted-foreground wrap-anywhere">
                                                     {line.specification &&
                                                     line.specification !==
                                                         "无规格"

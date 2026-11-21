@@ -81,7 +81,7 @@ export function CopyRuleEditor({
                     <CopyRuleList {...props} targetNodeId={targetNodeId} />
                 )}
                 <SheetFooter className="border-t">
-                    <p className="mr-auto w-full text-xs leading-5 text-muted-foreground">
+                    <p className="mr-auto w-full text-xs text-muted-foreground">
                         关闭面板保留修改，请在页面点击「保存草稿」。
                     </p>
                     <Button
@@ -186,10 +186,10 @@ function CopyRuleList({
                                         }
                                     >
                                         <div className="min-w-0 flex-1 space-y-1">
-                                            <p className="break-words text-sm font-medium">
+                                            <p className="break-words text-body-compact font-medium">
                                                 {slot.label}
                                             </p>
-                                            <p className="break-words text-xs leading-5 text-muted-foreground">
+                                            <p className="break-words text-xs text-muted-foreground">
                                                 {rule.recipients
                                                     .slice(0, 3)
                                                     .map(
@@ -303,8 +303,10 @@ function CopyRuleList({
                 !adding && (
                     <div className="rounded-lg border border-dashed px-4 py-8 text-center">
                         <BellIcon className="mx-auto mb-3 size-6 text-muted-foreground" />
-                        <p className="text-sm font-medium">尚未设置抄送</p>
-                        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                        <p className="text-body-compact font-medium">
+                            尚未设置抄送
+                        </p>
+                        <p className="mt-2 text-xs text-muted-foreground">
                             按需选择通知时机和接收人。
                         </p>
                     </div>
@@ -313,7 +315,7 @@ function CopyRuleList({
             {adding ? (
                 <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
                     <div className="flex items-center justify-between gap-2">
-                        <h3 className="text-sm font-medium">添加抄送规则</h3>
+                        <h3 className="font-medium">添加抄送规则</h3>
                         <Button
                             id={`${id}-cancel-add`}
                             type="button"
@@ -376,7 +378,9 @@ function CopyRuleList({
                     </div>
                     {pending && (
                         <div className="space-y-2">
-                            <p className="text-sm font-medium">抄送人</p>
+                            <p className="text-body-compact font-medium">
+                                抄送人
+                            </p>
                             <AssigneeCombobox
                                 id={`${id}-new-recipient`}
                                 copies
@@ -438,7 +442,7 @@ export function CopyRuleSummary({
             )}
             aria-label="抄送规则"
         >
-            <h3 className="flex items-center gap-2 text-sm font-medium">
+            <h3 className="flex items-center gap-2 font-medium">
                 <BellIcon
                     aria-hidden
                     className="size-4 text-muted-foreground"

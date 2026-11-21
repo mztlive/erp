@@ -31,7 +31,7 @@ export function BatchPreparationStatus({
             action,
         })
     return (
-        <div className="flex flex-wrap items-center gap-3 text-sm">
+        <div className="flex flex-wrap items-center gap-3 text-body-compact">
             <div role="status" aria-live="polite" className="space-y-1">
                 <p className="font-medium">
                     {label} · 已准备 {state.completed} / {batch.selected_count}{" "}

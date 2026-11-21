@@ -65,7 +65,7 @@ export function OrganizationUnitPanel({
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border px-4 py-3 sm:px-6 lg:px-7">
                 <div className="min-w-0">
                     <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                        <h2 className="text-base font-semibold tracking-tight wrap-anywhere">
+                        <h2 className="text-section-title font-semibold tracking-tight wrap-anywhere">
                             {unit.name}
                         </h2>
                         <BusinessStatusBadge
@@ -161,7 +161,7 @@ export function OrganizationUnitPanel({
             </div>
 
             <div className="flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-6 lg:px-7">
-                <div className="text-sm">
+                <div className="text-body-compact">
                     负责人：
                     {unit.leader
                         ? personLabel(view.people, unit.leader.user_id)
@@ -192,7 +192,7 @@ export function OrganizationUnitPanel({
             <div className="min-w-0 px-4 py-4 sm:px-6 lg:px-7">
                 <div className="min-w-0 space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                        <h3 className="flex items-center gap-2 text-sm font-medium">
+                        <h3 className="flex items-center gap-2 font-medium">
                             <UsersIcon
                                 className="size-4 text-muted-foreground"
                                 aria-hidden="true"
@@ -223,7 +223,7 @@ export function OrganizationUnitPanel({
                         ) : null}
                     </div>
                     {node.members.length === 0 ? (
-                        <p className="rounded-lg bg-muted/30 px-4 py-8 text-center text-sm leading-6 text-muted-foreground">
+                        <p className="rounded-lg bg-muted/30 px-4 py-8 text-center text-body-compact leading-6 text-muted-foreground">
                             当前部门还没有成员，请点击「添加成员」选择已有账号。
                         </p>
                     ) : (
@@ -231,7 +231,7 @@ export function OrganizationUnitPanel({
                             {node.members.map((member) => (
                                 <li
                                     key={member.id}
-                                    className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 px-1 py-3 text-sm"
+                                    className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 px-1 py-3 text-body-compact"
                                 >
                                     <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
                                         {canViewAccounts ? (

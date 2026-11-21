@@ -238,7 +238,7 @@ export function WorkspaceTaskSurface({
                             <p className="text-xs font-medium text-muted-foreground">
                                 {item.workItemTypeLabel}
                             </p>
-                            <h1 className="break-words text-xl font-semibold tracking-tight">
+                            <h1 className="break-words text-page-title font-semibold tracking-tight">
                                 {item.counterpartyName || "采购付款安排"}
                             </h1>
                             <p className="break-all text-xs text-muted-foreground">

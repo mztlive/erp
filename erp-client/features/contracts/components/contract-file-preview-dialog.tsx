@@ -47,7 +47,10 @@ export function ContractFilePreviewDialog({
                     <DialogDescription>{fileName}</DialogDescription>
                 </DialogHeader>
                 {query.isError ? (
-                    <div role="alert" className="space-y-3 py-6 text-sm">
+                    <div
+                        role="alert"
+                        className="space-y-3 py-6 text-body-compact"
+                    >
                         <p>
                             {getErrorMessage(
                                 query.error,
@@ -91,7 +94,7 @@ export function ContractFilePreviewDialog({
                 ) : (
                     <div
                         role="status"
-                        className="flex items-center gap-2 py-8 text-sm"
+                        className="flex items-center gap-2 py-8 text-body-compact"
                     >
                         <Spinner />
                         正在加载合同原文…

@@ -74,7 +74,7 @@ function CounterForm({ counter }: { counter: ContractCounter }) {
                 </form.AppForm>
             </div>
             {mutation.isError && (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {getErrorMessage(
                         mutation.error,
                         "流水保存失败，请刷新后重试",
@@ -113,7 +113,10 @@ export function TemplateCounterDialog({ onClose }: { onClose: () => void }) {
                 <div className="space-y-3">
                     {query.isPending && <p role="status">正在读取流水…</p>}
                     {query.isError && (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {getErrorMessage(query.error, "流水加载失败")}
                         </p>
                     )}

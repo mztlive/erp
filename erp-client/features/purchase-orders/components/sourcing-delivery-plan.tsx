@@ -52,7 +52,7 @@ function DeliveryAddress({
 }) {
     const term = addressDeliveryTerm(option, row.region_code)
     return (
-        <span className="min-w-0 text-xs leading-5">
+        <span className="min-w-0 text-xs">
             <span className="flex flex-wrap items-center gap-1.5 font-medium">
                 {row.recipient} · {row.phone}
                 {option && term ? (
@@ -86,7 +86,7 @@ export function SalesDeliveryRequirements({
             className="space-y-2 border-b border-border px-4 py-4"
             aria-label="销售交付要求"
         >
-            <h3 className="text-sm font-medium">销售交付要求</h3>
+            <h3 className="font-medium">销售交付要求</h3>
             {product.deliveryAllocations.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                     {NO_ADDRESS_NOTE}
@@ -131,7 +131,7 @@ export function SourcingDeliveryRequirementSection({
             className="space-y-2 border-t border-border px-4 py-4"
             aria-label="交付地址"
         >
-            <h4 className="text-sm font-medium">交付地址</h4>
+            <h4 className="text-body-compact font-medium">交付地址</h4>
             {rows.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                     {NO_ADDRESS_NOTE}
@@ -155,7 +155,7 @@ export function SourcingDeliveryRequirementSection({
                                     className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3"
                                 >
                                     <DeliveryAddress row={row} />
-                                    <span className="text-right text-xs leading-5">
+                                    <span className="text-right text-xs">
                                         <QuantityValue
                                             value={row.quantity}
                                             unit={product.unit}
@@ -245,7 +245,7 @@ export function SourcingDeliveryEditor({
                         aria-label="交付地址"
                     >
                         <div className="flex min-h-8 items-center justify-between gap-2">
-                            <h4 className="text-sm font-medium">
+                            <h4 className="text-body-compact font-medium">
                                 交付地址
                                 {condensed && !expanded ? (
                                     <span className="ml-2 text-xs font-normal text-muted-foreground">
@@ -421,7 +421,7 @@ export function SourcingDeliveryEditor({
                                                     option={option}
                                                 />
                                                 <QuantityValue
-                                                    className="text-xs leading-5"
+                                                    className="text-xs"
                                                     value={row.quantity}
                                                     unit={product.unit}
                                                 />
@@ -474,7 +474,7 @@ function CompactDeliverySummary({
                     className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 py-3"
                 >
                     <DeliveryAddress row={row} option={option} />
-                    <span className="text-right text-xs leading-5">
+                    <span className="text-right text-xs">
                         <QuantityValue
                             value={row.quantity}
                             unit={product.unit}

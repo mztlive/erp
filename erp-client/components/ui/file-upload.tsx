@@ -415,7 +415,7 @@ function FileUpload({
                                         className="size-5"
                                         aria-hidden="true"
                                     />
-                                    <span className="line-clamp-2 break-all text-2xs leading-tight">
+                                    <span className="line-clamp-2 break-all text-xs">
                                         {activePreview.name}
                                     </span>
                                 </div>
@@ -471,7 +471,7 @@ function FileUpload({
                                 className={cn(
                                     "font-medium text-foreground",
                                     effectiveDensity === "hero" &&
-                                        "text-base sm:text-lg",
+                                        "text-section-title font-semibold tracking-tight",
                                     (effectiveDensity === "tile" &&
                                         !showTileLabel) ||
                                         effectiveDensity === "button"
@@ -480,7 +480,7 @@ function FileUpload({
                                           ? "text-xs"
                                           : effectiveDensity === "hero"
                                             ? undefined
-                                            : "text-sm",
+                                            : "text-body-compact",
                                 )}
                             >
                                 {label}
@@ -580,7 +580,7 @@ function FileUpload({
                 </div>
             ) : null}
             {readOnly && !activePreview && !hasSelection ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-body-compact text-muted-foreground">
                     {fileUploadText.empty}
                 </p>
             ) : null}
@@ -589,7 +589,7 @@ function FileUpload({
                 <p
                     id={errorId}
                     role="alert"
-                    className="text-sm text-destructive"
+                    className="text-body-compact text-destructive"
                 >
                     {selectionError}
                 </p>

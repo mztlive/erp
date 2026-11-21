@@ -108,7 +108,10 @@ export function ContractSalesAccessDialog({
                         )}
                     />
                     {mutation.isError ? (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {getErrorMessage(
                                 mutation.error,
                                 "保存共享名单失败。你的输入仍已保留，请核对合同是否有更新。",

@@ -89,7 +89,7 @@ function ProductEffectiveSection({
                     {reasonInvalid ? (
                         <p
                             id={`${prefix}-reason-error`}
-                            className="text-sm text-destructive"
+                            className="text-body-compact text-destructive"
                             role="alert"
                         >
                             请填写至少 2 个字的变更原因。

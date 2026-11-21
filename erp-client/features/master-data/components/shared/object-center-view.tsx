@@ -213,7 +213,7 @@ export function ObjectCenterView({
                             size="sm"
                             variant="ghost"
                             className={cn(
-                                "h-object-tab rounded-none border-b-2 border-transparent px-0 text-sm",
+                                "h-object-tab rounded-none border-b-2 border-transparent px-0 text-body-compact",
                                 selected
                                     ? "border-b-foreground bg-transparent font-semibold text-foreground hover:bg-transparent"
                                     : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",

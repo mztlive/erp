@@ -66,7 +66,7 @@ export function AdjustmentDialog({
                 {feedback}
                 {meta ? (
                     <div className="space-y-4">
-                        <div className="rounded-xl border bg-muted/40 p-3 text-sm">
+                        <div className="rounded-xl border bg-muted/40 p-3 text-body-compact">
                             <div className="font-medium">
                                 {meta.warehouseName}
                                 <span className="num ml-2 text-muted-foreground">
@@ -226,7 +226,7 @@ export function AdjustmentDialog({
                                     selector={(state) => state.values}
                                 >
                                     {(value) => (
-                                        <p className="text-sm font-medium">
+                                        <p className="text-body-compact font-medium">
                                             本次
                                             {REASON_TYPE_OPTIONS.find(
                                                 (reason) =>

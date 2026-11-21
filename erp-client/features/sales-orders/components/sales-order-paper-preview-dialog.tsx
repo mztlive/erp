@@ -82,7 +82,7 @@ function SalesOrderPaperPreviewBody({
     if (query.isPending) {
         return (
             <div className="flex min-h-64 items-center justify-center rounded-lg bg-card px-6 py-12 shadow-lg">
-                <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                <p className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Spinner aria-label="正在读取销售单" />
                     正在读取销售单…
                 </p>
@@ -114,7 +114,7 @@ function SalesOrderPaperPreviewBody({
 
     if (!query.data) {
         return (
-            <div className="rounded-lg bg-card px-6 py-8 text-center text-sm text-muted-foreground shadow-lg">
+            <div className="rounded-lg bg-card px-6 py-8 text-center text-body-compact text-muted-foreground shadow-lg">
                 未找到这张销售单，可能已删除或当前角色无权查看。
             </div>
         )

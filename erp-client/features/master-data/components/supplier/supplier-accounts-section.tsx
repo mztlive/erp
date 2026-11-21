@@ -115,15 +115,15 @@ export function SupplierAccountsSection({
                 <div className="space-y-1">
                     <h2
                         id="supplier-portal-accounts-title"
-                        className="text-base font-semibold"
+                        className="text-section-title font-semibold tracking-tight"
                     >
                         门户账号
                     </h2>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         为供应商人员开通登录账号，按岗位分配维护或查看权限。
                     </p>
                     {!supplierEnabled && (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             供应商已停用，暂不能开通新账号。
                         </p>
                     )}

@@ -57,7 +57,9 @@ export function AllocationPoolCard({
             aria-label="待核销应付单据"
         >
             <div className="border-b border-border px-4 py-3">
-                <h2 className="text-sm font-semibold">待核销应付单据</h2>
+                <h2 className="text-section-title font-semibold tracking-tight">
+                    待核销应付单据
+                </h2>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                     {`仅 ${supplierName} · ${
                         track === "payment" ? "未结清应付" : "可收票余额"
@@ -93,7 +95,7 @@ export function AllocationPoolCard({
                     </div>
                 </div>
                 {pool.length === 0 ? (
-                    <p className="py-6 text-sm text-muted-foreground">
+                    <p className="py-6 text-xs text-muted-foreground">
                         暂无待核销单据
                     </p>
                 ) : (
@@ -127,7 +129,7 @@ export function AllocationPoolCard({
                                         aria-label={`选择 ${item.sourceDocumentNo}`}
                                     />
                                     <div className="min-w-0 flex-1">
-                                        <div className="flex flex-wrap items-center gap-2 text-sm">
+                                        <div className="flex flex-wrap items-center gap-2 text-body-compact">
                                             <span className="font-medium">
                                                 {
                                                     SOURCE_TYPE_LABEL[
@@ -143,7 +145,7 @@ export function AllocationPoolCard({
                                                 {item.dueDate}
                                             </span>
                                         </div>
-                                        <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-sm">
+                                        <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-body-compact">
                                             <span className="text-muted-foreground">
                                                 待核销余额
                                             </span>

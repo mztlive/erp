@@ -215,7 +215,7 @@ export function PurchaseChangeOrderApprovalSection({
                     }
                 >
                     {isPlaceholderReason(changeOrder.reason) ? null : (
-                        <p className="text-sm">
+                        <p className="text-body-compact">
                             <span className="text-muted-foreground">
                                 变更原因：
                             </span>

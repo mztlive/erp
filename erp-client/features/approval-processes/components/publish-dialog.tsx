@@ -72,7 +72,7 @@ export function PublishDialog({
                         · {versionLabel(detail.definition_version)}
                     </DialogDescription>
                 </DialogHeader>
-                <div className="flex flex-col gap-3 text-sm">
+                <div className="flex flex-col gap-3 text-body-compact">
                     <div data-testid="publish-path-preview">
                         <DefinitionFlowchart
                             id={`${id}-flow`}
@@ -86,12 +86,12 @@ export function PublishDialog({
                     </div>
                     <CopyRuleSummary detail={detail} />
                     <p
-                        className="text-xs leading-5 text-muted-foreground"
+                        className="text-xs text-muted-foreground"
                         data-testid="publish-reject-copy"
                     >
                         {rejectionPolicyCopy()}
                     </p>
-                    <p className="text-xs leading-5 text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         发布后，新发起的单据将按此版本审批；已创建或审批中的单据仍按原流程继续执行。
                     </p>
                 </div>

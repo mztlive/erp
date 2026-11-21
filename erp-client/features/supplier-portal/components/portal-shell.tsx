@@ -151,7 +151,7 @@ function PortalSidebarAccount({
                                     "供"}
                             </AvatarFallback>
                         </Avatar>
-                        <span className="grid min-w-0 flex-1 text-left text-sm leading-tight">
+                        <span className="grid min-w-0 flex-1 text-left text-body-compact leading-tight">
                             <span className="truncate font-medium">
                                 {displayName}
                             </span>
@@ -221,10 +221,10 @@ export function PortalShell({
                         <Building2Icon className="size-4" aria-hidden="true" />
                     </div>
                     <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold tracking-tight text-foreground">
+                        <div className="truncate text-body-compact font-semibold tracking-tight text-foreground">
                             福尚云 ERP
                         </div>
-                        <div className="truncate text-2xs font-medium text-muted-foreground">
+                        <div className="truncate text-xs font-medium text-muted-foreground">
                             供应商门户
                         </div>
                     </div>

@@ -116,7 +116,7 @@ export function InvoiceRequestPanel({
                 {overview}
                 {invoiceRecords}
                 {!salesOrderId && (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         当前账号没有查看开票申请的权限。
                     </p>
                 )}
@@ -145,7 +145,7 @@ export function InvoiceRequestPanel({
     if (requestForm && !salesOrderId)
         return (
             <section className="space-y-4">
-                <h2 className="font-semibold">
+                <h2 className="text-section-title font-semibold tracking-tight">
                     {editing ? "修改开票申请" : "申请开票"}
                 </h2>
                 {requestForm}
@@ -183,8 +183,10 @@ export function InvoiceRequestPanel({
                     {toolbar}
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
-                            <h2 className="font-semibold">开票申请</h2>
-                            <p className="mt-1 text-sm text-muted-foreground">
+                            <h2 className="text-section-title font-semibold tracking-tight">
+                                开票申请
+                            </h2>
+                            <p className="mt-1 text-xs text-muted-foreground">
                                 提交申请，审批通过后由财务开票。
                             </p>
                         </div>
@@ -310,12 +312,12 @@ export function InvoiceRequestPanel({
                             </Table>
                         </div>
                     ) : (
-                        <p className="py-6 text-center text-sm text-muted-foreground">
+                        <p className="py-6 text-center text-xs text-muted-foreground">
                             暂无开票申请。有开票需求时，可在此发起申请。
                         </p>
                     )}
                     {(list.data?.total ?? 0) > 10 ? (
-                        <div className="flex items-center justify-end gap-3 text-sm">
+                        <div className="flex items-center justify-end gap-3 text-body-compact">
                             <span>
                                 第 {page} 页 · 共 {list.data?.total} 条
                             </span>

@@ -26,7 +26,7 @@ export function CopyFiles({
     return (
         <div className="space-y-3">
             {!files.length && (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     本次提交没有附件。
                 </p>
             )}
@@ -35,7 +35,7 @@ export function CopyFiles({
                     key={file.file_asset_id}
                     className="flex flex-wrap items-center gap-2 rounded-md border p-3"
                 >
-                    <span className="min-w-0 flex-1 break-all text-sm">
+                    <span className="min-w-0 flex-1 break-all text-body-compact">
                         {file.file_name}
                     </span>
                     {([false, true] as const).map((isPreview) => {
@@ -101,7 +101,7 @@ export function CopyFiles({
                 </div>
             ))}
             {fileQuery.isError && (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {getErrorMessage(fileQuery.error)}
                 </p>
             )}

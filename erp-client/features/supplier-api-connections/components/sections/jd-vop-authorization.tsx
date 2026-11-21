@@ -50,14 +50,14 @@ export function JdVopAuthorizationSection({
         <section aria-label="京东账号授权" className="space-y-4 p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0 space-y-2">
-                    <h2 className="flex items-center gap-2 text-base font-semibold">
+                    <h2 className="flex items-center gap-2 text-section-title font-semibold tracking-tight">
                         <KeyRoundIcon
                             className="size-4 text-muted-foreground"
                             aria-hidden="true"
                         />
                         京东账号授权
                     </h2>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         授权企业采购账号或配置已有令牌后，可继续测试京东接口连接。
                     </p>
                 </div>
@@ -114,19 +114,19 @@ export function JdVopAuthorizationSection({
                 </div>
             </div>
             {!canRead ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     当前账号没有查看京东授权状态的权限，请联系管理员。
                 </p>
             ) : query.isPending ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     正在查询京东授权状态…
                 </p>
             ) : query.isError ? (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     暂时无法查询授权状态，请刷新；如仍失败，请联系管理员核验权限和服务配置。
                 </p>
             ) : status ? (
-                <div className="space-y-3 text-sm" aria-live="polite">
+                <div className="space-y-3 text-body-compact" aria-live="polite">
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                         <Badge
                             variant={
@@ -173,16 +173,16 @@ export function JdVopAuthorizationSection({
                 </div>
             ) : null}
             {submissionUnknown && query.unconfirmed ? (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     本次授权结果尚未查明，本次敏感输入已清空。请刷新授权状态，不要重复提交；仍无法确认时请联系管理员核实。
                 </p>
             ) : null}
             {pollExpired ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     已停止自动查询。可稍后点击“刷新授权状态”，或关闭页面后回来查看。
                 </p>
             ) : waiting || query.unconfirmed ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     正在自动查询授权进度，最多查询 2
                     分钟。可离开页面后回来查看。
                 </p>

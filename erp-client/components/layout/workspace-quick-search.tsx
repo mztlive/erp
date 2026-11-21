@@ -104,7 +104,7 @@ export function WorkspaceQuickSearch() {
                 <span className="flex-1 truncate text-xs">快速跳转</span>
                 <span
                     aria-hidden="true"
-                    className="ml-auto font-mono text-2xs text-muted-foreground/65"
+                    className="ml-auto font-mono text-xs text-muted-foreground/65"
                 >
                     ⌘K
                 </span>

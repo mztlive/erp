@@ -15,7 +15,7 @@ export function ListRouteRedirect({
         router.replace(href)
     }, [href, router])
     return (
-        <div className="flex min-h-[12rem] items-center justify-center text-sm text-muted-foreground">
+        <div className="flex min-h-[12rem] items-center justify-center text-body-compact text-muted-foreground">
             正在打开{label}…
         </div>
     )

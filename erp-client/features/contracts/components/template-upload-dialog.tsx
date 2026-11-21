@@ -180,7 +180,10 @@ export function TemplateUploadDialog({ onClose }: { onClose: () => void }) {
                         检查第一页排版。样张不占流水。
                     </p>
                     {upload.isError && (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {getErrorMessage(
                                 upload.error,
                                 "模板上传失败，请重试",

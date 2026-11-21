@@ -79,23 +79,23 @@ export function ProposedScopeSummary({
     }
     return (
         <section className="space-y-4" aria-live="polite" aria-atomic="true">
-            <h3 className="text-sm font-medium">
+            <h3 className="font-medium">
                 {incompleteKeys.size ? "已完成部分的预览" : "保存后范围"}
             </h3>
             {[...groups.entries()].map(([key, group]) => (
                 <div key={key} className="space-y-1">
-                    <p className="text-xs leading-5 text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         {group.actions.length === value.actions.length
                             ? "全部可配置操作"
                             : group.actions.map(actionLabel).join("、")}
                     </p>
-                    <p className="text-sm leading-6 wrap-anywhere">
+                    <p className="text-body-compact leading-6 wrap-anywhere">
                         {group.description}
                     </p>
                 </div>
             ))}
             {incompleteKeys.size > 0 && (
-                <p className="text-xs leading-5 text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     待完善范围尚未计入。
                 </p>
             )}

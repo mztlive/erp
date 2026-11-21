@@ -128,11 +128,11 @@ function AcceptanceConfirmSelection({
                         <p className="font-medium text-foreground">
                             {line.itemLabel}
                         </p>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             {line.fulfillmentLabel}
                         </p>
                         {line.reason ? (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 {line.reason}
                             </p>
                         ) : null}

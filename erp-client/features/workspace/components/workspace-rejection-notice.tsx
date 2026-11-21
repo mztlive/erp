@@ -68,7 +68,7 @@ export function WorkspaceRejectionNotice({
                 </AlertDescription>
             </Alert>
             {actionable && (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     请按驳回意见修改或补充说明后重新提交。保存修改不结束待办；重新提交将从第一个节点审批。
                 </p>
             )}

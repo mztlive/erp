@@ -130,7 +130,7 @@ export function BatchPricingPanel({
                         />
                         <h2
                             id="supplier-catalog-batch-pricing-title"
-                            className="text-base font-semibold"
+                            className="text-section-title font-semibold tracking-tight"
                         >
                             设置售价
                         </h2>
@@ -142,7 +142,7 @@ export function BatchPricingPanel({
                 <div className="space-y-3">
                     <h3
                         id="supplier-catalog-batch-mode-label"
-                        className="text-sm font-medium"
+                        className="font-medium"
                     >
                         定价模式
                     </h3>
@@ -163,7 +163,7 @@ export function BatchPricingPanel({
                             <label
                                 key={mode.value}
                                 htmlFor={`supplier-catalog-batch-mode-${mode.value.toLowerCase()}`}
-                                className="flex cursor-pointer items-center gap-2.5 text-sm"
+                                className="flex cursor-pointer items-center gap-2.5 text-xs"
                             >
                                 <RadioGroupItem
                                     id={`supplier-catalog-batch-mode-${mode.value.toLowerCase()}`}
@@ -198,7 +198,7 @@ export function BatchPricingPanel({
                               : PackageIcon
                     return (
                         <div key={name} className="space-y-3 border-t pt-4">
-                            <h3 className="flex items-center gap-2 text-sm font-semibold">
+                            <h3 className="flex items-center gap-2 font-semibold">
                                 <PriceIcon
                                     className="size-4 text-muted-foreground"
                                     aria-hidden
@@ -326,7 +326,7 @@ export function BatchPricingPanel({
                 >
                     <h3
                         id="supplier-catalog-batch-more-settings"
-                        className="flex items-center gap-2 text-sm font-semibold"
+                        className="flex items-center gap-2 font-semibold"
                     >
                         <SlidersHorizontalIcon
                             className="size-4 text-muted-foreground"
@@ -356,7 +356,7 @@ export function BatchPricingPanel({
                                 >
                                     <label
                                         htmlFor="supplier-catalog-batch-overwrite-fill"
-                                        className="flex items-center gap-2 text-sm"
+                                        className="flex items-center gap-2 text-xs"
                                     >
                                         <RadioGroupItem
                                             id="supplier-catalog-batch-overwrite-fill"
@@ -366,7 +366,7 @@ export function BatchPricingPanel({
                                     </label>
                                     <label
                                         htmlFor="supplier-catalog-batch-overwrite-replace"
-                                        className="flex items-center gap-2 text-sm"
+                                        className="flex items-center gap-2 text-xs"
                                     >
                                         <RadioGroupItem
                                             id="supplier-catalog-batch-overwrite-replace"
@@ -382,7 +382,7 @@ export function BatchPricingPanel({
                                 {(field) => (
                                     <label
                                         htmlFor="supplier-catalog-batch-preserve-manual"
-                                        className="flex items-start gap-2 text-sm"
+                                        className="flex items-start gap-2 text-xs"
                                     >
                                         <Checkbox
                                             id="supplier-catalog-batch-preserve-manual"

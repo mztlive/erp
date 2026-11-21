@@ -29,8 +29,8 @@ export function SourcePurchaseTerms({
     const quote = terms.quote_context
     return (
         <section className="space-y-3" aria-label="来源采购要求">
-            <h3 className="text-sm font-medium">来源采购要求</h3>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+            <h3 className="font-medium">来源采购要求</h3>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-body-compact">
                 {[
                     ["起购数量", terms.minimum_quantity],
                     ["购买倍数", terms.quantity_multiple],
@@ -54,7 +54,7 @@ export function SourcePurchaseTerms({
                 ))}
             </dl>
             {quote && canReadCost ? (
-                <p className="text-xs leading-5 text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     报价核验数量{" "}
                     <QuantityValue value={quote.quantity} unit={unit ?? ""} />
                     <span className="ml-2 num">
@@ -76,12 +76,12 @@ export function SourcePurchaseTerms({
                             </Badge>
                         ))}
                     </div>
-                    <p className="text-xs leading-5 text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         该商品存在额外采购或履约条件，自动发单前须完成对应核验；未支持的履约要求会阻断发单。
                     </p>
                 </div>
             ) : null}
-            <p className="text-xs leading-5 text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 实际采购仍按本次数量和收货地址核验可售、库存、报价与运费。
             </p>
         </section>

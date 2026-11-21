@@ -32,7 +32,9 @@ export function ApprovalMaterialPreview({
     return (
         <main className="flex h-svh flex-col bg-background">
             <header className="shrink-0 border-b px-6 py-4">
-                <h1 className="break-all text-lg font-semibold">{fileName}</h1>
+                <h1 className="break-all text-page-title font-semibold tracking-tight">
+                    {fileName}
+                </h1>
             </header>
             <div className="relative min-h-0 flex-1">
                 {query.isError ? (
@@ -42,7 +44,7 @@ export function ApprovalMaterialPreview({
                         onRetry={() => void query.refetch()}
                     />
                 ) : query.isFetching || !url ? (
-                    <p role="status" className="text-sm text-muted-foreground">
+                    <p role="status" className="text-xs text-muted-foreground">
                         正在读取附件…
                     </p>
                 ) : query.data?.type === "application/pdf" ? (

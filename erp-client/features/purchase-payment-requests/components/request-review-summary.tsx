@@ -50,10 +50,10 @@ export function RequestReviewSummary({
         >
             <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
                 <div className="min-w-0 flex-1 space-y-1">
-                    <h2 className="text-base font-semibold leading-snug wrap-anywhere">
+                    <h2 className="text-section-title font-semibold wrap-anywhere tracking-tight">
                         {purchaseSummary(request.lines)}
                     </h2>
-                    <p className="text-sm wrap-anywhere">
+                    <p className="text-body-compact wrap-anywhere">
                         {request.supplier_name}
                     </p>
                     <p className="num text-xs text-muted-foreground break-all">
@@ -63,8 +63,8 @@ export function RequestReviewSummary({
                     </p>
                 </div>
                 <div className="min-w-0 space-y-1 @min-[640px]/payment-review:border-l @min-[640px]/payment-review:border-grid @min-[640px]/payment-review:pl-6">
-                    <p className="text-sm text-muted-foreground">本次申请</p>
-                    <p className="text-2xl font-semibold tracking-tight">
+                    <p className="text-xs text-muted-foreground">本次申请</p>
+                    <p className="num text-value-section font-semibold tracking-tight">
                         <MoneyValue value={request.total_amount} />
                     </p>
                 </div>
@@ -84,8 +84,8 @@ export function RequestReviewSummary({
                             <dd
                                 className={
                                     label === "本次可申请"
-                                        ? "text-base font-semibold"
-                                        : "text-base"
+                                        ? "text-body-compact font-semibold"
+                                        : "text-body-compact"
                                 }
                             >
                                 <MoneyValue value={value} />
@@ -103,7 +103,7 @@ export function RequestReviewSummary({
                             : "提交时的金额依据"}
                 </p>
             </div>
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-grid pt-3 text-sm">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-grid pt-3 text-body-compact">
                 <p>
                     <span className="text-muted-foreground">付款条件 </span>
                     {terms.length === 1 ? terms[0] : "见各采购单"}
@@ -129,18 +129,18 @@ export function RequestReviewSummary({
             {request.lines.some((line) => line.source_changed) && (
                 <p
                     role="alert"
-                    className="rounded-md bg-warning-soft px-4 py-3 text-sm text-warning-soft-foreground"
+                    className="rounded-md bg-warning-soft px-4 py-3 text-body-compact text-warning-soft-foreground"
                 >
                     采购或收款依据已变化，请核对后处理。
                 </p>
             )}
             {basis.exceeds && (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     有采购单的申请未付金额超过可申请余额，请逐单核对。
                 </p>
             )}
             {(closed || compareDecimal(request.paid_amount, "0", 4) > 0) && (
-                <div className="flex flex-wrap gap-x-6 gap-y-2 border-t border-grid pt-3 text-sm">
+                <div className="flex flex-wrap gap-x-6 gap-y-2 border-t border-grid pt-3 text-body-compact">
                     <span>
                         本申请已付 <MoneyValue value={request.paid_amount} />
                     </span>

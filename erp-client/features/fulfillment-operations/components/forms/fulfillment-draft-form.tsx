@@ -172,7 +172,10 @@ export function FulfillmentDraftReadOnly({
             : undefined
     const note = "evidenceNote" in draft ? draft.evidenceNote : undefined
     return (
-        <section aria-label="履约明细" className="flex flex-col gap-3 text-sm">
+        <section
+            aria-label="履约明细"
+            className="flex flex-col gap-3 text-body-compact"
+        >
             <ul className="divide-y rounded-lg border">
                 {operation.lines.map((line) => {
                     const receipt =

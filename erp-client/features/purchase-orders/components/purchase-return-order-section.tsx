@@ -24,7 +24,7 @@ export function PurchaseReturnOrderSection({
     returns: readonly PurchaseReturnOrderRow[]
 }) {
     if (returns.length === 0) {
-        return <p className="text-sm text-muted-foreground">暂无采购退货。</p>
+        return <p className="text-xs text-muted-foreground">暂无采购退货。</p>
     }
 
     return (
@@ -34,7 +34,7 @@ export function PurchaseReturnOrderSection({
                     key={row.purchaseReturnOrderId}
                     className={cn(
                         surfaceInsetClassName,
-                        "flex items-center justify-between px-3 py-2 text-sm",
+                        "flex items-center justify-between px-3 py-2 text-body-compact",
                     )}
                 >
                     <span>
@@ -72,7 +72,7 @@ export function PurchaseReturnOrderRelatedSection({
             compact={query.isSuccess && (query.data?.length ?? 0) === 0}
         >
             {query.isPending ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     正在加载采购退货…
                 </p>
             ) : null}

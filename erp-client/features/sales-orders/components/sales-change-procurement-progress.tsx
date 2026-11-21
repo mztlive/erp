@@ -27,7 +27,7 @@ export function SalesChangeProcurementProgressCard({
             className="space-y-3 rounded-xl border border-border/70 px-4 py-4 md:px-5"
         >
             <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 id={`${id}-title`} className="text-sm font-semibold">
+                <h3 id={`${id}-title`} className="font-semibold">
                     {procurement.predicted ? "预计影响的采购" : "采购处理"}
                 </h3>
                 <Badge
@@ -56,7 +56,7 @@ export function SalesChangeProcurementProgressCard({
                     {procurement.items.map((item) => (
                         <li
                             key={item.purchaseOrderId}
-                            className="space-y-1 py-2 first:pt-0 last:pb-0 text-sm"
+                            className="space-y-1 py-2 first:pt-0 last:pb-0 text-body-compact"
                         >
                             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                                 <Link

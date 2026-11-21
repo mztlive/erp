@@ -542,19 +542,19 @@ function AllocationWorkspace<TAllocation>({
                     <DescriptionList columns="three" aria-label="分配数量摘要">
                         <DescriptionItem>
                             <DescriptionTerm>待分配总量</DescriptionTerm>
-                            <DescriptionDetails className="num text-base font-medium">
+                            <DescriptionDetails className="num text-section-title font-medium">
                                 {summary.totalToAllocate}
                             </DescriptionDetails>
                         </DescriptionItem>
                         <DescriptionItem>
                             <DescriptionTerm>已分配</DescriptionTerm>
-                            <DescriptionDetails className="num text-base font-medium">
+                            <DescriptionDetails className="num text-section-title font-medium">
                                 {summary.allocated}
                             </DescriptionDetails>
                         </DescriptionItem>
                         <DescriptionItem>
                             <DescriptionTerm>差额</DescriptionTerm>
-                            <DescriptionDetails className="num text-base font-medium">
+                            <DescriptionDetails className="num text-section-title font-medium">
                                 {summary.difference}
                             </DescriptionDetails>
                         </DescriptionItem>

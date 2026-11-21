@@ -82,7 +82,7 @@ export function CopyRolePermissions({
                         aria-label="复制权限的来源角色"
                     />
                     {source && (
-                        <p className="text-sm">
+                        <p className="text-body-compact">
                             将使用「{source.name}」的 {copyable.length}{" "}
                             项可配置权限。整模块全选授权不参与复制，当前角色已有的整模块全选授权保持不变。
                         </p>
@@ -182,7 +182,7 @@ export function RolePermissionReview({
                     {mode === "changes" && (
                         <>
                             {nameChanged && (
-                                <p className="text-sm">
+                                <p className="text-body-compact">
                                     角色名称：{initialName || "未设置"} → {name}
                                 </p>
                             )}
@@ -195,7 +195,7 @@ export function RolePermissionReview({
                                 codes={removed}
                             />
                             {authorizationModeChanged && (
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-xs text-muted-foreground">
                                     已切换为按单项操作授权，后续新增功能需手动勾选。
                                 </p>
                             )}
@@ -203,7 +203,7 @@ export function RolePermissionReview({
                                 !nameChanged &&
                                 added.length === 0 &&
                                 removed.length === 0 && (
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         尚未修改角色。
                                     </p>
                                 )}
@@ -232,10 +232,10 @@ export function RolePermissionReview({
                             preservedCodes.length > 0 &&
                             !preservedCodes.includes("*:*"))) && (
                         <>
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 以下为当前保留的整模块全选授权。关闭此窗口后，可在对应模块改按单项操作勾选；跨模块全选授权的操作需由超级管理员调整。
                             </p>
-                            <ul className="space-y-2 text-sm">
+                            <ul className="space-y-2 text-body-compact">
                                 {preservedCodes.map((code) => (
                                     <li key={code}>{permissionLabel(code)}</li>
                                 ))}
@@ -268,16 +268,16 @@ function PermissionList({
     const groups = selectedItemsByGroup(codes)
     return (
         <section className="space-y-3">
-            <h3 className="text-sm font-medium">{title}</h3>
+            <h3 className="font-medium">{title}</h3>
             {groups.length === 0 && (
-                <p className="text-sm text-muted-foreground">无</p>
+                <p className="text-xs text-muted-foreground">无</p>
             )}
             {groups.map((group) => (
                 <div key={group.name} className="border-l-2 border-border pl-3">
                     <p className="mb-1 text-xs font-medium text-muted-foreground">
                         {group.name}
                     </p>
-                    <ul className="space-y-1 text-sm">
+                    <ul className="space-y-1 text-body-compact">
                         {group.items.map((item) => (
                             <li key={item.code}>
                                 {permissionLabel(item.code)}

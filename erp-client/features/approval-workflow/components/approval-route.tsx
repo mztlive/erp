@@ -99,7 +99,7 @@ export function ApprovalRoute({
                         </span>
                         <span
                             className={cn(
-                                "text-sm leading-5 wrap-anywhere",
+                                "text-body-compact leading-5 wrap-anywhere",
                                 current ? "font-semibold" : "font-medium",
                             )}
                         >
@@ -108,7 +108,7 @@ export function ApprovalRoute({
                         </span>
                         <span
                             className={cn(
-                                "col-start-2 text-xs leading-5 wrap-anywhere",
+                                "col-start-2 text-xs wrap-anywhere",
                                 approved
                                     ? "text-success-soft-foreground"
                                     : failed
@@ -137,7 +137,7 @@ export function ApprovalRoute({
                         {node.execution?.decisionReason ? (
                             <p
                                 className={cn(
-                                    "col-start-2 mt-1 rounded-lg border px-3 py-2 text-xs leading-5 whitespace-pre-wrap break-words",
+                                    "col-start-2 mt-1 rounded-lg border px-3 py-2 text-xs whitespace-pre-wrap break-words",
                                     approved
                                         ? "border-success-border bg-success-soft text-success-soft-foreground"
                                         : failed

@@ -35,7 +35,9 @@ function SettlementCenterItems({
             className={cn(surfaceInsetClassName, "shadow-none ring-0")}
         >
             <CardHeader className="rounded-t-lg border-b border-grid py-3">
-                <CardTitle className="text-base">结算明细</CardTitle>
+                <CardTitle className="text-section-title font-semibold tracking-tight">
+                    结算明细
+                </CardTitle>
                 <CardDescription>
                     按结算单锁定的业务明细汇总，金额仅供核对，不可直接修改
                 </CardDescription>

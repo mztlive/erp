@@ -262,17 +262,17 @@ export function SellableItemsListPage() {
                     </PopoverTrigger>
                     <PopoverContent align="end" className="rounded-xl p-5">
                         <p className="font-medium">商品池查询说明</p>
-                        <p className="text-sm leading-6 text-muted-foreground">
+                        <p className="text-body-compact leading-6 text-muted-foreground">
                             {masterDataCopy.sellableItemsHint}
                         </p>
                         {canExport ? (
-                            <p className="text-sm leading-6 text-muted-foreground">
+                            <p className="text-body-compact leading-6 text-muted-foreground">
                                 表格和卡片均可勾选商品，导出带主图、客户选品和配送地址填写页的
                                 Excel。表格未勾选时导出当前筛选结果。
                             </p>
                         ) : null}
                         {canLaunchSelection ? (
-                            <p className="text-sm leading-6 text-muted-foreground">
+                            <p className="text-body-compact leading-6 text-muted-foreground">
                                 发起选品时，已勾选则按勾选，未勾选则按当前筛选结果。
                             </p>
                         ) : null}

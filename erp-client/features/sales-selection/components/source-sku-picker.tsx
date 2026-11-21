@@ -39,7 +39,7 @@ export function SourceSkuPicker({
             {query.isError ? (
                 <div
                     role="alert"
-                    className="flex items-center gap-2 text-sm text-destructive"
+                    className="flex items-center gap-2 text-body-compact text-destructive"
                 >
                     商品加载失败，请重试。
                     <Button
@@ -52,7 +52,7 @@ export function SourceSkuPicker({
                     </Button>
                 </div>
             ) : query.isPending ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     正在加载商品…
                 </p>
             ) : (
@@ -63,7 +63,7 @@ export function SourceSkuPicker({
                                 key={row.sku_id}
                                 className="flex items-center justify-between gap-3 px-3 py-2"
                             >
-                                <div className="min-w-0 text-sm">
+                                <div className="min-w-0 text-body-compact">
                                     <p className="break-words">{row.name}</p>
                                     <p className="text-xs text-muted-foreground">
                                         {row.sku_no}
@@ -92,7 +92,7 @@ export function SourceSkuPicker({
                             </li>
                         ))}
                         {query.data.items.length === 0 && (
-                            <li className="p-3 text-sm text-muted-foreground">
+                            <li className="p-3 text-body-compact text-muted-foreground">
                                 没有符合条件的可售商品
                             </li>
                         )}
@@ -126,7 +126,9 @@ export function SourceSkuPicker({
                     </div>
                 </>
             )}
-            <p className="text-sm font-medium">已选 {value.length} / 500 件</p>
+            <p className="text-body-compact font-medium">
+                已选 {value.length} / 500 件
+            </p>
             <ul className="max-h-52 divide-y overflow-y-auto rounded-md border">
                 {value.map((id) => {
                     const row = known.get(id)
@@ -135,7 +137,7 @@ export function SourceSkuPicker({
                             key={id}
                             className="flex items-center justify-between gap-3 px-3 py-2"
                         >
-                            <div className="min-w-0 text-sm">
+                            <div className="min-w-0 text-body-compact">
                                 <p className="break-words">
                                     {row?.name ??
                                         "原来源商品已不可售，请移除后重新选择"}
@@ -166,7 +168,7 @@ export function SourceSkuPicker({
                     )
                 })}
                 {value.length === 0 && (
-                    <li className="p-3 text-sm text-muted-foreground">
+                    <li className="p-3 text-body-compact text-muted-foreground">
                         请从上方添加至少一件商品
                     </li>
                 )}

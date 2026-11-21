@@ -56,7 +56,7 @@ export function SourcingSourceList({
                                 aria-label={`编辑 ${name} · ${route}，分配数量 ${line.quantity || "待填写"}${row.product.unit}${hasError ? "，待调整" : ""}`}
                                 onClick={() => onSelect(line.rowKey)}
                                 className={cn(
-                                    "flex min-w-0 flex-1 cursor-pointer flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-sm px-2 py-4 text-left text-sm outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring",
+                                    "flex min-w-0 flex-1 cursor-pointer flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-sm px-2 py-4 text-left text-body-compact outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring",
                                     !line.selected && "text-muted-foreground",
                                 )}
                             >
@@ -77,7 +77,7 @@ export function SourcingSourceList({
                                         </span>
                                     ) : null}
                                 </span>
-                                <span className="shrink-0 text-right text-sm">
+                                <span className="shrink-0 text-right text-body-compact">
                                     {line.quantity ? (
                                         <QuantityValue
                                             value={line.quantity}

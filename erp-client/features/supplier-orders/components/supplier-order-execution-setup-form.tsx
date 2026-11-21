@@ -163,7 +163,7 @@ export function SupplierExecutionSetupForm({
                         : "收件人和详细地址使用已批准采购资料。仅补充该地址对应的城市、区县及真实百度地图经纬度坐标，不接受其他坐标直接替用。保存后由后台继续核验并取得可选配送方案。"}
                 </AlertDescription>
             </Alert>
-            <div className="rounded-md border p-3 text-sm">
+            <div className="rounded-md border p-3 text-body-compact">
                 <p className="font-medium">本单收件资料</p>
                 <p className="mt-1 text-muted-foreground">
                     {addressSummary ||
@@ -271,7 +271,7 @@ export function SupplierExecutionSetupForm({
                             />
                             <Label
                                 htmlFor={`${prefix}-coordinate-confirmed`}
-                                className="text-sm font-normal"
+                                className="font-normal"
                             >
                                 已核对坐标来自可信百度地图经纬度坐标数据，且对应本单收件地址
                             </Label>
@@ -353,7 +353,7 @@ export function SupplierExecutionSetupForm({
                     </form.Field>
                 </fieldset>
             ) : (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     配送方案尚未取得。保存地址资料后，刷新执行状态查看实际返回结果。
                 </p>
             )}

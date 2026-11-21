@@ -39,7 +39,7 @@ function ProcurementOwnerPreview({
 }) {
     return (
         <div
-            className="flex min-h-control w-28 items-center text-sm"
+            className="flex min-h-control w-28 items-center"
             data-testid={`sales-line-procurement-owner-${line.rowKey}`}
         >
             {!line.sku.trim() ? (
@@ -83,7 +83,7 @@ export function buildSalesOrderCreateLineItemColumns(
             renderValue: ({ item }) => item.name,
             renderEditor: ({ rowIndex }) =>
                 inquiryLocked ? (
-                    <div className="flex min-w-60 items-center gap-3 py-2 text-sm">
+                    <div className="flex min-w-60 items-center gap-3 py-2">
                         <SkuThumbnail
                             assetId={skuImages.get(
                                 values.lineItems[rowIndex]?.sku ?? "",
@@ -161,7 +161,7 @@ export function buildSalesOrderCreateLineItemColumns(
                         <form.AppField name={`lineItems[${rowIndex}].unit`}>
                             {(field) => (
                                 <span
-                                    className="min-w-8 shrink-0 text-sm text-muted-foreground"
+                                    className="min-w-8 shrink-0 text-muted-foreground"
                                     title={
                                         unitLocked
                                             ? nature === "card_voucher"
@@ -306,7 +306,7 @@ export function buildSalesOrderCreateLineItemColumns(
                           )
                           return (
                               <span
-                                  className="num flex h-8 min-w-16 items-center justify-end text-sm tabular-nums text-muted-foreground"
+                                  className="num flex h-8 min-w-16 items-center justify-end tabular-nums text-muted-foreground"
                                   title={
                                       gift
                                           ? `配赠率 ${gift.giftRatePercent}%（金额 ${gift.giftAmount}）。配赠 = 面值小计 − 成交金额，系统计算不可改。`

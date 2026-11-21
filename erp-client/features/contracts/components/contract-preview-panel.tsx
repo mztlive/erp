@@ -54,7 +54,7 @@ export function ContractPreviewPanel({
                 >
                     <SectionTitle>基本信息</SectionTitle>
                     <div>
-                        <dl className="grid grid-cols-[6.5rem_1fr] gap-x-5 gap-y-3 text-sm">
+                        <dl className="grid grid-cols-[6.5rem_1fr] gap-x-5 gap-y-3 text-body-compact">
                             <Fact
                                 label="客户"
                                 value={row.customer.displayName}
@@ -102,11 +102,11 @@ export function ContractPreviewPanel({
                     <SectionTitle>结算与开票</SectionTitle>
                     <div>
                         {detailLoading && !detail ? (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 加载条款摘要…
                             </p>
                         ) : (
-                            <dl className="grid grid-cols-[6.5rem_1fr] gap-x-5 gap-y-3 text-sm">
+                            <dl className="grid grid-cols-[6.5rem_1fr] gap-x-5 gap-y-3 text-body-compact">
                                 <Fact
                                     label="结算主体"
                                     value={
@@ -161,16 +161,16 @@ export function ContractPreviewPanel({
                     </div>
                     <div>
                         {detailLoading && !detail ? (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 附件加载中…
                             </p>
                         ) : detail ? (
                             detail.attachments.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-xs text-muted-foreground">
                                     暂无附件
                                 </p>
                             ) : (
-                                <ul className="space-y-2 text-sm">
+                                <ul className="space-y-2 text-body-compact">
                                     {detail.attachments.map((file) => (
                                         <li
                                             key={file.id}
@@ -203,7 +203,7 @@ export function ContractPreviewPanel({
                                 </ul>
                             )
                         ) : (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 附件列表暂时无法加载
                             </p>
                         )}
@@ -223,7 +223,7 @@ export function ContractPreviewPanel({
                     </div>
                     <div>
                         {detailLoading && !detail ? (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 加载关联单据…
                             </p>
                         ) : detail && detail.relatedSalesOrders.length > 0 ? (
@@ -239,7 +239,7 @@ export function ContractPreviewPanel({
                                                     <Link
                                                         id={`card-contracts-preview-panel-sales-order-${toAutomationIdSegment(so.salesOrderId)}-open`}
                                                         href={`/sales/orders/${so.salesOrderId}`}
-                                                        className="num text-sm font-medium text-primary hover:underline"
+                                                        className="num text-body-compact font-medium text-primary hover:underline"
                                                     >
                                                         {so.documentNumber}
                                                     </Link>
@@ -284,7 +284,7 @@ export function ContractPreviewPanel({
                                 </p>
                             </div>
                         ) : (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 当前合同尚无关联销售单。可在下方直接新建销售单。
                             </p>
                         )}
@@ -305,7 +305,7 @@ export function ContractPreviewPanel({
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-    return <h3 className="text-sm font-medium text-foreground">{children}</h3>
+    return <h3 className="font-medium text-foreground">{children}</h3>
 }
 
 function Fact({

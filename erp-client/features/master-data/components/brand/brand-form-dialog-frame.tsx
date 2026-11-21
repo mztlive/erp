@@ -96,7 +96,9 @@ export function BrandFormDialogFrame({
                 closeButtonId={`${prefix}-close`}
             >
                 <DialogHeader className="shrink-0 gap-2 border-b px-6 py-5 pr-14">
-                    <DialogTitle className="text-lg">{title}</DialogTitle>
+                    <DialogTitle className="text-section-title font-semibold tracking-tight">
+                        {title}
+                    </DialogTitle>
                     {identity ? (
                         <p className="num text-xs text-muted-foreground">
                             资料编号：{identity}

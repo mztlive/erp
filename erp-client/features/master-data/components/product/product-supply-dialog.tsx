@@ -111,15 +111,15 @@ export function ProductSupplyDialog({
                         onRetry={onRetrySkus}
                     />
                 ) : skuLoading ? (
-                    <div className="rounded-lg border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground">
+                    <div className="rounded-lg border bg-muted/30 px-4 py-8 text-center text-body-compact text-muted-foreground">
                         正在读取 SKU…
                     </div>
                 ) : skus.length === 0 ? (
                     <div className="rounded-lg border bg-muted/30 px-4 py-8 text-center">
-                        <p className="text-sm font-medium">
+                        <p className="text-body-compact font-medium">
                             该商品没有启用中的 SKU
                         </p>
-                        <p className="mt-1 text-sm text-muted-foreground">
+                        <p className="mt-1 text-xs text-muted-foreground">
                             请先进入商品详情新增或启用 SKU，再添加供给。
                         </p>
                     </div>
@@ -195,15 +195,15 @@ export function ProductSupplyDialog({
                                     </div>
 
                                     {offeringLoading ? (
-                                        <div className="px-4 py-6 text-sm text-muted-foreground">
+                                        <div className="px-4 py-6 text-body-compact text-muted-foreground">
                                             正在读取供给…
                                         </div>
                                     ) : offeringError ? (
-                                        <div className="px-4 py-6 text-sm text-muted-foreground">
+                                        <div className="px-4 py-6 text-body-compact text-muted-foreground">
                                             当前无法判断该 SKU 是否存在供给。
                                         </div>
                                     ) : skuOfferings.length === 0 ? (
-                                        <div className="px-4 py-6 text-sm text-muted-foreground">
+                                        <div className="px-4 py-6 text-body-compact text-muted-foreground">
                                             该 SKU
                                             暂无启用中的供给关系，可点击“添加供给”登记。
                                         </div>

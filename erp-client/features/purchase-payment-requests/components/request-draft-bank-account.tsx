@@ -80,7 +80,7 @@ export function RequestDraftBankAccount({
                         </FieldLabel>
                         <div className="flex items-start justify-between gap-3 rounded-lg border px-3 py-3">
                             <div className="min-w-0 space-y-1">
-                                <p className="break-words text-sm font-medium">
+                                <p className="break-words text-body-compact font-medium">
                                     {account.account_name}
                                 </p>
                                 <p className="break-words text-xs text-muted-foreground">

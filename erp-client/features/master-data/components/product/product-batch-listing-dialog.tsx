@@ -252,7 +252,7 @@ export function ProductBatchListingDialog({
                                 {pending && progress ? (
                                     <div
                                         role="status"
-                                        className="flex items-center gap-2 rounded-lg border border-border bg-muted px-3.5 py-2.5 text-sm text-foreground"
+                                        className="flex items-center gap-2 rounded-lg border border-border bg-muted px-3.5 py-2.5 text-body-compact text-foreground"
                                     >
                                         <Spinner />
                                         <span>
@@ -398,7 +398,7 @@ export function ProductBatchListingDialog({
                                 {pending && progress ? (
                                     <div
                                         role="status"
-                                        className="flex items-center gap-2 rounded-lg border border-border bg-muted px-3.5 py-2.5 text-sm text-foreground"
+                                        className="flex items-center gap-2 rounded-lg border border-border bg-muted px-3.5 py-2.5 text-body-compact text-foreground"
                                     >
                                         <Spinner />
                                         <span>

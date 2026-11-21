@@ -383,8 +383,10 @@ export function InquiryFeesContent({
         <section className="space-y-5" aria-label="询价费用归属与办理">
             {showHeading && (
                 <div>
-                    <h2 className="text-lg font-semibold">费用与办理</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
+                    <h2 className="text-section-title font-semibold tracking-tight">
+                        费用与办理
+                    </h2>
+                    <p className="mt-1 text-xs text-muted-foreground">
                         先按金额明确费用归属，再由采购办理。暂估费用仅供定价参考；收款对象和付款条件不同的费用分别建单。
                     </p>
                     {round > 0 && (
@@ -404,7 +406,7 @@ export function InquiryFeesContent({
                 </div>
             )}
             {!summaries.length ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     暂无可展示的费用结果。采购发布额外费用后，可在此查看分摊与办理进度。
                 </p>
             ) : (
@@ -727,7 +729,7 @@ export function InquiryFeesContent({
                                     </form.AppField>
                                 </div>
                                 {selectedFee ? (
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         本项尚未分摊：
                                         <MoneyValue
                                             value={selectedFee.unallocated}
@@ -737,7 +739,7 @@ export function InquiryFeesContent({
                                     </p>
                                 ) : null}
                                 {actionFailure ? (
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         {actionFailure}
                                     </p>
                                 ) : null}
@@ -906,7 +908,7 @@ export function InquiryFeesContent({
                                         void form.handleSubmit()
                                     }}
                                 >
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         每次为一笔费用分摊创建费用采购；收款供应商和付款条件须与本轮采购确认的费用依据一致。创建后立即提交审批。
                                     </p>
                                     <div className="grid gap-4 sm:grid-cols-2">
@@ -1025,7 +1027,7 @@ export function InquiryFeesContent({
                                         </form.AppField>
                                     </div>
                                     {selectedAllocation ? (
-                                        <p className="text-sm text-muted-foreground">
+                                        <p className="text-xs text-muted-foreground">
                                             本笔可转：
                                             <MoneyValue
                                                 value={
@@ -1045,7 +1047,7 @@ export function InquiryFeesContent({
                                         </p>
                                     ) : null}
                                     {!canCreateExpense ? null : !allocationRows.length ? (
-                                        <p className="text-sm text-muted-foreground">
+                                        <p className="text-xs text-muted-foreground">
                                             请先由销售明确费用归属和分摊金额。
                                         </p>
                                     ) : null}

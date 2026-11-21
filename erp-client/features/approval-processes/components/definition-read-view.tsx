@@ -26,7 +26,7 @@ export function DefinitionReadView({
     return (
         <section aria-label="审批流程详情" className="space-y-4 p-4 sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="min-w-0 break-words text-base font-semibold">
+                <h2 className="min-w-0 break-words text-section-title font-semibold tracking-tight">
                     {detail.name}
                 </h2>
                 <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
@@ -45,8 +45,8 @@ export function DefinitionReadView({
                     className="min-w-0 divide-y divide-border rounded-lg border border-border bg-card"
                 >
                     <div className="space-y-2 rounded-t-lg bg-muted/30 p-4">
-                        <h3 className="text-sm font-medium">版本说明</h3>
-                        <p className="text-xs leading-5 text-muted-foreground">
+                        <h3 className="font-medium">版本说明</h3>
+                        <p className="text-xs text-muted-foreground">
                             {versionDescription}
                         </p>
                     </div>
@@ -54,14 +54,14 @@ export function DefinitionReadView({
                         <CopyRuleSummary detail={detail} embedded />
                     </div>
                     <div className="space-y-3 p-4">
-                        <h3 className="flex items-center gap-2 text-sm font-medium">
+                        <h3 className="flex items-center gap-2 font-medium">
                             <GitBranchIcon
                                 aria-hidden
                                 className="size-4 text-muted-foreground"
                             />
                             流转规则
                         </h3>
-                        <dl className="space-y-3 text-xs leading-5">
+                        <dl className="space-y-3 text-xs">
                             <div className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3">
                                 <dt className="font-medium">通过</dt>
                                 <dd className="text-muted-foreground">

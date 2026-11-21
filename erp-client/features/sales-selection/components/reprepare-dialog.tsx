@@ -171,14 +171,14 @@ export const ReprepareDialog = ({
                                                     )
                                                 }
                                             />
-                                            <p className="text-sm text-muted-foreground">
+                                            <p className="text-xs text-muted-foreground">
                                                 留空表示不限制关键字，其他来源条件继续生效。
                                             </p>
                                         </div>
                                     )}
                                 </form.Field>
                                 {filters.length > 0 && (
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         保留的来源条件：
                                         {filters
                                             .map(
@@ -219,7 +219,10 @@ export const ReprepareDialog = ({
                         )}
                     </fieldset>
                     {error && (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {error}
                         </p>
                     )}

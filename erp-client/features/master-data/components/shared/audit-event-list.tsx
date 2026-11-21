@@ -13,13 +13,13 @@ export function MasterDataAuditList({
 }) {
     if (events.length === 0) {
         return (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 {masterDataCopy.centerNoAudit}
             </p>
         )
     }
     return (
-        <ul className="space-y-2 text-sm">
+        <ul className="space-y-2 text-body-compact">
             {events.map((ev) => (
                 <li
                     key={ev.id}

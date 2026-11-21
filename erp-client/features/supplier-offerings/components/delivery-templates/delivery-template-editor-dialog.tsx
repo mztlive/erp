@@ -210,7 +210,7 @@ export function DeliveryTemplateEditorDialog({
                             {(field) => (
                                 <label
                                     htmlFor="delivery-template-editor-default"
-                                    className="flex min-h-9 items-center gap-2 text-sm"
+                                    className="flex min-h-9 items-center gap-2 text-xs"
                                 >
                                     <Checkbox
                                         id="delivery-template-editor-default"
@@ -224,13 +224,16 @@ export function DeliveryTemplateEditorDialog({
                             )}
                         </form.AppField>
                     </div>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         保存后立即生效。修改规则会影响使用该模板的供给；设置或取消默认模板会影响跟随供应商默认的供给。
                     </p>
                     <RuleSetEditor form={form} mode="dropship" title="代发" />
                     <RuleSetEditor form={form} mode="bulk" title="集采" />
                     {failure ? (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {failure}
                         </p>
                     ) : null}
@@ -272,7 +275,7 @@ function RuleSetEditor({
             className="space-y-3 rounded-lg border p-4"
             aria-labelledby={`${prefix}-title`}
         >
-            <h3 id={`${prefix}-title`} className="text-sm font-semibold">
+            <h3 id={`${prefix}-title`} className="font-semibold">
                 {title}
             </h3>
             <form.AppField name={`${mode}.defaultTerm`}>

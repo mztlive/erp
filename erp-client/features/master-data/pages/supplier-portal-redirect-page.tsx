@@ -22,7 +22,7 @@ export function SupplierPortalRedirectPage({
     }, [href, router])
 
     return (
-        <p className="p-5 text-sm text-muted-foreground">
+        <p className="p-5 text-xs text-muted-foreground">
             管理功能已归入
             <Link
                 id="supplier-portal-open-supplier-profile"

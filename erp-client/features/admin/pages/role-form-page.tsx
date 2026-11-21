@@ -374,7 +374,7 @@ function RoleForm({
                     }
                 />
                 <fieldset className="space-y-2 border-b pb-4 mb-4">
-                    <legend className="text-sm font-medium">岗位工作台</legend>
+                    <legend className="text-xs font-medium">岗位工作台</legend>
                     <p className="text-xs text-muted-foreground">
                         设置该角色登录后默认使用的岗位工作台（仍需勾选下方对应业务权限后才可进入）。
                     </p>
@@ -384,7 +384,7 @@ function RoleForm({
                                 {ROLE_WORKBENCHES.map((item) => (
                                     <label
                                         key={item.id}
-                                        className="flex items-center gap-2 text-sm"
+                                        className="flex items-center gap-2 text-xs"
                                         htmlFor={`role-workbench-${item.id.toLowerCase()}`}
                                     >
                                         <Checkbox
@@ -454,12 +454,15 @@ function RoleForm({
                     </div>
                 )}
                 <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b pb-4">
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         设置此角色可以执行的操作。每个人可以处理哪些数据，请到人员资料中设置。
                     </p>
                 </div>
                 {savedMessage && (
-                    <p role="status" className="py-3 text-sm text-success">
+                    <p
+                        role="status"
+                        className="py-3 text-body-compact text-success"
+                    >
                         {savedMessage}
                     </p>
                 )}

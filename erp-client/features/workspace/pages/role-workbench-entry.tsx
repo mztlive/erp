@@ -99,8 +99,10 @@ export function RoleWorkbenchEntry({
                             key={item.id}
                             className="rounded-xl border p-5"
                         >
-                            <h2>{item.name}</h2>
-                            <p className="my-4 text-sm text-muted-foreground">
+                            <h2 className="text-section-title font-semibold tracking-tight">
+                                {item.name}
+                            </h2>
+                            <p className="my-4 text-xs text-muted-foreground">
                                 {item.description}
                             </p>
                             <Button
@@ -127,7 +129,7 @@ export function RoleWorkbenchEntry({
                     <Link
                         id="workbench-entry-todos"
                         href="/workspace/tasks"
-                        className="text-sm underline"
+                        className="text-body-compact underline"
                     >
                         待我处理
                     </Link>

@@ -230,7 +230,7 @@ function CalendarMonths({ children, className, ...props }: MonthsProps) {
                             </Button>
                             {view === "years" ? (
                                 <span
-                                    className="text-sm font-medium"
+                                    className="text-body-compact font-medium"
                                     aria-live="polite"
                                 >
                                     {Math.max(yearStart, minYear)}—

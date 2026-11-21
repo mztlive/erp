@@ -54,7 +54,7 @@ export function PortalLoginPage() {
                 <CardHeader className="gap-4">
                     <LoginModeSwitch mode="supplier" />
                     <div className="flex flex-col gap-1.5">
-                        <CardTitle className="text-login-title">
+                        <CardTitle className="text-2xl font-semibold tracking-tight">
                             供应商登录
                         </CardTitle>
                         <CardDescription>

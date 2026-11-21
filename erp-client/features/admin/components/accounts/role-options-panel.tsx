@@ -133,7 +133,7 @@ export function RoleOptionsPanel({
                                     <div className="flex items-center gap-2 pr-3">
                                         <label
                                             htmlFor={`${id}-option-${segment}`}
-                                            className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md p-2 text-sm hover:bg-muted/40"
+                                            className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md p-2 text-xs hover:bg-muted/40"
                                         >
                                             <Checkbox
                                                 id={`${id}-option-${segment}`}
@@ -155,7 +155,7 @@ export function RoleOptionsPanel({
                                                 <span className="block font-medium">
                                                     {role.name}
                                                 </span>
-                                                <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                                                <span className="mt-1 block text-xs text-muted-foreground">
                                                     {roleCapabilitySummary(
                                                         role.permissions,
                                                     )}
@@ -178,7 +178,7 @@ export function RoleOptionsPanel({
                                         </CollapsibleTrigger>
                                     </div>
                                     <CollapsibleContent className="border-t border-border px-3 py-3">
-                                        <ul className="grid gap-2 text-xs leading-5 text-muted-foreground sm:grid-cols-2">
+                                        <ul className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
                                             {role.permissions?.length ? (
                                                 [
                                                     ...new Set(

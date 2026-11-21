@@ -93,11 +93,11 @@ export function DeliveryTemplateField({
                     className="rounded-lg border bg-muted/30 px-4 py-3"
                 >
                     {templates.isError ? (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             模板读取失败，保存后可在供给资料页再设置。
                         </p>
                     ) : templates.isPending ? (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             正在读取配送模板…
                         </p>
                     ) : (

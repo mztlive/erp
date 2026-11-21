@@ -112,7 +112,7 @@ export function CategoryTreeList({
                         title={node.pathLabel}
                         onFocus={() => setFocusedId(item.stableId)}
                         className={cn(
-                            "group flex min-h-10 cursor-pointer items-center gap-2 rounded-lg py-2 pr-2 text-sm outline-none hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                            "group flex min-h-10 cursor-pointer items-center gap-2 rounded-lg py-2 pr-2 text-body-compact outline-none hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                             selectedId === item.stableId &&
                                 "bg-muted font-semibold",
                             contextOnly && "text-muted-foreground",
@@ -228,7 +228,7 @@ export function CategoryTreeList({
                     {renderNodes(forest)}
                 </ul>
             ) : (
-                <div className="space-y-3 px-2 py-10 text-center text-sm text-muted-foreground">
+                <div className="space-y-3 px-2 py-10 text-center text-body-compact text-muted-foreground">
                     <p>{filterActive ? "没有匹配的分类" : "暂无分类"}</p>
                     {filterActive ? (
                         <Button

@@ -160,7 +160,7 @@ export function RoleWorkbenchMetrics({
                             </div>
                             <div
                                 className={cn(
-                                    "mt-3 flex min-h-9 items-baseline gap-1.5 text-value-summary font-semibold tabular-nums tracking-tight text-foreground",
+                                    "mt-3 flex min-h-9 items-baseline gap-1.5 text-value-summary font-semibold num tracking-tight text-foreground",
                                     warning &&
                                         "text-destructive-soft-foreground",
                                 )}

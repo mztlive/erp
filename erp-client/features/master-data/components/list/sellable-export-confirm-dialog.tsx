@@ -48,7 +48,7 @@ function useConfirmColumns(onRemove: (id: string) => void, pending: boolean) {
                             />
                             <div className="min-w-0">
                                 <div
-                                    className="truncate text-sm font-medium"
+                                    className="truncate text-body-compact font-medium"
                                     title={row.original.name}
                                 >
                                     {row.original.name}
@@ -108,7 +108,7 @@ function useConfirmColumns(onRemove: (id: string) => void, pending: boolean) {
                     const item = row.original.sellableItem
                     if (!item?.bulkMinQuantity) {
                         return (
-                            <span className="text-sm text-muted-foreground">
+                            <span className="text-body-compact text-muted-foreground">
                                 —
                             </span>
                         )

@@ -54,7 +54,7 @@ export function InquiryCustomerTemplateButton({
                 {download.isPending ? "正在生成…" : "下载客户选品模板"}
             </Button>
             {download.isError ? (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {getErrorMessage(
                         download.error,
                         "模板下载失败，请重新获取商品后重试",

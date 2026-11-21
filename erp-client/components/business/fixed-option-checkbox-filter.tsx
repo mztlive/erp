@@ -64,7 +64,10 @@ export function FixedOptionCheckboxFilter<Value extends string>({
                 className,
             )}
         >
-            <span id={labelId} className="text-sm text-muted-foreground">
+            <span
+                id={labelId}
+                className="text-body-compact text-muted-foreground"
+            >
                 {label}
             </span>
             <div

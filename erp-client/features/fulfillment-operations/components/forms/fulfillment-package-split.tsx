@@ -189,7 +189,7 @@ export function FulfillmentPackageSplit({
                                 {!values.items.some((item) =>
                                     matches(item.delivery_line_id),
                                 ) && (
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         没有匹配的商品，请更换搜索词。
                                     </p>
                                 )}

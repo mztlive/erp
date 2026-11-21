@@ -20,8 +20,10 @@ export function ApprovalCurrentSalesMaterials({
     return (
         <article className="space-y-6 rounded-lg bg-card p-6 shadow-lg sm:p-10">
             <header className="space-y-2 border-b pb-5 pr-8">
-                <h2 className="text-xl font-semibold">销售单预览</h2>
-                <p className="text-sm text-muted-foreground">
+                <h2 className="text-section-title font-semibold tracking-tight">
+                    销售单预览
+                </h2>
+                <p className="text-xs text-muted-foreground">
                     当前生效销售版本及关联合同、凭证
                 </p>
             </header>

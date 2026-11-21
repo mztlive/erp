@@ -21,7 +21,7 @@ export function FormError({ className, ...props }: React.ComponentProps<"p">) {
         <p
             role="alert"
             className={cn(
-                "whitespace-pre-line text-sm text-destructive",
+                "whitespace-pre-line text-body-compact text-destructive",
                 className,
             )}
             {...props}

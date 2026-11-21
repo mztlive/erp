@@ -152,7 +152,7 @@ function PackageImportDialog({
                         <DownloadIcon />
                         下载当前任务模板
                     </Button>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         修改包裹数量、物流公司和单号。不需要覆盖的地址请整行删除；拆包请复制完整商品行，同一包裹的不同商品填写相同单号。每个地址须包含本次发货的全部商品，数量合计须与页面一致。
                     </p>
                     <div className="space-y-2">
@@ -181,23 +181,29 @@ function PackageImportDialog({
                     </div>
                 </div>
                 {busy && (
-                    <p role="status" className="text-sm text-muted-foreground">
+                    <p role="status" className="text-xs text-muted-foreground">
                         正在处理 Excel…
                     </p>
                 )}
                 {error && (
-                    <p role="alert" className="text-sm text-destructive">
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
                         {error}
                     </p>
                 )}
                 {stale && (
-                    <p role="alert" className="text-sm text-destructive">
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
                         页面上的包裹或收货安排已变化，请重新上传并核对预览。
                     </p>
                 )}
                 {preview && !stale && (
                     <div className="min-w-0 space-y-3">
-                        <p role="status" className="text-sm">
+                        <p role="status" className="text-body-compact">
                             {preview.filename}：将覆盖{" "}
                             {preview.result.addresses.length} 个地址，共{" "}
                             {preview.result.rows} 行包裹商品；其余{" "}

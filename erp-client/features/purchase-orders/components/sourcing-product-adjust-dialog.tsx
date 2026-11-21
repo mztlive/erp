@@ -255,7 +255,7 @@ export function SourcingProductAdjustDialog({
                                 aria-label="供给来源列表"
                             >
                                 <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-5 py-4">
-                                    <h3 className="text-sm font-medium">
+                                    <h3 className="font-medium">
                                         供给来源 · {row.allocations.length}
                                     </h3>
                                     <Button
@@ -295,7 +295,7 @@ export function SourcingProductAdjustDialog({
                                 aria-label="当前来源编辑"
                             >
                                 <div className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-3 px-4 pt-2 lg:px-6">
-                                    <h3 className="text-sm font-medium">
+                                    <h3 className="font-medium">
                                         编辑当前来源
                                     </h3>
                                     {active && row.allocations.length > 1 ? (
@@ -358,7 +358,7 @@ export function SourcingProductAdjustDialog({
                                             row={row}
                                         />
                                     ) : (
-                                        <p className="p-4 text-sm text-muted-foreground">
+                                        <p className="p-4 text-xs text-muted-foreground">
                                             尚未添加供给来源
                                         </p>
                                     )}

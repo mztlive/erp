@@ -48,9 +48,7 @@ export function AcceptanceProgressTable({
             }
         >
             {progress.lines.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                    本单还没有销售明细。
-                </p>
+                <p className="text-muted-foreground">本单还没有销售明细。</p>
             ) : (
                 <Table className="min-w-[32rem]">
                     <TableHeader>

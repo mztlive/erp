@@ -157,7 +157,7 @@ export function SalesOrderCreateTotalBar({
                                             }
                                             className={
                                                 compact
-                                                    ? "text-2xl font-semibold"
+                                                    ? "text-value-section font-semibold tracking-tight"
                                                     : undefined
                                             }
                                         />
@@ -200,7 +200,7 @@ export function SalesOrderCreateTotalBar({
                                 },
                             ]}
                             leftActions={
-                                <span className="text-sm text-muted-foreground">
+                                <span className="text-body-compact text-muted-foreground">
                                     共{" "}
                                     {
                                         values.lineItems.filter((line) =>

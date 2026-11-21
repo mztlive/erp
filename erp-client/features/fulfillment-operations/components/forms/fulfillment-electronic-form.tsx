@@ -46,7 +46,7 @@ export function FulfillmentElectronicForm({
     )
     return (
         <section className="space-y-3" aria-label="电子交付表单">
-            <h3 className="text-sm font-semibold">电子交付</h3>
+            <h3 className="font-semibold">电子交付</h3>
             <p className="text-xs text-muted-foreground">
                 填写接收人或交付渠道并上传交付凭证，请勿填写卡号卡密。确认后通过冲正更正。
             </p>
@@ -134,7 +134,7 @@ export function FulfillmentElectronicForm({
                         key={line.salesOrderLineId}
                         className="space-y-2 rounded-xl border border-border p-3"
                     >
-                        <p className="text-sm font-medium">
+                        <p className="text-body-compact font-medium">
                             {lineItemTitle(src?.itemName, i)}
                         </p>
                         {salesOrderNo ? (

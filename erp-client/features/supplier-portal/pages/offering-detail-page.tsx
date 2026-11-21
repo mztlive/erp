@@ -101,7 +101,7 @@ export function PortalOfferingDetailPage({
                 <Link
                     id="supplier-portal-offering-back"
                     href="/supplier-portal/offerings"
-                    className="text-sm text-primary"
+                    className="text-body-compact text-primary"
                 >
                     返回供货商品目录
                 </Link>
@@ -115,7 +115,7 @@ export function PortalOfferingDetailPage({
             />
             <div className="grid gap-4 rounded-xl border bg-card p-5 md:grid-cols-3">
                 <div>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         代发含税供货价
                     </p>
                     <MoneyValue
@@ -125,7 +125,7 @@ export function PortalOfferingDetailPage({
                     />
                 </div>
                 <div>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         集采含税供货价
                     </p>
                     <MoneyValue
@@ -135,7 +135,7 @@ export function PortalOfferingDetailPage({
                     />
                 </div>
                 <div>
-                    <p className="text-sm text-muted-foreground">可供数量</p>
+                    <p className="text-xs text-muted-foreground">可供数量</p>
                     {offering.available_quantity == null ? (
                         "未提供"
                     ) : (
@@ -179,7 +179,9 @@ export function PortalOfferingDetailPage({
             </div>
             {offering.pending_applications?.length ? (
                 <section className="rounded-lg border p-5">
-                    <h2 className="font-semibold">待确认变更</h2>
+                    <h2 className="text-section-title font-semibold tracking-tight">
+                        待确认变更
+                    </h2>
                     {offering.pending_applications.map((application) => (
                         <p key={application.id}>
                             <Link
@@ -214,7 +216,9 @@ export function PortalOfferingDetailPage({
                 </>
             )}
             <section className="space-y-3 rounded-xl border p-5">
-                <h2 className="font-semibold">条款历史</h2>
+                <h2 className="text-section-title font-semibold tracking-tight">
+                    条款历史
+                </h2>
                 <PortalError
                     error={history.error}
                     retry={() => void history.refetch()}
@@ -223,7 +227,7 @@ export function PortalOfferingDetailPage({
                 {history.data?.map((item) => (
                     <div
                         key={item.id}
-                        className="flex flex-wrap gap-4 border-b pb-2 text-sm"
+                        className="flex flex-wrap gap-4 border-b pb-2 text-body-compact"
                     >
                         <span>第 {item.revision_no} 版</span>
                         <span>
@@ -251,8 +255,10 @@ export function PortalOfferingDetailPage({
                         void form.handleSubmit()
                     }}
                 >
-                    <h2 className="font-semibold">申请停止供应</h2>
-                    <p className="text-sm text-muted-foreground">
+                    <h2 className="text-section-title font-semibold tracking-tight">
+                        申请停止供应
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
                         采购确认后停止关系。当前临时缺货请在可供情况中单独报送。
                     </p>
                     <PortalError error={error} />

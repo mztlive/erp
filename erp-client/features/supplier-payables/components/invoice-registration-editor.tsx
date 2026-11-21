@@ -122,7 +122,7 @@ export function InvoiceRegistrationEditor({
                     title={title}
                     status={{ label: "草稿", tone: "neutral" }}
                 />
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-body-compact">
                     <span className="text-muted-foreground">供应商</span>
                     <LockKeyholeIcon
                         className="size-4 shrink-0 text-muted-foreground"
@@ -145,7 +145,7 @@ export function InvoiceRegistrationEditor({
                 <div className="border-b border-border pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-8">
                     <div className="space-y-5 lg:sticky lg:top-4">
                         <div className="space-y-1">
-                            <h2 className="text-sm font-semibold text-foreground">
+                            <h2 className="text-section-title font-semibold text-foreground tracking-tight">
                                 发票信息
                             </h2>
                             <p className="text-xs text-muted-foreground">

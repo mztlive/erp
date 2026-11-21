@@ -66,10 +66,10 @@ export function SourceText({
     other: string | null
     incoming: boolean
 }) {
-    if (!value) return <p className="text-sm text-muted-foreground">（空）</p>
+    if (!value) return <p className="text-xs text-muted-foreground">（空）</p>
     const parts = changedText(value, other ?? "")
     return (
-        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+        <p className="whitespace-pre-wrap break-words text-body-compact leading-relaxed">
             {parts.before}
             {parts.changed ? (
                 incoming ? (
@@ -204,7 +204,7 @@ export function SourceImages({
     idPrefix: string
 }) {
     if (!images.length)
-        return <p className="text-sm text-muted-foreground">（无图片）</p>
+        return <p className="text-xs text-muted-foreground">（无图片）</p>
     return (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {images.map((image, index) => {
@@ -268,7 +268,7 @@ export function SourceValueComparison({
     return (
         <div className="grid min-w-0 gap-4 md:grid-cols-2">
             <div className="min-w-0 space-y-3 rounded-lg border p-4">
-                <p className="text-sm font-medium">公司当前内容</p>
+                <p className="text-body-compact font-medium">公司当前内容</p>
                 {company.type === "TEXT" ? (
                     <SourceText
                         value={company.value}
@@ -287,7 +287,7 @@ export function SourceValueComparison({
                 )}
             </div>
             <div className="min-w-0 space-y-3 rounded-lg border p-4">
-                <p className="text-sm font-medium">供应商最新内容</p>
+                <p className="text-body-compact font-medium">供应商最新内容</p>
                 {supplier.type === "TEXT" ? (
                     <SourceText
                         value={supplier.value}

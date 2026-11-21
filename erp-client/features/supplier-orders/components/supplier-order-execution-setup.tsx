@@ -153,7 +153,7 @@ export function SupplierOrderExecutionSetup({
                     {resultQuery.error ? (
                         <p
                             role="alert"
-                            className="mt-2 text-sm text-destructive"
+                            className="mt-2 text-body-compact text-destructive"
                         >
                             {getErrorMessage(resultQuery.error)}
                         </p>
@@ -233,7 +233,7 @@ export function SupplierOrderExecutionSetup({
                             }}
                         />
                     ) : (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             订单执行步骤已变化，请关闭窗口并刷新状态。
                         </p>
                     )}
@@ -241,7 +241,7 @@ export function SupplierOrderExecutionSetup({
                         <div className="space-y-3">
                             {saveOutcomeUnknown && mutation.variables ? (
                                 <>
-                                    <p className="text-sm text-warning-soft-foreground">
+                                    <p className="text-body-compact text-warning-soft-foreground">
                                         上次保存结果确认中，已保留您填写的配送资料，请点击「重试保存」确认结果。
                                     </p>
                                     <Button

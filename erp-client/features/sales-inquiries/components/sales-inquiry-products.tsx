@@ -61,7 +61,7 @@ export function SalesInquiryProducts({
     return (
         <div className="flex h-full min-h-0 min-w-0 flex-col gap-3">
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-body-compact">
                     <span className="font-medium">
                         {feedback
                             ? `第 ${feedback.round} 轮反馈`
@@ -167,7 +167,7 @@ export function SalesInquiryProducts({
                 </Alert>
             )}
             {historical && (
-                <p className="shrink-0 text-sm text-muted-foreground">
+                <p className="shrink-0 text-xs text-muted-foreground">
                     正在查看第 {feedback.requirement_version}{" "}
                     版需求及其报价；最新需求为第 {inquiry.requirement_version}{" "}
                     版。

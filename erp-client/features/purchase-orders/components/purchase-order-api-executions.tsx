@@ -119,7 +119,7 @@ export function PurchaseOrderApiExecutions({
                             </TableBody>
                         </Table>
                     </div>
-                    <p className="text-xs leading-5 text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         仅统计已确认的入库或发货数量（供应商接单及物流状态不计入实际交付）。
                     </p>
                 </PurchaseOrderDetailSection>
@@ -134,7 +134,7 @@ export function PurchaseOrderApiExecutions({
                             >
                                 <div className="flex flex-wrap items-center justify-between gap-3">
                                     <div className="space-y-1">
-                                        <p className="text-sm font-medium">
+                                        <p className="text-body-compact font-medium">
                                             {displayBusinessText(
                                                 execution.orderNo,
                                                 execution.orderId,
@@ -193,7 +193,7 @@ export function PurchaseOrderApiExecutions({
                                     )}
                                 </div>
                                 {execution.blocker ? (
-                                    <p className="text-sm text-warning-soft-foreground">
+                                    <p className="text-body-compact text-warning-soft-foreground">
                                         {costMasked
                                             ? "执行条件待处理，请由有权限的采购或财务人员核对。"
                                             : execution.blocker}
@@ -202,7 +202,7 @@ export function PurchaseOrderApiExecutions({
                             </li>
                         ))}
                     </ul>
-                    <p className="text-xs leading-5 text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         如遇下单受阻，请根据具体提示核对付款审批或预存款余额。
                     </p>
                 </PurchaseOrderDetailSection>

@@ -471,7 +471,7 @@ export function OrganizationChangeDialog({
                                                 .join("、")} → ${target}`
                                 return (
                                     <p
-                                        className="rounded-lg bg-muted/40 p-3 text-sm"
+                                        className="rounded-lg bg-muted/40 p-3 text-body-compact"
                                         role="status"
                                     >
                                         {summary}

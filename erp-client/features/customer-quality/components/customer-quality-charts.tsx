@@ -65,7 +65,7 @@ export function CustomerQualityCharts({
                     valueColumnHeader="盈亏（不含税）"
                     hiddenNotice={
                         isVoucherOnly ? (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 当前为卡券业务性质筛选，利润贡献图隐藏。
                             </p>
                         ) : undefined

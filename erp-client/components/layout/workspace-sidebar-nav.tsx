@@ -251,7 +251,7 @@ export function WorkspaceSidebarNav() {
                 />
                 <span
                     className={cn(
-                        "text-2xs leading-none tracking-tight",
+                        "text-tiny leading-none tracking-tight",
                         selected
                             ? "font-semibold text-foreground"
                             : "font-medium",
@@ -329,7 +329,7 @@ export function WorkspaceSidebarNav() {
                             aria-label={badgeError ?? badgeLabel}
                             title={badgeError ?? badgeLabel}
                             className={cn(
-                                "num ml-auto flex h-4.5 min-w-4.5 items-center justify-center rounded-full px-1.5 text-2xs font-medium",
+                                "num ml-auto flex h-4.5 min-w-4.5 items-center justify-center rounded-full px-1.5 text-tiny font-medium",
                                 badgeError
                                     ? "bg-destructive text-destructive-foreground"
                                     : item.badge ===
@@ -486,7 +486,7 @@ export function WorkspaceSidebarNav() {
                                         )}
                                     >
                                         {!omitHeading ? (
-                                            <div className="mb-1 px-2.5 text-tiny font-medium tracking-wide text-muted-foreground/75">
+                                            <div className="mb-1 px-2.5 text-xs font-medium tracking-wide text-muted-foreground/75">
                                                 {group.label}
                                             </div>
                                         ) : null}

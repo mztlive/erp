@@ -42,7 +42,7 @@ export function InquiryRequirementDetail({
                             : "交付安排"}
                     </h3>
                     {line.allocations.length > 0 && (
-                        <span className="text-sm text-muted-foreground">
+                        <span className="text-body-compact text-muted-foreground">
                             {line.allocations.length} 个地址
                         </span>
                     )}
@@ -56,7 +56,7 @@ export function InquiryRequirementDetail({
                     </Alert>
                 )}
                 {line.allocations.length === 0 ? (
-                    <p className="rounded-lg bg-muted/40 p-4 text-sm text-muted-foreground">
+                    <p className="rounded-lg bg-muted/40 p-4 text-xs text-muted-foreground">
                         {line.fulfillment_kind === "physical"
                             ? "尚未填写收货地址。"
                             : `${progress.label}，无需实物收货地址。`}
@@ -71,16 +71,16 @@ export function InquiryRequirementDetail({
                                 <h4 className="font-medium wrap-anywhere">
                                     {allocation.recipient || "未填写收货人"}
                                 </h4>
-                                <p className="num text-sm text-muted-foreground wrap-anywhere">
+                                <p className="num text-xs text-muted-foreground wrap-anywhere">
                                     {allocation.phone || "未填写联系电话"}
                                 </p>
                             </div>
-                            <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground wrap-anywhere">
+                            <p className="whitespace-pre-wrap text-body-compact leading-6 text-muted-foreground wrap-anywhere">
                                 {allocation.region_name || "未填写地区"}
                                 <br />
                                 {allocation.address || "未填写详细地址"}
                             </p>
-                            <div className="flex flex-wrap items-baseline justify-between gap-2 border-t pt-3 text-sm">
+                            <div className="flex flex-wrap items-baseline justify-between gap-2 border-t pt-3 text-body-compact">
                                 <span className="text-muted-foreground">
                                     分配数量
                                 </span>
@@ -105,8 +105,8 @@ export function InquiryRequirementDetail({
                                 unit={unit}
                                 className={
                                     compact
-                                        ? "text-sm font-medium"
-                                        : "text-xl font-semibold"
+                                        ? "text-body-compact font-medium"
+                                        : "text-value-compact font-semibold tracking-tight"
                                 }
                             />
                         </dd>
@@ -117,8 +117,8 @@ export function InquiryRequirementDetail({
                     <dd
                         className={
                             compact
-                                ? "num text-sm font-medium"
-                                : "num text-lg font-semibold"
+                                ? "num text-body-compact font-medium"
+                                : "num text-body-compact font-semibold"
                         }
                     >
                         {inquiryDate(line.delivery_due_at)}
@@ -129,7 +129,7 @@ export function InquiryRequirementDetail({
                         <dt className="text-xs text-muted-foreground">
                             交付要求
                         </dt>
-                        <dd className="whitespace-pre-wrap text-sm wrap-anywhere">
+                        <dd className="whitespace-pre-wrap text-body-compact wrap-anywhere">
                             {line.delivery_terms}
                         </dd>
                     </div>

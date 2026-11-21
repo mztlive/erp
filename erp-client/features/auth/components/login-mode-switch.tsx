@@ -26,7 +26,7 @@ export function LoginModeSwitch({ mode }: { mode: "admin" | "supplier" }) {
                     href={item.href}
                     aria-current={mode === item.id ? "page" : undefined}
                     className={cn(
-                        "rounded-md px-4 py-2 text-center text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                        "rounded-md px-4 py-2 text-center text-body-compact font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                         mode === item.id
                             ? "bg-background text-foreground shadow-sm"
                             : "text-muted-foreground hover:text-foreground",

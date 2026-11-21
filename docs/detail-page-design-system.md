@@ -24,7 +24,7 @@
      - `width="form"`（`max-w-4xl`，约 `896px`）：用于基础资料表单、版本时间线等阅读/录入块，杜绝 1440px 宽屏下出现 1100px 超长空白输入框；
      - `width="full"`（100% 铺满）：用于 SKU 价格矩阵、单据行项目表、图片画廊等宽表/多列内容。
 4. **标签克制退后，数据与操作成为主角，保存按需浮现**
-   - 标题严格对齐列表页的 `18px`（`text-page-title`），分区标题 `15px`（`text-section-title`），输入值/正文 `13px`（`text-body-compact`），表单字段标签收紧为 `12px`（`text-xs font-medium text-foreground/72`），彻底纠正「标签比输入值还大还黑」的倒置问题。
+   - 标题严格对齐列表页的 `18px`（`text-page-title`），分区标题 `15px`（`text-section-title`），输入值/正文 `13px`（`text-body-compact`），表单字段标签收紧为 `12px`（`text-xs font-medium text-foreground/75`），彻底纠正「标签比输入值还大还黑」的倒置问题。
    - 必填星号 `<RequiredMark />` 紧贴标签文字右侧 `2px`，不得漂离。
    - **编辑页按需保存（Dirty Save Dock）**：创建态在页头保留唯一实心主蓝「创建」按钮；编辑态未发生修改时页头保持极净（只放静默次要动作如「停用」），**一旦修改任意表单字段，页面底部居中平滑上浮 `DetailWorkspaceSaveDock`（`● 已修改 N 项 · 取消修改 / 保存更新`）**，跨 Tab 始终可见、同时与「供应商供给」等独立实时保存 Tab 的主蓝「添加供给」彻底解耦，并支持 `Cmd/Ctrl + S` 快捷提交。
 5. **表单柔底轻描边，表格内联编辑静止无框**
@@ -65,14 +65,14 @@
 
 ## 3. 字号、色彩与控件规范
 
-所有值均消费 `erp-client/app/globals.css` 语义 Token，与列表页完全对齐：
+所有值均消费 `erp-client/app/globals.css` 的语义令牌，与列表页共用[排版与字号设计系统](./typography-design-system.md)。`Label` 原语统一提供 12px / 18px，详情表单网格沿用同一标签样式。
 
 | 视觉角色 | Token / 类 | 字号 / 行高 | 规范要求 |
 | --- | --- | --- | --- |
 | 对象主标题 | `text-page-title` | `18px / 26px` | `font-semibold tracking-tight text-foreground`（禁止使用 `text-2xl`） |
 | 分区标题 | `text-section-title` | `15px / 22px` | `font-semibold tracking-tight text-foreground`，不再在标题下画冗余 `border-b` |
 | 表单输入值 / 按钮 / Tab | `text-body-compact` | `13px / 20px` | 核心业务数据字号；金额/数量/编号一律加 `.num` |
-| 字段标签 / 表头 / 元信息 / 徽章 | `text-xs` | `12px / 16px` | 表单标签 `font-medium text-foreground/72`；元信息 `text-muted-foreground` 配 `·` 分隔 |
+| 字段标签 / 表头 / 元信息 / 徽章 | `text-xs` | `12px / 18px` | 表单标签 `font-medium text-foreground/75`；元信息 `text-muted-foreground` 配 `·` 分隔 |
 | 未保存修改微胶囊 | `text-tiny` | `11px / 16px` | `DetailWorkspaceDirtyBadge`（琥珀柔底 `bg-warning-soft` + `size-1.5 bg-warning` 圆点） |
 
 ### 控件分级矩阵

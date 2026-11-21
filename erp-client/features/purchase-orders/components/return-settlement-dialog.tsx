@@ -111,7 +111,7 @@ export function ReturnSettlementDialog({
                         填写与供应商确认的结果，提交后交给财务办理。此操作不登记资金到账。
                     </DialogDescription>
                 </DialogHeader>
-                <p className="text-sm">
+                <p className="text-body-compact">
                     本次待处理款项 <MoneyValue value={total} />
                     {compareDecimal(total, "0", 2) === 0 &&
                         "，仅需交接进项红票处理。"}
@@ -185,7 +185,10 @@ export function ReturnSettlementDialog({
                         )}
                     />
                     {error && (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {error}
                         </p>
                     )}

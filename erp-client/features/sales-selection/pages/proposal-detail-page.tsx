@@ -86,7 +86,7 @@ export function ProposalDetailPage({ proposalId }: { proposalId: string }) {
                 navigationMeta="选品册 / 销售方案"
                 meta={
                     <div className="flex flex-col items-start gap-3">
-                        <p className="text-base font-medium text-foreground">
+                        <p className="text-body-compact font-medium text-foreground">
                             销售方案
                         </p>
                         <div className="flex max-w-full items-center gap-2">

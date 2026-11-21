@@ -99,13 +99,16 @@ export function PurchasePaymentArrangement({
     ])
     if (!arrangement && query.isPending)
         return (
-            <p role="status" className="text-sm text-muted-foreground">
+            <p role="status" className="text-xs text-muted-foreground">
                 正在读取付款安排…
             </p>
         )
     if (query.isError && !requestOpen)
         return (
-            <div role="alert" className="rounded-lg border p-4 text-sm">
+            <div
+                role="alert"
+                className="rounded-lg border p-4 text-body-compact"
+            >
                 {getErrorMessage(query.error, "付款安排读取失败")}
                 <Button
                     id="purchase-payment-arrangement-retry"
@@ -162,7 +165,7 @@ export function PurchasePaymentArrangement({
             )}
         >
             <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold">
+                <h2 className="text-section-title font-semibold tracking-tight">
                     {workItemId && arrangement.state === "available"
                         ? "本次付款安排"
                         : titles[arrangement.state]}
@@ -188,7 +191,7 @@ export function PurchasePaymentArrangement({
             <div className="mt-5 rounded-lg bg-muted/30 p-5">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="min-w-0 space-y-2">
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             {hasPrepaymentGap
                                 ? "履约前还需付款"
                                 : arrangement.state === "settled"
@@ -206,7 +209,7 @@ export function PurchasePaymentArrangement({
                             )}
                         </div>
                     </div>
-                    <div className="space-y-1 text-sm">
+                    <div className="space-y-1 text-body-compact">
                         <p className="text-xs text-muted-foreground">
                             付款条件
                         </p>
@@ -215,7 +218,7 @@ export function PurchasePaymentArrangement({
                         </p>
                     </div>
                 </div>
-                <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                <p className="mt-3 text-xs text-muted-foreground">
                     {hasPrepaymentGap
                         ? "按付款条件计算的实付缺口，审批中的申请不计入已付。"
                         : "采购审批已通过，付款申请须经财务审核后由出纳执行。"}
@@ -234,28 +237,30 @@ export function PurchasePaymentArrangement({
                         <dt className="text-xs text-muted-foreground">
                             {label}
                         </dt>
-                        <dd className="text-lg">{money(value)}</dd>
+                        <dd className="num text-value-compact font-semibold tracking-tight">
+                            {money(value)}
+                        </dd>
                     </div>
                 ))}
             </dl>
-            <p className="mt-3 text-xs leading-5 text-muted-foreground">
+            <p className="mt-3 text-xs text-muted-foreground">
                 可申请金额为剩余应付扣除有效申请占用后的余额；申请占用不代表已付款。
             </p>
             {arrangement.payment_blocked && (
                 <p
                     role="alert"
-                    className="mt-4 rounded-lg bg-destructive/5 p-3 text-sm leading-6 text-destructive"
+                    className="mt-4 rounded-lg bg-destructive/5 p-3 text-body-compact leading-6 text-destructive"
                 >
                     销售变更影响尚未处理，本采购暂停付款申请和付款。请先根据最新销售单调整或确认本采购单。
                 </p>
             )}
             {arrangement.state === "pending" && (
-                <p className="mt-2 text-sm">
+                <p className="mt-2 text-body-compact">
                     剩余应付已由有效申请覆盖，请跟踪下方审核和付款进度。
                 </p>
             )}
             {hasBalance && (
-                <div className="mt-5 border-t border-border/60 pt-5 text-sm leading-6">
+                <div className="mt-5 border-t border-border/60 pt-5 text-body-compact leading-6">
                     {followUp && (
                         <p className="mb-1 font-medium">下次跟进：{followUp}</p>
                     )}
@@ -267,7 +272,7 @@ export function PurchasePaymentArrangement({
                     </p>
                 </div>
             )}
-            <div className="mt-6 space-y-4 border-t border-border/60 pt-5 text-sm">
+            <div className="mt-6 space-y-4 border-t border-border/60 pt-5 text-body-compact">
                 <div className="flex items-center justify-between gap-3">
                     <h3 className="font-semibold">审核与付款进度</h3>
                     {canListRequests && arrangement.requests.length > 0 ? (
@@ -286,7 +291,7 @@ export function PurchasePaymentArrangement({
                     )}
                 </div>
                 {arrangement.requests.length === 0 && (
-                    <p className="rounded-lg bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
+                    <p className="rounded-lg bg-muted/20 px-4 py-5 text-xs text-muted-foreground">
                         暂无付款申请，提交后可在此查看审核与付款进度。
                     </p>
                 )}

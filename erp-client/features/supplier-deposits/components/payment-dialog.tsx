@@ -113,7 +113,7 @@ export function RechargePaymentDialog({
                         仅登记已经实际支付的充值。银行已付后仍须核对供应商到账，才增加可用余额。
                     </DialogDescription>
                 </DialogHeader>
-                <p className="text-sm">
+                <p className="text-body-compact">
                     {account.supplier_name} · {account.payer_party_name} ·{" "}
                     <MoneyValue value={request.amount} display="exact" />
                 </p>

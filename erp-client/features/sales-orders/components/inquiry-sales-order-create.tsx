@@ -156,13 +156,13 @@ function InquirySaleRecovery({
                 description="上次发送的开单内容已保留。核对会沿用原操作记录；确认前请勿重新创建。"
             />
             <div className="space-y-3 rounded-lg border p-4">
-                <p className="text-sm font-medium">
+                <p className="text-body-compact font-medium">
                     销售单号：{command.payload.orderNo}
                 </p>
                 {command.payload.lineItems.map((line) => (
                     <div
                         key={line.rowKey}
-                        className="flex flex-wrap gap-3 text-sm"
+                        className="flex flex-wrap gap-3 text-body-compact"
                     >
                         <span>{line.name}</span>
                         <QuantityValue value={line.quantity} unit={line.unit} />
@@ -176,7 +176,10 @@ function InquirySaleRecovery({
                     </div>
                 ))}
                 {mutation.error || recoveryError ? (
-                    <p role="status" className="text-sm text-destructive">
+                    <p
+                        role="status"
+                        className="text-body-compact text-destructive"
+                    >
                         {getErrorMessage(
                             mutation.error ?? recoveryError,
                             "结果仍待核对，请保持当前记录后重试。",

@@ -120,7 +120,10 @@ export function BookCopyDialog({
                         )}
                     />
                     {copy.isError ? (
-                        <p className="text-sm text-destructive" role="alert">
+                        <p
+                            className="text-body-compact text-destructive"
+                            role="alert"
+                        >
                             {getErrorMessage(
                                 copy.error,
                                 "复制未确认成功，请重试或刷新列表核对。",

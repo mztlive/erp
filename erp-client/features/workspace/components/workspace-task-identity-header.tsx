@@ -44,7 +44,7 @@ export function WorkspaceTaskIdentityHeader({
                 }
             >
                 {compact && (
-                    <h2 className="break-words text-xl font-semibold tracking-tight">
+                    <h2 className="break-words text-section-title font-semibold tracking-tight">
                         {title ?? item.objectTitle}
                     </h2>
                 )}
@@ -63,12 +63,12 @@ export function WorkspaceTaskIdentityHeader({
                     ) : null}
                 </div>
                 {!compact && (
-                    <h2 className="break-words text-xl font-medium tracking-tight">
+                    <h2 className="break-words text-section-title font-semibold tracking-tight">
                         {title ?? item.objectTitle}
                     </h2>
                 )}
                 {resolvedSubtitle ? (
-                    <div className="text-sm text-muted-foreground">
+                    <div className="text-body-compact text-muted-foreground">
                         {resolvedSubtitle}
                     </div>
                 ) : null}

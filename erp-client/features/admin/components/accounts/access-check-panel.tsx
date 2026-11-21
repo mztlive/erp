@@ -56,13 +56,16 @@ export function AccessCheckPanel({ accountId }: { accountId: string }) {
     })
     return (
         <section
-            className="space-y-4 text-sm"
+            className="space-y-4 text-body-compact"
             aria-labelledby="account-access-check-title"
         >
-            <h2 id="account-access-check-title" className="font-semibold">
+            <h2
+                id="account-access-check-title"
+                className="text-section-title font-semibold tracking-tight"
+            >
                 检查访问权限
             </h2>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 检查此人能否执行所选操作。
                 {canListOrders &&
                     "未选择单据时，只检查权限配置；选择销售单后，可进一步确认此人能否查看或修改这张单据。"}

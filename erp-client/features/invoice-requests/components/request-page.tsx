@@ -598,7 +598,7 @@ function InvoiceRequestListWorkspace({
                     />
                 ) : showForm ? (
                     <section className="flex flex-col gap-4">
-                        <h2 className="font-semibold">
+                        <h2 className="text-section-title font-semibold tracking-tight">
                             {editing ? "修改开票申请" : "申请开票"}
                         </h2>
                         <InvoiceRequestForm

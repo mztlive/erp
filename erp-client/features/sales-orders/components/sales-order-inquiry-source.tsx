@@ -17,8 +17,8 @@ export function SalesOrderInquirySource({
         <div
             className={
                 compact
-                    ? "text-sm text-muted-foreground"
-                    : "rounded-lg border border-info-border bg-info-soft px-4 py-3 text-sm text-info-soft-foreground"
+                    ? "text-body-compact text-muted-foreground"
+                    : "rounded-lg border border-info-border bg-info-soft px-4 py-3 text-body-compact text-info-soft-foreground"
             }
         >
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">

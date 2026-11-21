@@ -40,7 +40,7 @@ export function InquiryFeedbackCommonTerms({
                 </Label>
                 <InquiryTaxRateInput
                     id="procurement-feedback-common-tax"
-                    className="h-8 w-28 text-sm"
+                    className="h-8 w-28 text-body-compact"
                     disabled={inactive}
                     inputMode="decimal"
                     aria-describedby="procurement-feedback-common-tax-hint procurement-feedback-common-hint"

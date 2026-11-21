@@ -148,11 +148,11 @@ export function SalesOrderCreateLineItemsSection({
                                 <div className="flex flex-wrap items-baseline gap-3">
                                     <h2
                                         id="sales-create-lines-title"
-                                        className="font-heading text-base font-semibold"
+                                        className="font-heading text-section-title font-semibold tracking-tight"
                                     >
                                         销售明细
                                     </h2>
-                                    <span className="text-sm text-muted-foreground">
+                                    <span className="text-body-compact text-muted-foreground">
                                         {nature === "card_voucher" ? (
                                             "卡券 · 仅一条明细"
                                         ) : (
@@ -233,10 +233,10 @@ export function SalesOrderCreateLineItemsSection({
                                         aria-hidden="true"
                                     />
                                     <div className="space-y-1">
-                                        <p className="text-sm font-medium">
+                                        <p className="text-body-compact font-medium">
                                             尚未添加商品
                                         </p>
-                                        <p className="text-sm text-muted-foreground">
+                                        <p className="text-xs text-muted-foreground">
                                             点击“添加商品”，选择后设置数量和交付日，成交单价由销售填写。
                                         </p>
                                     </div>

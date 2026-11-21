@@ -66,7 +66,7 @@ export function FulfillmentDeliveryRow({
                 </TableCell>
                 <TableCell className="whitespace-normal">
                     <p
-                        className="line-clamp-2 break-words text-sm font-medium"
+                        className="line-clamp-2 break-words text-body-compact font-medium"
                         title={row.title}
                     >
                         {row.title}

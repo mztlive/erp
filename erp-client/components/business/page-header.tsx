@@ -46,7 +46,7 @@ export type PageHeaderProps = Omit<
 }
 
 const metaSlotClassName =
-    "min-w-0 text-xs leading-5 text-muted-foreground [&_svg:not([class*='size-'])]:size-3.5"
+    "min-w-0 text-xs text-muted-foreground [&_svg:not([class*='size-'])]:size-3.5"
 
 function PageHeader({
     title,
@@ -127,7 +127,7 @@ function PageHeader({
                         {description ? (
                             <p
                                 className={cn(
-                                    "max-w-3xl text-body-compact text-muted-foreground",
+                                    "max-w-3xl text-xs text-muted-foreground",
                                     compact ? "mt-1" : "mt-1.5",
                                 )}
                             >

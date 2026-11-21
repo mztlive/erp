@@ -149,7 +149,7 @@ export function WorkspaceApprovalReworkActions({
                         {error ? (
                             <p
                                 role="alert"
-                                className="text-sm text-destructive"
+                                className="text-body-compact text-destructive"
                             >
                                 {unknown
                                     ? "处理结果待确认，请保留输入并重试同一次操作。"

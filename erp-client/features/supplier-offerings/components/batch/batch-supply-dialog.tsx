@@ -128,7 +128,7 @@ function BatchSupplyEditor({
                                         {values.message && (
                                             <p
                                                 role="status"
-                                                className="rounded-lg border bg-muted/30 p-3 text-sm"
+                                                className="rounded-lg border bg-muted/30 p-3 text-body-compact"
                                             >
                                                 {values.message}
                                             </p>
@@ -194,7 +194,7 @@ function BatchSupplyEditor({
                                             )}
                                         </div>
                                         {invalid.length > 0 && (
-                                            <div className="rounded-lg border p-3 text-sm">
+                                            <div className="rounded-lg border p-3 text-body-compact">
                                                 <p>
                                                     版本冲突时，先重新读取异常行的最新内容，再填写本次修改。已完成和待确认的行保持锁定。
                                                 </p>

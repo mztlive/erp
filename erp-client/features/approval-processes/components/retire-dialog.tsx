@@ -66,7 +66,7 @@ export function RetireDialog({
                         · {versionLabel(detail.definition_version)}
                     </DialogDescription>
                 </DialogHeader>
-                <p className="text-sm">
+                <p className="text-body-compact">
                     停用后，新发起的单据将不再使用此流程；已创建或审批中的单据不受影响。注意：若停用后该单据没有其他启用中的审批流程，将暂时无法新建单据。
                 </p>
                 {error ? (

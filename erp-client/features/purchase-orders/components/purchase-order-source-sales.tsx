@@ -225,12 +225,12 @@ function SourceSalesBody({
     const download = useDownloadPurchaseSalesMaterial(purchaseOrderId)
     return (
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-7 py-6">
-            <dl className="grid gap-4 text-sm sm:grid-cols-2">
+            <dl className="grid gap-4 text-body-compact sm:grid-cols-2">
                 <div>
                     <dt className="text-xs text-muted-foreground">
                         销售含税金额
                     </dt>
-                    <dd className="mt-1 text-xl font-semibold">
+                    <dd className="num mt-1 text-value-compact font-semibold tracking-tight">
                         <MoneyValue value={source.totals.gross} />
                     </dd>
                 </div>
@@ -254,8 +254,10 @@ function SourceSalesBody({
                 </div>
             </dl>
             <section className="space-y-3" aria-label="关联销售明细">
-                <h2 className="text-sm font-semibold">销售明细</h2>
-                <p className="text-xs leading-5 text-muted-foreground">
+                <h2 className="text-section-title font-semibold tracking-tight">
+                    销售明细
+                </h2>
+                <p className="text-xs text-muted-foreground">
                     以下为采购关联销售版本的完整明细，销售金额按整张销售单展示。
                 </p>
                 <DataTable
@@ -276,7 +278,9 @@ function SourceSalesBody({
                 className="space-y-3 border-t pt-5"
                 aria-label="合同及开单凭证"
             >
-                <h2 className="text-sm font-semibold">合同及开单凭证</h2>
+                <h2 className="text-section-title font-semibold tracking-tight">
+                    合同及开单凭证
+                </h2>
                 {source.materials.length ? (
                     <ul className="space-y-3">
                         {source.materials.map((file) => {
@@ -287,7 +291,7 @@ function SourceSalesBody({
                                     className="flex flex-wrap items-center justify-between gap-3"
                                 >
                                     <div className="min-w-0">
-                                        <p className="break-all text-sm">
+                                        <p className="break-all text-body-compact">
                                             {file.fileName}
                                         </p>
                                         <p className="text-xs text-muted-foreground">
@@ -332,14 +336,17 @@ function SourceSalesBody({
                         })}
                     </ul>
                 ) : (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         {source.materialsUnavailable
                             ? "关联文件暂不可读取，请联系经办人核对。"
                             : "该销售版本未保留可读取的合同或开单凭证，历史资料可能未保存。"}
                     </p>
                 )}
                 {download.isError ? (
-                    <p role="alert" className="text-sm text-destructive">
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
                         {getErrorMessage(
                             download.error,
                             "附件下载失败，请重试",

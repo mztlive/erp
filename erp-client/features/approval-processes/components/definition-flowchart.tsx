@@ -43,7 +43,7 @@ export function DefinitionFlowchart({
             className="min-w-0 overflow-hidden rounded-lg border border-border bg-muted/30"
         >
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-card px-4 py-3">
-                <h3 className="flex items-center gap-2 text-sm font-medium">
+                <h3 className="flex items-center gap-2 font-medium">
                     <GitBranchIcon className="size-4 text-muted-foreground" />
                     审批流程
                 </h3>
@@ -127,7 +127,7 @@ export function DefinitionFlowchart({
                                     >
                                         {String(index + 1).padStart(2, "0")}
                                     </span>
-                                    <span className="min-w-0 flex-1 break-words text-sm font-medium">
+                                    <span className="min-w-0 flex-1 break-words text-body-compact font-medium">
                                         {node.node_name.trim() || "未命名节点"}
                                     </span>
                                     <span className="shrink-0 rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
@@ -242,7 +242,7 @@ export function DefinitionFlowchart({
                         )
                     })}
                     {nodes.length === 0 && (
-                        <li className="mb-6 w-full rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+                        <li className="mb-6 w-full rounded-lg border border-dashed border-border px-4 py-6 text-center text-body-compact text-muted-foreground">
                             {onAdd
                                 ? "添加第一个审批节点，或从其它流程复制。"
                                 : "此版本尚未配置审批节点"}

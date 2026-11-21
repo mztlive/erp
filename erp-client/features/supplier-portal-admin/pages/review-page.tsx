@@ -52,21 +52,21 @@ export function PortalAdminReviewPage({
             />
             {!access.can("supplier_portal_request:detail") &&
                 !access.profile.isPending && (
-                    <p className="text-sm">
+                    <p className="text-body-compact">
                         当前账号缺少供应商申请资料查看资格，请联系管理员配置或转交处理。
                     </p>
                 )}
             {application ? (
                 <>
                     <div>
-                        <h2 className="text-xl font-semibold">
+                        <h2 className="text-section-title font-semibold tracking-tight">
                             {application.title ??
                                 (application.input.name as
                                     | string
                                     | undefined) ??
                                 kindLabels[application.kind]}
                         </h2>
-                        <p className="mt-1 text-sm text-muted-foreground">
+                        <p className="mt-1 text-xs text-muted-foreground">
                             {statusLabels[application.status]} ·{" "}
                             {application.supplier_name ?? "供应商申请"}
                         </p>
@@ -97,7 +97,7 @@ export function PortalAdminReviewPage({
                     )}
                     {application.status === "pending" &&
                         !access.can("work_item:detail") && (
-                            <p className="text-sm">
+                            <p className="text-body-compact">
                                 当前账号缺少审核任务读取资格，请联系管理员配置或转交处理。
                             </p>
                         )}
@@ -136,14 +136,14 @@ export function PortalAdminReviewPage({
                         <Link
                             id="supplier-portal-review-unlisted-link"
                             href="/master-data/products?productListingStatus=unlisted"
-                            className="inline-block text-sm text-primary"
+                            className="inline-block text-body-compact text-primary"
                         >
                             进入商品库集中定价及上架
                         </Link>
                     )}
                 </>
             ) : query.isPending ? (
-                <p className="text-sm">正在读取申请资料…</p>
+                <p className="text-body-compact">正在读取申请资料…</p>
             ) : null}
         </div>
     )
@@ -159,7 +159,7 @@ export function PortalAdminReviewPage({
                 <Link
                     id="supplier-portal-review-open-supplier"
                     href={`/master-data/suppliers/${encodeURIComponent(query.data.supplier_id)}?section=portal-applications`}
-                    className="text-sm text-primary"
+                    className="text-body-compact text-primary"
                 >
                     返回供应商资料
                 </Link>

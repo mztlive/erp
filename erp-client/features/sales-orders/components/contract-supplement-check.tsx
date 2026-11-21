@@ -23,7 +23,7 @@ export function ContractSupplementCheck({
 }) {
     if (error)
         return (
-            <p role="alert" className="text-sm text-destructive">
+            <p role="alert" className="text-body-compact text-destructive">
                 {getErrorMessage(
                     error,
                     "合同核对失败，请重新选择合同或刷新页面后重试",
@@ -32,7 +32,7 @@ export function ContractSupplementCheck({
         )
     if (loading || !data)
         return (
-            <p role="status" className="text-sm text-muted-foreground">
+            <p role="status" className="text-xs text-muted-foreground">
                 正在核对原单与合同条款…
             </p>
         )
@@ -42,7 +42,7 @@ export function ContractSupplementCheck({
             className="space-y-2"
             aria-live="polite"
         >
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 核对依据：{data.basis}
             </p>
             <Table>
@@ -80,8 +80,8 @@ export function ContractSupplementCheck({
             <p
                 className={
                     data.matches
-                        ? "text-sm text-muted-foreground"
-                        : "text-sm text-destructive"
+                        ? "text-xs text-muted-foreground"
+                        : "text-body-compact text-destructive"
                 }
             >
                 {data.matches

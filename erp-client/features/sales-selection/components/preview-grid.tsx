@@ -77,7 +77,7 @@ const PreviewCard = ({
                                     className="size-8 stroke-[1.5] text-muted-foreground/60"
                                     aria-hidden="true"
                                 />
-                                <span className="text-2xs">暂无图片</span>
+                                <span className="text-xs">暂无图片</span>
                             </div>
                         )}
                         {item.missing_image ? (
@@ -94,10 +94,10 @@ const PreviewCard = ({
                         <div className="flex flex-wrap items-center gap-1.5">
                             <MoneyValue
                                 display="exact"
-                                className="text-base font-bold text-foreground"
+                                className="text-body-compact font-bold text-foreground"
                                 value={item.price_gross || item.price}
                             />
-                            <span className="text-2xs text-muted-foreground">
+                            <span className="text-xs text-muted-foreground">
                                 含税
                             </span>
                             {item.markup_percent != null ? (
@@ -119,7 +119,7 @@ const PreviewCard = ({
                                 {item.name}
                             </CardTitle>
                             {unit ? (
-                                <span className="shrink-0 text-2xs leading-snug text-muted-foreground">
+                                <span className="shrink-0 text-xs text-muted-foreground">
                                     单位：{unit}
                                 </span>
                             ) : null}
@@ -129,14 +129,14 @@ const PreviewCard = ({
                     <CardContent className="flex flex-col gap-1 p-3 pt-1.5 text-xs text-muted-foreground">
                         {item.spec_label ? (
                             <p
-                                className="truncate text-2xs"
+                                className="truncate text-xs"
                                 title={item.spec_label}
                             >
                                 {item.spec_label}
                             </p>
                         ) : null}
                         {members.length > 0 ? (
-                            <ul className="flex flex-col gap-0.5 rounded-md bg-muted/30 p-1.5 text-2xs">
+                            <ul className="flex flex-col gap-0.5 rounded-md bg-muted/30 p-1.5 text-xs">
                                 {members.slice(0, 3).map((member) => (
                                     <li
                                         key={member.sku_id}
@@ -147,7 +147,7 @@ const PreviewCard = ({
                                     </li>
                                 ))}
                                 {extraMembers > 0 ? (
-                                    <li className="num pt-0.5 text-2xs font-medium text-muted-foreground">
+                                    <li className="num pt-0.5 text-xs font-medium text-muted-foreground">
                                         另有 {extraMembers} 件商品
                                     </li>
                                 ) : null}
@@ -505,7 +505,7 @@ export const PreviewGrid = ({
                                                 >
                                                     <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/30 px-3.5 py-2">
                                                         <div className="flex flex-wrap items-baseline gap-2">
-                                                            <h3 className="text-sm font-semibold text-foreground">
+                                                            <h3 className="font-semibold text-foreground">
                                                                 {tierName}
                                                             </h3>
                                                             <Badge

@@ -376,11 +376,11 @@ export function TransferBatchResult({
                                         />
                                     </div>
                                     {code && (
-                                        <p className="text-sm text-muted-foreground">
+                                        <p className="text-xs text-muted-foreground">
                                             商品编码：{code}
                                         </p>
                                     )}
-                                    <p className="text-sm">
+                                    <p className="text-body-compact">
                                         {rowMessage(row, state)}
                                     </p>
                                     {href && (

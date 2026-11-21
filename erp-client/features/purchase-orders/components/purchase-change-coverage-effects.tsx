@@ -32,7 +32,7 @@ export function PurchaseChangeCoverageEffects({
             className="space-y-3 rounded-xl border border-border/70 px-4 py-4 md:px-5"
         >
             <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 id={`${id}-title`} className="text-sm font-semibold">
+                <h3 id={`${id}-title`} className="font-semibold">
                     对销售的影响
                 </h3>
                 <Badge variant={gaps ? "warning" : "secondary"}>
@@ -46,7 +46,7 @@ export function PurchaseChangeCoverageEffects({
                 {effects.map((effect) => (
                     <li
                         key={effect.salesOrderLineId}
-                        className="space-y-0.5 py-2 text-sm first:pt-0 last:pb-0"
+                        className="space-y-0.5 py-2 text-body-compact first:pt-0 last:pb-0"
                     >
                         <p>
                             第 {effect.lineNo} 行 {effect.itemName}

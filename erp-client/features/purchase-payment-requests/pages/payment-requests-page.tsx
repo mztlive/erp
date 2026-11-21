@@ -410,7 +410,7 @@ export function PaymentRequestsPage({
                                 size="hero"
                             />
                         </div>
-                        <dl className="space-y-3 text-sm">
+                        <dl className="space-y-3 text-body-compact">
                             <div className="flex justify-between">
                                 <dt>有效已付</dt>
                                 <dd>
@@ -439,7 +439,7 @@ export function PaymentRequestsPage({
                                 <p className="text-xs text-muted-foreground">
                                     关联采购单
                                 </p>
-                                <ul className="space-y-2 text-sm">
+                                <ul className="space-y-2 text-body-compact">
                                     {preview.lines.map((line) => (
                                         <li
                                             key={line.payable_account_id}
@@ -478,7 +478,7 @@ export function PaymentRequestsPage({
                                 </ul>
                             </div>
                         )}
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             {preview.description}
                         </p>
                     </div>

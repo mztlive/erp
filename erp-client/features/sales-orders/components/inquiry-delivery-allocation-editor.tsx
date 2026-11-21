@@ -67,7 +67,7 @@ export function InquiryDeliveryAllocationEditor({
                 >
                     <h2
                         id="inquiry-sales-delivery-title"
-                        className="font-heading font-semibold"
+                        className="text-section-title font-semibold tracking-tight font-heading"
                     >
                         询价配送分配
                     </h2>
@@ -79,7 +79,7 @@ export function InquiryDeliveryAllocationEditor({
                             key={line.rowKey}
                             className="space-y-2 rounded-md border border-border p-3"
                         >
-                            <p className="text-sm font-medium">
+                            <p className="text-body-compact font-medium">
                                 {line.name} ·{" "}
                                 <QuantityValue
                                     value={line.quantity}
@@ -103,7 +103,7 @@ export function InquiryDeliveryAllocationEditor({
                                             return (
                                                 <p
                                                     key={`${line.rowKey}-unmatched`}
-                                                    className="text-sm text-destructive"
+                                                    className="text-body-compact text-destructive"
                                                 >
                                                     配送资料与来源不一致，请返回询价核对。
                                                 </p>
@@ -114,7 +114,7 @@ export function InquiryDeliveryAllocationEditor({
                                                 key={original.allocation_id}
                                                 className="flex flex-wrap items-center gap-3 rounded-md bg-muted/30 p-3"
                                             >
-                                                <div className="min-w-40 flex-1 text-sm">
+                                                <div className="min-w-40 flex-1 text-body-compact">
                                                     <p>
                                                         {delivery.recipient} ·{" "}
                                                         {delivery.phone}

@@ -114,7 +114,7 @@ export function InquiryAddressImportGroups({
                                 className="[&>td]:py-3 [&>td]:align-top"
                             >
                                 <TableCell
-                                    className="text-xs leading-5"
+                                    className="text-xs"
                                     title={`来源：第 ${sourceLines.join("、")} 行`}
                                 >
                                     <p className="font-medium tabular-nums">
@@ -132,7 +132,7 @@ export function InquiryAddressImportGroups({
                                         {group.allocation.phone || "—"}
                                     </p>
                                 </TableCell>
-                                <TableCell className="space-y-1 whitespace-normal text-xs leading-5 wrap-anywhere">
+                                <TableCell className="space-y-1 whitespace-normal text-xs wrap-anywhere">
                                     <p className="text-muted-foreground">
                                         {group.allocation.region_name ||
                                             [
@@ -143,7 +143,7 @@ export function InquiryAddressImportGroups({
                                     </p>
                                     <p>{group.allocation.address || "—"}</p>
                                 </TableCell>
-                                <TableCell className="whitespace-normal text-xs leading-5">
+                                <TableCell className="whitespace-normal text-xs">
                                     <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
                                         <dt className="text-muted-foreground">
                                             原有
@@ -235,7 +235,7 @@ export function InquiryAddressImportGroups({
                                         </div>
                                     ) : (
                                         group.resultQuantity != null && (
-                                            <p className="flex items-baseline justify-between gap-3 text-sm">
+                                            <p className="flex items-baseline justify-between gap-3 text-body-compact">
                                                 <span className="shrink-0 text-xs text-muted-foreground">
                                                     结果数量
                                                 </span>
@@ -256,7 +256,7 @@ export function InquiryAddressImportGroups({
                                     )}
                                     <p
                                         id={`${rowId}-status`}
-                                        className={`text-xs leading-5 ${group.status === "error" ? "text-destructive" : group.status === "conflict" ? "text-warning-soft-foreground" : "text-muted-foreground"}`}
+                                        className={`text-xs ${group.status === "error" ? "text-destructive" : group.status === "conflict" ? "text-warning-soft-foreground" : "text-muted-foreground"}`}
                                     >
                                         {group.errors.length
                                             ? group.errors.join("；")

@@ -118,7 +118,7 @@ export const SupplierImportDialog = ({
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
-                    <div className="rounded-lg bg-muted/50 p-4 text-sm leading-6">
+                    <div className="rounded-lg bg-muted/50 p-4 text-body-compact leading-6">
                         签约和付款主体互相补齐，并按公司全称、简称或别名匹配。周期结算默认期末后
                         15 天计划付款；不明确的合同有效期留空。
                         <PermissionGuard permission="company:list">
@@ -153,12 +153,15 @@ export const SupplierImportDialog = ({
                         onFilesSelected={(files) => void read(files[0])}
                     />
                     {fileName && (
-                        <p className="text-sm">
+                        <p className="text-body-compact">
                             {reading ? "读取中…" : summary}
                         </p>
                     )}
                     {error && (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {error}
                         </p>
                     )}

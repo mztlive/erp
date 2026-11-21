@@ -410,10 +410,10 @@ export function DefinitionEditor({
                                                         />
                                                     ) : (
                                                         <div className="space-y-3">
-                                                            <h3 className="text-sm font-medium">
+                                                            <h3 className="font-medium">
                                                                 还没有审批步骤
                                                             </h3>
-                                                            <p className="text-xs leading-5 text-muted-foreground">
+                                                            <p className="text-xs text-muted-foreground">
                                                                 流程会从提交申请直达审批完成。添加步骤后会自动连线。
                                                             </p>
                                                             <Button
@@ -433,7 +433,7 @@ export function DefinitionEditor({
                                             </div>
                                         }
                                     />
-                                    <p className="px-1 text-xs leading-5 text-muted-foreground">
+                                    <p className="px-1 text-xs text-muted-foreground">
                                         <span className="font-medium text-foreground">
                                             驳回规则：
                                         </span>

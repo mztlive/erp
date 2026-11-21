@@ -165,7 +165,7 @@ export function PortalTermsForm({
                 void form.handleSubmit()
             }}
         >
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 保存后为草稿；提交采购确认前，当前供货条款继续有效。报价数量和价格按
                 {sku?.unit_name ?? offering?.unit_name ?? "当前基础单位"}填写。
             </p>
@@ -332,7 +332,7 @@ export function PortalTermsForm({
                             selector={(state) => state.values.reportedAt}
                         >
                             {(at) => (
-                                <div className="flex flex-wrap items-center gap-3 text-sm">
+                                <div className="flex flex-wrap items-center gap-3 text-body-compact">
                                     <span>实际报送时间：{timeLabel(at)}</span>
                                     <Button
                                         id="supplier-portal-quote-report-now"
@@ -379,7 +379,7 @@ export function PortalTermsForm({
                 />
             </form.AppForm>
             {readOnly && (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     {offering?.source_type === "API"
                         ? "当前供给由接口同步，请联系采购处理商务变更。"
                         : "当前账号仅可查看。"}

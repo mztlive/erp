@@ -55,7 +55,7 @@ export function BatchPriceTable({
                     />
                     <h2
                         id="supplier-catalog-batch-sample-title"
-                        className="text-base font-semibold"
+                        className="text-section-title font-semibold tracking-tight"
                     >
                         售价预览
                     </h2>

@@ -77,7 +77,7 @@ export function ContractImportTask({
                 </div>
                 <div className="min-w-0 flex-1 basis-40">
                     <p
-                        className="truncate text-sm font-medium"
+                        className="truncate text-body-compact font-medium"
                         title={task.file_name}
                     >
                         {task.file_name}
@@ -128,7 +128,7 @@ export function ContractImportTask({
                     />
                     <div>
                         <h3 className="font-medium">合同已归档</h3>
-                        <p className="mt-1 text-sm text-muted-foreground">
+                        <p className="mt-1 text-xs text-muted-foreground">
                             {showExtraction
                                 ? "合同信息已确认并归档，下方保留原始识别依据。"
                                 : "合同信息与原 PDF 已保存，可查看原文核对。"}
@@ -146,7 +146,7 @@ export function ContractImportTask({
                                   ? "识别尚未完成"
                                   : "合同已上传，等待识别"}
                         </h3>
-                        <p className="break-words text-sm leading-relaxed text-muted-foreground">
+                        <p className="break-words text-body-compact leading-relaxed text-muted-foreground">
                             {failed ? (
                                 <>
                                     {stageLabel
@@ -216,7 +216,7 @@ export function ContractImportTask({
             ) : null}
             {showExtraction && task.extraction ? (
                 <div className="space-y-3">
-                    <h3 className="text-sm font-medium">识别信息</h3>
+                    <h3 className="font-medium">识别信息</h3>
                     <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         {Object.entries(task.extraction.fields).map(
                             ([key, field]) => (
@@ -227,7 +227,7 @@ export function ContractImportTask({
                                     <dt className="text-xs text-muted-foreground">
                                         {FIELDS[key] ?? "合同字段"}
                                     </dt>
-                                    <dd className="mt-1 break-words text-sm">
+                                    <dd className="mt-1 break-words text-body-compact">
                                         {field.value}
                                     </dd>
                                     <dd className="mt-2">

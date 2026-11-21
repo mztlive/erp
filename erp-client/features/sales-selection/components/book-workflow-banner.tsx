@@ -315,14 +315,14 @@ export function BookWorkflowBanner({
                     className="flex flex-wrap items-center justify-between gap-4"
                 >
                     <div className="min-w-0 space-y-0.5">
-                        <div className="flex items-center gap-2 text-sm font-semibold">
+                        <div className="flex items-center gap-2 text-body-compact font-semibold">
                             <SparklesIcon
                                 className="size-4"
                                 aria-hidden="true"
                             />
                             <span>选品册已创建，请开始准备陈列</span>
                         </div>
-                        <p className="text-sm">
+                        <p className="text-body-compact">
                             选品形态：
                             {SELECTION_FORM_LABEL[detail.selection_form]} ·
                             商品来源：{POOL_SOURCE_LABEL[detail.source_kind]}
@@ -383,14 +383,14 @@ export function BookWorkflowBanner({
                     className="flex flex-wrap items-center justify-between gap-4"
                 >
                     <div className="min-w-0 space-y-0.5">
-                        <div className="flex items-center gap-2 text-sm font-semibold">
+                        <div className="flex items-center gap-2 text-body-compact font-semibold">
                             <FileCheck2Icon
                                 className="size-4"
                                 aria-hidden="true"
                             />
                             <span>陈列已就绪，请核对商品与售价</span>
                         </div>
-                        <p className="text-sm">
+                        <p className="text-body-compact">
                             请核对下方商品、规格与客户售价（共{" "}
                             <span className="num font-medium">
                                 {detail.display_count}
@@ -419,11 +419,11 @@ export function BookWorkflowBanner({
                     className="flex flex-wrap items-center justify-between gap-4"
                 >
                     <div className="min-w-0 space-y-0.5">
-                        <div className="flex items-center gap-2 text-sm font-semibold">
+                        <div className="flex items-center gap-2 text-body-compact font-semibold">
                             <SendIcon className="size-4" aria-hidden="true" />
                             <span>选品册已发布，客户专属链接生效中</span>
                         </div>
-                        <p className="text-sm">
+                        <p className="text-body-compact">
                             专属安全链接已生成（30天有效）。可复制右侧链接发送给客户，客户在手机端打开即可选品。
                         </p>
                     </div>
@@ -454,11 +454,11 @@ export function BookWorkflowBanner({
                     className="flex flex-wrap items-center justify-between gap-4"
                 >
                     <div className="min-w-0 space-y-0.5">
-                        <div className="flex items-center gap-2 text-sm font-semibold">
+                        <div className="flex items-center gap-2 text-body-compact font-semibold">
                             <CheckIcon className="size-4" aria-hidden="true" />
                             <span>客户已完成选品并提交方案</span>
                         </div>
-                        <p className="text-sm">
+                        <p className="text-body-compact">
                             客户已提交选品，商品清单已锁定。
                             {detail.proposal_no ? (
                                 <>
@@ -491,7 +491,7 @@ export function BookWorkflowBanner({
 
             {isTerminal ? (
                 <div className="rounded-xl border border-border bg-muted/40 p-4">
-                    <p className="text-sm font-semibold text-foreground">
+                    <p className="text-body-compact font-semibold text-foreground">
                         该选品册已{detail.status === "CLOSED" ? "关闭" : "作废"}
                     </p>
                     <p className="mt-0.5 text-xs text-muted-foreground">

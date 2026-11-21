@@ -64,7 +64,7 @@ export function SupplierEditorContractSection({
                             !values.contractValidTo) && (
                             <p
                                 role="status"
-                                className="mb-4 text-sm text-warning-soft-foreground"
+                                className="mb-4 text-body-compact text-warning-soft-foreground"
                             >
                                 有效期未核实：请核实并补齐合同起止日期。
                             </p>

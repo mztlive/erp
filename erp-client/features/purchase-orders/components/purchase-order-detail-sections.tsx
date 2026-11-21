@@ -79,7 +79,7 @@ export function PurchaseOrderDetailSections({
             item.id === "approval" && approvalPending ? (
                 <Badge
                     variant="info"
-                    className="h-5 px-1.5 text-2xs font-normal"
+                    className="h-5 px-1.5 text-xs font-normal"
                 >
                     进行中
                 </Badge>

@@ -60,7 +60,7 @@ export function InvoiceAllocationTable({
                         <h2
                             id="invoice-allocation-title"
                             tabIndex={-1}
-                            className="text-sm font-semibold text-foreground"
+                            className="text-section-title font-semibold text-foreground tracking-tight"
                         >
                             核销明细
                         </h2>

@@ -129,7 +129,7 @@ export function PurchaseSourceUpdateWorkspace({
 
     return (
         <div className="min-w-0 space-y-5 px-5 py-5 @container/document">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-body-compact">
                 <StatusBadge
                     label={`采购单${order.identity.statusLabel}`}
                     tone={order.identity.statusTone}
@@ -150,7 +150,7 @@ export function PurchaseSourceUpdateWorkspace({
                 </span>
             </div>
             {query.isError ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     当前显示上次加载的采购情况，修改内容已保留。
                 </p>
             ) : null}
@@ -210,12 +210,12 @@ export function PurchaseSourceUpdateWorkspace({
                 <details className="rounded-lg border px-4 py-3">
                     <summary
                         id="purchase-source-update-exception"
-                        className="cursor-pointer text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-4"
+                        className="cursor-pointer text-body-compact font-medium focus-visible:outline-2 focus-visible:outline-offset-4"
                     >
                         供应商无法按销售变更调整采购
                     </summary>
                     <div className="mt-3 space-y-3">
-                        <p className="text-sm leading-relaxed text-muted-foreground">
+                        <p className="text-body-compact leading-relaxed text-muted-foreground">
                             已与供应商核实无法调整时，可填写原因并维持原采购。登记后本次影响待办结束，原采购数量和金额不变；多出的商品仍需另行处理。
                         </p>
                         <MaintainSourceButton
@@ -229,7 +229,7 @@ export function PurchaseSourceUpdateWorkspace({
             <details className="min-w-0 rounded-lg border px-4 py-3">
                 <summary
                     id="purchase-source-update-order-details"
-                    className="cursor-pointer text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-4"
+                    className="cursor-pointer text-body-compact font-medium focus-visible:outline-2 focus-visible:outline-offset-4"
                 >
                     查看当前采购明细与金额
                 </summary>

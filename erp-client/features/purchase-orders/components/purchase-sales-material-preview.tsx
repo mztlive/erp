@@ -38,7 +38,7 @@ export function PurchaseSalesMaterialPreview({
     return (
         <section className="space-y-3 border-t pt-5" aria-label="附件预览">
             <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="min-w-0 break-all text-sm font-medium">
+                <h3 className="min-w-0 break-all font-medium">
                     {file.fileName}
                 </h3>
                 <Button
@@ -59,7 +59,7 @@ export function PurchaseSalesMaterialPreview({
                     onRetry={() => void query.refetch()}
                 />
             ) : query.isFetching || !url ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     正在读取附件…
                 </p>
             ) : file.contentType === "application/pdf" ? (

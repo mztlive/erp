@@ -178,7 +178,7 @@ function SourceFlowPicker({
             {error ? (
                 <div
                     role="alert"
-                    className="flex items-center justify-between gap-3 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm"
+                    className="flex items-center justify-between gap-3 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-body-compact"
                 >
                     <span>{definitionErrorMessage(error)}</span>
                     <Button
@@ -202,7 +202,7 @@ function SourceFlowPicker({
             ) : (
                 <div
                     role="status"
-                    className="rounded-lg border border-dashed border-border px-4 py-12 text-center text-sm text-muted-foreground"
+                    className="rounded-lg border border-dashed border-border px-4 py-12 text-center text-body-compact text-muted-foreground"
                 >
                     {sourceType
                         ? versions.isSuccess &&
@@ -213,7 +213,7 @@ function SourceFlowPicker({
                         : "选择来源，预览将复制的流程"}
                 </div>
             )}
-            <p className="text-xs leading-5 text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 {replacesNodes
                     ? "带入后将替换当前编辑内容，点击保存草稿后才生效。"
                     : "来源流程保持不变，复制后可继续调整。"}

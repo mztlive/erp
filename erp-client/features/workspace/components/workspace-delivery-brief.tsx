@@ -53,8 +53,10 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
                         label={value("履约状态") ?? "状态待核对"}
                         tone={item.statusTone}
                     />
-                    <span className="text-sm font-medium">{mode}</span>
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-body-compact font-medium">
+                        {mode}
+                    </span>
+                    <span className="text-body-compact text-muted-foreground">
                         {lines.length} 项商品 · {pending} 项待发
                     </span>
                     {workspaceFulfillmentDescriptor(item)?.role ===
@@ -101,15 +103,17 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
                 </div>
             )}
             <section className={sectionClass} aria-label="收货信息">
-                <h4 className="text-sm font-semibold">收货信息</h4>
-                <p className="mt-2 text-sm text-muted-foreground">
+                <h4 className="text-body-compact font-semibold">收货信息</h4>
+                <p className="mt-2 text-xs text-muted-foreground">
                     {value("收货信息") ??
                         "收货信息暂不可用，请联系销售负责人核对"}
                 </p>
             </section>
             <section className={sectionClass} aria-label="本批次发货明细">
                 <div className="mb-3 flex flex-wrap items-baseline gap-2">
-                    <h4 className="text-sm font-semibold">本批次发货明细</h4>
+                    <h4 className="text-body-compact font-semibold">
+                        本批次发货明细
+                    </h4>
                     <span className="text-xs text-muted-foreground">
                         {lines.length} 项 · 数量仅统计当前批次
                     </span>
@@ -165,18 +169,20 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
                     </TableBody>
                 </Table>
                 {!lines.length ? (
-                    <p className="py-3 text-sm text-muted-foreground">
+                    <p className="py-3 text-xs text-muted-foreground">
                         本批次尚无发货明细
                     </p>
                 ) : null}
             </section>
             {hasDeliveryRecords ? (
                 <section className={sectionClass} aria-label="物流与发货记录">
-                    <h4 className="text-sm font-semibold">物流与发货记录</h4>
+                    <h4 className="text-body-compact font-semibold">
+                        物流与发货记录
+                    </h4>
                     {trackingLines.length > 0 ? (
                         <ul className="mt-3 space-y-3">
                             {trackingLines.map((line) => (
-                                <li key={line.id} className="text-sm">
+                                <li key={line.id} className="text-body-compact">
                                     <p className="font-medium">{line.title}</p>
                                     {line.tracking.map((tracking) => (
                                         <p
@@ -190,7 +196,7 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
                             ))}
                         </ul>
                     ) : (
-                        <p className="mt-2 text-sm text-muted-foreground">
+                        <p className="mt-2 text-xs text-muted-foreground">
                             尚未登记物流
                         </p>
                     )}
@@ -200,10 +206,13 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
                 </section>
             ) : null}
             <section className={sectionClass} aria-label="关联单据">
-                <h4 className="text-sm font-semibold">关联单据</h4>
+                <h4 className="text-body-compact font-semibold">关联单据</h4>
                 <dl className="mt-3 grid grid-cols-1 gap-3 @min-[640px]/delivery-brief:grid-cols-2">
                     {links.map((field) => (
-                        <div key={field.label} className="min-w-0 text-sm">
+                        <div
+                            key={field.label}
+                            className="min-w-0 text-body-compact"
+                        >
                             <dt className="mb-1 text-xs text-muted-foreground">
                                 {field.label}
                             </dt>
@@ -236,7 +245,7 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
 
 function Fact({ label, value }: { label: string; value?: string }) {
     return (
-        <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] items-baseline gap-3 text-sm">
+        <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] items-baseline gap-3 text-body-compact">
             <dt className="text-xs text-muted-foreground">{label}</dt>
             <dd className="min-w-0 break-words">{value || "未提供"}</dd>
         </div>

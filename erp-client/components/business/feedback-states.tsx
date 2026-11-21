@@ -385,7 +385,7 @@ function BusinessFailureState({
             data-slot="business-failure-state"
             data-kind={resolvedKind}
             className={cn(
-                "space-y-2 rounded-lg border border-border p-4 text-sm",
+                "space-y-2 rounded-lg border border-border p-4 text-body-compact",
                 className,
             )}
         >
@@ -538,7 +538,7 @@ function AsyncSectionState({
             {showActivity && hasChildren ? (
                 <div
                     role="status"
-                    className="flex items-center gap-2 rounded-2xl bg-surface-sunken px-3 py-2 text-sm text-muted-foreground"
+                    className="flex items-center gap-2 rounded-2xl bg-surface-sunken px-3 py-2 text-body-compact text-muted-foreground"
                 >
                     <Spinner
                         aria-label={

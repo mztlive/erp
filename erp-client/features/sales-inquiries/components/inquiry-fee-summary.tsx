@@ -36,7 +36,7 @@ export function InquiryFeeSummary({
         <div className="rounded-lg border bg-background px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                 <div className="min-w-0 flex-1">
-                    <p className="break-words text-sm font-medium">
+                    <p className="break-words text-body-compact font-medium">
                         {fee.name.trim() || "未填写费用名称"}
                     </p>
                     <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-muted-foreground">

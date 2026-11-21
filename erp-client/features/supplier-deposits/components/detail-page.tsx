@@ -859,7 +859,7 @@ function AccountSummary({ data }: { data: AccountDetail }) {
                     </AlertDescription>
                 </Alert>
             ) : null}
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 其他不可用额度：
                 <MoneyValue
                     value={data.account.unavailable_amount}

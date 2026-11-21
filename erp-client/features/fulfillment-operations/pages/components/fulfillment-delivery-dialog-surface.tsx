@@ -117,7 +117,7 @@ export function FulfillmentDeliveryDialogSurface({
                         <dt className="text-xs text-muted-foreground">
                             {field.label}
                         </dt>
-                        <dd className="min-w-0 break-words text-sm font-medium">
+                        <dd className="min-w-0 break-words text-body-compact font-medium">
                             {field.value}
                         </dd>
                     </div>
@@ -197,7 +197,7 @@ export function FulfillmentDeliveryDialogSurface({
                     <Collapsible>
                         <CollapsibleTrigger
                             id="fulfillment-dialog-purchase-details"
-                            className="flex w-full items-center justify-between gap-3 py-3 text-left text-sm font-medium"
+                            className="flex w-full items-center justify-between gap-3 py-3 text-left text-body-compact font-medium"
                         >
                             关联采购单
                             <ChevronDownIcon
@@ -206,7 +206,7 @@ export function FulfillmentDeliveryDialogSurface({
                             />
                         </CollapsibleTrigger>
                         <CollapsibleContent className="pb-3">
-                            <p className="num break-all text-sm text-muted-foreground">
+                            <p className="num break-all text-xs text-muted-foreground">
                                 {canViewPurchase &&
                                 operation.source.purchaseOrderId ? (
                                     <Link

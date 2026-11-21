@@ -287,7 +287,7 @@ export function SalesOrderPaperDocument({
                     : undefined)
             }
             signature={
-                <div className="space-y-8 text-sm">
+                <div className="space-y-8 text-body-compact">
                     <div>
                         <div className="text-muted-foreground">业务负责人</div>
                         <div className="mt-6 border-b border-dashed border-border pb-1">

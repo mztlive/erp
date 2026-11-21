@@ -9,7 +9,9 @@ function ContractField({ label, value }: { label: string; value: string }) {
     return (
         <div className="min-w-0">
             <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd className="mt-1 break-words text-sm">{value || "—"}</dd>
+            <dd className="mt-1 break-words text-body-compact">
+                {value || "—"}
+            </dd>
         </div>
     )
 }
@@ -31,7 +33,7 @@ export function SalesOrderDocumentsPanel({
         <div className="space-y-6">
             <DocumentSection
                 title="销售合同"
-                className="border-0 py-0 [&_h2]:text-sm [&>div:last-child]:pt-3"
+                className="border-0 py-0 [&_h2]:text-body-compact [&>div:last-child]:pt-3"
                 description={
                     hasContract
                         ? "合同条款随销售版本锁定，补录合同不会改写历史版本。"
@@ -62,7 +64,7 @@ export function SalesOrderDocumentsPanel({
                         />
                     </dl>
                 ) : (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         当前销售版本未关联合同。
                     </p>
                 )}

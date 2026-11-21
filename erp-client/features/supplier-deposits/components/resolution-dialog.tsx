@@ -184,11 +184,11 @@ export function DepositResolutionDialog({
                             : "须先查清原订单、真实扣款、冻结及后续费用。核实后将释放剩余冻结金额，并同步调整对应付款申请额度。"}
                     </DialogDescription>
                 </DialogHeader>
-                <p className="text-sm">
+                <p className="text-body-compact">
                     {account.supplier_name} · {account.payer_party_name}
                 </p>
                 {resolving ? (
-                    <div className="space-y-1 text-sm">
+                    <div className="space-y-1 text-body-compact">
                         <p>
                             原对账范围：
                             {format(
@@ -211,7 +211,7 @@ export function DepositResolutionDialog({
                         </p>
                     </div>
                 ) : (
-                    <div className="space-y-1 text-sm">
+                    <div className="space-y-1 text-body-compact">
                         <p>
                             原占用{" "}
                             <MoneyValue

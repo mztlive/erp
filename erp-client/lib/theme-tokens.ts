@@ -1,13 +1,13 @@
 /** globals.css 自定义字号的类合并注册名；取值仅由全局主题定义。 */
 export const themeTextNames = [
-    "2xs",
     "tiny",
     "body-compact",
     "section-title",
     "page-title",
+    "value-compact",
+    "value-section",
     "value-summary",
     "value-hero",
-    "login-title",
 ] as const
 
 /** globals.css 自定义尺寸的类合并注册名；新增尺寸须同步登记。 */

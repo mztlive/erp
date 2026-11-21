@@ -20,7 +20,7 @@ export function PortalAdminCommandConflict({
     const [error, setError] = useState<unknown>(null)
     return (
         <div className="space-y-3 rounded-lg border p-4">
-            <p className="text-sm">
+            <p className="text-body-compact">
                 资料或处理资格已变化。本次填写保留，请重新读取并核对，再修正内容。
             </p>
             <PortalError error={error} />
@@ -49,7 +49,7 @@ export function PortalAdminCommandConflict({
             {loaded && (
                 <label
                     htmlFor={`${idPrefix}-confirmed`}
-                    className="flex items-center gap-2 text-sm"
+                    className="flex items-center gap-2 text-xs"
                 >
                     <NativeCheckbox
                         id={`${idPrefix}-confirmed`}

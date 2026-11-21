@@ -37,6 +37,7 @@ export function PurchaseOrderDetailFulfillmentSection({
             <DetailSummary label="采购履约摘要">
                 <DetailSummaryItem
                     label="履约进度"
+                    valueRole="text"
                     value={summary.progressLabel}
                     detail={
                         FULFILLMENT_RESPONSIBILITY_LABEL[
@@ -46,6 +47,7 @@ export function PurchaseOrderDetailFulfillmentSection({
                 />
                 <DetailSummaryItem
                     label="预计交期"
+                    valueRole="text"
                     value={order.header.expectedDate ?? "—"}
                     detail={order.header.supplierSnapshot}
                 />
@@ -67,7 +69,7 @@ export function PurchaseOrderDetailFulfillmentSection({
                                     <dt className="text-xs text-muted-foreground">
                                         {item.label}
                                     </dt>
-                                    <dd className="num mt-1 text-lg font-medium">
+                                    <dd className="num mt-1 text-value-compact font-semibold tracking-tight">
                                         {item.value}
                                     </dd>
                                 </div>
@@ -77,7 +79,7 @@ export function PurchaseOrderDetailFulfillmentSection({
                 ) : null}
                 {summary.note ? (
                     <DetailRecordSection title="履约说明">
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             {summary.note}
                         </p>
                     </DetailRecordSection>
@@ -105,13 +107,13 @@ export function PurchaseOrderDetailFulfillmentSection({
                                     <dt className="text-xs text-muted-foreground">
                                         {item.label}
                                     </dt>
-                                    <dd className="mt-1 text-lg font-medium">
+                                    <dd className="num mt-1 text-value-compact font-semibold tracking-tight">
                                         {amount(item.value)}
                                     </dd>
                                 </div>
                             ))}
                         </dl>
-                        <p className="text-xs leading-5 text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             {gate.message}
                         </p>
                     </DetailRecordSection>

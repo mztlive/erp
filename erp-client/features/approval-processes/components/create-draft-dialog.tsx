@@ -317,7 +317,7 @@ export function CreateDraftDialog({
                                                     />
                                                     <option.icon className="size-4 shrink-0 text-muted-foreground" />
                                                     <span className="space-y-1">
-                                                        <span className="block text-sm font-medium">
+                                                        <span className="block text-body-compact font-medium">
                                                             {option.label}
                                                         </span>
                                                         <span className="block text-xs text-muted-foreground">
@@ -342,7 +342,7 @@ export function CreateDraftDialog({
                                 source === "OTHER" ? (
                                     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/40 p-3">
                                         <div className="min-w-0">
-                                            <p className="text-sm font-medium">
+                                            <p className="text-body-compact font-medium">
                                                 {copied
                                                     ? documentTypeLabel(
                                                           copied.document_type,

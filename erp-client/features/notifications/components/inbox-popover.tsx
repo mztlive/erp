@@ -153,7 +153,7 @@ export function InboxPopover() {
             >
                 <InboxIcon className="size-4" aria-hidden="true" />
                 {unread ? (
-                    <span className="num pointer-events-none absolute top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-2xs font-semibold leading-none text-destructive-foreground ring-2 ring-card">
+                    <span className="num pointer-events-none absolute top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-tiny font-semibold leading-none text-destructive-foreground ring-2 ring-card">
                         {unread > 99 ? "99+" : unread}
                     </span>
                 ) : null}
@@ -180,7 +180,10 @@ export function InboxPopover() {
                     </p>
                 ) : null}
                 {read.isError ? (
-                    <p role="alert" className="text-sm text-destructive">
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
                         消息未能标记为已读，请重试。
                     </p>
                 ) : null}
@@ -225,7 +228,7 @@ export function InboxPopover() {
                                     )}
                                 >
                                     <div className="flex items-start gap-2">
-                                        <span className="flex-1 text-sm font-medium">
+                                        <span className="flex-1 text-body-compact font-medium">
                                             {message.title}
                                         </span>
                                         {message.read_at == null ? (

@@ -107,7 +107,7 @@ function DraftSaveIndicator({
             role="status"
             aria-live="polite"
             className={cn(
-                "flex flex-wrap items-center gap-2 text-sm",
+                "flex flex-wrap items-center gap-2 text-body-compact",
                 className,
             )}
         >
@@ -361,7 +361,7 @@ function FormalActionResult({
             aria-live="polite"
             tabIndex={-1}
             className={cn(
-                "erp-raised-surface rounded-lg border border-border bg-card px-4 py-3 text-sm text-card-foreground shadow-xs",
+                "erp-raised-surface rounded-lg border border-border bg-card px-4 py-3 text-body-compact text-card-foreground shadow-xs",
                 className,
             )}
         >
@@ -484,7 +484,7 @@ function BackgroundJobProgress({
             data-status={status}
             aria-live="polite"
             className={cn(
-                "flex flex-col gap-4 rounded-2xl border bg-card p-4 text-sm",
+                "flex flex-col gap-4 rounded-2xl border bg-card p-4 text-body-compact",
                 className,
             )}
         >
@@ -639,7 +639,7 @@ function SensitiveValue({
             )}
         >
             <span className="sr-only">{label}：</span>
-            <code className="num rounded-xl bg-muted px-2 py-1 font-mono text-sm">
+            <code className="num rounded-xl bg-muted px-2 py-1 font-mono text-body-compact">
                 {displayValue}
             </code>
             {onReveal ? (

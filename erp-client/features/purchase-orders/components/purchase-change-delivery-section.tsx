@@ -84,7 +84,7 @@ function DeliveryGroup({
     const unit = source.base_unit_code ?? ""
     return (
         <div className="min-w-0 space-y-3 p-4">
-            <p className="break-words text-sm font-medium">
+            <p className="break-words text-body-compact font-medium">
                 {source.product_name ?? "采购商品/服务"}
                 <span className="num ml-2 font-normal text-muted-foreground">
                     {compactFixed(line.quantity || "0")} {unit}

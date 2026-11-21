@@ -61,7 +61,7 @@ export function ReceiptAllocationSource({
             ) : null}
             {source ? (
                 <p
-                    className="text-xs leading-5 text-muted-foreground"
+                    className="text-xs text-muted-foreground"
                     title={source.products.join("；")}
                 >
                     {source.products.length > 0

@@ -28,7 +28,7 @@ function SettlementCenterBlockersAlert({
         <Alert variant="warning">
             <AlertTitle>动作门禁</AlertTitle>
             <AlertDescription>
-                <ul className="list-inside list-disc text-sm">
+                <ul className="list-inside list-disc text-body-compact">
                     {visible.map((b) => (
                         <li key={`${b.action}-${b.code}`}>{b.message}</li>
                     ))}

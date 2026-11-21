@@ -46,7 +46,9 @@ export function SalesOrderProcessPanel({
             />
             <section aria-label="流程记录" className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="text-sm font-semibold">流程记录</h2>
+                    <h2 className="text-section-title font-semibold tracking-tight">
+                        流程记录
+                    </h2>
                     <div className="flex flex-wrap items-center gap-3">
                         <label
                             htmlFor={`${prefix}-category`}

@@ -58,10 +58,10 @@ export function RequestReviewContent({
                     "space-y-4 py-4",
                 )}
             >
-                <h2 className="text-sm font-semibold">
+                <h2 className="text-section-title font-semibold tracking-tight">
                     {bank ? "收款与材料" : "预存款与材料"}
                 </h2>
-                <dl className="grid gap-x-8 gap-y-3 text-sm @min-[640px]/payment-review:grid-cols-2 @min-[1100px]/payment-review:grid-cols-3">
+                <dl className="grid gap-x-8 gap-y-3 text-body-compact @min-[640px]/payment-review:grid-cols-2 @min-[1100px]/payment-review:grid-cols-3">
                     <Info label="付款主体">{request.our_company_name}</Info>
                     {bank ? (
                         <>
@@ -90,7 +90,7 @@ export function RequestReviewContent({
                     <Info label="申请说明">{request.description || "—"}</Info>
                 </dl>
                 {!bank && (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         批准后占用预存款额度，实际扣款核实后核销，不登记银行付款。
                     </p>
                 )}
@@ -122,7 +122,7 @@ export function RequestReviewContent({
                                 className="space-y-6 pt-4"
                             >
                                 {approval ?? (
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         尚未提交财务审核。
                                     </p>
                                 )}

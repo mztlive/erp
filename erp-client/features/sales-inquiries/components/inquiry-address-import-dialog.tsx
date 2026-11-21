@@ -159,7 +159,7 @@ export function InquiryAddressImportDialog({
                         )}
                         {!rows.length ? (
                             <>
-                                <p className="text-sm">
+                                <p className="text-body-compact">
                                     列顺序：收件人、联系电话、省、市、区、详细地址、配送数量（选填，默认
                                     1）。
                                 </p>
@@ -307,7 +307,7 @@ export function InquiryAddressImportDialog({
                                     </TableToolbarScope>
                                 )}
                                 {progress && (
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         处理后：{progress.label}。
                                     </p>
                                 )}

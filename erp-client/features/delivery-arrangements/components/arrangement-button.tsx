@@ -114,7 +114,7 @@ export function ArrangementButton({
                             </Button>
                         </div>
                     ) : (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             正在读取收货安排…
                         </p>
                     )}
@@ -260,12 +260,12 @@ function ArrangementEditor({
             }}
         >
             {data.blocked_reason ? (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {data.blocked_reason}
                 </p>
             ) : null}
             {data.source_changed ? (
-                <p role="status" className="text-sm text-warning">
+                <p role="status" className="text-body-compact text-warning">
                     销售内容已有更新，请重新核对本次收货安排。
                 </p>
             ) : null}
@@ -285,7 +285,7 @@ function ArrangementEditor({
                                             <p className="font-medium">
                                                 {source.item_name}
                                             </p>
-                                            <p className="text-sm text-muted-foreground">
+                                            <p className="text-xs text-muted-foreground">
                                                 共{" "}
                                                 {compactFixed(source.quantity)}{" "}
                                                 {source.unit} · 待补地址{" "}
@@ -338,7 +338,7 @@ function ArrangementEditor({
                                         </Button>
                                     </div>
                                     {source.shipped_addresses.length ? (
-                                        <div className="rounded-md border p-3 text-sm">
+                                        <div className="rounded-md border p-3 text-body-compact">
                                             <p className="font-medium">
                                                 已发部分（地址及数量不可减少）
                                             </p>
@@ -361,7 +361,7 @@ function ArrangementEditor({
                                         </div>
                                     ) : null}
                                     {line.allocations.length === 0 ? (
-                                        <p className="text-sm text-muted-foreground">
+                                        <p className="text-xs text-muted-foreground">
                                             待补收货地址；本项商品暂不发货。
                                         </p>
                                     ) : null}
@@ -600,7 +600,7 @@ function ArrangementEditor({
                             />
                             <Label
                                 htmlFor={`${prefix}-reset-packages`}
-                                className="block text-sm leading-relaxed"
+                                className="block leading-relaxed"
                             >
                                 我已确认：地址发生变化的包裹需要重新登记，原物流号保留供核对。
                                 {hasUnsavedChanges
@@ -613,7 +613,7 @@ function ArrangementEditor({
             ) : null}
             <FormValidationSummary form={form} />
             {mutation.isError ? (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {mutation.error.message}
                     。已保留您刚才填写的内容；若单据已被他人更新，请关闭窗口后重新打开核对。
                 </p>

@@ -92,7 +92,7 @@ export function DetailPageHeader({
                         </Button>
                     ) : null}
                     {navigationMeta ? (
-                        <div className="min-w-0 text-sm text-muted-foreground">
+                        <div className="min-w-0 text-xs text-muted-foreground">
                             {navigationMeta}
                         </div>
                     ) : null}

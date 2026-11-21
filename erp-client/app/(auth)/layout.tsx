@@ -11,7 +11,7 @@ export default function AuthLayout({
     return (
         <Suspense
             fallback={
-                <div className="flex min-h-svh items-center justify-center bg-background text-sm text-muted-foreground">
+                <div className="flex min-h-svh items-center justify-center bg-background text-body-compact text-muted-foreground">
                     加载中…
                 </div>
             }

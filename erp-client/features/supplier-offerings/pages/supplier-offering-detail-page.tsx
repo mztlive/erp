@@ -59,7 +59,7 @@ export function SupplierOfferingDetailPage({
         return (
             <PageScaffold density="compact">
                 <DetailPageHeader title="供给资料" back={back} />
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     正在加载供给资料…
                 </p>
             </PageScaffold>

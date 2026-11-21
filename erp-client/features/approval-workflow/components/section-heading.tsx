@@ -13,7 +13,11 @@ export function ApprovalSectionHeading({
     children: React.ReactNode
 }) {
     if (compact) {
-        return <h2 className="text-sm font-medium">{children}</h2>
+        return (
+            <h2 className="text-section-title font-semibold tracking-tight">
+                {children}
+            </h2>
+        )
     }
     return <CardTitle>{children}</CardTitle>
 }

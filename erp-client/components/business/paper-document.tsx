@@ -139,7 +139,7 @@ function PaperDocument<Row>({
                 data-slot="paper-document"
                 aria-label={ariaLabel ?? "纸质单据预览"}
                 className={cn(
-                    "mx-auto min-h-screen min-w-3xl max-w-5xl border border-border bg-card px-10 py-12 text-card-foreground shadow-lg print:min-h-0 print:min-w-0 print:max-w-none print:border-0 print:px-0 print:py-0 print:shadow-none",
+                    "mx-auto min-h-screen min-w-3xl max-w-5xl border border-border bg-card px-10 py-12 text-sm text-card-foreground shadow-lg print:min-h-0 print:min-w-0 print:max-w-none print:border-0 print:px-0 print:py-0 print:shadow-none",
                     frame === "bare" && "min-h-0 shadow-2xl",
                     className,
                 )}

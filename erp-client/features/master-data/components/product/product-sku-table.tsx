@@ -174,7 +174,7 @@ function SkuRow({
                     {sku.skuNo ? (
                         <p
                             id={`master-data-product-sku-${skuSegment}-code`}
-                            className="num truncate pl-2.5 text-xs leading-5 text-muted-foreground"
+                            className="num truncate pl-2.5 text-xs text-muted-foreground"
                             title="SKU 编码：系统生成，不可修改"
                         >
                             {sku.skuNo}

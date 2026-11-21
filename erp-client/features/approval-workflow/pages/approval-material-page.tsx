@@ -23,7 +23,7 @@ export function ApprovalMaterialPage() {
                     sourceRevisionId={sourceRevisionId}
                 />
             ) : (
-                <main className="p-6 text-sm" role="alert">
+                <main className="p-6 text-body-compact" role="alert">
                     附件链接不完整，请返回审批提交资料重新打开。
                 </main>
             )}

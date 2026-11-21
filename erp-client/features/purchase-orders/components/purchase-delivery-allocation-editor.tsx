@@ -47,7 +47,10 @@ export function PurchaseDeliveryAllocationEditor({
             className="space-y-2 rounded-lg border border-border/70 p-3"
         >
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h4 id={`${id}-title`} className="text-sm font-medium">
+                <h4
+                    id={`${id}-title`}
+                    className="text-body-compact font-medium"
+                >
                     第 {option.lineNo} 行 {option.itemName} · 收件分配
                 </h4>
                 <p

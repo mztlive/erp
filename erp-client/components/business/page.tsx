@@ -198,7 +198,7 @@ function MetricItem({
                 <div
                     className={cn(
                         "num max-w-full wrap-anywhere font-semibold tracking-tight text-foreground",
-                        compact ? "text-xl" : "text-2xl",
+                        compact ? "text-value-compact" : "text-value-section",
                     )}
                 >
                     {value}
@@ -351,7 +351,7 @@ function PageScaffold({
                 "px-page-inline py-page-block md:px-page-inline-lg md:py-page-block-lg",
                 density === "compact" ? "gap-page-gap-compact" : "gap-page-gap",
                 "[&>[data-slot=page-header]]:pb-1",
-                "[&:has(>[data-slot=document-header])>[data-slot=page-header]_h1]:text-sm",
+                "[&:has(>[data-slot=document-header])>[data-slot=page-header]_h1]:text-body-compact",
                 "[&:has(>[data-slot=document-header])>[data-slot=page-header]_h1]:font-normal",
                 "[&:has(>[data-slot=document-header])>[data-slot=page-header]_h1]:text-muted-foreground",
                 className,

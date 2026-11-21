@@ -92,7 +92,7 @@ export function RequestOrderPicker({
                                 : "支持跨供应商选择；仅显示已生效、有可申请余额且你有申请资格的采购单。"}
                         </p>
                         <div className="overflow-x-auto rounded-lg border">
-                            <Table className="w-full text-left text-sm">
+                            <Table className="w-full text-left text-body-compact">
                                 <TableHeader className="bg-muted/60 text-xs text-muted-foreground">
                                     <TableRow>
                                         <TableHead className="w-10 p-3">

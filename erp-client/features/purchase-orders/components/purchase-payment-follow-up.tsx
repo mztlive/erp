@@ -65,7 +65,7 @@ export function PurchasePaymentFollowUp({
                 )}
             </form.AppField>
             {mutation.isError && (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {getErrorMessage(
                         mutation.error,
                         "跟进安排保存失败，请重试",

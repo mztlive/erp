@@ -102,11 +102,11 @@ export function SupplierApplicationsSection({
             <div className="space-y-1">
                 <h2
                     id="supplier-applications-title"
-                    className="text-base font-semibold"
+                    className="text-section-title font-semibold tracking-tight"
                 >
                     供应商申请
                 </h2>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     查看当前供应商的报价、商品及合作资料申请；待处理事项也可从工作台进入。
                 </p>
             </div>

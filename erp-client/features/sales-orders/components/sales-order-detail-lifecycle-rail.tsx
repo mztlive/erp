@@ -60,7 +60,7 @@ function RailNode({ step }: { step: LifecycleStep }) {
     const node = (
         <span
             className={cn(
-                "inline-flex items-center gap-3 text-sm leading-6",
+                "inline-flex items-center gap-3 text-body-compact leading-6",
                 step.state === "current" && "font-semibold text-foreground",
                 step.state === "done" && "text-muted-foreground",
                 step.state === "todo" && "text-muted-foreground",

@@ -31,17 +31,17 @@ export function BatchReviewSummary({
                     role="status"
                     className="flex flex-wrap items-center gap-2"
                 >
-                    <span className="text-base font-semibold text-warning-soft-foreground">
+                    <span className="text-body-compact font-semibold text-warning-soft-foreground">
                         待重新核对
                     </span>
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-body-compact text-muted-foreground">
                         {view.batch.preview_version == null
                             ? "核对后可确认入库"
                             : "草稿已恢复或调整，以下为上次核对结果"}
                     </span>
                 </div>
             ) : null}
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-body-compact">
                 {hasPreview ? (
                     <p
                         className={
@@ -55,7 +55,7 @@ export function BatchReviewSummary({
                             className={
                                 needsRecheck
                                     ? "num"
-                                    : "num text-xl font-semibold"
+                                    : "num text-value-compact font-semibold tracking-tight"
                             }
                         >
                             {readyIds.length}

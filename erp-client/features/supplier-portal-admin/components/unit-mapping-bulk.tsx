@@ -194,7 +194,7 @@ export function PortalUnitMappingBulk({
     return (
         <section className="space-y-3 rounded-lg border p-4">
             <h3 className="font-medium">批量确认相同单位</h3>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 先逐行确认一个来源规格；提报单位与标准单位名称不同时，必须勾选一致确认并填写说明。再勾选提报单位、包装和报价口径完全一致的未匹配规格，自动填充标准单位及一致说明，并保留供应商提报的包装、价格及数量。
             </p>
             <form.AppField name="sourceRowId">
@@ -217,7 +217,7 @@ export function PortalUnitMappingBulk({
                 )}
             </form.AppField>
             {!sources.length && (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     暂无可用来源。请先逐行确认有效单位及必要的同义依据；单位版本变化、同义核对不完整或包装换算未经供应商确认时，不能批量应用。
                 </p>
             )}
@@ -361,7 +361,7 @@ export function PortalUnitMappingBulk({
                 }}
             </form.Subscribe>
             {feedback && (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     {feedback}
                 </p>
             )}

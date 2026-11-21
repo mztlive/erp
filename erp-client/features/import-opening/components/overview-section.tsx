@@ -94,7 +94,7 @@ export function OverviewSection({
                     {batch.openingPolicyHints.map((hint) => (
                         <div
                             key={hint.objectCode}
-                            className="space-y-1 text-sm"
+                            className="space-y-1 text-body-compact"
                         >
                             <div className="font-medium">
                                 {OBJECT_CODE_LABEL[hint.objectCode]}

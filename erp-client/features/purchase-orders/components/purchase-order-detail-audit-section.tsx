@@ -16,13 +16,13 @@ export function PurchaseOrderDetailAuditSection({
             compact={order.workflow.length === 0}
         >
             {order.workflow.length === 0 ? (
-                <p className="text-sm text-muted-foreground">暂无操作记录</p>
+                <p className="text-xs text-muted-foreground">暂无操作记录</p>
             ) : (
                 <ol className="ml-1 border-l border-border/70">
                     {order.workflow.map((item) => (
                         <li
                             key={item.id}
-                            className="relative pb-5 pl-5 text-sm last:pb-0"
+                            className="relative pb-5 pl-5 text-body-compact last:pb-0"
                         >
                             <span
                                 aria-hidden="true"
@@ -43,7 +43,7 @@ export function PurchaseOrderDetailAuditSection({
                                 {item.actorLabel}
                             </p>
                             {item.comment ? (
-                                <p className="mt-3 whitespace-pre-wrap break-words rounded-lg bg-muted/40 px-4 py-3 text-sm leading-6">
+                                <p className="mt-3 whitespace-pre-wrap break-words rounded-lg bg-muted/40 px-4 py-3 text-body-compact leading-6">
                                     {item.comment}
                                 </p>
                             ) : null}

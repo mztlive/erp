@@ -18,7 +18,7 @@ export function PurchasePaymentReceipts({
 }) {
     const { query, download } = usePurchasePaymentReceipts(workItemId)
     const messageClass = cn(
-        "text-sm text-muted-foreground",
+        "text-body-compact text-muted-foreground",
         layout === "section" && "mt-2",
     )
     const content = query.isPending ? (
@@ -59,7 +59,7 @@ export function PurchasePaymentReceipts({
                     className={
                         layout === "row"
                             ? "text-xs font-normal text-muted-foreground"
-                            : "text-sm font-semibold"
+                            : "font-semibold"
                     }
                 >
                     {title}

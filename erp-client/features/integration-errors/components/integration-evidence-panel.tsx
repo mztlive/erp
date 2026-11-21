@@ -16,7 +16,7 @@ export function IntegrationEvidencePanel({
                 id="integration-evidence-history-toggle"
                 className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-                <h3 className="text-sm font-semibold">执行与处理记录</h3>
+                <h3 className="font-semibold">执行与处理记录</h3>
                 <span className="flex items-center gap-3 text-xs text-muted-foreground">
                     {item.auditTrail.length} 条处理记录 ·{" "}
                     {item.linkedEvidence.length} 项核验
@@ -29,12 +29,14 @@ export function IntegrationEvidencePanel({
             <div className="space-y-5 pt-5">
                 {item.attempts.length > 0 ? (
                     <div className="space-y-2">
-                        <h4 className="text-sm font-medium">最近执行尝试</h4>
+                        <h4 className="text-body-compact font-medium">
+                            最近执行尝试
+                        </h4>
                         <ul className="space-y-2">
                             {item.attempts.map((attempt) => (
                                 <li
                                     key={`${attempt.attemptNumber}-${attempt.attemptedAt}`}
-                                    className="border-l-2 border-border px-4 py-2 text-sm"
+                                    className="border-l-2 border-border px-4 py-2 text-body-compact"
                                 >
                                     <div className="font-medium">
                                         第 {attempt.attemptNumber} 次 ·{" "}
@@ -60,7 +62,9 @@ export function IntegrationEvidencePanel({
 
                 {item.evidenceTimeline.length > 0 ? (
                     <div>
-                        <h4 className="mb-2 text-sm font-medium">证据时间线</h4>
+                        <h4 className="mb-2 text-body-compact font-medium">
+                            证据时间线
+                        </h4>
                         <AuditTimeline
                             entries={item.evidenceTimeline.map((entry) => ({
                                 id: entry.id,
@@ -80,7 +84,9 @@ export function IntegrationEvidencePanel({
                 ) : null}
 
                 <div>
-                    <h4 className="mb-2 text-sm font-medium">处理审计</h4>
+                    <h4 className="mb-2 text-body-compact font-medium">
+                        处理审计
+                    </h4>
                     <AuditTimeline
                         entries={item.auditTrail.map((entry) => ({
                             id: entry.id,
@@ -103,8 +109,10 @@ export function IntegrationEvidencePanel({
 
                 {item.linkedEvidence.length > 0 ? (
                     <div className="space-y-1">
-                        <h4 className="text-sm font-medium">已关联核验记录</h4>
-                        <ul className="text-sm">
+                        <h4 className="text-body-compact font-medium">
+                            已关联核验记录
+                        </h4>
+                        <ul className="text-body-compact">
                             {item.linkedEvidence.map((evidence) => (
                                 <li
                                     key={evidence.recordId}

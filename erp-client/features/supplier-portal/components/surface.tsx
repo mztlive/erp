@@ -61,7 +61,7 @@ export function PortalError({
     return (
         <div
             role="alert"
-            className="rounded-lg border border-destructive/30 p-4 text-sm text-destructive"
+            className="rounded-lg border border-destructive/30 p-4 text-body-compact text-destructive"
         >
             <p>{getErrorMessage(error, "操作未完成，请核对后重试")}</p>
             {retry && (
@@ -89,7 +89,7 @@ export function PortalPaging({
     prefix: string
 }) {
     return (
-        <div className="flex items-center justify-end gap-3 text-sm">
+        <div className="flex items-center justify-end gap-3 text-body-compact">
             <span>
                 共 {total} 条 · 第 {page} 页
             </span>

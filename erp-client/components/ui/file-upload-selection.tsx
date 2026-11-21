@@ -129,7 +129,7 @@ function SelectedFile({
                                     href={url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-sm text-primary underline underline-offset-2"
+                                    className="text-body-compact text-primary underline underline-offset-2"
                                 >
                                     在新窗口打开
                                 </a>

@@ -69,7 +69,7 @@ export function AcceptanceHistoryList({
             }
         >
             {ordered.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     还没有验收记录。
                 </p>
             ) : (
@@ -185,7 +185,7 @@ function HistoryEntry({
                         <p>已被 {relatedReversalNo} 冲正</p>
                     ) : null}
                     {comment ? (
-                        <p className="rounded-lg bg-muted px-2.5 py-1.5 text-sm text-foreground">
+                        <p className="rounded-lg bg-muted px-2.5 py-1.5 text-body-compact text-foreground">
                             {comment}
                         </p>
                     ) : null}

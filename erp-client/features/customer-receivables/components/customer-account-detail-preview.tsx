@@ -457,7 +457,7 @@ export function CustomerAccountDetailPreview({
                 </div>
             ) : isError ? (
                 <div className="space-y-3">
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         {getErrorMessage(error, "详情加载失败，请重试。")}
                     </p>
                     <Button
@@ -473,12 +473,12 @@ export function CustomerAccountDetailPreview({
             ) : data?.receivable ? (
                 <ReceivableDetailBody
                     row={data.receivable}
-                    className="space-y-6 text-sm"
+                    className="space-y-6 text-body-compact"
                 />
             ) : data?.receipt ? (
                 <ReceiptDetailBody
                     approvalActionsInFooter
-                    className="space-y-6 text-sm"
+                    className="space-y-6 text-body-compact"
                     row={data.receipt}
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
@@ -487,7 +487,7 @@ export function CustomerAccountDetailPreview({
                 />
             ) : data?.refund ? (
                 <CustomerRefundDetailBody
-                    className="space-y-6 text-sm"
+                    className="space-y-6 text-body-compact"
                     row={data.refund}
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
@@ -496,7 +496,7 @@ export function CustomerAccountDetailPreview({
                 />
             ) : data?.reversal ? (
                 <ReceiptReversalDetailBody
-                    className="space-y-6 text-sm"
+                    className="space-y-6 text-body-compact"
                     row={data.reversal}
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
@@ -506,10 +506,10 @@ export function CustomerAccountDetailPreview({
             ) : data?.invoice ? (
                 <InvoiceDetailBody
                     row={data.invoice}
-                    className="space-y-6 text-sm"
+                    className="space-y-6 text-body-compact"
                 />
             ) : (
-                <div className="text-sm text-muted-foreground">
+                <div className="text-body-compact text-muted-foreground">
                     未找到该笔记录，可能已超出当前数据范围。
                 </div>
             )}

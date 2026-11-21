@@ -160,7 +160,7 @@ export function InquiryProductsTable({
                         : undefined
                 }
                 summary={
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-muted-foreground">
                         {feedback
                             ? `第 ${feedback.round} 轮反馈对应需求第 ${feedback.requirement_version} 版`
                             : "当前商品需求"}
@@ -179,7 +179,7 @@ export function InquiryProductsTable({
                 {activeLine && (
                     <>
                         {results.get(activeLine.line_id)?.public_note && (
-                            <p className="whitespace-pre-wrap rounded-lg bg-muted/40 p-3 text-sm">
+                            <p className="whitespace-pre-wrap rounded-lg bg-muted/40 p-3">
                                 采购说明：
                                 {results.get(activeLine.line_id)?.public_note}
                             </p>
@@ -328,7 +328,7 @@ function ProductRow({
                                         id={`${prefix}-delivery-attention`}
                                         variant="link"
                                         size="sm"
-                                        className="mt-1 h-auto max-w-full items-start justify-end gap-1 p-0 text-right text-xs leading-5 whitespace-normal text-warning-soft-foreground"
+                                        className="mt-1 h-auto max-w-full items-start justify-end gap-1 p-0 text-right text-xs whitespace-normal text-warning-soft-foreground"
                                         aria-label={`${line.product_name}：${attention}，查看${line.fulfillment_kind === "physical" ? "配送地址" : "交付要求"}`}
                                         onClick={onDetails}
                                     >

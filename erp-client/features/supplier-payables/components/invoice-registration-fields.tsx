@@ -25,7 +25,7 @@ export function InvoiceRegistrationFields({
                 填写发票信息
             </h2>
             {session?.existingInvoiceId ? (
-                <div className="space-y-2 text-sm">
+                <div className="space-y-2 text-body-compact">
                     <p>原发票 {session.existingDocumentNo}</p>
                     <p>
                         未核销金额{" "}

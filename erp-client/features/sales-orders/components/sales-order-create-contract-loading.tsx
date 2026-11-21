@@ -30,7 +30,7 @@ export function SalesOrderCreateContractLoading({
         >
             <h2
                 id="sales-contract-handoff-title"
-                className="flex items-center gap-2 font-semibold"
+                className="text-section-title font-semibold tracking-tight flex items-center gap-2"
             >
                 {!failed ? <Spinner /> : null}
                 {failed
@@ -39,7 +39,7 @@ export function SalesOrderCreateContractLoading({
                       ? "合同已归档，正在带入开单信息"
                       : "正在加载合同信息"}
             </h2>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 {failed
                     ? imported
                         ? "合同已经归档，无需重新上传。请重试加载开单信息。"
@@ -47,7 +47,7 @@ export function SalesOrderCreateContractLoading({
                     : "正在读取客户、结算主体与合同条款，请稍候。"}
             </p>
             {revisionUnavailable ? (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {customerMismatch
                         ? "所选合同的客户与销售方案不一致，请更换同客户的有效合同。"
                         : "所选合同版本不存在或已更新，请重新加载或更换有效合同。"}

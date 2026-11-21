@@ -382,7 +382,7 @@ function DictionaryCreateForm({
                     />
                 )}
                 {unknown && (
-                    <p role="status" className="text-sm text-muted-foreground">
+                    <p role="status" className="text-xs text-muted-foreground">
                         本次结果尚未确认，填写内容已保留。请核对已创建记录，再继续审核。
                     </p>
                 )}
@@ -392,7 +392,7 @@ function DictionaryCreateForm({
                     candidates.some(
                         (candidate) => candidate.name.trim() === rawName.trim(),
                     ) && (
-                        <div className="space-y-2 text-sm">
+                        <div className="space-y-2 text-body-compact">
                             <p>已有相同名称品牌，请确认是否复用。</p>
                             {candidates
                                 .filter(
@@ -454,7 +454,7 @@ function DictionaryCreateForm({
                     </form.AppField>
                     {kind === "category" && (
                         <>
-                            <p className="text-sm">
+                            <p className="text-body-compact">
                                 适用商品类型：
                                 {productKindLabels[productKind] ?? "待确认"}
                             </p>
@@ -502,7 +502,7 @@ function DictionaryCreateForm({
                                             candidate.id === parentId,
                                     )
                                     return (
-                                        <p className="text-sm text-muted-foreground">
+                                        <p className="text-xs text-muted-foreground">
                                             创建路径：
                                             {parent
                                                 ? `${parent.path ?? parent.name} / `

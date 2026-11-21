@@ -171,7 +171,7 @@ function TemplateSelection({
                 void form.handleSubmit()
             }}
         >
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 财务分岗时选择“财务总监、出纳、开票”；“财务”是包含全部财务能力的可选综合岗位。分岗人员不要同时绑定综合财务角色。角色生成后，在人员资料分配角色和数据范围，并指定审批、付款、开票及仓库经办人。
             </p>
             <div className="min-h-0 overflow-y-auto divide-y rounded-lg border">
@@ -205,7 +205,7 @@ function TemplateSelection({
                 </form.AppField>
             </div>
             {(error || stale) && (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {stale
                         ? "权限配置已更新，请关闭后重新打开，核对岗位再生成。"
                         : error}
@@ -292,7 +292,7 @@ function TemplateRow({
                     <span className="ml-2 text-xs text-muted-foreground">
                         {STATE_LABEL[template.state]}
                     </span>
-                    <p className="mt-1 text-sm text-muted-foreground">
+                    <p className="mt-1 text-xs text-muted-foreground">
                         {template.description}
                     </p>
                     {template.existing_name && (
@@ -320,7 +320,10 @@ function TemplateRow({
                 </Button>
             </div>
             {expanded && (
-                <div id={`${id}-content`} className="space-y-3 pl-7 text-sm">
+                <div
+                    id={`${id}-content`}
+                    className="space-y-3 pl-7 text-body-compact"
+                >
                     <div>
                         <p className="font-medium">操作权限</p>
                         <p className="mt-1 text-muted-foreground">
@@ -371,7 +374,7 @@ function GenerationResult({
                         {result.state === "existing" && (
                             <Link
                                 id={`roles-builtin-result-${toAutomationIdSegment(result.id)}`}
-                                className="text-sm underline"
+                                className="text-body-compact underline"
                                 href={`/system/roles/${encodeURIComponent(result.id)}/edit`}
                             >
                                 查看角色
@@ -380,7 +383,7 @@ function GenerationResult({
                     </li>
                 ))}
             </ul>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 下一步：到“组织与人员”分配岗位角色，按岗位说明配置数据范围和业务责任。
             </p>
             <DialogFooter>

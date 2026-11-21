@@ -38,7 +38,7 @@ export function RequestDraftWorkspace({
     ].find((group) => issues.has(group.key))
     if (!selected)
         return (
-            <p role="alert" className="p-6 text-sm">
+            <p role="alert" className="p-6 text-body-compact">
                 {fixedOrder
                     ? "当前采购单暂无可申请付款的来源，请核对采购单是否已生效、余额是否已付清或已被其他申请占用，以及是否存在待处理的采购依据变更。"
                     : "当前采购来源不可申请，请返回上一步重新选择。"}
@@ -47,7 +47,7 @@ export function RequestDraftWorkspace({
     return (
         <div className="flex min-h-0 flex-1 flex-col">
             {!fixedOrder ? (
-                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-6 py-3 text-sm">
+                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-6 py-3 text-body-compact">
                     <p>
                         共 <strong>{groups.length}</strong> 份申请{" "}
                         <span className="text-muted-foreground">

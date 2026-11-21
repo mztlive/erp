@@ -106,7 +106,7 @@ export function ItemsSection({
                                 </div>
                                 <Badge
                                     variant="secondary"
-                                    className="mt-1 text-2xs"
+                                    className="mt-1 text-xs"
                                 >
                                     下单记录不可变
                                 </Badge>

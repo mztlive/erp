@@ -33,7 +33,7 @@ function RelatedColumn({
     return (
         <DetailRecordColumn label={label}>
             {items.length === 0 ? (
-                <p className="py-2 text-sm text-muted-foreground">{empty}</p>
+                <p className="py-2 text-xs text-muted-foreground">{empty}</p>
             ) : (
                 items.map((item) => (
                     <DetailRecordRow key={item.id}>

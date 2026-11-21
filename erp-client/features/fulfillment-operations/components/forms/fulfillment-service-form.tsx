@@ -47,7 +47,7 @@ export function FulfillmentServiceForm({
     return (
         <div className="space-y-6" aria-label="线下服务表单">
             <section className="space-y-3">
-                <h3 className="text-sm font-semibold">服务项目</h3>
+                <h3 className="font-semibold">服务项目</h3>
                 {draft.lines.map((line, i) => {
                     const src = operation.lines.find(
                         (item) =>
@@ -61,7 +61,7 @@ export function FulfillmentServiceForm({
                             className="space-y-3 rounded-xl border border-border p-3"
                         >
                             <div className="space-y-0.5">
-                                <p className="text-sm font-medium">
+                                <p className="text-body-compact font-medium">
                                     {lineItemTitle(src?.itemName, i)}
                                 </p>
                                 {remaining ? (

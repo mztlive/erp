@@ -37,11 +37,11 @@ export function SupplierCreditUsePanel({
     const [selected, setSelected] = useState<SupplierCredit | null>(null)
     if (query.isPending)
         return (
-            <p className="text-sm text-muted-foreground">正在核对可用留抵…</p>
+            <p className="text-xs text-muted-foreground">正在核对可用留抵…</p>
         )
     if (query.isError)
         return (
-            <div className="text-sm">
+            <div className="text-body-compact">
                 <p role="alert">
                     {getErrorMessage(query.error, "留抵余额读取失败")}
                 </p>
@@ -60,11 +60,11 @@ export function SupplierCreditUsePanel({
             className="space-y-3 rounded-lg border p-4"
             aria-label="可用供应商留抵"
         >
-            <h3 className="text-sm font-medium">可用留抵</h3>
+            <h3 className="font-medium">可用留抵</h3>
             {query.data.map((credit) => (
                 <div
                     key={credit.id}
-                    className="flex flex-wrap items-center justify-between gap-3 text-sm"
+                    className="flex flex-wrap items-center justify-between gap-3 text-body-compact"
                 >
                     <div>
                         <MoneyValue
@@ -244,7 +244,10 @@ function CreditUseDialog({
                         )}
                     />
                     {error && (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {error}
                         </p>
                     )}

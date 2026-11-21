@@ -331,7 +331,7 @@ export function ProfitLossChartsAndStageReference({
                                     </ul>
                                 </>
                             ) : (
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-xs text-muted-foreground">
                                     当前范围无成本构成数据。
                                 </p>
                             )}
@@ -357,7 +357,7 @@ export function ProfitLossChartsAndStageReference({
                                     className="rounded-lg border border-dashed border-border bg-muted/30 p-3"
                                 >
                                     <div className="flex items-center justify-between gap-2">
-                                        <span className="text-sm font-medium">
+                                        <span className="text-body-compact font-medium">
                                             {line.label}
                                         </span>
                                         <Badge variant="outline">

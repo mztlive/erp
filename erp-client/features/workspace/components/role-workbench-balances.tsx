@@ -41,7 +41,7 @@ export function RoleWorkbenchBalances({
                     <div>
                         <h2
                             id="cashier-workbench-balances-title"
-                            className="text-sm font-semibold text-foreground"
+                            className="text-section-title font-semibold text-foreground tracking-tight"
                         >
                             待分配资金
                         </h2>
@@ -130,15 +130,15 @@ export function RoleWorkbenchBalances({
                                     {query.isPending ? (
                                         <Skeleton className="h-7 w-28" />
                                     ) : query.isError ? (
-                                        <span className="text-sm text-destructive">
+                                        <span className="text-body-compact text-destructive">
                                             读取失败，点击重试
                                         </span>
                                     ) : query.data?.noScope ? (
-                                        <span className="text-sm text-muted-foreground">
+                                        <span className="text-body-compact text-muted-foreground">
                                             暂无数据查看权限
                                         </span>
                                     ) : value == null ? (
-                                        <span className="text-sm text-muted-foreground">
+                                        <span className="text-body-compact text-muted-foreground">
                                             {query.data?.limited
                                                 ? "仅统计权限内部分数据"
                                                 : "暂不可用"}

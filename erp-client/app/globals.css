@@ -203,21 +203,25 @@
     --spacing-filter-max: 44rem;
     --spacing-filter-medium-max: 38rem;
 
-    /* 页面角色字号；业务组件只消费这些角色或 Tailwind 标准字号。 */
-    --text-2xs: 0.625rem; /* 10px */
+    /* 工作面字号：五档文本角色与四档关键数值。 */
     --text-tiny: 0.6875rem; /* 11px */
+    --text-tiny--line-height: 1rem;
+    --text-xs: 0.75rem; /* 12px */
+    --text-xs--line-height: 1.125rem;
     --text-body-compact: 0.8125rem; /* 13px */
     --text-body-compact--line-height: 1.25rem; /* 20px */
     --text-section-title: 0.9375rem; /* 15px 详情页分区标题 */
     --text-section-title--line-height: 1.375rem; /* 22px */
     --text-page-title: 1.125rem; /* 18px 飞书精致页面主标题 */
     --text-page-title--line-height: 1.625rem; /* 26px */
+    --text-value-compact: 1.25rem; /* 20px */
+    --text-value-compact--line-height: 1.75rem;
+    --text-value-section: 1.5rem; /* 24px */
+    --text-value-section--line-height: 2rem;
     --text-value-summary: 1.75rem; /* 28px */
     --text-value-summary--line-height: 2.25rem;
     --text-value-hero: 2.5rem; /* 40px */
     --text-value-hero--line-height: 2.75rem;
-    --text-login-title: 1.75rem; /* 28px */
-    --text-login-title--line-height: 2.25rem;
 }
 
 @theme inline {
@@ -508,7 +512,7 @@
         @apply border-border outline-ring/50;
     }
     body {
-        @apply bg-background text-foreground;
+        @apply bg-background text-foreground text-body-compact;
     }
     html {
         @apply font-sans;
@@ -651,13 +655,6 @@
     [data-slot="detail-workspace-section"]
     + [data-slot="detail-workspace-section"] {
     border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
-}
-/* 详情页表单区：12px 克制标签让 13px 输入值成为主角；微柔底轻描边替代生硬白框 */
-.erp-detail-workspace-page [data-slot="detail-form-grid"] [data-slot="label"] {
-    font-size: var(--text-xs);
-    line-height: 1rem;
-    font-weight: 500;
-    color: color-mix(in oklab, var(--foreground) 72%, transparent);
 }
 .erp-detail-workspace-page
     [data-slot="detail-form-grid"]
@@ -1063,7 +1060,7 @@
     margin-bottom: 0.375rem;
     padding: 0;
     font-size: var(--text-xs);
-    line-height: 1.125rem;
+    line-height: var(--text-xs--line-height);
     font-weight: 500;
     color: var(--muted-foreground);
 }
@@ -1168,7 +1165,7 @@
     flex-shrink: 0;
     white-space: nowrap;
     font-size: var(--text-body-compact);
-    line-height: 1.25rem;
+    line-height: var(--text-body-compact--line-height);
     font-weight: 400;
     color: color-mix(in oklab, var(--muted-foreground) 82%, transparent);
     user-select: none;
@@ -1374,8 +1371,6 @@
         --spacing-filter-body: 0.75rem;
         --spacing-filter-max: 32rem;
         --spacing-filter-medium-max: 32rem;
-        --text-page-title: 1.125rem;
-        --text-page-title--line-height: 1.625rem;
     }
 }
 

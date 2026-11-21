@@ -27,7 +27,9 @@ export function PurchaseOrderDetailSection({
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-t-xl border-b border-border/60 bg-muted/30 px-5 py-4">
                 <div className="min-w-0 space-y-1">
                     <div className="flex items-center gap-2">
-                        <h2 className="text-base font-semibold">{title}</h2>
+                        <h2 className="text-section-title font-semibold tracking-tight">
+                            {title}
+                        </h2>
                         {count != null ? (
                             <span className="num rounded-md bg-background px-2 py-0.5 text-xs text-muted-foreground">
                                 {count}
@@ -35,7 +37,7 @@ export function PurchaseOrderDetailSection({
                         ) : null}
                     </div>
                     {description ? (
-                        <div className="text-xs leading-5 text-muted-foreground">
+                        <div className="text-xs text-muted-foreground">
                             {description}
                         </div>
                     ) : null}

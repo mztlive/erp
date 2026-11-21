@@ -53,7 +53,7 @@ export function PurchasePanel({
                 >
                     <h3
                         id="sales-orders-detail-freight-title"
-                        className="text-sm font-medium text-warning-soft-foreground"
+                        className="font-medium text-warning-soft-foreground"
                     >
                         运费待追加
                     </h3>
@@ -64,7 +64,7 @@ export function PurchasePanel({
                         {freightFollowUps.map((item) => (
                             <li
                                 key={`${item.purchaseOrderId}-${item.salesOrderLineId}`}
-                                className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+                                className="flex flex-wrap items-center justify-between gap-2 py-2 text-body-compact"
                             >
                                 <span className="min-w-0">
                                     {item.productName ?? "商品"}
@@ -98,7 +98,7 @@ export function PurchasePanel({
 
             {canAddExpense ? (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed px-4 py-3">
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         {expenseCreated
                             ? `已创建费用采购单 ${expenseCreated}，已提交审批。`
                             : "本单有我方承担、不对应销售明细的费用（第三方物流、额外包装、上门安装等）时，追加费用采购单走审批和付款。"}

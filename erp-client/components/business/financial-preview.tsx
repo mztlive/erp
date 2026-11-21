@@ -33,7 +33,7 @@ export function PreviewSection({
 }) {
     return (
         <section className="space-y-3 border-b border-border pb-6 last:border-b-0 last:pb-0">
-            <h3 className="text-sm font-medium">{title}</h3>
+            <h3 className="text-body-compact font-medium">{title}</h3>
             {children}
         </section>
     )
@@ -57,7 +57,7 @@ export function PreviewFact({
 }
 
 export function PreviewNote({ children }: { children: ReactNode }) {
-    return <p className="text-xs leading-5 text-muted-foreground">{children}</p>
+    return <p className="text-xs text-muted-foreground">{children}</p>
 }
 
 /** 已过账往来记录的统一限制说明。 */

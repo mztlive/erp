@@ -371,7 +371,7 @@ const moneyMagnitudeClasses: Record<MoneyMagnitude, string> = {
 
 const moneyValueSizeClassNames: Record<MoneyValueSize, string> = {
     inherit: "",
-    section: "text-2xl font-semibold tracking-tight",
+    section: "text-value-section font-semibold tracking-tight",
     summary: "text-value-summary font-semibold tracking-tight",
     hero: "text-value-hero font-semibold tracking-tight",
 }
@@ -584,7 +584,7 @@ function DocumentTotals({
             {...props}
         >
             {title != null ? (
-                <h2 className="font-heading text-sm font-semibold text-foreground">
+                <h2 className="font-heading text-section-title font-semibold tracking-tight text-foreground">
                     {title}
                 </h2>
             ) : null}
@@ -595,13 +595,13 @@ function DocumentTotals({
                         key={item.id}
                         className="flex flex-col gap-2 p-3 sm:flex-row sm:items-start sm:justify-between"
                     >
-                        <dt className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                        <dt className="flex min-w-0 flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
                             <span>{item.label}</span>
                             {item.basis != null ? (
                                 <Badge variant="neutral">{item.basis}</Badge>
                             ) : null}
                         </dt>
-                        <dd className="min-w-0 text-sm sm:text-right">
+                        <dd className="min-w-0 text-body-compact sm:text-right">
                             <div
                                 className={cn(
                                     "num font-medium text-foreground",

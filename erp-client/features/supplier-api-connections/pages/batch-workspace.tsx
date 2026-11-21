@@ -478,7 +478,7 @@ export function BatchWorkspace({
                             {center.data?.supplier.name ?? "供应商商品库"}
                         </Badge>
                         {step === "REVIEW" || step === "RESULT" ? (
-                            <span className="text-sm text-muted-foreground">
+                            <span className="text-body-compact text-muted-foreground">
                                 {view.product_count} 个商品 /{" "}
                                 {view.batch.selected_count -
                                     view.counts.excluded}{" "}
@@ -547,7 +547,7 @@ export function BatchWorkspace({
                                 <div className="flex shrink-0 flex-col items-center gap-2 sm:flex-row">
                                     <span
                                         className={cn(
-                                            "num flex size-7 shrink-0 items-center justify-center rounded-full text-sm",
+                                            "num flex size-7 shrink-0 items-center justify-center rounded-full text-body-compact",
                                             isCurrent || isComplete
                                                 ? "bg-primary text-primary-foreground"
                                                 : "bg-muted text-muted-foreground",
@@ -569,7 +569,7 @@ export function BatchWorkspace({
                                     </span>
                                     <span
                                         className={cn(
-                                            "whitespace-nowrap text-xs sm:text-sm",
+                                            "whitespace-nowrap text-xs sm:text-body-compact",
                                             isCurrent
                                                 ? "font-medium"
                                                 : "text-muted-foreground",
@@ -597,7 +597,7 @@ export function BatchWorkspace({
             {!canWrite ? (
                 <p
                     role="status"
-                    className="rounded-lg border p-3 text-sm text-muted-foreground"
+                    className="rounded-lg border p-3 text-xs text-muted-foreground"
                 >
                     当前账号没有入库或接口成本权限，可查看已获授权的批次内容。
                 </p>
@@ -605,7 +605,7 @@ export function BatchWorkspace({
             {view.batch.draft_operation ? (
                 <div
                     role="status"
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 text-sm"
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 text-body-compact"
                 >
                     <p>
                         {draftActive
@@ -636,20 +636,23 @@ export function BatchWorkspace({
                 <p
                     key={`${index}-${error?.message}`}
                     role="alert"
-                    className="text-sm text-destructive"
+                    className="text-body-compact text-destructive"
                 >
                     {error?.message}
                 </p>
             ))}
             {submissionNotice ? (
-                <p role="status" className="rounded-lg border p-3 text-sm">
+                <p
+                    role="status"
+                    className="rounded-lg border p-3 text-body-compact"
+                >
                     {submissionNotice}
                 </p>
             ) : null}
             {canWrite && uncertainSubmission ? (
                 <div
                     role="alert"
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm"
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 text-body-compact"
                 >
                     <p>
                         本次确认结果待核实。请先查询原操作，不能直接重新提交。
@@ -744,19 +747,19 @@ export function BatchWorkspace({
                         </MetricStrip>
                     )}
                     {step !== "RESULT" && preparing && !processing ? (
-                        <p role="status" className="text-sm">
+                        <p role="status" className="text-body-compact">
                             本次确认范围已保存，后台正在准备入库。可以离开页面后继续查看。
                         </p>
                     ) : null}
                     {step !== "RESULT" && processing ? (
-                        <p role="status" className="text-sm">
+                        <p role="status" className="text-body-compact">
                             后台正在处理 {processing} 个 SKU；已完成 {completed}{" "}
                             个，可离开页面后继续查看。
                         </p>
                     ) : null}
                     {canWrite && step !== "RESULT" && warningRows.length ? (
                         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/10 p-3">
-                            <p className="text-sm">
+                            <p className="text-body-compact">
                                 {warningRows.length}{" "}
                                 项存在价格提示。请查看逐项说明后确认。
                             </p>

@@ -53,7 +53,7 @@ export function PersonalBusinessPermissions({
 
     return (
         <section
-            className="min-w-0 space-y-4 text-sm"
+            className="min-w-0 space-y-4 text-body-compact"
             aria-label="人员数据范围"
         >
             {notice && (

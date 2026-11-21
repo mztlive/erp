@@ -165,7 +165,7 @@ export function SupplierOrderFourLevelAddressForm({
                     按已批准采购的收货地址选择京东四级区域。候选来自供应商，不使用本地地区编号或自由填写编码替代。
                 </AlertDescription>
             </Alert>
-            <div className="space-y-1 rounded-lg border p-3 text-sm">
+            <div className="space-y-1 rounded-lg border p-3 text-body-compact">
                 <p className="font-medium">本单收货地址</p>
                 <p className="text-muted-foreground">
                     {addressSummary || "请按原采购单权限核对完整地址。"}

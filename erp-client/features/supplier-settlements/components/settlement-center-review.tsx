@@ -21,7 +21,9 @@ function SettlementCenterReview({ detail }: { detail: SettlementDetailView }) {
             className={cn(surfaceInsetClassName, "shadow-none ring-0")}
         >
             <CardHeader className="rounded-t-lg border-b border-grid py-3">
-                <CardTitle className="text-base">复核记录</CardTitle>
+                <CardTitle className="text-section-title font-semibold tracking-tight">
+                    复核记录
+                </CardTitle>
                 <CardDescription>
                     支持提交复核、退回修改与复核确认；提交与复核需由不同人员操作
                 </CardDescription>
@@ -40,7 +42,7 @@ function SettlementCenterReview({ detail }: { detail: SettlementDetailView }) {
                     </Alert>
                 ) : null}
                 {detail.reviewRecords.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         尚无复核记录
                     </p>
                 ) : (
@@ -49,7 +51,7 @@ function SettlementCenterReview({ detail }: { detail: SettlementDetailView }) {
                             key={r.recordId}
                             className={cn(
                                 surfaceInsetClassName,
-                                "px-3 py-2 text-sm",
+                                "px-3 py-2 text-body-compact",
                             )}
                         >
                             <div className="font-medium">

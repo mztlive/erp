@@ -59,7 +59,7 @@ export function SelectionRecipientFields({
         >
             <h2
                 id="sales-selection-public-recipient-title"
-                className="font-semibold"
+                className="text-section-title font-semibold tracking-tight"
             >
                 收件信息
             </h2>

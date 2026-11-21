@@ -57,8 +57,8 @@ export function PurchaseLineSupplement({
         <div className="grid gap-5 @min-[720px]/document:grid-cols-2">
             {warnings.length > 0 && (
                 <section className="space-y-2">
-                    <h4 className="text-sm font-medium">异常说明</h4>
-                    <ul className="space-y-2 text-sm text-warning-soft-foreground">
+                    <h4 className="text-body-compact font-medium">异常说明</h4>
+                    <ul className="space-y-2 text-body-compact text-warning-soft-foreground">
                         {warnings.map((warning) => (
                             <li key={warning}>
                                 {warning === "高于销售预估采购价" &&
@@ -125,7 +125,7 @@ export function PurchaseLineSupplement({
                 </section>
             )}
             {mismatchedProduct && line.source && (
-                <section className="space-y-2 text-sm">
+                <section className="space-y-2 text-body-compact">
                     <h4 className="font-medium">商品与规格差异</h4>
                     <dl className="space-y-2 wrap-anywhere">
                         <div>
@@ -151,7 +151,7 @@ export function PurchaseLineSupplement({
                 </section>
             )}
             {line.input_tax_rate != null && (
-                <section className="space-y-2 text-sm">
+                <section className="space-y-2 text-body-compact">
                     <h4 className="font-medium">采购条件</h4>
                     <p className="flex items-baseline gap-3">
                         <span className="text-muted-foreground">进项税率</span>
@@ -167,7 +167,7 @@ export function PurchaseLineSupplement({
                 </section>
             )}
             {source && (
-                <section className="space-y-2 text-sm">
+                <section className="space-y-2 text-body-compact">
                     <h4 className="font-medium">本行来源销售单</h4>
                     <p>
                         {displayBusinessText(
@@ -190,8 +190,8 @@ export function PurchaseLineSupplement({
             )}
             {!!line.delivery_allocations?.length && (
                 <section className="space-y-2 @min-[720px]/document:col-span-2">
-                    <h4 className="text-sm font-medium">交付安排</h4>
-                    <ul className="divide-y divide-grid rounded-md border border-grid px-3 text-sm">
+                    <h4 className="text-body-compact font-medium">交付安排</h4>
+                    <ul className="divide-y divide-grid rounded-md border border-grid px-3 text-body-compact">
                         {line.delivery_allocations.map((delivery) => (
                             <li
                                 key={JSON.stringify([

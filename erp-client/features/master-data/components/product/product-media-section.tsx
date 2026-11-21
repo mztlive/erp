@@ -56,7 +56,7 @@ function MobileDetailPreview({
 
             <div className="mx-auto w-full max-w-[360px] overflow-hidden rounded-2xl border border-border/90 bg-card shadow-xs">
                 {/* 极简手机顶条 */}
-                <div className="flex items-center justify-between border-b border-border/60 bg-surface-sunken/80 px-4 py-2 text-2xs text-muted-foreground">
+                <div className="flex items-center justify-between border-b border-border/60 bg-surface-sunken/80 px-4 py-2 text-xs text-muted-foreground">
                     <span className="truncate font-medium text-foreground/80">
                         {productName || "商品详情"}
                     </span>
@@ -76,7 +76,7 @@ function MobileDetailPreview({
                                 <p className="truncate text-xs font-medium text-foreground">
                                     {productName || "未命名商品"}
                                 </p>
-                                <p className="text-2xs text-muted-foreground">
+                                <p className="text-xs text-muted-foreground">
                                     以下为详情长图连续展示效果
                                 </p>
                             </div>
@@ -111,7 +111,7 @@ function MobileDetailPreview({
                                             </div>
                                         )}
                                         {highlighted ? (
-                                            <span className="num absolute left-2 top-2 rounded-sm bg-primary px-1.5 py-0.5 text-2xs font-medium text-primary-foreground shadow-xs">
+                                            <span className="num absolute left-2 top-2 rounded-sm bg-primary px-1.5 py-0.5 text-tiny font-medium text-primary-foreground shadow-xs">
                                                 第 {index + 1} 张
                                             </span>
                                         ) : null}
@@ -128,7 +128,7 @@ function MobileDetailPreview({
                             <p className="text-xs font-medium text-muted-foreground">
                                 暂无详情图
                             </p>
-                            <p className="text-2xs leading-4.5 text-muted-foreground/80">
+                            <p className="text-xs text-muted-foreground/80">
                                 在左侧上传并拖拽排序后，此处将实时呈现客户看到的无缝长图效果。
                             </p>
                         </div>

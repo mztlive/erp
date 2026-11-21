@@ -59,14 +59,14 @@ function RuleColumn({
     return (
         <div className="min-w-0 space-y-2.5">
             <div className="flex items-baseline gap-2">
-                <h4 className="text-sm font-medium">{title}</h4>
+                <h4 className="text-body-compact font-medium">{title}</h4>
                 {hint ? (
                     <span className="text-xs text-muted-foreground">
                         {hint}
                     </span>
                 ) : null}
             </div>
-            <dl className="space-y-2 text-sm">
+            <dl className="space-y-2 text-body-compact">
                 <div className="flex items-start gap-3">
                     <dt className="w-16 shrink-0 pt-0.5 text-xs text-muted-foreground">
                         其他地区

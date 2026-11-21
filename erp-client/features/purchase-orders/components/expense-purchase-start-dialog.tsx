@@ -165,7 +165,7 @@ function ExpensePurchaseStartContent({
                                                 <p className="font-medium">
                                                     {source.order_no}
                                                 </p>
-                                                <p className="text-sm text-muted-foreground">
+                                                <p className="text-xs text-muted-foreground">
                                                     {source.customer_name ??
                                                         "客户未标注"}{" "}
                                                     · {source.status_label}
@@ -183,7 +183,7 @@ function ExpensePurchaseStartContent({
                                         </div>
                                     ))}
                                     {list.data.items.length === 0 ? (
-                                        <p className="py-4 text-sm text-muted-foreground">
+                                        <p className="py-4 text-xs text-muted-foreground">
                                             {list.data.empty_reason ===
                                             "no_scope"
                                                 ? "尚未配置销售单协同范围，请联系管理员配置后再创建费用采购单。"
@@ -192,7 +192,7 @@ function ExpensePurchaseStartContent({
                                     ) : null}
                                 </div>
                                 <div className="flex justify-end items-center gap-3">
-                                    <span className="text-sm text-muted-foreground">
+                                    <span className="text-body-compact text-muted-foreground">
                                         共 {list.data.total} 张 · 第{" "}
                                         {query.page} 页
                                     </span>

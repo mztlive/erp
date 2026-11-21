@@ -131,7 +131,7 @@ function DeliveryGroup({
         <div className="min-w-0 space-y-4 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 space-y-1.5">
-                    <p className="break-words text-sm font-medium">
+                    <p className="break-words text-body-compact font-medium">
                         {source.line_no}. {source.item_name_snapshot}
                         <span className="num ml-2 font-normal text-muted-foreground">
                             {removed

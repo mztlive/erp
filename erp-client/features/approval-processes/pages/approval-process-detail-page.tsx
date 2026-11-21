@@ -242,7 +242,7 @@ export function ApprovalProcessDetailPage({
                         </Button>
                     }
                 />
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     该单据类型不配置审批流程，也没有新建、编辑、发布或停用入口。
                 </p>
             </PageScaffold>
@@ -492,7 +492,7 @@ export function ApprovalProcessDetailPage({
                 ) : catalogQuery.isPending || versionsQuery.isPending ? (
                     <p
                         role="status"
-                        className="p-6 text-sm text-muted-foreground"
+                        className="p-6 text-xs text-muted-foreground"
                     >
                         正在加载流程版本…
                     </p>
@@ -547,7 +547,7 @@ export function ApprovalProcessDetailPage({
                 !versionsQuery.isPending ? (
                     <p
                         role="status"
-                        className="p-6 text-sm text-muted-foreground"
+                        className="p-6 text-xs text-muted-foreground"
                     >
                         所选版本不存在，请选择其它版本。
                     </p>
@@ -610,7 +610,7 @@ export function ApprovalProcessDetailPage({
                 (detailQuery.isPending || detailQuery.isPlaceholderData) ? (
                     <div
                         role="status"
-                        className="p-6 text-sm text-muted-foreground"
+                        className="p-6 text-body-compact text-muted-foreground"
                     >
                         正在加载审批流程…
                     </div>

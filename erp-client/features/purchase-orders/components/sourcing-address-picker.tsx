@@ -81,7 +81,7 @@ export function SourcingAddressPicker({
                 </p>
                 <div className="max-h-72 overflow-y-auto overscroll-contain">
                     {candidates.length === 0 ? (
-                        <p className="py-3 text-sm text-muted-foreground">
+                        <p className="py-3 text-xs text-muted-foreground">
                             本来源已添加全部地址。
                         </p>
                     ) : (
@@ -110,7 +110,7 @@ export function SourcingAddressPicker({
                                         checked={picked.includes(key)}
                                         onCheckedChange={toggle}
                                     />
-                                    <span className="min-w-0 space-y-1 text-sm">
+                                    <span className="min-w-0 space-y-1 text-body-compact">
                                         <span className="block font-medium">
                                             {row.recipient} · {row.phone}
                                         </span>

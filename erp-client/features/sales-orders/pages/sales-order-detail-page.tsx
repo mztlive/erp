@@ -393,7 +393,7 @@ function SalesOrderDetailContent({
                         changeQuery.isPending ? (
                             <p
                                 role="status"
-                                className="text-sm text-muted-foreground"
+                                className="text-xs text-muted-foreground"
                             >
                                 正在加载变更单…
                             </p>

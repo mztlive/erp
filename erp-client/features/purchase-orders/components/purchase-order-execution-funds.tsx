@@ -50,7 +50,7 @@ export function PurchaseOrderExecutionFunds({
                             className="space-y-3 py-4 first:pt-0 last:pb-0"
                         >
                             <div className="flex flex-wrap items-center justify-between gap-3">
-                                <h3 className="text-sm font-medium">{label}</h3>
+                                <h3 className="font-medium">{label}</h3>
                                 <BusinessStatusBadge
                                     context="detail"
                                     label={
@@ -73,7 +73,7 @@ export function PurchaseOrderExecutionFunds({
                                 </Alert>
                             ) : null}
                             {funds.status === "not_reserved" ? (
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-xs text-muted-foreground">
                                     暂未冻结预存款额度，请核对付款申请是否已批准、预存款余额及自动扣款授权是否充足。
                                 </p>
                             ) : (
@@ -92,7 +92,7 @@ export function PurchaseOrderExecutionFunds({
                                             <dt className="text-xs text-muted-foreground">
                                                 {name}
                                             </dt>
-                                            <dd className="mt-1 text-base font-medium">
+                                            <dd className="mt-1 text-body-compact font-medium">
                                                 <MoneyValue
                                                     value={value}
                                                     display="exact"
@@ -105,7 +105,7 @@ export function PurchaseOrderExecutionFunds({
                                             <dt className="text-xs text-muted-foreground">
                                                 返款待核实
                                             </dt>
-                                            <dd className="mt-1 text-base font-medium">
+                                            <dd className="mt-1 text-body-compact font-medium">
                                                 <MoneyValue
                                                     value={
                                                         funds.pendingReturnAmount
@@ -121,7 +121,7 @@ export function PurchaseOrderExecutionFunds({
                     )
                 })}
             </div>
-            <p className="text-xs leading-5 text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 资金占用仅作为本次发单的保障，不计入已付。实际扣款核实后按原采购应付核销；取消不代表返款到账，供应商账户返款不记为银行现金退款。
             </p>
         </PurchaseOrderDetailSection>

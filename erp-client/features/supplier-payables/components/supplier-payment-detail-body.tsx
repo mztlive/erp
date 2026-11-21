@@ -219,7 +219,7 @@ export function SupplierPaymentDetailBody({
                         />
                     </div>
                 ) : (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         未记录收款账户
                     </p>
                 )}
@@ -231,7 +231,7 @@ export function SupplierPaymentDetailBody({
                 <PaymentReversalHistory row={row} />
             </SectionPanel>
             <SectionPanel value="related" icon={Link2Icon} title="关联单据">
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     应付按来源采购单或结算单记账。查看应付在本页打开，打开采购单会进入该单据。
                 </p>
                 <RelatedDocumentList
@@ -244,11 +244,11 @@ export function SupplierPaymentDetailBody({
                 icon={GitCompareArrowsIcon}
                 title="付款去向"
             >
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     这笔付款分别付给了哪些应付、各付了多少。点来源单进入采购单或结算单。冲正不会改已经记下的行，只会再记一笔冲减。
                 </p>
                 {row.allocations.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         尚未付到任何应付
                     </p>
                 ) : (
@@ -311,7 +311,7 @@ function SectionPanel({
                 <span className="flex size-6 items-center justify-center rounded-full border border-border text-muted-foreground">
                     <Icon className="size-3.5" aria-hidden />
                 </span>
-                <h3 className="text-sm font-medium">{title}</h3>
+                <h3 className="font-medium">{title}</h3>
             </div>
             <div className="flex flex-col gap-5">{children}</div>
         </TabsContent>
@@ -355,7 +355,7 @@ function ReadOnlyField({
             ) : (
                 <div
                     className={cn(
-                        "flex min-h-control items-center rounded-lg border border-input bg-muted px-3 py-1.5 text-sm",
+                        "flex min-h-control items-center rounded-lg border border-input bg-muted px-3 py-1.5 text-body-compact",
                         mono && "num font-mono",
                     )}
                 >
@@ -381,17 +381,17 @@ function PaymentReversalHistory({ row }: { row: PaymentRow }) {
 
     return (
         <>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 待审批记录仅用于跟踪；审批通过后才改变原付款事实。
             </p>
             {row.relatedReversals.length === 0 ? (
-                <p className="text-sm text-muted-foreground">尚未发起冲正</p>
+                <p className="text-xs text-muted-foreground">尚未发起冲正</p>
             ) : (
                 <ul className="flex flex-col gap-2">
                     {row.relatedReversals.map((reversal) => (
                         <li
                             key={reversal.reversalId}
-                            className="rounded-xl border px-3 py-2 text-sm"
+                            className="rounded-xl border px-3 py-2 text-body-compact"
                         >
                             <div className="flex flex-wrap items-center justify-between gap-2">
                                 <span className="flex flex-wrap items-center gap-2">
@@ -458,7 +458,7 @@ function BankReceiptPreview({ row }: { row: PaymentRow }) {
 
     if (!row.bankReceipt) {
         return (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 历史付款未留存银行回单图片
             </p>
         )
@@ -593,7 +593,7 @@ function AllocationLineItem({
         allocation.sourceHref ??
         sourceDocumentHref(allocation.sourceType, allocation.sourceDocumentId)
     return (
-        <li className="rounded-xl border px-3 py-2 text-sm">
+        <li className="rounded-xl border px-3 py-2 text-body-compact">
             <div className="flex justify-between gap-2">
                 <span>
                     {

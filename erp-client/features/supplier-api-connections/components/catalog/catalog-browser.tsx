@@ -501,7 +501,7 @@ export function CatalogBrowser({
                 >
                     <h3
                         id="supplier-catalog-batch-excluded-title"
-                        className="text-sm font-medium"
+                        className="font-medium"
                     >
                         已排除 {choice.excludedRows.length} 个 SKU
                     </h3>
@@ -509,7 +509,7 @@ export function CatalogBrowser({
                         {choice.excludedRows.map((row) => (
                             <div
                                 key={row.source.id}
-                                className="flex flex-wrap items-center justify-between gap-3 border-b pb-2 text-sm"
+                                className="flex flex-wrap items-center justify-between gap-3 border-b pb-2 text-body-compact"
                             >
                                 <div>
                                     <p>{row.source.name}</p>

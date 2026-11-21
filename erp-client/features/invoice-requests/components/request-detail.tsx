@@ -200,10 +200,10 @@ function InvoiceRequestDetailBody({
         <section className="space-y-5" aria-label="开票申请详情">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h2 className="break-all text-lg font-semibold">
+                    <h2 className="break-all text-section-title font-semibold tracking-tight">
                         {request.request_no || "开票申请"}
                     </h2>
-                    <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-2 text-body-compact text-muted-foreground">
                         <span>
                             {request.sales_order_no || "—"} · {facts.title}
                         </span>
@@ -386,7 +386,7 @@ function CancelRequestForm({
             <h3 className="font-semibold">
                 {reviseRejected ? "修改原单" : "撤回"} {request.request_no}
             </h3>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 撤回后释放本次申请额度，申请保留为草稿。
                 {reviseRejected
                     ? "原申请编号和审批记录保留，修改后重新提交审批。"
@@ -403,7 +403,7 @@ function CancelRequestForm({
                 )}
             </form.AppField>
             {cancel.error ? (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {uncertain
                         ? "结果尚未确认，请核对撤回结果。"
                         : getErrorMessage(cancel.error, "撤回失败")}

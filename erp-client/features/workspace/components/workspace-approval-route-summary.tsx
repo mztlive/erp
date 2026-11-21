@@ -60,7 +60,7 @@ export function WorkspaceApprovalRouteSummary({
         >
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-3">
-                    <h3 className="text-sm font-semibold">审批流程</h3>
+                    <h3 className="font-semibold">审批流程</h3>
                     <span className="text-xs text-muted-foreground">
                         {displayRound(
                             route?.roundNo ?? instance.currentRoundNo,
@@ -88,7 +88,7 @@ export function WorkspaceApprovalRouteSummary({
                             {historyQuery.isPending ? (
                                 <p
                                     role="status"
-                                    className="text-sm text-muted-foreground"
+                                    className="text-xs text-muted-foreground"
                                 >
                                     正在加载审批记录…
                                 </p>
@@ -122,7 +122,7 @@ export function WorkspaceApprovalRouteSummary({
                     instanceStatus={instance.status}
                 />
             ) : historyQuery.isPending ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     正在加载审批流程…
                 </p>
             ) : !historyQuery.isError ? (

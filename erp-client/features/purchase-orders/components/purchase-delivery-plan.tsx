@@ -30,7 +30,10 @@ export function PurchaseDeliveryPlan({
     warehouseName?: string
 }) {
     return (
-        <section aria-label="交付安排" className="mt-8 space-y-3 text-sm">
+        <section
+            aria-label="交付安排"
+            className="mt-8 space-y-3 text-body-compact"
+        >
             <h3 className="font-semibold">交付安排</h3>
             {warehouse ? (
                 <p>

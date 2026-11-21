@@ -63,7 +63,7 @@ export function ContractImportProgress({
                 </h3>
             </div>
             <div className="mt-4 space-y-4 sm:ml-8">
-                <p className="text-sm leading-relaxed text-muted-foreground">
+                <p className="text-body-compact leading-relaxed text-muted-foreground">
                     {active?.description ?? "任务正在处理，等待后端进度更新。"}
                 </p>
                 {active ? (

@@ -32,7 +32,9 @@ export function PaymentBasis({
             aria-label="付款依据"
             className="space-y-4 border-b border-border px-4 py-4"
         >
-            <h2 className="text-sm font-semibold">付款依据</h2>
+            <h2 className="text-section-title font-semibold tracking-tight">
+                付款依据
+            </h2>
             {targets.map((item) => {
                 const guidance = item.paymentGuidance
                 const amount = amounts[item.payableAccountId] ?? ""
@@ -48,7 +50,7 @@ export function PaymentBasis({
                 ]
                 return (
                     <div key={item.payableAccountId} className="space-y-3">
-                        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
+                        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-body-compact">
                             <span className="font-medium">
                                 {guidance?.termLabel ?? "付款条件待核对"}
                             </span>
@@ -64,7 +66,7 @@ export function PaymentBasis({
                                     <dt className="text-xs text-muted-foreground">
                                         {label}
                                     </dt>
-                                    <dd className="text-sm font-medium">
+                                    <dd className="text-body-compact font-medium">
                                         {value != null ? (
                                             <MoneyValue value={value} />
                                         ) : (
@@ -98,7 +100,7 @@ export function PaymentBasis({
                             </div>
                         ) : null}
                         {amount ? (
-                            <p className="text-sm" aria-live="polite">
+                            <p className="text-body-compact" aria-live="polite">
                                 {paymentOutcome(item, amount)}
                             </p>
                         ) : null}

@@ -34,7 +34,7 @@ function OverviewField({
             <dt className="text-xs leading-4 text-muted-foreground">{label}</dt>
             <dd
                 className={cn(
-                    "break-words text-sm leading-5",
+                    "break-words text-body-compact leading-5",
                     numeric && "num",
                 )}
             >
@@ -138,7 +138,7 @@ export function OverviewPanel({
                     <div className="mb-4 flex items-baseline justify-between gap-2">
                         <h2
                             id="sales-order-lines-heading"
-                            className="text-lg font-semibold"
+                            className="text-section-title font-semibold tracking-tight"
                         >
                             卡券明细
                         </h2>
@@ -147,13 +147,13 @@ export function OverviewPanel({
                         </p>
                     </div>
                     <CardLineItemsTable order={order} />
-                    <div className="flex items-baseline justify-end gap-5 pt-5 text-sm">
+                    <div className="flex items-baseline justify-end gap-5 pt-5 text-body-compact">
                         <span className="text-muted-foreground">
                             合计（含税）
                         </span>
                         <MoneyValue
                             value={order.amountGross}
-                            className="text-xl font-semibold"
+                            className="text-value-compact font-semibold tracking-tight"
                         />
                     </div>
                 </section>
@@ -164,7 +164,7 @@ export function OverviewPanel({
             >
                 <h2
                     id="sales-order-transaction-heading"
-                    className="mb-4 text-sm font-semibold"
+                    className="mb-4 text-section-title font-semibold tracking-tight"
                 >
                     交易约定
                 </h2>

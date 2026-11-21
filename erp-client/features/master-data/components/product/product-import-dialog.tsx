@@ -112,7 +112,10 @@ export function ProductImportDialog({
                         下载导入模板
                     </LoadingButton>
                     {template.error ? (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {getErrorMessage(
                                 template.error,
                                 "模板下载失败，请重试。",
@@ -145,7 +148,7 @@ export function ProductImportDialog({
                                 value={progress.percent}
                             />
                             <p
-                                className="text-sm text-muted-foreground"
+                                className="text-xs text-muted-foreground"
                                 role="status"
                             >
                                 {committing
@@ -155,12 +158,18 @@ export function ProductImportDialog({
                         </div>
                     ) : null}
                     {direct.error ? (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {direct.error}
                         </p>
                     ) : null}
                     {legacyError ? (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {legacyError}
                         </p>
                     ) : null}

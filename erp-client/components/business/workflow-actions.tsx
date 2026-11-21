@@ -154,7 +154,7 @@ function WorkflowDetailList({
         >
             <h3
                 className={cn(
-                    "flex items-center gap-2 text-sm font-medium",
+                    "flex items-center gap-2 text-body-compact font-medium",
                     tone === "destructive"
                         ? "text-destructive-soft-foreground"
                         : "text-foreground",
@@ -163,7 +163,7 @@ function WorkflowDetailList({
                 <Icon aria-hidden="true" className="size-4" />
                 {title}
             </h3>
-            <ul className="mt-3 space-y-2 text-sm">
+            <ul className="mt-3 space-y-2 text-body-compact">
                 {items.map((item, index) => (
                     <li
                         key={index}
@@ -612,7 +612,7 @@ function SequentialProcessBar({
                 />
                 {statusExtras}
                 {responsibilityStatus === "assigned_to_other" ? (
-                    <span className="text-sm text-destructive">
+                    <span className="text-body-compact text-destructive">
                         {responsibilityText.changed}
                     </span>
                 ) : null}

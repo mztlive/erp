@@ -1143,7 +1143,7 @@ function PurchaseOrderCreateSurface({
                                         )}
                                     >
                                         <div className="flex flex-wrap items-center gap-2">
-                                            <h2 className="font-heading text-sm font-semibold">
+                                            <h2 className="font-heading text-section-title font-semibold tracking-tight">
                                                 销售明细与供给方案
                                             </h2>
                                             <span className="text-xs text-muted-foreground">
@@ -1273,7 +1273,7 @@ function PurchaseOrderCreateFooterTotals({
                         <dt className="text-xs text-muted-foreground">
                             {item.label}
                         </dt>
-                        <dd className="num text-sm font-medium">
+                        <dd className="num text-body-compact font-medium">
                             {item.value}
                         </dd>
                     </div>

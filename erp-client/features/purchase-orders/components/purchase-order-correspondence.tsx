@@ -175,7 +175,7 @@ function PurchaseEmailDialog({
                         )}
                     </form.AppField>
                     {result ? (
-                        <p className="text-sm" role="status">
+                        <p className="text-body-compact" role="status">
                             {result}
                         </p>
                     ) : null}

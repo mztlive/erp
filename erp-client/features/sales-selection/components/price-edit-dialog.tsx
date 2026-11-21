@@ -158,14 +158,16 @@ export function PriceEditDialog({
                             )}
                         />
                     ) : item ? (
-                        <p className="text-sm font-medium">{item.name}</p>
+                        <p className="text-body-compact font-medium">
+                            {item.name}
+                        </p>
                     ) : null}
                     {item ? (
                         <form.Subscribe
                             selector={(state) => state.values.skuId}
                             children={(skuId) => (
                                 <div className="space-y-2">
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         当前客户售价：
                                         <MoneyValue
                                             value={
@@ -216,7 +218,7 @@ export function PriceEditDialog({
                             children={(value) => {
                                 const parsed = positiveDecimal.safeParse(value)
                                 return parsed.success ? (
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         示例：¥100.00 →{" "}
                                         <MoneyValue
                                             value={sumFixed(
@@ -231,7 +233,10 @@ export function PriceEditDialog({
                         />
                     ) : null}
                     {error ? (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {error}
                         </p>
                     ) : null}

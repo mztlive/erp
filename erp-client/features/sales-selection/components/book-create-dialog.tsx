@@ -215,7 +215,7 @@ export const BookCreateDialog = ({
                         <p className="text-xs text-muted-foreground">
                             商品来源
                         </p>
-                        <p className="text-sm">{sourceSummary}</p>
+                        <p className="text-body-compact">{sourceSummary}</p>
                     </div>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <form.AppField
@@ -306,7 +306,7 @@ export const BookCreateDialog = ({
                         children={(selectionForm) =>
                             selectionForm === "PACKAGE" ? (
                                 <div className="grid gap-2">
-                                    <span className="text-sm font-medium">
+                                    <span className="text-body-compact font-medium">
                                         档位规则
                                         <RequiredMark />
                                     </span>

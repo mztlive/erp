@@ -97,7 +97,9 @@ export function SalesOrderDetailSecondaryActions({
                     />
                 </PopoverTrigger>
                 <PopoverContent align="end" keepMounted className="w-56 gap-3">
-                    <PopoverTitle className="text-sm">销售单操作</PopoverTitle>
+                    <PopoverTitle className="text-section-title font-semibold tracking-tight">
+                        销售单操作
+                    </PopoverTitle>
                     <div className="flex flex-col gap-2">
                         <SalesOrderCancelApprovalButton
                             order={order}

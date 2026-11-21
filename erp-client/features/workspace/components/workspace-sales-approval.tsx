@@ -73,7 +73,7 @@ export function WorkspaceSalesApproval({
         >
             <header className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    <h3 className="text-sm font-semibold">销售明细</h3>
+                    <h3 className="font-semibold">销售明细</h3>
                     {submission && (
                         <span className="text-xs text-muted-foreground">
                             共 {submission.lines.length} 行 · 本次提交的全部明细
@@ -100,7 +100,7 @@ export function WorkspaceSalesApproval({
             {query.isPending ? (
                 <p
                     role="status"
-                    className="flex items-center gap-2 text-sm text-muted-foreground"
+                    className="flex items-center gap-2 text-xs text-muted-foreground"
                 >
                     <Spinner />
                     正在读取销售明细…
@@ -179,7 +179,7 @@ export function WorkspaceSalesApproval({
                             </Table>
                         </div>
                     ) : (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             本次提交没有销售明细。
                         </p>
                     )}

@@ -30,7 +30,7 @@ export function ApprovalReadonly({
         Boolean(instanceId),
     )
     if (!approval)
-        return <p className="text-sm text-muted-foreground">暂无审批记录。</p>
+        return <p className="text-xs text-muted-foreground">暂无审批记录。</p>
     return (
         <div className={cn("space-y-4", className)}>
             {approval.instance ? (

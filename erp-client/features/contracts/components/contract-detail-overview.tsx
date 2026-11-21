@@ -133,7 +133,7 @@ export function ContractDetailOverview({
                     ) : null
                 }
             >
-                <p className="text-sm leading-relaxed">
+                <p className="text-body-compact leading-relaxed">
                     当前关联 {contract.relatedSalesOrders.length} 张销售单
                     {contract.relatedSalesOrders.length > 0
                         ? "，可在「关联销售单」标签页查看明细。"

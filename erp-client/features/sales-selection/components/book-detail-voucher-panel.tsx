@@ -217,23 +217,26 @@ export function BookDetailVoucherPanel({
                         </div>
                     </dl>
                     {!canReadVouchers ? (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             当前账号无权查看提货码。
                         </p>
                     ) : beforePublication ? (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             发布后生成提货码
                         </p>
                     ) : vouchersQuery.isPending ? (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             正在加载提货码…
                         </p>
                     ) : vouchersQuery.isError ? (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             提货码未加载成功，请点击刷新重试。
                         </p>
                     ) : vouchers.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             暂无可用提货码。
                         </p>
                     ) : (
@@ -243,7 +246,7 @@ export function BookDetailVoucherPanel({
                                     key={voucher.voucher_code}
                                     className="flex items-center justify-between gap-3 rounded-md border px-3 py-2"
                                 >
-                                    <span className="num break-all text-sm">
+                                    <span className="num break-all text-body-compact">
                                         {voucher.voucher_code}
                                     </span>
                                     <Badge
@@ -273,19 +276,22 @@ export function BookDetailVoucherPanel({
                 </CardHeader>
                 <CardContent className="grid gap-3">
                     {!canReadSelections ? (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             当前账号无权查看个人选品结果。
                         </p>
                     ) : selectionsQuery.isPending ? (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             正在加载选品结果…
                         </p>
                     ) : selectionsQuery.isError ? (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             选品结果未加载成功，请点击刷新重试。
                         </p>
                     ) : selections.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             暂无已提交的选品结果。
                         </p>
                     ) : (
@@ -296,7 +302,7 @@ export function BookDetailVoucherPanel({
                             >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div className="grid gap-1">
-                                        <p className="text-sm font-medium">
+                                        <p className="text-body-compact font-medium">
                                             {selection.recipient?.name ??
                                                 "未填写收件人"}
                                             <span className="num ml-3 font-normal text-muted-foreground">
@@ -326,7 +332,7 @@ export function BookDetailVoucherPanel({
                                         查看方案 {selection.proposal_no}
                                     </Button>
                                 </div>
-                                <p className="break-words text-sm">
+                                <p className="break-words text-body-compact">
                                     <span className="text-muted-foreground">
                                         收件地址：
                                     </span>
@@ -348,7 +354,7 @@ export function BookDetailVoucherPanel({
                                                 item.specification ?? [],
                                                 item.unit,
                                             ])}
-                                            className="flex flex-wrap items-baseline justify-between gap-2 text-sm"
+                                            className="flex flex-wrap items-baseline justify-between gap-2 text-body-compact"
                                         >
                                             <span>
                                                 {item.name}
@@ -376,7 +382,7 @@ export function BookDetailVoucherPanel({
                                         </li>
                                     ))}
                                 </ul>
-                                <p className="flex items-baseline justify-end gap-2 text-sm font-medium">
+                                <p className="flex items-baseline justify-end gap-2 text-body-compact font-medium">
                                     选品合计
                                     <MoneyValue
                                         value={selection.total_amount}

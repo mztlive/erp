@@ -138,7 +138,7 @@ function InventoryBalancePreview({
                             <div className="text-xs text-muted-foreground">
                                 账面现存
                             </div>
-                            <div className="num text-base font-semibold">
+                            <div className="num text-body-compact font-semibold">
                                 <QuantityValue
                                     value={detail.balance.onHandQuantity}
                                     unit={detail.balance.baseUnit}
@@ -150,7 +150,7 @@ function InventoryBalancePreview({
                             <div className="text-xs text-muted-foreground">
                                 有效预占
                             </div>
-                            <div className="num text-base font-semibold">
+                            <div className="num text-body-compact font-semibold">
                                 <QuantityValue
                                     value={detail.balance.reservedQuantity}
                                     unit={detail.balance.baseUnit}
@@ -162,21 +162,21 @@ function InventoryBalancePreview({
                             <div className="text-xs text-muted-foreground">
                                 可用数量
                             </div>
-                            <div className="num text-base font-semibold text-primary">
+                            <div className="num text-body-compact font-semibold text-primary">
                                 <QuantityValue
                                     value={detail.balance.availableQuantity}
                                     unit={detail.balance.baseUnit}
                                     className="[&>.num]:text-inherit"
                                 />
                             </div>
-                            <div className="text-2xs text-muted-foreground">
+                            <div className="text-xs text-muted-foreground">
                                 系统计算
                             </div>
                         </div>
                     </div>
 
                     <section className="space-y-3">
-                        <h3 className="text-sm font-medium">最近流水</h3>
+                        <h3 className="font-medium">最近流水</h3>
                         {detail.recentMovements.length === 0 ? (
                             <p className="text-xs text-muted-foreground">
                                 暂无流水
@@ -186,7 +186,7 @@ function InventoryBalancePreview({
                                 {detail.recentMovements.map((m) => (
                                     <li
                                         key={m.movementId}
-                                        className="border-b border-border py-3 text-sm last:border-b-0"
+                                        className="border-b border-border py-3 text-body-compact last:border-b-0"
                                     >
                                         <div className="flex items-start justify-between gap-2">
                                             <div>
@@ -239,7 +239,7 @@ function InventoryBalancePreview({
                     <Separator />
 
                     <section className="space-y-3">
-                        <h3 className="text-sm font-medium">来源单据</h3>
+                        <h3 className="font-medium">来源单据</h3>
                         {detail.sourceDocuments.length === 0 ? (
                             <p className="text-xs text-muted-foreground">
                                 无关联来源
@@ -249,7 +249,7 @@ function InventoryBalancePreview({
                                 {detail.sourceDocuments.map((doc) => (
                                     <li
                                         key={`${doc.documentType}:${doc.documentId}`}
-                                        className="flex items-center justify-between gap-2 text-sm"
+                                        className="flex items-center justify-between gap-2 text-body-compact"
                                     >
                                         <span>
                                             {doc.label}
@@ -283,7 +283,7 @@ function InventoryBalancePreview({
                     <Separator />
 
                     <section className="space-y-3">
-                        <h3 className="text-sm font-medium">有效预占</h3>
+                        <h3 className="font-medium">有效预占</h3>
                         {detail.reservations.length === 0 ? (
                             <p className="text-xs text-muted-foreground">
                                 无有效预占
@@ -293,7 +293,7 @@ function InventoryBalancePreview({
                                 {detail.reservations.map((r) => (
                                     <li
                                         key={r.reservationId}
-                                        className="border-b border-border py-3 text-sm last:border-b-0"
+                                        className="border-b border-border py-3 text-body-compact last:border-b-0"
                                     >
                                         <div className="flex items-start justify-between gap-2">
                                             <div>
@@ -349,10 +349,8 @@ function InventoryBalancePreview({
                         <>
                             <Separator />
                             <section className="space-y-3">
-                                <h3 className="text-sm font-medium">
-                                    进行中的调整
-                                </h3>
-                                <ul className="space-y-1 text-sm">
+                                <h3 className="font-medium">进行中的调整</h3>
+                                <ul className="space-y-1 text-body-compact">
                                     {detail.pendingAdjustments.map((a) => (
                                         <li
                                             key={a.adjustmentId}

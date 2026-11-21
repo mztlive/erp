@@ -84,7 +84,7 @@ export function ResumeApproverDialog({
                     </DialogDescription>
                 </DialogHeader>
                 {conflictMessage ? (
-                    <p className="text-sm text-destructive">
+                    <p className="text-body-compact text-destructive">
                         {conflictMessage}
                     </p>
                 ) : null}

@@ -131,10 +131,10 @@ function RowStatus({
 
 function MatchKind({ row }: { row: BatchRow }) {
     if (row.status === "SKIPPED")
-        return <span className="text-sm text-muted-foreground">已完成跳过</span>
+        return <span className="text-muted-foreground">已完成跳过</span>
     const kind = row.resolution?.kind
     return (
-        <div className="space-y-1 text-sm">
+        <div className="space-y-1">
             <span>
                 {kind === "EXISTING"
                     ? "关联已有 SKU"
@@ -633,7 +633,7 @@ export function BatchReviewTable({
     return (
         <div className="min-w-0 space-y-3">
             {mode === "RECOVERY" && view.counts.unknown > 0 ? (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning-border bg-warning-soft px-4 py-3 text-sm text-warning-soft-foreground">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning-border bg-warning-soft px-4 py-3 text-warning-soft-foreground">
                     <p>
                         {view.counts.unknown} 个 SKU
                         的原操作结果待核实；查明前不能选择重试。
@@ -743,9 +743,11 @@ export function BatchReviewTable({
                     ) : undefined
                 }
                 selectionBar={
-                    <div className="flex flex-wrap items-center gap-3 text-sm">
+                    <div className="flex flex-wrap items-center gap-3">
                         {mode === "RESULT" ? (
-                            <h2 className="font-semibold">入库明细</h2>
+                            <h2 className="text-section-title font-semibold tracking-tight">
+                                入库明细
+                            </h2>
                         ) : null}
                         <span className="num">
                             当前 {filteredRows.length} 个 SKU

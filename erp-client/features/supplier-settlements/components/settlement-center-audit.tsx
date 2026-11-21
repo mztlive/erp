@@ -18,7 +18,9 @@ function SettlementCenterAudit({
             className={cn(surfaceInsetClassName, "shadow-none ring-0")}
         >
             <CardHeader className="rounded-t-lg border-b border-grid py-3">
-                <CardTitle className="text-base">审计</CardTitle>
+                <CardTitle className="text-section-title font-semibold tracking-tight">
+                    审计
+                </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 pt-4">
                 {events.map((e) => (
@@ -26,7 +28,7 @@ function SettlementCenterAudit({
                         key={e.eventId}
                         className={cn(
                             surfaceInsetClassName,
-                            "px-3 py-2 text-sm",
+                            "px-3 py-2 text-body-compact",
                         )}
                     >
                         <div className="flex flex-wrap gap-2">

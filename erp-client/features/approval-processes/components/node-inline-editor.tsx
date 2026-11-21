@@ -87,7 +87,7 @@ export function NodeInlineEditor({
                     <span className="num flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-medium text-muted-foreground">
                         {String(index + 1).padStart(2, "0")}
                     </span>
-                    <h3 className="truncate text-sm font-medium">步骤设置</h3>
+                    <h3 className="truncate font-medium">步骤设置</h3>
                 </div>
                 <div className="flex items-center gap-0.5">
                     <Button
@@ -259,13 +259,13 @@ export function NodeInlineEditor({
                             </div>
                         </div>
                         {people.length > 1 ? (
-                            <p className="text-xs leading-5 text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 任一人通过后进入下一步。
                             </p>
                         ) : null}
                     </div>
                 ) : (
-                    <p className="text-xs leading-5 text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         提交时按申请人所属组织确定负责人；请先在“组织与人员”中配置负责人。审批开始后人员保持不变。
                     </p>
                 )}

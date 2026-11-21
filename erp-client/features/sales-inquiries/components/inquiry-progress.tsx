@@ -21,7 +21,7 @@ export function InquiryProgress({
     if (compact)
         return (
             <p
-                className="text-sm text-muted-foreground"
+                className="text-xs text-muted-foreground"
                 aria-label="转单进度与商品报价状态"
             >
                 已全部转单 {progress.completed_lines} 项（含未提交的销售单草稿）
@@ -33,7 +33,7 @@ export function InquiryProgress({
         )
     return (
         <div
-            className="flex flex-wrap items-center gap-3 text-sm"
+            className="flex flex-wrap items-center gap-3 text-body-compact"
             aria-label="转单进度与商品报价状态"
         >
             <StatusBadge

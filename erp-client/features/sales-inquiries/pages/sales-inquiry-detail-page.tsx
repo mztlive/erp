@@ -371,7 +371,7 @@ function InquiryDetailContent({
         hasPermission(permissions, "sales_inquiry:convert_sales") &&
         hasPermission(permissions, "sales_order:create")
     const feeOwner = inquiry.shared_fee_owner_user_id ? (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
             整单费用责任：
             {inquiry.shared_fee_owner_name ||
                 (inquiry.shared_fee_owner_user_id === userId
@@ -471,7 +471,7 @@ function InquiryDetailContent({
                 (React.Children.count(primaryActions) > 0 || canOpenSales) && (
                     <div className="flex flex-wrap items-center justify-end gap-3">
                         {actionRound !== inquiry.feedback_round && (
-                            <p className="mr-auto text-sm text-muted-foreground">
+                            <p className="mr-auto text-xs text-muted-foreground">
                                 正在查看历史轮次，请切回最新一轮后接受或重新询价。
                             </p>
                         )}
@@ -624,7 +624,7 @@ function InquiryDetailContent({
                                     <div ref={setDemandDetailsContainer} />
                                 ) : (
                                     <div className="flex flex-wrap items-start gap-x-8 gap-y-2 rounded-lg bg-muted/40 px-4 py-3">
-                                        <p className="flex min-w-0 gap-2 text-sm text-muted-foreground">
+                                        <p className="flex min-w-0 gap-2 text-xs text-muted-foreground">
                                             <span className="shrink-0">
                                                 {productFeedback &&
                                                 productFeedback.requirement_version !==
@@ -672,7 +672,7 @@ function InquiryDetailContent({
                                 <Link
                                     id="sales-inquiry-copy-source"
                                     href={`/sales/inquiries/${encodeURIComponent(inquiry.copied_from_inquiry_id)}`}
-                                    className="text-sm underline underline-offset-4"
+                                    className="text-body-compact underline underline-offset-4"
                                 >
                                     查看原询价
                                 </Link>

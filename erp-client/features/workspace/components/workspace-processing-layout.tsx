@@ -171,9 +171,7 @@ export function WorkspaceProcessingLayout({
                     ) : (
                         <section className="space-y-4">
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                                <h3 className="text-sm font-medium">
-                                    办理状态
-                                </h3>
+                                <h3 className="font-medium">办理状态</h3>
                                 <StatusBadge
                                     label={item.statusLabel}
                                     tone={item.statusTone}
@@ -205,7 +203,7 @@ export function WorkspaceProcessingLayout({
                     {(item.nextActionHint ||
                         item.impactSummary ||
                         item.actionBlockers.length > 0) && (
-                        <section className="space-y-4 border-t border-border/60 pt-5 text-sm leading-6">
+                        <section className="space-y-4 border-t border-border/60 pt-5 text-body-compact leading-6">
                             <h3 className="font-medium">处理说明</h3>
                             <WorkspaceTaskInstructions item={item} />
                         </section>
@@ -280,7 +278,7 @@ function Fact({
             }
         >
             <dt className="shrink-0 text-xs text-muted-foreground">{label}</dt>
-            <dd className="break-words text-sm font-medium leading-6">
+            <dd className="break-words text-body-compact font-medium leading-6">
                 {value || "—"}
             </dd>
         </div>

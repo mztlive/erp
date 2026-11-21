@@ -85,7 +85,9 @@ function DataTableViewOptions<TData>({
             >
                 <div className="space-y-3">
                     <div>
-                        <div className="text-sm font-medium">列设置</div>
+                        <div className="text-body-compact font-medium">
+                            列设置
+                        </div>
                         <p className="text-xs text-muted-foreground">
                             调整顺序、显隐和固定位置
                         </p>

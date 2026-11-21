@@ -21,7 +21,7 @@ export function PurchaseSourceUpdateLines({
         )
 
     if (lines.length === 0)
-        return <p className="text-sm text-muted-foreground">暂无采购明细</p>
+        return <p className="text-xs text-muted-foreground">暂无采购明细</p>
 
     return (
         <div className="min-w-0 @container/purchase-lines">
@@ -44,7 +44,7 @@ export function PurchaseSourceUpdateLines({
                         >
                             <div className="grid min-w-0 grid-cols-3 items-baseline gap-x-4 gap-y-3 @xl/purchase-lines:grid-cols-[minmax(0,1fr)_5rem_7rem_8rem]">
                                 <div className="col-span-3 min-w-0 @xl/purchase-lines:col-span-1">
-                                    <h4 className="text-sm font-medium wrap-anywhere">
+                                    <h4 className="text-body-compact font-medium wrap-anywhere">
                                         {line.itemName}
                                     </h4>
                                     {line.salesAllocationLabel || isFee ? (
@@ -55,7 +55,7 @@ export function PurchaseSourceUpdateLines({
                                         </p>
                                     ) : null}
                                 </div>
-                                <div className="min-w-0 text-sm @xl/purchase-lines:text-right">
+                                <div className="min-w-0 text-body-compact @xl/purchase-lines:text-right">
                                     <span className="mb-1 block text-xs text-muted-foreground @xl/purchase-lines:sr-only">
                                         采购数量
                                     </span>
@@ -69,13 +69,13 @@ export function PurchaseSourceUpdateLines({
                                         />
                                     )}
                                 </div>
-                                <div className="min-w-0 text-right text-sm">
+                                <div className="min-w-0 text-right text-body-compact">
                                     <span className="mb-1 block text-xs text-muted-foreground @xl/purchase-lines:sr-only">
                                         含税单价
                                     </span>
                                     {isFee ? "—" : amount(line.unitCostGross)}
                                 </div>
-                                <div className="min-w-0 text-right text-sm">
+                                <div className="min-w-0 text-right text-body-compact">
                                     <span className="mb-1 block text-xs text-muted-foreground @xl/purchase-lines:sr-only">
                                         含税小计
                                     </span>

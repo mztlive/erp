@@ -63,7 +63,7 @@ export function PortalCooperationPage() {
             />
             {query.data && (
                 <>
-                    <div className="grid gap-3 rounded-xl border p-5 text-sm md:grid-cols-2">
+                    <div className="grid gap-3 rounded-xl border p-5 text-body-compact md:grid-cols-2">
                         <p>供应商：{query.data.supplier_name}</p>
                         <p>
                             当前付款条件：
@@ -203,14 +203,16 @@ export function PortalCooperationEditor({
                 void form.handleSubmit()
             }}
         >
-            <h2 className="font-semibold">申请调整付款条件</h2>
-            <p className="text-sm text-muted-foreground">
+            <h2 className="text-section-title font-semibold tracking-tight">
+                申请调整付款条件
+            </h2>
+            <p className="text-xs text-muted-foreground">
                 当前生效付款条件：
                 {profile.payment_term
                     ? paymentTermLabel(profile.payment_term)
                     : "待核对"}
             </p>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 当前生效对账频率：
                 {reconciliationCycleLabel(profile.reconciliation_cycle) ??
                     "未配置"}
@@ -324,7 +326,9 @@ export function PortalCooperationEditor({
                             )}
                         </form.AppField>
                     ) : settlement === "cash_settlement" ? (
-                        <p className="text-sm">采购审批通过日付款。</p>
+                        <p className="text-body-compact">
+                            采购审批通过日付款。
+                        </p>
                     ) : (
                         <form.AppField name="days">
                             {(field) => (

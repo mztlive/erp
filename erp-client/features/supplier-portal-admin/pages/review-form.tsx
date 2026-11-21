@@ -368,8 +368,10 @@ export function PortalReviewForm({
     if (!canReview) {
         return (
             <section className="space-y-4 rounded-xl border p-5">
-                <h2 className="font-semibold">采购确认</h2>
-                <p className="text-sm text-muted-foreground">
+                <h2 className="text-section-title font-semibold tracking-tight">
+                    采购确认
+                </h2>
+                <p className="text-xs text-muted-foreground">
                     当前处理人：{task.owner_user?.display_name ?? "待核对"}。
                 </p>
                 {canReassign && (
@@ -399,8 +401,10 @@ export function PortalReviewForm({
         <section className="space-y-4 rounded-xl border p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                    <h2 className="font-semibold">采购确认</h2>
-                    <p className="text-sm text-muted-foreground">
+                    <h2 className="text-section-title font-semibold tracking-tight">
+                        采购确认
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
                         当前处理人：{task.owner_user?.display_name ?? "待核对"}
                         。供应商提报资料保持不变，单位、规格含义或报价变化请退回供应商确认。
                     </p>
@@ -417,7 +421,7 @@ export function PortalReviewForm({
                 )}
             </div>
             {!canProcess && (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     当前任务仅可查看，请由任务处理人确认。
                 </p>
             )}
@@ -643,7 +647,7 @@ export function PortalReviewForm({
                                 />
                             )}
                         </form.Subscribe>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             未匹配的品牌、分类或单位需由有权限的同事新增；完成后重新核对候选。可转交当前申请，供应商提报资料保留。
                         </p>
                         <div className="flex flex-wrap gap-3">
@@ -991,7 +995,7 @@ export function PortalReviewForm({
                                                     {(field) => (
                                                         <label
                                                             htmlFor={`${prefix}-unit-synonym-confirmed`}
-                                                            className="flex items-center gap-2 text-sm md:col-span-2"
+                                                            className="flex items-center gap-2 text-xs md:col-span-2"
                                                         >
                                                             <NativeCheckbox
                                                                 id={`${prefix}-unit-synonym-confirmed`}
@@ -1090,7 +1094,7 @@ export function PortalReviewForm({
                                             <label
                                                 key={candidate.offering_id}
                                                 htmlFor={`supplier-portal-review-existing-${toAutomationIdSegment(candidate.offering_id)}`}
-                                                className="flex items-start gap-2 text-sm"
+                                                className="flex items-start gap-2 text-xs"
                                             >
                                                 <NativeCheckbox
                                                     id={`supplier-portal-review-existing-${toAutomationIdSegment(candidate.offering_id)}`}
@@ -1129,7 +1133,7 @@ export function PortalReviewForm({
                                 )}
                             </form.AppField>
                         )}
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             仅本次新增规格保持未上架；复用在售商品规格并增加有效供货后，可能立即参与销售及采购供应选择。
                         </p>
                     </section>
@@ -1137,7 +1141,7 @@ export function PortalReviewForm({
                 {initialAvailability && (
                     <section className="space-y-3 rounded-lg border p-4">
                         <h3 className="font-medium">初始可供报送时间核对</h3>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             当前未配置自动过期时限；请核对供应商实际报送时间，需要新信息时退回确认。通过审核不会重新报送供应商可供情况。
                         </p>
                         {(rawProduct
@@ -1165,7 +1169,7 @@ export function PortalReviewForm({
                                     60000,
                             )
                             return (
-                                <p key={index} className="text-sm">
+                                <p key={index} className="text-body-compact">
                                     {row.name}：{timeLabel(row.at)} ·{" "}
                                     {Number.isFinite(elapsed) && elapsed >= 0
                                         ? elapsed < 60
@@ -1177,7 +1181,7 @@ export function PortalReviewForm({
                         })}
                         <label
                             htmlFor="supplier-portal-review-reported-confirmed"
-                            className="flex items-start gap-2 text-sm"
+                            className="flex items-start gap-2 text-xs"
                         >
                             <NativeCheckbox
                                 id="supplier-portal-review-reported-confirmed"
@@ -1210,7 +1214,7 @@ export function PortalReviewForm({
                                     />
                                 ) : (
                                     <>
-                                        <p className="text-sm">
+                                        <p className="text-body-compact">
                                             当前暂无可选采购人员列表，可选择由本人跟进或转交他人处理。
                                         </p>
                                         <Button

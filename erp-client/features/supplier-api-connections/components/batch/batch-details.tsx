@@ -55,7 +55,7 @@ export function BatchDetailsPanel({
             >
                 <h2
                     id="supplier-catalog-batch-terms-title"
-                    className="text-base font-semibold"
+                    className="text-section-title font-semibold tracking-tight"
                 >
                     供给条件
                 </h2>

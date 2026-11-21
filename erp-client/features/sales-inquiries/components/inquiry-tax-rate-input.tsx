@@ -78,7 +78,7 @@ export function InquiryTaxRateInput({
             />
             <span
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-sm text-muted-foreground"
+                className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-body-compact text-muted-foreground"
             >
                 %
             </span>

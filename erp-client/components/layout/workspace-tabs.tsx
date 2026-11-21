@@ -386,7 +386,7 @@ export function WorkspaceTabs({
                             {!tab.ready ? (
                                 <div
                                     role="status"
-                                    className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background text-sm text-muted-foreground"
+                                    className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background text-body-compact text-muted-foreground"
                                 >
                                     <WorkspaceOpeningMark />
                                     <span>正在打开工作页…</span>

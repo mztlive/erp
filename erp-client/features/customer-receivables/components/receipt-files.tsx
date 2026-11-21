@@ -15,7 +15,7 @@ export function ReceiptFiles({
     const { query, download } = useCustomerReceiptFiles(receiptId, draft)
     if (query.isPending)
         return (
-            <p role="status" className="text-sm text-muted-foreground">
+            <p role="status" className="text-xs text-muted-foreground">
                 正在读取回款凭证…
             </p>
         )
@@ -28,7 +28,7 @@ export function ReceiptFiles({
             />
         )
     if (!query.data.length)
-        return <p className="text-sm text-muted-foreground">未上传回款凭证</p>
+        return <p className="text-xs text-muted-foreground">未上传回款凭证</p>
     return (
         <FinancialFileList
             files={query.data}

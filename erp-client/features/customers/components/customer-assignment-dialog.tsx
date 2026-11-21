@@ -108,7 +108,7 @@ export function CustomerAssignmentDialog({
                             .map((item) => (
                                 <div
                                     key={item.id}
-                                    className="flex items-center justify-between gap-2 text-sm"
+                                    className="flex items-center justify-between gap-2 text-body-compact"
                                 >
                                     <span>
                                         {item.userName} · {item.effectiveFrom}{" "}
@@ -235,7 +235,10 @@ export function CustomerAssignmentDialog({
                         )}
                     />
                     {mutation.isError ? (
-                        <p className="text-sm text-destructive" role="alert">
+                        <p
+                            className="text-body-compact text-destructive"
+                            role="alert"
+                        >
                             {mutationMessage(mutation.error)}
                         </p>
                     ) : null}

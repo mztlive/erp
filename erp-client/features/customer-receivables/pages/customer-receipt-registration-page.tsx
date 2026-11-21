@@ -133,7 +133,7 @@ function ReceiptRegistrationSession({
     return (
         <PageScaffold density="compact" className="gap-6">
             {migrationError ? (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {migrationError}
                 </p>
             ) : null}

@@ -16,7 +16,7 @@ export function SupplierOrderExecutionProgress({
     return (
         <>
             {setup.supplier_address ? (
-                <div className="space-y-1 rounded-lg border p-3 text-sm">
+                <div className="space-y-1 rounded-lg border p-3 text-body-compact">
                     <p className="font-medium">已确认供应商区域</p>
                     <p className="text-muted-foreground">
                         {[

@@ -39,11 +39,11 @@ export function WorkspaceProcurementTask({
                 <>
                     <div className="min-w-0 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
-                            <h2 className="text-xl font-medium tracking-tight">
+                            <h2 className="text-section-title font-semibold tracking-tight">
                                 供给分配
                             </h2>
                             {item.counterpartyName ? (
-                                <span className="text-sm font-medium">
+                                <span className="text-body-compact font-medium">
                                     {item.counterpartyName}
                                 </span>
                             ) : null}

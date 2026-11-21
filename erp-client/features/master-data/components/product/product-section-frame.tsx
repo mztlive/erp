@@ -32,7 +32,7 @@ function ProductSectionFrame({
                                 {title}
                             </h2>
                             {description ? (
-                                <p className="text-xs leading-4.5 text-muted-foreground">
+                                <p className="text-xs text-muted-foreground">
                                     {description}
                                 </p>
                             ) : null}

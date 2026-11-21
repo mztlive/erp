@@ -15,7 +15,7 @@ export function SupplierOrdersListReturnBanner({
         <div
             className={cn(
                 surfacePanelClassName,
-                "flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm",
+                "flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-body-compact",
             )}
         >
             <span className="text-muted-foreground">

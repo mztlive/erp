@@ -113,7 +113,7 @@ export function PurchaseOrderExpenseSection({
                 pending > 0 ? `${pending} 条待确认发生` : "无待确认费用"
             }
         >
-            <p className="rounded-lg bg-muted/40 px-4 py-3 text-sm leading-6 text-muted-foreground">
+            <p className="rounded-lg bg-muted/40 px-4 py-3 text-body-compact leading-6 text-muted-foreground">
                 {pending > 0
                     ? "费用发生后上传运单、签收单或账单凭证。确认后计入来源销售单的实际经营盈亏，该费用行不能再改单修改。"
                     : "费用已确认发生或已移除，无需继续确认。"}
@@ -146,9 +146,9 @@ export function PurchaseOrderExpenseSection({
                 </TableBody>
             </Table>
             {expenseOnly ? (
-                <div className="flex flex-wrap items-baseline justify-end gap-3 border-t border-border/60 pt-4 text-sm">
+                <div className="flex flex-wrap items-baseline justify-end gap-3 border-t border-border/60 pt-4 text-body-compact">
                     <span className="text-muted-foreground">合计（含税）</span>
-                    <span className="text-xl font-semibold">
+                    <span className="num text-value-compact font-semibold tracking-tight">
                         {costMasked ? (
                             "•••"
                         ) : (
@@ -376,7 +376,10 @@ function ConfirmExpenseDialog({
                         )}
                     />
                     {failure ? (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {failure}
                         </p>
                     ) : null}

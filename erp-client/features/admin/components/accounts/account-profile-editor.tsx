@@ -318,7 +318,7 @@ export function AccountProfileEditor({
                             )}
                             <Field>
                                 <FieldLabel>登录账号</FieldLabel>
-                                <div className="flex h-control items-center gap-2 rounded-lg border border-input bg-muted/35 px-3 text-sm">
+                                <div className="flex h-control items-center gap-2 rounded-lg border border-input bg-muted/35 px-3 text-body-compact">
                                     <span className="min-w-0 truncate text-muted-foreground">
                                         {account.account}
                                     </span>
@@ -363,7 +363,7 @@ export function AccountProfileEditor({
                                     >
                                         角色
                                     </h3>
-                                    <p className="text-xs leading-5 text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         角色决定可以执行哪些操作；可处理哪些数据在“数据范围”中设置。
                                     </p>
                                 </div>
@@ -510,7 +510,7 @@ export function AccountProfileEditor({
                         {error ? (
                             <p
                                 role="alert"
-                                className="text-sm text-destructive"
+                                className="text-body-compact text-destructive"
                             >
                                 {error}
                             </p>

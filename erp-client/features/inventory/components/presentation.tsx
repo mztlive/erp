@@ -18,7 +18,7 @@ function ChipFilter({
 
 function formatQty(value: string, unit: string) {
     return (
-        <span className="num text-sm">
+        <span className="num text-body-compact">
             {value}
             <span className="ml-1 text-xs font-normal text-muted-foreground">
                 {unit}

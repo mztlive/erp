@@ -375,7 +375,7 @@ export function FulfillmentWorkSurface({
                                 className={
                                     addressPacking
                                         ? "sr-only outline-none"
-                                        : "text-base font-semibold outline-none"
+                                        : "text-body-compact font-semibold outline-none"
                                 }
                             >
                                 {operation.operationType === "SUPPLIER_DIRECT"
@@ -703,7 +703,7 @@ function FulfillmentReadOnlyActions({
 }) {
     return (
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
-            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
                 <EyeIcon className="size-4 shrink-0" aria-hidden="true" />
                 {readOnlyNote}
             </p>
@@ -782,8 +782,8 @@ function FulfillmentSourceContext({
                                 title={isDocument ? field.value : undefined}
                                 className={
                                     isDocument
-                                        ? "min-w-0 truncate text-sm font-medium"
-                                        : "min-w-0 break-words text-sm font-medium"
+                                        ? "min-w-0 truncate text-body-compact font-medium"
+                                        : "min-w-0 break-words text-body-compact font-medium"
                                 }
                             >
                                 {href ? (

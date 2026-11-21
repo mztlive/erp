@@ -56,11 +56,14 @@ export function PaymentRequestDetailPage({ requestId }: { requestId: string }) {
                 }
             />
             {query.isPending ? (
-                <p className="py-8 text-sm text-muted-foreground">
+                <p className="py-8 text-xs text-muted-foreground">
                     正在读取付款申请…
                 </p>
             ) : query.isError ? (
-                <p role="alert" className="py-6 text-sm text-destructive">
+                <p
+                    role="alert"
+                    className="py-6 text-body-compact text-destructive"
+                >
                     {getErrorMessage(
                         query.error,
                         "付款申请读取失败，请刷新后重试",

@@ -42,7 +42,7 @@ export function FulfillmentTrackingEntriesField({
                             <span className="w-24 shrink-0 break-words text-xs text-muted-foreground">
                                 {entry.carrier || "未填写物流公司"}
                             </span>
-                            <span className="num min-w-0 flex-1 break-all text-sm">
+                            <span className="num min-w-0 flex-1 break-all text-body-compact">
                                 {entry.trackingNo}
                             </span>
                             <Button

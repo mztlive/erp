@@ -70,8 +70,10 @@ export function WorkbenchDataInfo({
                 align="end"
                 className="w-80 max-w-[calc(100vw-2rem)] gap-2"
             >
-                <PopoverTitle className="text-sm">{title}</PopoverTitle>
-                <div className="space-y-2 text-xs leading-5 text-muted-foreground">
+                <PopoverTitle className="text-section-title font-semibold tracking-tight">
+                    {title}
+                </PopoverTitle>
+                <div className="space-y-2 text-xs text-muted-foreground">
                     {children}
                 </div>
                 <p className="text-xs text-muted-foreground">

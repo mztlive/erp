@@ -179,12 +179,12 @@ export function PortalAttachments({
             />
             {intent.current && (
                 <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground" role="status">
+                    <p className="text-xs text-muted-foreground" role="status">
                         {upload.isPending
                             ? "正在上传，请等待完成后保存。"
                             : "上传结果尚未全部确认。请重试原文件，确认完成后再保存或继续上传。"}
                     </p>
-                    <ul className="space-y-1 text-sm">
+                    <ul className="space-y-1 text-body-compact">
                         {intent.current.rows.map((row) => (
                             <li
                                 key={row.key}
@@ -247,7 +247,7 @@ export function PortalAttachments({
             {assetIds.map((id, index) => (
                 <div
                     key={id}
-                    className="flex flex-wrap items-center gap-2 text-sm"
+                    className="flex flex-wrap items-center gap-2 text-body-compact"
                 >
                     {imageOnly && (
                         <PortalImage

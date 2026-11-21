@@ -13,7 +13,7 @@ import { formatDateTime } from "@/lib/datetime"
 
 function CheckResult({ record }: { record: HealthRecordView }) {
     return (
-        <div className="min-w-0 space-y-2 text-sm">
+        <div className="min-w-0 space-y-2 text-body-compact">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <BusinessStatusBadge
                     context="list"
@@ -61,7 +61,7 @@ export function HealthRecords({
 }) {
     const [latest, ...history] = records
     if (!latest) {
-        return <p className="text-sm text-muted-foreground">尚未测试连接</p>
+        return <p className="text-xs text-muted-foreground">尚未测试连接</p>
     }
 
     return (

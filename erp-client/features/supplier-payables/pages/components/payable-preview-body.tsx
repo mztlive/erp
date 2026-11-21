@@ -140,13 +140,13 @@ export function PayablePreviewBody({
 
             <PreviewSection title="应付构成">
                 {entries.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">暂无分录</p>
+                    <p className="text-xs text-muted-foreground">暂无分录</p>
                 ) : (
                     <ul className="flex flex-col gap-2">
                         {entries.map((entry) => (
                             <li
                                 key={entry.entryId}
-                                className="flex items-start justify-between gap-5 border-b border-border py-3 text-sm last:border-b-0"
+                                className="flex items-start justify-between gap-5 border-b border-border py-3 text-body-compact last:border-b-0"
                             >
                                 <div className="min-w-0">
                                     <p>
@@ -178,7 +178,7 @@ export function PayablePreviewBody({
 
             <PreviewSection title="核销记录">
                 {activity.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         尚无付款或进项核销记录
                     </p>
                 ) : (
@@ -245,12 +245,12 @@ function ActivityRow({ item }: { item: PayableActivityItem }) {
                 <Link
                     id={`supplier-payables-preview-activity-${toAutomationIdSegment(item.id)}-open`}
                     href={item.href}
-                    className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm hover:bg-muted"
+                    className="flex items-center gap-2 rounded-lg px-2 py-2 text-body-compact hover:bg-muted"
                 >
                     {content}
                 </Link>
             ) : (
-                <div className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm">
+                <div className="flex items-center gap-2 rounded-lg px-2 py-2 text-body-compact">
                     {content}
                 </div>
             )}

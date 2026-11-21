@@ -67,7 +67,7 @@ export function SalesOrderInvoiceRecords({
             }
         >
             {pending ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     正在读取发票…
                 </p>
             ) : null}
@@ -94,7 +94,7 @@ export function SalesOrderInvoiceRecords({
                         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
                             <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
-                                    <h3 className="text-sm font-medium wrap-anywhere">
+                                    <h3 className="font-medium wrap-anywhere">
                                         {row.invoiceNo}
                                     </h3>
                                     <span className="text-xs text-muted-foreground">
@@ -117,7 +117,7 @@ export function SalesOrderInvoiceRecords({
                                     <dt className="text-xs text-muted-foreground">
                                         本单开票金额
                                     </dt>
-                                    <dd className="num text-base font-semibold whitespace-nowrap">
+                                    <dd className="num text-body-compact font-semibold whitespace-nowrap">
                                         {rowAmount(row.allocations)}
                                     </dd>
                                 </dl>
@@ -138,7 +138,7 @@ export function SalesOrderInvoiceRecords({
                         key={id}
                         className="space-y-3 rounded-lg border border-border/70 p-3"
                     >
-                        <h3 className="text-sm font-medium wrap-anywhere">
+                        <h3 className="font-medium wrap-anywhere">
                             {files[0]!.document_no || "发票附件"}
                         </h3>
                         {fileList(files)}
@@ -149,7 +149,7 @@ export function SalesOrderInvoiceRecords({
             query.isSuccess &&
             !records.length &&
             !remainingFiles.length ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     {allowed && state.invoices.isSuccess
                         ? "暂无已开发票"
                         : "暂无可下载的发票文件"}

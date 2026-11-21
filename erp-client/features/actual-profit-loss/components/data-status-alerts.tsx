@@ -31,18 +31,18 @@ export function DataStatusAlerts({
                 description="已保留上次成功结果，业务记录未被修改。请稍后刷新或联系管理员。"
             />
             {data.freshness.state === "stale" || refreshFailed ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     当前显示上次成功结果，更新于{" "}
                     {formatDateTime(data.freshness.projectedAt, "full")}。
                 </p>
             ) : null}
             {data.freshness.state === "rebuilding" ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     数据更新中，已保留上次成功结果；导出将标注数据时间。
                 </p>
             ) : null}
             {data.freshness.state === "failed" ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     当前显示上次成功结果，最新数据暂不可用。
                 </p>
             ) : null}

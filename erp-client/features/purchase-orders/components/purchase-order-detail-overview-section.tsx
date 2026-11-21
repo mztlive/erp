@@ -25,8 +25,8 @@ function OverviewField({
 }) {
     return (
         <div className="min-w-0 space-y-1.5">
-            <dt className="text-sm text-muted-foreground">{label}</dt>
-            <dd className="min-w-0 break-words text-sm leading-6">
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd className="min-w-0 break-words text-body-compact leading-6">
                 {children}
             </dd>
         </div>
@@ -60,11 +60,11 @@ export function PurchaseOrderDetailOverviewSection({
                         order={order}
                         costMasked={costMasked}
                     />
-                    <div className="flex items-baseline justify-end gap-5 border-t border-border/60 pt-4 text-sm">
+                    <div className="flex items-baseline justify-end gap-5 border-t border-border/60 pt-4 text-body-compact">
                         <span className="text-muted-foreground">
                             合计（含税）
                         </span>
-                        <span className="text-xl font-semibold">
+                        <span className="num text-value-compact font-semibold tracking-tight">
                             {costMasked ? (
                                 "•••"
                             ) : (

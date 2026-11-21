@@ -133,7 +133,7 @@ export const InquiryDemandLines = withForm({
                             )}
                             {removed && (
                                 <div
-                                    className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-4 py-2 text-sm"
+                                    className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-4 py-2 text-body-compact"
                                     role="status"
                                 >
                                     <span>
@@ -167,10 +167,10 @@ export const InquiryDemandLines = withForm({
                                         aria-hidden="true"
                                         className="mb-1 size-7 text-muted-foreground"
                                     />
-                                    <p className="text-sm font-medium">
+                                    <p className="text-body-compact font-medium">
                                         添加客户需要询价的商品
                                     </p>
-                                    <p className="max-w-md text-sm leading-6 text-muted-foreground">
+                                    <p className="max-w-md text-body-compact leading-6 text-muted-foreground">
                                         从公司商品池选择商品，填写数量与交期。创建草稿后，也可导入客户选品文件。
                                     </p>
                                 </div>
@@ -312,7 +312,7 @@ export const InquiryDemandLines = withForm({
                                                                     line.product_name
                                                                 }
                                                             </p>
-                                                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                                            <p className="mt-1 text-xs text-muted-foreground">
                                                                 {line.specification &&
                                                                 line.specification !==
                                                                     "无规格"

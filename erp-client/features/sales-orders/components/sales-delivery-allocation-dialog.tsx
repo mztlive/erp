@@ -153,7 +153,7 @@ function DeliveryAllocationForm({
                         })
                         return (
                             <div
-                                className="space-y-1 rounded-lg bg-muted/40 px-3 py-2 text-sm"
+                                className="space-y-1 rounded-lg bg-muted/40 px-3 py-2 text-body-compact"
                                 aria-live="polite"
                             >
                                 <p className="num">
@@ -182,7 +182,7 @@ function DeliveryAllocationForm({
                                         className="space-y-3 rounded-lg border border-grid p-4"
                                     >
                                         <div className="flex items-center justify-between gap-2">
-                                            <h3 className="text-sm font-medium">
+                                            <h3 className="font-medium">
                                                 地址 {index + 1}
                                             </h3>
                                             <Button

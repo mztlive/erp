@@ -367,7 +367,7 @@ export function AcceptanceWorkspace({
                         <WorkspaceTaskFooter
                             fallback={
                                 <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         {progressHint}
                                     </p>
                                     {registerButton}
@@ -377,7 +377,7 @@ export function AcceptanceWorkspace({
                             {registerButton}
                         </WorkspaceTaskFooter>
                     ) : !isOwner && pendingCount > 0 && !inWorkspaceTaskPane ? (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             {progressHint}
                         </p>
                     ) : null}

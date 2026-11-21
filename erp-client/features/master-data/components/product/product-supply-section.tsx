@@ -831,7 +831,7 @@ export function ProductSupplySection({
                                             {sku.skuNo ? (
                                                 <p
                                                     className={cn(
-                                                        "num truncate text-2xs",
+                                                        "num truncate text-xs",
                                                         selected
                                                             ? "text-sidebar-accent-foreground/75"
                                                             : "text-muted-foreground",
@@ -844,7 +844,7 @@ export function ProductSupplySection({
                                         {query.isPending ? null : count > 0 ? (
                                             <span
                                                 className={cn(
-                                                    "num shrink-0 rounded-sm px-1.5 py-0.5 text-2xs font-medium",
+                                                    "num shrink-0 rounded-sm px-1.5 py-0.5 text-tiny font-medium",
                                                     selected
                                                         ? "bg-primary/12 text-primary"
                                                         : "bg-muted text-muted-foreground",
@@ -853,7 +853,7 @@ export function ProductSupplySection({
                                                 {count} 家
                                             </span>
                                         ) : (
-                                            <span className="shrink-0 rounded-sm bg-warning-soft px-1.5 py-0.5 text-2xs font-medium text-warning-soft-foreground">
+                                            <span className="shrink-0 rounded-sm bg-warning-soft px-1.5 py-0.5 text-tiny font-medium text-warning-soft-foreground">
                                                 缺供给
                                             </span>
                                         )}

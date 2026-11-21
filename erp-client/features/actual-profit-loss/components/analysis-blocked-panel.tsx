@@ -29,7 +29,7 @@ export function AnalysisBlockedPanel({
                     <p className="text-xs text-muted-foreground">
                         公式说明：{W16_FORMULA_HINT}
                     </p>
-                    <ul className="list-disc space-y-1 pl-5 text-sm">
+                    <ul className="list-disc space-y-1 pl-5 text-body-compact">
                         {basisConfig.allowedPeriodBases.map((opt) => (
                             <li key={opt.code}>
                                 <button
@@ -55,7 +55,7 @@ export function AnalysisBlockedPanel({
                     <CardTitle>计算范围</CardTitle>
                     <CardDescription>选定口径后加载数据。</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-2 text-sm text-muted-foreground">
+                <CardContent className="space-y-2 text-body-compact text-muted-foreground">
                     <p>{W16_FORMULA_HINT}</p>
                     <p>
                         公式仅统计实际发生成本（冲减计入）；计划与已确认金额仅作对照。卡券与消费成本不在本页。

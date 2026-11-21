@@ -183,7 +183,10 @@ function WaiveFreightDialog({
                         )}
                     </form.AppField>
                     {failure ? (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {failure}
                         </p>
                     ) : null}

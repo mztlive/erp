@@ -36,7 +36,7 @@ export function ReceiptSessionFooter({
                         </p>
                         <MoneyValue
                             value={amount || "0"}
-                            className="text-2xl font-semibold"
+                            className="text-value-section font-semibold tracking-tight"
                         />
                     </div>
                     <div className="space-y-1 border-l pl-8">
@@ -45,7 +45,7 @@ export function ReceiptSessionFooter({
                         </p>
                         <MoneyValue
                             value={allocated}
-                            className="text-2xl font-semibold"
+                            className="text-value-section font-semibold tracking-tight"
                         />
                     </div>
                     <div className="space-y-1 border-l pl-8">
@@ -55,8 +55,8 @@ export function ReceiptSessionFooter({
                         <MoneyValue
                             className={
                                 overAllocated
-                                    ? "text-lg font-semibold text-destructive"
-                                    : "text-lg font-medium"
+                                    ? "text-value-compact font-semibold text-destructive tracking-tight"
+                                    : "text-value-compact font-semibold tracking-tight"
                             }
                             value={
                                 overAllocated

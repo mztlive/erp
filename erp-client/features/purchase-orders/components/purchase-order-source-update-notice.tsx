@@ -288,7 +288,7 @@ export function MaintainSourceButton({
                     <div className="space-y-2">
                         <label
                             htmlFor={reasonId}
-                            className="text-sm font-medium"
+                            className="text-xs font-medium"
                         >
                             无法调整的原因
                             <RequiredMark />
@@ -308,7 +308,7 @@ export function MaintainSourceButton({
                         {error ? (
                             <p
                                 id={`${reasonId}-error`}
-                                className="text-sm text-destructive"
+                                className="text-body-compact text-destructive"
                                 role="alert"
                             >
                                 {error}

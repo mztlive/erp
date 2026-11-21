@@ -145,7 +145,7 @@ export function DecisionDialog({
                     }}
                 >
                     {context ? (
-                        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 rounded-md border border-border/60 bg-muted/30 p-3 text-sm">
+                        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 rounded-md border border-border/60 bg-muted/30 p-3 text-body-compact">
                             <dt className="text-muted-foreground">单据</dt>
                             <dd className="min-w-0 break-words font-medium">
                                 {context.documentLabel?.trim() || "当前任务"}
@@ -211,7 +211,7 @@ export function DecisionDialog({
                     />
                     {conflictMessage ? (
                         <p
-                            className="text-sm text-destructive"
+                            className="text-body-compact text-destructive"
                             role="alert"
                             aria-live="assertive"
                         >

@@ -44,11 +44,13 @@ export function SessionHeader({
                     <PageHeader title={title} status={status} />
                 ) : (
                     <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-base font-semibold">{title}</h2>
+                        <h2 className="text-section-title font-semibold tracking-tight">
+                            {title}
+                        </h2>
                         <StatusBadge {...status} />
                     </div>
                 )}
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-body-compact">
                     <span className="text-muted-foreground">结算主体</span>
                     <LockKeyholeIcon
                         className="size-4 shrink-0 text-muted-foreground"
@@ -85,10 +87,10 @@ export function SessionHeader({
         <>
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                    <h2 className="font-heading text-lg font-semibold">
+                    <h2 className="font-heading text-section-title font-semibold tracking-tight">
                         核销 · {session.counterpartyPartyName}
                     </h2>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         模式：{isReceipt ? "回款核销" : "发票核销"}
                         {existing
                             ? ` · 继续单号 ${session.existingFactNo}`

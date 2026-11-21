@@ -184,7 +184,9 @@ function RoleWorkbenchContent({
                 ) : (
                     <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5">
-                            <h2 className="text-sm font-semibold">业务概览</h2>
+                            <h2 className="text-section-title font-semibold tracking-tight">
+                                业务概览
+                            </h2>
                             <WorkbenchDataInfo
                                 id={`${presentation.prefix}-workbench-scope-info`}
                                 title="业务概览"

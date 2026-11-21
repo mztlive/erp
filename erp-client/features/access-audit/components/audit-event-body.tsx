@@ -28,9 +28,9 @@ function AuditEventBody({ query }: AuditEventBodyProps) {
         )
     }
     return (
-        <div className="flex flex-col gap-5 text-sm">
+        <div className="flex flex-col gap-5 text-body-compact">
             <section className="flex flex-col gap-2">
-                <h3 className="text-sm font-medium">谁在何时操作</h3>
+                <h3 className="font-medium">谁在何时操作</h3>
                 <DescriptionList columns="two" aria-label="操作者与时间">
                     <DescriptionItem>
                         <DescriptionTerm>操作者</DescriptionTerm>
@@ -62,7 +62,7 @@ function AuditEventBody({ query }: AuditEventBodyProps) {
                 </DescriptionList>
             </section>
             <section className="flex flex-col gap-2">
-                <h3 className="text-sm font-medium">做了什么</h3>
+                <h3 className="font-medium">做了什么</h3>
                 <DescriptionList columns="two" aria-label="动作与对象">
                     <DescriptionItem>
                         <DescriptionTerm>动作</DescriptionTerm>

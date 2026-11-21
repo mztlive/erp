@@ -120,28 +120,28 @@ export function WorkspaceOverviewMetrics({
                             onClick={() => onSelect(metric)}
                             className="group min-w-0 rounded-xl border border-border/60 bg-card p-4 text-left transition-colors hover:bg-muted/30 focus-visible:outline-2 focus-visible:outline-ring"
                         >
-                            <span className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
+                            <span className="flex items-center justify-between gap-2 text-body-compact text-muted-foreground">
                                 {metric.label}
                                 <ArrowUpRightIcon className="size-3.5 shrink-0 opacity-40 group-hover:opacity-100" />
                             </span>
                             <div
                                 className={cn(
-                                    "mt-3 min-h-9 truncate text-2xl font-semibold tabular-nums tracking-tight",
+                                    "num mt-3 min-h-9 truncate text-value-section font-semibold tracking-tight",
                                     warning && "text-destructive",
                                 )}
                             >
                                 {query.isPending ? (
                                     <Skeleton className="h-8 w-28" />
                                 ) : query.isError ? (
-                                    <span className="text-sm">
+                                    <span className="text-body-compact">
                                         读取失败，点击重试
                                     </span>
                                 ) : data?.noScope ? (
-                                    <span className="text-sm">
+                                    <span className="text-body-compact">
                                         暂无数据查看权限
                                     </span>
                                 ) : value == null ? (
-                                    <span className="text-sm text-muted-foreground">
+                                    <span className="text-body-compact text-muted-foreground">
                                         {data?.limited
                                             ? "仅统计权限内部分数据"
                                             : "暂不可用"}
@@ -160,7 +160,7 @@ export function WorkspaceOverviewMetrics({
                                     />
                                 )}
                             </div>
-                            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                            <p className="mt-2 text-xs text-muted-foreground">
                                 {metric.detail}
                                 {data?.scopeSummary
                                     ? ` · ${data.scopeSummary}`
@@ -228,7 +228,7 @@ export function WorkspaceInsights({
     return (
         <aside aria-label="业务分析与风险" className="min-w-0 space-y-4">
             <section className="rounded-xl border border-border/60 bg-card p-4">
-                <h2 className="flex items-center gap-2 text-sm font-medium">
+                <h2 className="flex items-center gap-2 text-section-title font-semibold tracking-tight">
                     <ChartNoAxesCombinedIcon className="size-4 text-muted-foreground" />
                     {overview.view === "sales"
                         ? "新增销售单趋势"
@@ -236,7 +236,7 @@ export function WorkspaceInsights({
                           ? "实际经营盈亏趋势"
                           : "业务分布"}
                 </h2>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                <p className="mt-1 text-xs text-muted-foreground">
                     {overview.view === "sales"
                         ? "截至所选期末的近六个月 · 按创建日期，含草稿"
                         : overview.view === "management"
@@ -246,7 +246,7 @@ export function WorkspaceInsights({
                 {failed ? (
                     <p
                         role="status"
-                        className="py-8 text-sm text-muted-foreground"
+                        className="py-8 text-xs text-muted-foreground"
                     >
                         分析读取失败，请刷新重试。
                     </p>
@@ -350,7 +350,7 @@ export function WorkspaceInsights({
                     </>
                 ) : overview.view === "sales" ||
                   overview.view === "management" ? (
-                    <p className="py-8 text-sm text-muted-foreground">
+                    <p className="py-8 text-xs text-muted-foreground">
                         {overview.queries.some((query) => query.isPending) ||
                         overview.trend.isFetching
                             ? "正在读取趋势…"
@@ -413,13 +413,13 @@ export function WorkspaceInsights({
                     </div>
                 )}
                 {businessData?.note && (
-                    <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                    <p className="mt-3 text-xs text-muted-foreground">
                         {businessData.note}
                     </p>
                 )}
             </section>
             <section className="rounded-xl border border-border/60 bg-card p-4">
-                <h2 className="flex items-center gap-2 text-sm font-medium">
+                <h2 className="flex items-center gap-2 text-section-title font-semibold tracking-tight">
                     <CircleAlertIcon className="size-4 text-muted-foreground" />
                     风险与关注
                 </h2>
@@ -462,7 +462,7 @@ export function WorkspaceInsights({
                         </Button>
                     ))}
                     {!(overdue?.count || blocked?.count || warnings.length) && (
-                        <p className="py-3 text-xs leading-5 text-muted-foreground">
+                        <p className="py-3 text-xs text-muted-foreground">
                             {queueFailed ||
                             overview.queries.some((query) => query.isError)
                                 ? "部分业务数据读取失败，风险信息可能不完整。"

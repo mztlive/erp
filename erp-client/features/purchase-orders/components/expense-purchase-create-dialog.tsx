@@ -222,7 +222,7 @@ export function ExpensePurchaseCreateDialog({
                     </DialogDescription>
                 </DialogHeader>
                 {sourceLabel ? (
-                    <div className="flex items-center justify-between gap-3 rounded-md bg-muted p-3 text-sm">
+                    <div className="flex items-center justify-between gap-3 rounded-md bg-muted p-3 text-body-compact">
                         <span>归属销售单：{sourceLabel}</span>
                         {onChangeSource ? (
                             <Button
@@ -292,7 +292,7 @@ export function ExpensePurchaseCreateDialog({
                         {(array) => (
                             <section className="space-y-3">
                                 <div className="flex items-center justify-between gap-2">
-                                    <h3 className="text-sm font-semibold">
+                                    <h3 className="font-semibold">
                                         费用明细 · {array.state.value.length} 行
                                     </h3>
                                     <Button
@@ -412,7 +412,7 @@ export function ExpensePurchaseCreateDialog({
                     </form.AppField>
                     <form.Subscribe selector={(state) => state.values.lines}>
                         {(lines) => (
-                            <div className="flex items-baseline justify-end gap-3 text-sm">
+                            <div className="flex items-baseline justify-end gap-3 text-body-compact">
                                 <span className="text-muted-foreground">
                                     费用合计（含税）
                                 </span>
@@ -424,7 +424,10 @@ export function ExpensePurchaseCreateDialog({
                         )}
                     </form.Subscribe>
                     {failure ? (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {failure}
                         </p>
                     ) : null}

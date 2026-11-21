@@ -158,7 +158,7 @@ function WorkspaceDetailContent({
                         }
                     />
                 ) : (
-                    <p role="status" className="text-sm text-muted-foreground">
+                    <p role="status" className="text-xs text-muted-foreground">
                         {autoNext && !approval
                             ? "当前任务已处理，正在打开下一项…"
                             : "当前任务已处理，正在返回队列…"}

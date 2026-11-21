@@ -29,7 +29,7 @@ export function FlowStepHeader({ data }: { data: CanvasNode["data"] }) {
             <span className="num text-xs text-muted-foreground">
                 {String(data.order ?? 0).padStart(2, "0")}
             </span>
-            <span className="min-w-0 flex-1 truncate text-sm font-medium">
+            <span className="min-w-0 flex-1 truncate text-body-compact font-medium">
                 {node.node_name.trim() || "未命名节点"}
             </span>
             <span

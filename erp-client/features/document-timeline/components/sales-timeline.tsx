@@ -65,7 +65,7 @@ export function SalesTimeline({
         >
             {!embedded ? (
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h3 className="text-sm font-medium">
+                    <h3 className="font-medium">
                         {compact
                             ? "最近动态"
                             : fixedCategory === "returns"
@@ -85,7 +85,7 @@ export function SalesTimeline({
             ) : null}
             {!embedded && !compact && !fixedCategory && (
                 <div className="flex flex-wrap items-center gap-3">
-                    <label htmlFor={`${idPrefix}-category`} className="text-sm">
+                    <label htmlFor={`${idPrefix}-category`} className="text-xs">
                         业务环节
                     </label>
                     <NativeSelect
@@ -113,7 +113,7 @@ export function SalesTimeline({
                     </NativeSelect>
                     <label
                         htmlFor={`${idPrefix}-details`}
-                        className="inline-flex items-center gap-2 text-sm"
+                        className="inline-flex items-center gap-2 text-xs"
                     >
                         <NativeCheckbox
                             id={`${idPrefix}-details`}
@@ -127,11 +127,11 @@ export function SalesTimeline({
                 </div>
             )}
             {query.isPending ? (
-                <p className="text-sm text-muted-foreground">正在读取动态…</p>
+                <p className="text-xs text-muted-foreground">正在读取动态…</p>
             ) : query.isError ? (
                 <div
                     role="alert"
-                    className="space-y-2 text-sm text-destructive"
+                    className="space-y-2 text-body-compact text-destructive"
                 >
                     <p>动态读取失败，请重试。当前单据内容仍可继续查看。</p>
                     <Button
@@ -172,7 +172,7 @@ export function SalesTimeline({
                 </Button>
             )}
             {!compact && query.data && (
-                <p className="border-t pt-3 text-xs leading-5 text-muted-foreground">
+                <p className="border-t pt-3 text-xs text-muted-foreground">
                     {query.data.pages[0]?.notice}
                 </p>
             )}
@@ -214,7 +214,7 @@ export function SalesTimelineSheet({
                             href={`/sales/orders/${encodeURIComponent(source.id)}?section=timeline`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-sm text-primary"
+                            className="text-body-compact text-primary"
                         >
                             打开销售单
                         </a>

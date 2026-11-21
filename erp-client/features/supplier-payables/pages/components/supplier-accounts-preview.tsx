@@ -178,7 +178,7 @@ export function SupplierAccountsPreview({
                     />
                 ) : reversalQuery.isError ? (
                     <div className="space-y-3">
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             {getErrorMessage(
                                 reversalQuery.error,
                                 "冲正详情加载失败，请重试。",
@@ -195,7 +195,7 @@ export function SupplierAccountsPreview({
                         </Button>
                     </div>
                 ) : (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         未找到冲正详情
                     </p>
                 )}
@@ -271,7 +271,7 @@ export function SupplierAccountsPreview({
                     />
                 ) : refundQuery.isError ? (
                     <div className="space-y-3">
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             {getErrorMessage(
                                 refundQuery.error,
                                 "退款详情加载失败，请重试。",
@@ -288,7 +288,7 @@ export function SupplierAccountsPreview({
                         </Button>
                     </div>
                 ) : (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         未找到退款详情
                     </p>
                 )}
@@ -482,7 +482,7 @@ export function SupplierAccountsPreview({
                 />
             ) : detailQuery.isError ? (
                 <div className="flex flex-col gap-3 p-6">
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         {getErrorMessage(
                             detailQuery.error,
                             "应付详情加载失败，请重试。",
@@ -499,7 +499,7 @@ export function SupplierAccountsPreview({
                     </Button>
                 </div>
             ) : (
-                <p className="text-sm text-muted-foreground">未找到应付详情</p>
+                <p className="text-xs text-muted-foreground">未找到应付详情</p>
             )}
         </QuickPreviewSheet>
     )

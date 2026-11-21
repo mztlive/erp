@@ -41,7 +41,7 @@ export function InvoiceRequestDetails({
           : []
     return (
         <div className="flex min-w-0 flex-col gap-4">
-            <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+            <dl className="grid gap-x-6 gap-y-3 text-body-compact sm:grid-cols-2">
                 {facts.map(([label, value]) => (
                     <div key={label}>
                         <dt className="text-muted-foreground">{label}</dt>
@@ -52,7 +52,7 @@ export function InvoiceRequestDetails({
                 ))}
             </dl>
             <div className="flex min-w-0 flex-col gap-2">
-                <h4 className="text-sm font-semibold">开票明细</h4>
+                <h4 className="text-body-compact font-semibold">开票明细</h4>
                 {lines.length ? (
                     <Table aria-label="开票明细" className="min-w-96">
                         <TableHeader>
@@ -105,7 +105,7 @@ export function InvoiceRequestDetails({
                         </TableBody>
                     </Table>
                 ) : (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         未记录开票明细
                     </p>
                 )}

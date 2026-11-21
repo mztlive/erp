@@ -222,7 +222,7 @@ export function CatalogPreviewSheet({
             }
         >
             <div className="space-y-5">
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-body-compact">
                     {[
                         ["分类", item.category_name || "未提供"],
                         ["品牌", item.brand_name || "未提供"],
@@ -252,7 +252,7 @@ export function CatalogPreviewSheet({
                     canReadCost={canReadCost}
                 />
                 {choice.error ? (
-                    <div role="alert" className="space-y-2 text-sm">
+                    <div role="alert" className="space-y-2 text-body-compact">
                         <p className="text-destructive">
                             选择更新失败：{choice.error.message}
                         </p>
@@ -271,7 +271,7 @@ export function CatalogPreviewSheet({
                 ) : null}
                 {mainImages.length ? (
                     <section className="space-y-2">
-                        <h3 className="text-sm font-medium">
+                        <h3 className="font-medium">
                             商品图片（{mainImages.length}）
                         </h3>
                         <CatalogPreviewThumbnails
@@ -289,7 +289,7 @@ export function CatalogPreviewSheet({
                     >
                         <summary
                             id="supplier-catalog-preview-details-toggle"
-                            className="cursor-pointer text-sm font-medium"
+                            className="cursor-pointer text-body-compact font-medium"
                         >
                             商品详情图（{details.length}）
                         </summary>
@@ -308,13 +308,13 @@ export function CatalogPreviewSheet({
                 ) : null}
                 {item.description ? (
                     <section className="space-y-2">
-                        <h3 className="text-sm font-medium">商品介绍</h3>
+                        <h3 className="font-medium">商品介绍</h3>
                         <p
                             id="supplier-catalog-preview-description"
                             className={
                                 expanded
-                                    ? "whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground"
-                                    : "line-clamp-3 whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground"
+                                    ? "whitespace-pre-wrap break-words text-body-compact leading-6 text-muted-foreground"
+                                    : "line-clamp-3 whitespace-pre-wrap break-words text-body-compact leading-6 text-muted-foreground"
                             }
                         >
                             {item.description}

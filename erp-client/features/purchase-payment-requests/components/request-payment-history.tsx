@@ -23,14 +23,14 @@ export function RequestPaymentHistory({
         >
             <h3 className="font-medium">实际付款与回单</h3>
             {request.payments.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     尚未登记实际付款。
                 </p>
             ) : (
                 request.payments.map((payment) => (
                     <article
                         key={payment.payment_id}
-                        className="space-y-3 rounded-lg border p-4 text-sm"
+                        className="space-y-3 rounded-lg border p-4 text-body-compact"
                     >
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <p className="num font-medium">
@@ -128,7 +128,7 @@ export function RequestPaymentHistory({
                     {request.credit_uses.map((use) => (
                         <div
                             key={use.id}
-                            className="flex flex-wrap justify-between gap-2 rounded-lg border p-4 text-sm"
+                            className="flex flex-wrap justify-between gap-2 rounded-lg border p-4 text-body-compact"
                         >
                             <span>
                                 {request.lines.find(
@@ -144,7 +144,7 @@ export function RequestPaymentHistory({
                 </section>
             )}
             {download.isError && (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {getErrorMessage(download.error, "付款回单读取失败")}
                 </p>
             )}

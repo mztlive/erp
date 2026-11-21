@@ -89,7 +89,7 @@ export function PaymentRecipientHeading({
         : "supplier-payables-payment-recipient-title"
     return (
         <div className={className}>
-            <h3 id={titleId} className="text-sm font-semibold">
+            <h3 id={titleId} className="font-semibold">
                 收款信息
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">

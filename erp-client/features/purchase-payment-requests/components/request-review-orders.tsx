@@ -19,8 +19,10 @@ export function RequestReviewOrders({ request }: { request: PaymentRequest }) {
     return (
         <section aria-label="采购明细" className="space-y-3">
             <div className="flex items-center justify-between gap-4">
-                <h2 className="text-sm font-semibold">采购明细</h2>
-                <span className="text-sm text-muted-foreground">
+                <h2 className="text-section-title font-semibold tracking-tight">
+                    采购明细
+                </h2>
+                <span className="text-body-compact text-muted-foreground">
                     {request.lines.reduce(
                         (count, line) => count + line.purchase_items.length,
                         0,
@@ -35,7 +37,7 @@ export function RequestReviewOrders({ request }: { request: PaymentRequest }) {
                         className="space-y-4"
                     >
                         {multiple && (
-                            <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                            <div className="flex flex-wrap items-center justify-between gap-3 text-body-compact">
                                 <div className="space-y-1">
                                     <p className="num font-medium">
                                         {line.purchase_order_no}
@@ -101,7 +103,7 @@ export function RequestReviewOrders({ request }: { request: PaymentRequest }) {
                                                     {item.item_name}
                                                 </p>
                                                 {item.spec && (
-                                                    <p className="mt-1 text-sm text-muted-foreground">
+                                                    <p className="mt-1 text-xs text-muted-foreground">
                                                         {item.spec}
                                                     </p>
                                                 )}
@@ -127,7 +129,7 @@ export function RequestReviewOrders({ request }: { request: PaymentRequest }) {
                                 </TableBody>
                             </Table>
                         ) : (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 未记录采购明细，请核对提交材料。
                             </p>
                         )}

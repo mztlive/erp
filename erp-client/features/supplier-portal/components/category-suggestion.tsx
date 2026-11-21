@@ -98,8 +98,8 @@ function CategorySuggestionLookup({
         <section className="space-y-3 rounded-lg border bg-muted/20 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="space-y-1">
-                    <h3 className="text-sm font-medium">此前核对的分类建议</h3>
-                    <p className="text-sm text-muted-foreground">
+                    <h3 className="font-medium">此前核对的分类建议</h3>
+                    <p className="text-xs text-muted-foreground">
                         按本供应商的原始完整路径和商品类型查询。查到建议后仍需人工确认，原始路径会保留。
                     </p>
                 </div>
@@ -122,7 +122,7 @@ function CategorySuggestionLookup({
                 </Button>
             </div>
             {!params.original_category_path && (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     请先填写供应商原始分类完整路径。
                 </p>
             )}
@@ -137,7 +137,7 @@ function CategorySuggestionLookup({
                 query.isSuccess &&
                 !query.isFetching &&
                 !suggestion && (
-                    <p role="status" className="text-sm text-muted-foreground">
+                    <p role="status" className="text-xs text-muted-foreground">
                         未查到此前确认的对应分类，请选择当前分类或保留原始路径，交由采购核对。
                     </p>
                 )}
@@ -146,7 +146,7 @@ function CategorySuggestionLookup({
                     <Badge variant={requiresRecheck ? "warning" : "info"}>
                         {requiresRecheck ? "需重新核对" : "待人工确认采用"}
                     </Badge>
-                    <dl className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-[auto_1fr]">
+                    <dl className="grid gap-x-4 gap-y-2 text-body-compact sm:grid-cols-[auto_1fr]">
                         <dt className="text-muted-foreground">原始分类路径</dt>
                         <dd className="min-w-0 break-words">
                             {suggestion.original_category_path}
@@ -163,27 +163,36 @@ function CategorySuggestionLookup({
                         </dd>
                     </dl>
                     {!matchingInput && (
-                        <p role="alert" className="text-sm text-warning">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-warning"
+                        >
                             建议与当前原始路径或商品类型不一致，请重新查询后核对。
                         </p>
                     )}
                     {!category ? (
-                        <p role="status" className="text-sm text-warning">
+                        <p
+                            role="status"
+                            className="text-body-compact text-warning"
+                        >
                             先前确认的分类当前不可选，请重新选择分类并核对。
                         </p>
                     ) : !candidate ? (
-                        <p role="status" className="text-sm text-warning">
+                        <p
+                            role="status"
+                            className="text-body-compact text-warning"
+                        >
                             当前候选中未找到相同分类、版本和商品类型，请刷新分类资料后重新核对。
                         </p>
                     ) : null}
                     {requiresRecheck && (
                         <div className="space-y-2">
-                            <p className="text-sm text-warning">
+                            <p className="text-body-compact text-warning">
                                 先前确认资料已需要重新核对。请比较原始路径、先前确认路径和当前分类，再确认本次匹配。
                             </p>
                             <label
                                 htmlFor={`${mappingPrefix}-confirm-recheck`}
-                                className="flex items-start gap-2 text-sm"
+                                className="flex items-start gap-2 text-xs"
                             >
                                 <NativeCheckbox
                                     id={`${mappingPrefix}-confirm-recheck`}
@@ -223,7 +232,10 @@ function CategorySuggestionLookup({
                             : "确认采用建议分类"}
                     </Button>
                     {applied && (
-                        <p role="status" className="text-sm text-success">
+                        <p
+                            role="status"
+                            className="text-body-compact text-success"
+                        >
                             已选择当前分类，供应商原始分类路径仍保留。保存或提交时将再次核对当前资料。
                         </p>
                     )}

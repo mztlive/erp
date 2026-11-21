@@ -109,7 +109,7 @@ export function ContractPdfPages({
                 {error ? (
                     <p
                         role="alert"
-                        className="p-5 text-sm text-muted-foreground"
+                        className="p-5 text-xs text-muted-foreground"
                     >
                         此文件暂时无法分页预览，请点击“查看完整原文”。
                     </p>
@@ -117,7 +117,7 @@ export function ContractPdfPages({
                 {!error && (!document || rendering) ? (
                     <p
                         role="status"
-                        className="absolute inset-0 flex items-center justify-center gap-2 bg-background text-sm text-muted-foreground"
+                        className="absolute inset-0 flex items-center justify-center gap-2 bg-background text-xs text-muted-foreground"
                     >
                         <Spinner />
                         正在渲染原文…
@@ -147,7 +147,7 @@ export function ContractPdfPages({
                     <ChevronLeftIcon />
                 </Button>
                 <span
-                    className="num text-sm text-muted-foreground"
+                    className="num text-body-compact text-muted-foreground"
                     aria-live="polite"
                 >
                     {document ? `${page} / ${document.numPages}` : "加载中"}

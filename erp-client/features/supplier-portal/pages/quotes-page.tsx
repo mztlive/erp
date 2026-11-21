@@ -226,7 +226,7 @@ export function PortalQuotesPage() {
             {canMaintain && selected && (
                 <section className="space-y-3">
                     <div className="flex items-center justify-between gap-3">
-                        <h2 className="font-semibold">
+                        <h2 className="text-section-title font-semibold tracking-tight">
                             {selected.name} · {selected.specification} ·{" "}
                             {selected.sku_no}
                         </h2>

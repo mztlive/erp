@@ -494,7 +494,7 @@ export const SelectionForm = ({
                     ) : (
                         <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-background via-muted/60 to-background p-2 text-center">
                             <Package className="h-6 w-6 stroke-[1.25] text-muted-foreground" />
-                            <span className="mt-1 text-2xs font-medium text-muted-foreground tracking-wider">
+                            <span className="mt-1 text-xs font-medium text-muted-foreground tracking-wider">
                                 严选品质
                             </span>
                         </div>
@@ -502,14 +502,14 @@ export const SelectionForm = ({
 
                     {/* 档位微标 */}
                     {item.tier_name && (
-                        <span className="absolute left-1 top-1 rounded-md bg-primary/80 px-1.5 py-0.5 text-2xs font-medium text-primary-foreground backdrop-blur-xs">
+                        <span className="absolute left-1 top-1 rounded-md bg-primary/80 px-1.5 py-0.5 text-tiny font-medium text-primary-foreground backdrop-blur-xs">
                             {item.tier_name}
                         </span>
                     )}
 
                     {/* 套餐件数 */}
                     {item.members.length > 0 && (
-                        <span className="absolute left-1 bottom-1 rounded-md bg-primary/80 px-1.5 py-0.5 text-2xs text-primary-foreground flex items-center gap-1 backdrop-blur-xs font-medium">
+                        <span className="absolute left-1 bottom-1 rounded-md bg-primary/80 px-1.5 py-0.5 text-tiny text-primary-foreground flex items-center gap-1 backdrop-blur-xs font-medium">
                             <Layers className="h-2.5 w-2.5" />
                             {item.members.length}件装
                         </span>
@@ -534,7 +534,7 @@ export const SelectionForm = ({
                                 {item.specification.slice(0, 2).map((s) => (
                                     <span
                                         key={s.name}
-                                        className="rounded-md bg-muted/80 px-1.5 py-0.5 text-2xs text-muted-foreground font-normal truncate max-w-full"
+                                        className="rounded-md bg-muted/80 px-1.5 py-0.5 text-xs text-muted-foreground font-normal truncate max-w-full"
                                     >
                                         {s.value || s.name}
                                     </span>
@@ -690,7 +690,7 @@ export const SelectionForm = ({
                                 <h1 className="text-xs sm:text-sm font-bold text-foreground truncate">
                                     {page.customer_name}
                                 </h1>
-                                <p className="text-2xs text-muted-foreground flex items-center gap-1">
+                                <p className="text-xs text-muted-foreground flex items-center gap-1">
                                     <span className="inline-block h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
                                     <span>专属选品会场</span>
                                     <span className="text-muted-foreground">
@@ -910,7 +910,7 @@ export const SelectionForm = ({
                                         {section.name}
                                     </span>
                                     {sectionSelectedCount > 0 && (
-                                        <span className="absolute top-1.5 right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-2xs font-bold text-primary-foreground shadow-xs">
+                                        <span className="num absolute top-1.5 right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-tiny font-bold text-primary-foreground shadow-xs">
                                             {sectionSelectedCount}
                                         </span>
                                     )}
@@ -1002,7 +1002,7 @@ export const SelectionForm = ({
                             <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm active:scale-95 transition-transform">
                                 <ShoppingBag className="h-5 w-5" />
                                 {selectedCount > 0 && (
-                                    <span className="absolute -right-1 -top-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-warning px-1 text-2xs font-bold text-warning-foreground shadow-xs animate-in zoom-in">
+                                    <span className="num absolute -right-1 -top-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-warning px-1 text-tiny font-bold text-warning-foreground shadow-xs animate-in zoom-in">
                                         {selectedCount}
                                     </span>
                                 )}
@@ -1017,7 +1017,7 @@ export const SelectionForm = ({
                                             </span>{" "}
                                             款
                                         </p>
-                                        <p className="text-2xs text-muted-foreground">
+                                        <p className="text-xs text-muted-foreground">
                                             {dirty
                                                 ? "修改待保存"
                                                 : "点击查看清单"}
@@ -1028,7 +1028,7 @@ export const SelectionForm = ({
                                         <p className="text-sm sm:text-base font-bold text-primary leading-none">
                                             已选 {selectedCount} 项
                                         </p>
-                                        <p className="text-2xs text-muted-foreground mt-0.5">
+                                        <p className="text-xs text-muted-foreground mt-0.5">
                                             {dirty
                                                 ? "尚有修改未保存"
                                                 : "已选内容已同步"}

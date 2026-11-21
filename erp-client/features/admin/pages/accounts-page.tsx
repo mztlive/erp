@@ -382,7 +382,7 @@ export function AccountsPage() {
                 notice ? (
                     <p
                         role="status"
-                        className="rounded-lg bg-muted p-3 text-sm"
+                        className="rounded-lg bg-muted p-3 text-body-compact"
                     >
                         {notice}
                     </p>

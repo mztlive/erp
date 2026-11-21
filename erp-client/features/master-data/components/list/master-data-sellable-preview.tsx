@@ -12,7 +12,7 @@ export function SellableItemPreviewPanel({ row }: { row: MasterDataListItem }) {
     if (!item) return null
 
     return (
-        <div className="space-y-6 text-sm">
+        <div className="space-y-6 text-body-compact">
             <section className="space-y-3 border-b border-border pb-6">
                 <h3 className="text-xs font-medium text-muted-foreground">
                     销售参考价（含税）
@@ -53,7 +53,7 @@ export function SellableItemPreviewPanel({ row }: { row: MasterDataListItem }) {
                 <div className="flex items-center gap-2 font-medium">
                     <h3>供应保障</h3>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2 text-body-compact text-muted-foreground">
                     <UsersIcon className="size-3.5" aria-hidden />
                     <span>
                         当前由{" "}
@@ -104,7 +104,7 @@ export function SellableItemPreviewPanel({ row }: { row: MasterDataListItem }) {
                 <div className="num mt-1 font-medium">
                     {formatEffectiveRange(row.effectiveFrom, row.effectiveTo)}
                 </div>
-                <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                <p className="mt-2 text-xs text-muted-foreground">
                     可售状态核对时间：{item.eligibilityAsOf}
                     。价格、商品上下架或供货情况变化后，可售状态将自动更新。
                 </p>

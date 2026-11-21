@@ -46,7 +46,9 @@ export function SupplierPaymentDetailDialog({
             >
                 <DialogHeader className="shrink-0 px-6 pt-6 pr-14 pb-4">
                     <div className="flex flex-wrap items-center gap-2">
-                        <DialogTitle className="text-lg">付款详情</DialogTitle>
+                        <DialogTitle className="text-section-title font-semibold tracking-tight">
+                            付款详情
+                        </DialogTitle>
                         {row ? (
                             <BusinessStatusBadge
                                 context="preview"
@@ -68,7 +70,7 @@ export function SupplierPaymentDetailDialog({
                         />
                     ) : isError ? (
                         <div className="flex flex-col items-start gap-3 p-6">
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 {getErrorMessage(
                                     error,
                                     "付款详情加载失败，请重试。",
@@ -85,7 +87,7 @@ export function SupplierPaymentDetailDialog({
                             </Button>
                         </div>
                     ) : (
-                        <p className="p-6 text-sm text-muted-foreground">
+                        <p className="p-6 text-xs text-muted-foreground">
                             未找到付款详情
                         </p>
                     )}

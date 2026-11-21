@@ -71,7 +71,7 @@ export function PortalBatchDraftEditor({
                         )}
                 </div>
                 {unresolved && (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         本次上传或保存结果尚未确认，请在原草稿恢复操作后再返回批次。
                     </p>
                 )}

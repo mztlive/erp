@@ -36,11 +36,11 @@ export function PurchaseSourceUpdateContext({
             >
                 <summary
                     id="purchase-source-update-impact-details"
-                    className="cursor-pointer text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-4"
+                    className="cursor-pointer text-body-compact font-medium focus-visible:outline-2 focus-visible:outline-offset-4"
                 >
                     查看销售变更内容
                 </summary>
-                <div className="mt-3 space-y-3 text-sm">
+                <div className="mt-3 space-y-3 text-body-compact">
                     <ul className="space-y-2">
                         {update.reasons.map((reason) => (
                             <li key={`${reason.lineNo}-${reason.description}`}>

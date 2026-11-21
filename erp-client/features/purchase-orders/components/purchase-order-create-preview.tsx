@@ -139,7 +139,7 @@ export function PurchaseOrderCreatePreviewDialog({
                 </DialogHeader>
 
                 {scopeRows.length > 0 ? (
-                    <div className="shrink-0 border-b border-border px-6 py-3 text-sm">
+                    <div className="shrink-0 border-b border-border px-6 py-3 text-body-compact">
                         <p className="font-medium">
                             本次分配 {scopeRows.length - excluded.length} 项 ·
                             暂不分配 {excluded.length} 项
@@ -230,7 +230,7 @@ export function PurchaseOrderCreatePreviewDialog({
                                 sourceOrder={sourceOrder}
                             />
                         ) : (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 本次全部由现有库存满足，不会创建采购单。
                             </p>
                         )}

@@ -409,7 +409,7 @@ export function DepositCommandDialog({
                     <DialogDescription>{spec.description}</DialogDescription>
                 </DialogHeader>
                 {account && (
-                    <p className="text-sm">
+                    <p className="text-body-compact">
                         {account.supplier_name} · {account.payer_party_name}
                         {request ? (
                             <>

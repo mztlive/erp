@@ -129,7 +129,7 @@ export function BatchCategoryMappings({
                     />
                     <h2
                         id="supplier-catalog-batch-category-title"
-                        className="text-sm font-semibold"
+                        className="text-section-title font-semibold tracking-tight"
                     >
                         公司分类
                     </h2>
@@ -234,7 +234,7 @@ export function BatchCategoryMappings({
             ) : null}
             {single ? (
                 <div className="flex flex-wrap items-center gap-3 border-t p-4">
-                    <div className="flex min-w-0 items-center gap-2 text-sm">
+                    <div className="flex min-w-0 items-center gap-2 text-body-compact">
                         <span className="wrap-anywhere">
                             {single.sourceName}
                         </span>
@@ -256,7 +256,7 @@ export function BatchCategoryMappings({
                     ) : null}
                 </div>
             ) : rows.length === 0 ? (
-                <p className="p-4 text-sm text-muted-foreground">
+                <p className="p-4 text-xs text-muted-foreground">
                     暂无待映射分类
                 </p>
             ) : (
@@ -448,7 +448,7 @@ export function BatchCategoryMappings({
                                             colSpan={4}
                                             className="py-10 text-center"
                                         >
-                                            <p className="mb-2 text-sm text-muted-foreground">
+                                            <p className="mb-2 text-xs text-muted-foreground">
                                                 没有符合条件的来源分类
                                             </p>
                                             <Button

@@ -48,7 +48,7 @@ export function RequestDraftGroupHeader({
                 >
                     {index + 1}
                 </span>
-                <span className="min-w-0 break-words text-sm font-medium">
+                <span className="min-w-0 break-words text-body-compact font-medium">
                     {first?.supplier_name ?? "采购来源不可用"}
                 </span>
             </span>

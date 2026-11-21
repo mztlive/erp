@@ -19,7 +19,7 @@ export const InvoiceAllocationTaxes = ({
     if (selected.size <= 1) return null
     return (
         <section className="space-y-3 rounded-lg border p-4">
-            <h3 className="text-sm font-semibold">分配税额</h3>
+            <h3 className="font-semibold">分配税额</h3>
             <p className="text-xs text-muted-foreground">
                 按发票实际内容填写每笔应付的税额；合计须与票面税额一致，不含税金额由分配金额减去税额计算。
             </p>

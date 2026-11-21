@@ -21,9 +21,11 @@ function SettlementCenterOverview({
             className={cn(surfaceInsetClassName, "shadow-none ring-0")}
         >
             <CardHeader className="rounded-t-lg border-b border-grid py-3">
-                <CardTitle className="text-base">概览</CardTitle>
+                <CardTitle className="text-section-title font-semibold tracking-tight">
+                    概览
+                </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 pt-4 text-sm">
+            <CardContent className="space-y-2 pt-4 text-body-compact">
                 <p>供应商：{st.supplierName}（记录时，不受后续更名影响）</p>
                 <p className="num">
                     期间：{st.periodStart} ~ {st.periodEnd}

@@ -30,11 +30,13 @@ export function BatchWorkStatus({
                 <p>
                     已处理 {work.completed} / {work.total} 个 SKU
                 </p>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     本次设置已受理。可离开页面，稍后从“入库批次”查看进度；完成后会继续到对应步骤。
                 </p>
                 {work.error ? (
-                    <p className="text-sm text-destructive">{work.error}</p>
+                    <p className="text-body-compact text-destructive">
+                        {work.error}
+                    </p>
                 ) : null}
             </div>
             <div className="flex flex-wrap gap-2">

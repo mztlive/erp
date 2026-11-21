@@ -119,7 +119,7 @@ export function ReviseOfferingDialog({
                                     价格与条款
                                 </FieldLegend>
                                 {offering.source_type === "API" ? (
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         供应商采购价格及集采条件由接口同步，不可修改。税率和有效期等内部补充信息可维护。
                                     </p>
                                 ) : null}

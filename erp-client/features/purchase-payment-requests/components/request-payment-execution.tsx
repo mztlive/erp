@@ -25,7 +25,7 @@ function ReferenceSection({
             <Button
                 id={`${id}-toggle`}
                 variant="ghost"
-                className="h-auto w-full justify-start px-0 py-3 text-sm"
+                className="h-auto w-full justify-start px-0 py-3 text-body-compact"
                 aria-expanded={open}
                 aria-controls={id}
                 onClick={() => setOpen(!open)}
@@ -71,7 +71,7 @@ export function RequestPaymentExecution({
                                 <MoneyValue value={request.paid_amount} />
                             </p>
                         </div>
-                        <div className="space-y-1 text-sm">
+                        <div className="space-y-1 text-body-compact">
                             <p className="text-xs text-muted-foreground">
                                 希望付款日
                             </p>
@@ -80,7 +80,7 @@ export function RequestPaymentExecution({
                             </p>
                         </div>
                     </div>
-                    <dl className="space-y-2 text-sm">
+                    <dl className="space-y-2 text-body-compact">
                         <div className="flex flex-wrap gap-x-3 gap-y-1">
                             <dt className="text-muted-foreground">申请人</dt>
                             <dd>{request.applicant_name}</dd>

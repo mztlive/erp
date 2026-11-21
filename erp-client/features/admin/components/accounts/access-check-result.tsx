@@ -140,7 +140,7 @@ export function AccessCheckResult({
                 {reviews.length > 0 && (
                     <Badge variant="outline">{reviews.length} 项待检查</Badge>
                 )}
-                <span className="text-sm text-muted-foreground">
+                <span className="text-body-compact text-muted-foreground">
                     {resourceLabel(input.resource)} ·{" "}
                     {actionLabel(input.action)}
                 </span>
@@ -149,14 +149,14 @@ export function AccessCheckResult({
                 <AlertTitle>{summary.title}</AlertTitle>
                 <AlertDescription>{summary.description}</AlertDescription>
             </Alert>
-            <p className="text-sm leading-relaxed">
+            <p className="text-body-compact leading-relaxed">
                 <span className="font-medium">
                     {summary.variant === "success" ? "适用范围：" : "下一步："}
                 </span>
                 {summary.next}
             </p>
             {reviews.length > 0 && (
-                <div className="space-y-2 text-sm">
+                <div className="space-y-2 text-body-compact">
                     <h4 className="font-medium">待检查项目</h4>
                     <ul className="space-y-2 text-muted-foreground">
                         {reviews.map((step, index) => (
@@ -170,7 +170,7 @@ export function AccessCheckResult({
             <details className="border-t pt-3">
                 <summary
                     id="account-check-result-details"
-                    className="w-fit cursor-pointer rounded-sm text-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                    className="w-fit cursor-pointer rounded-sm text-body-compact text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
                 >
                     查看检查明细
                 </summary>
@@ -183,7 +183,7 @@ export function AccessCheckResult({
                             <p className="font-medium">
                                 {step.layer} · {stepStatus(step)}
                             </p>
-                            <p className="mt-1 text-sm text-muted-foreground">
+                            <p className="mt-1 text-xs text-muted-foreground">
                                 {step.message}
                             </p>
                         </div>

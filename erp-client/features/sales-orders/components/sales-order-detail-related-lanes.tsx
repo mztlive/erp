@@ -40,7 +40,7 @@ function RelatedLane({
     return (
         <li className="flex items-center justify-between gap-3 py-2.5">
             <div className="min-w-0" data-testid={progressTestId}>
-                <div className="text-sm font-medium">
+                <div className="text-body-compact font-medium">
                     {copy.label}
                     <span className="num ml-1.5 font-normal text-muted-foreground">
                         {count} 笔

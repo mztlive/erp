@@ -116,11 +116,11 @@ export function ContractImportWorkspace(props: Props) {
                 <Title
                     id="contract-import-workspace-title"
                     tabIndex={-1}
-                    className="text-xl font-semibold outline-none"
+                    className="text-section-title font-semibold outline-none tracking-tight"
                 >
                     {props.revisionTarget ? "导入合同新版本" : "导入合同"}
                 </Title>
-                <Description className="text-sm text-muted-foreground">
+                <Description className="text-body-compact text-muted-foreground">
                     {reviewing
                         ? "识别已完成，请核对并补充"
                         : "识别合同并匹配签约双方，核对后保存合同档案"}
@@ -180,7 +180,7 @@ export function ContractImportWorkspace(props: Props) {
                     ) : null}
                     {!state.selectedId && state.uploadMutation.isPending ? (
                         <p
-                            className="flex items-center gap-2 py-8 text-sm text-muted-foreground"
+                            className="flex items-center gap-2 py-8 text-xs text-muted-foreground"
                             role="status"
                         >
                             <Spinner />
@@ -228,7 +228,7 @@ export function ContractImportWorkspace(props: Props) {
                             </state.form.AppField>
                             {state.uploadMutation.isPending ? (
                                 <p
-                                    className="flex items-center gap-2 text-sm text-muted-foreground"
+                                    className="flex items-center gap-2 text-xs text-muted-foreground"
                                     role="status"
                                 >
                                     <Spinner />
@@ -263,7 +263,7 @@ export function ContractImportWorkspace(props: Props) {
                         />
                     ) : !reviewing && state.detail.isPending ? (
                         <p
-                            className="flex items-center gap-2 py-8 text-sm text-muted-foreground"
+                            className="flex items-center gap-2 py-8 text-xs text-muted-foreground"
                             role="status"
                         >
                             <Spinner />

@@ -135,7 +135,7 @@ export function InquiryExpenseSourceSection({
         >
             <div>
                 <h3 className="font-medium">关联询价已确认的费用</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p className="mt-1 text-xs text-muted-foreground">
                     询价阶段已确认的费用请直接从下方选择；其他临时费用请在下方手工录入。
                 </p>
             </div>
@@ -235,7 +235,7 @@ export function InquiryExpenseSourceSection({
                     </Table>
                 </div>
             ) : (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     本销售单尚无已明确分摊的询价费用。请由销售先确认费用归属，采购再办理。
                 </p>
             )}
@@ -477,7 +477,7 @@ function InquiryExpenseSourceForm({
                             。费用来源固定保留，提交后进入采购审批。
                         </DialogDescription>
                     </DialogHeader>
-                    <p className="text-sm">
+                    <p className="text-body-compact">
                         归属销售单：{sourceLabel || "当前已选择销售单"}
                         ；可转金额：
                         <MoneyValue
@@ -562,7 +562,7 @@ function InquiryExpenseSourceForm({
                                 />
                             )}
                         </form.AppField>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             {candidate.public_note ||
                                 "按本轮确认的费用条件办理。"}{" "}
                             收款对象和付款条件不同的费用分别建单。

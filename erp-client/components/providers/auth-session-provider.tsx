@@ -81,7 +81,7 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
 
     if (!allowed) {
         return (
-            <div className="flex min-h-svh items-center justify-center bg-background text-sm text-muted-foreground">
+            <div className="flex min-h-svh items-center justify-center bg-background text-body-compact text-muted-foreground">
                 正在验证登录状态…
             </div>
         )
@@ -117,7 +117,7 @@ export function RedirectIfAuthenticated({
 
     if (!show) {
         return (
-            <div className="flex min-h-svh items-center justify-center bg-background text-sm text-muted-foreground">
+            <div className="flex min-h-svh items-center justify-center bg-background text-body-compact text-muted-foreground">
                 加载中…
             </div>
         )

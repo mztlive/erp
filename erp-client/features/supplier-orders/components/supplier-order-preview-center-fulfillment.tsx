@@ -99,7 +99,7 @@ export function FulfillmentSection({
                         默认打码；仅履约所需角色可短时揭示，揭示写入审计。
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-2 text-sm">
+                <CardContent className="space-y-2 text-body-compact">
                     <div>
                         收件人：
                         {address.recipientRevealed ?? address.recipientMasked}
@@ -152,7 +152,7 @@ export function FulfillmentSection({
             <Separator className="my-4" />
             <h4 className="mb-2 text-xs font-semibold">状态历史</h4>
             {statusHistory.length === 0 ? (
-                <p className="text-sm text-muted-foreground">暂无状态历史</p>
+                <p className="text-xs text-muted-foreground">暂无状态历史</p>
             ) : (
                 <ul className="space-y-2">
                     {statusHistory.map((h) => (

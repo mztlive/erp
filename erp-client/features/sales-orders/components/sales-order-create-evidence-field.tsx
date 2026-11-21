@@ -45,7 +45,7 @@ export function SalesOrderCreateEvidenceField({
                                     }) => (
                                         <li
                                             key={file.id}
-                                            className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm"
+                                            className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-body-compact"
                                         >
                                             <span className="min-w-0 break-all">
                                                 {file.fileName}
@@ -126,7 +126,7 @@ export function SalesOrderCreateEvidenceField({
                             <div className="space-y-2">
                                 <p
                                     role="alert"
-                                    className="text-sm text-destructive"
+                                    className="text-body-compact text-destructive"
                                 >
                                     {getErrorMessage(
                                         upload.error,

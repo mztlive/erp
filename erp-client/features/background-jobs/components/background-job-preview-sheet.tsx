@@ -133,11 +133,11 @@ export function BackgroundJobPreviewSheet({
             }
         >
             {detailQuery.isPending && !previewJob ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     正在加载任务详情…
                 </p>
             ) : previewJob ? (
-                <div className="space-y-6 text-sm">
+                <div className="space-y-6 text-body-compact">
                     {previewJob.domain_job_type === "DATA_TRANSFER" ? (
                         previewJob.job_type === "export" ||
                         previewJob.requested_by === currentUserId ? (

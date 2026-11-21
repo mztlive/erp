@@ -35,14 +35,16 @@ export function RequestReviewHistory({
             aria-label="采购付款记录"
             className="space-y-3 border-t border-grid pt-4"
         >
-            <h2 className="text-sm font-semibold">付款记录</h2>
+            <h2 className="text-section-title font-semibold tracking-tight">
+                付款记录
+            </h2>
             {submissionVersion != null ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     当前为第 {submissionVersion}{" "}
                     次提交材料，不包含后续付款记录。
                 </p>
             ) : reviews == null ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     采购付款记录暂未取得。
                 </p>
             ) : (
@@ -58,12 +60,12 @@ export function RequestReviewHistory({
                             className="space-y-2"
                         >
                             {reviews.length > 1 && (
-                                <p className="num text-sm font-medium">
+                                <p className="num text-body-compact font-medium">
                                     {line?.purchase_order_no ?? "关联采购单"}
                                 </p>
                             )}
                             {review.settlements.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-xs text-muted-foreground">
                                     暂无付款核销记录
                                 </p>
                             ) : (
@@ -210,7 +212,7 @@ export function RequestReviewHistory({
                                 </p>
                             ) : (
                                 <div className="space-y-2">
-                                    <h3 className="text-sm font-medium">
+                                    <h3 className="font-medium">
                                         其他申请{" "}
                                         <span className="text-xs font-normal text-muted-foreground">
                                             {review.other_requests.length} 笔
@@ -283,13 +285,13 @@ export function RequestReviewHistory({
             )}
             {request.credit_uses.length > 0 && (
                 <div className="space-y-3">
-                    <h3 className="text-sm font-medium text-muted-foreground">
+                    <h3 className="font-medium text-muted-foreground">
                         本申请留抵抵扣
                     </h3>
                     {request.credit_uses.map((row) => (
                         <div
                             key={row.id}
-                            className="flex justify-between gap-4 text-sm"
+                            className="flex justify-between gap-4 text-body-compact"
                         >
                             <span>
                                 {request.lines.find(
@@ -304,7 +306,7 @@ export function RequestReviewHistory({
                 </div>
             )}
             {download.isError && (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {getErrorMessage(download.error, "回单下载失败")}
                 </p>
             )}

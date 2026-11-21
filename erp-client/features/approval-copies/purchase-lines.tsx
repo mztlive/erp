@@ -17,7 +17,9 @@ export function CopyPurchaseLines({
     if (!lines.length) return null
     return (
         <section className="space-y-3 rounded-lg border p-4">
-            <h2 className="font-medium">本次采购提交明细</h2>
+            <h2 className="text-section-title font-semibold tracking-tight">
+                本次采购提交明细
+            </h2>
             <Table>
                 <TableHeader>
                     <TableRow>

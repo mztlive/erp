@@ -12,7 +12,10 @@ export function FormValidationSummary<TValues>({
         <form.Subscribe selector={(state) => state.errors}>
             {(errors) =>
                 errors.length ? (
-                    <p role="alert" className="text-sm text-destructive">
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
                         {errors.map(String).join("；")}
                     </p>
                 ) : null

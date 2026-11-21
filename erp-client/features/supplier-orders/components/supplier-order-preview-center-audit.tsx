@@ -86,7 +86,7 @@ export function AuditSection({
                         <TableRow>
                             <TableCell
                                 colSpan={5}
-                                className="py-6 text-center text-sm text-muted-foreground"
+                                className="py-6 text-center text-body-compact text-muted-foreground"
                             >
                                 暂无动作记录
                             </TableCell>

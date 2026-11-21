@@ -268,7 +268,7 @@ export function PurchaseOrderPaperDocument({
                     : "系统业务数据的打印件；金额与状态以系统记录为准。"
             }
             signature={
-                <div className="space-y-8 text-sm">
+                <div className="space-y-8">
                     <div>
                         <div className="text-muted-foreground">采购负责人</div>
                         <div className="mt-6 border-b border-dashed border-border pb-1">

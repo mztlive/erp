@@ -86,7 +86,10 @@ export function AssignDeliveryTemplateDialog({
                     </DialogDescription>
                 </DialogHeader>
                 {!supplierId ? (
-                    <p role="alert" className="text-sm text-destructive">
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
                         请只选择同一供应商的供给。
                     </p>
                 ) : (
@@ -144,7 +147,7 @@ export function AssignDeliveryTemplateDialog({
                         {failure ? (
                             <p
                                 role="alert"
-                                className="text-sm text-destructive"
+                                className="text-body-compact text-destructive"
                             >
                                 {failure}
                             </p>

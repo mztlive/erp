@@ -110,7 +110,7 @@ export function InquiryDeliveryAddressDialog({
                     )}
                     <fieldset disabled={disabled} className="space-y-4">
                         {frozen && (
-                            <p className="rounded-md bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                            <p className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
                                 {occupied
                                     ? "该地址已有销售占用，收件资料不可修改，数量不能少于已占用数量。"
                                     : "已提交的收件资料保留原记录。修改收件资料请取消后选择“替换地址”。"}

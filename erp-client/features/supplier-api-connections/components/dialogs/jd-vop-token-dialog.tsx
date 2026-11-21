@@ -124,7 +124,7 @@ export function JdVopTokenDialog({
                         填写同次授权取得的两项令牌，须属于此连接的采购账号及服务端配置的京东应用。保存后接口调用使用这份配置，续期成功会同步更新。
                     </DialogDescription>
                 </DialogHeader>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     请由 ERP
                     统一刷新令牌，避免另一套系统同时刷新导致令牌失效。已保存的令牌不会回显；更新时须重新填写两项令牌。
                 </p>

@@ -238,17 +238,17 @@ export function PortalReviewMappingBatch({
     return (
         <section className="space-y-3 rounded-lg border p-4">
             <h3 className="font-medium">同批申请映射核对</h3>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 先核对本张申请的映射，再勾选同供应商、同类型及原文口径一致的申请。保存后仍须逐张采用、核对和审核。
             </p>
             {(saved.plan || saved.issue) && (
                 <div className="space-y-2 rounded-md border p-3">
-                    <p className="text-sm">
+                    <p className="text-body-compact">
                         {saved.plan
                             ? `本申请已有来自“${saved.plan.sourceName}”的映射方案。`
                             : "本申请的映射方案需要重新核对。"}
                     </p>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         {saved.issue ??
                             "采用前将重新读取本申请，核对提报资料、申请状态及基础资料最新信息。"}
                     </p>
@@ -294,7 +294,7 @@ export function PortalReviewMappingBatch({
                     </div>
                 </div>
             )}
-            <div className="space-y-1 text-sm">
+            <div className="space-y-1 text-body-compact">
                 <p>
                     提报品牌：{rawProduct.brand.raw_name} →{" "}
                     {brand?.name ?? "待确认"}
@@ -326,13 +326,13 @@ export function PortalReviewMappingBatch({
                 })}
             </div>
             {sourceIssue && (
-                <p className="text-sm text-muted-foreground">{sourceIssue}</p>
+                <p className="text-xs text-muted-foreground">{sourceIssue}</p>
             )}
             <form.Field name="confirmedSource">
                 {(field) => (
                     <label
                         htmlFor={`${prefix}-confirm-source`}
-                        className="flex items-start gap-2 text-sm"
+                        className="flex items-start gap-2 text-xs"
                     >
                         <NativeCheckbox
                             id={`${prefix}-confirm-source`}
@@ -351,7 +351,7 @@ export function PortalReviewMappingBatch({
                 )}
             </form.Field>
             {!canList && (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     当前账号没有申请列表资格，可逐张完成当前审核任务。
                 </p>
             )}
@@ -403,7 +403,7 @@ export function PortalReviewMappingBatch({
                                                 return (
                                                     <div
                                                         key={target.id}
-                                                        className="flex items-start gap-2 rounded-md border p-3 text-sm"
+                                                        className="flex items-start gap-2 rounded-md border p-3 text-body-compact"
                                                     >
                                                         <NativeCheckbox
                                                             id={id}
@@ -470,7 +470,7 @@ export function PortalReviewMappingBatch({
                                             })}
                                             {!applications.isFetching &&
                                                 !candidates.length && (
-                                                    <p className="text-sm text-muted-foreground">
+                                                    <p className="text-xs text-muted-foreground">
                                                         本页没有其他可核对的新品申请。
                                                     </p>
                                                 )}
@@ -499,7 +499,7 @@ export function PortalReviewMappingBatch({
                             </>
                         )}
                     </form.Subscribe>
-                    <div className="flex items-center gap-3 text-sm">
+                    <div className="flex items-center gap-3 text-body-compact">
                         <Button
                             id={`${prefix}-previous`}
                             type="button"
@@ -544,7 +544,7 @@ export function PortalReviewMappingBatch({
                         <Link
                             key={target.id}
                             id={`${prefix}-open-${toAutomationIdSegment(target.id)}`}
-                            className="text-sm text-primary"
+                            className="text-body-compact text-primary"
                             href={`/procurement/supplier-portal/applications/${encodeURIComponent(target.id)}`}
                         >
                             打开 {target.name} 核对
@@ -553,7 +553,7 @@ export function PortalReviewMappingBatch({
                 </div>
             )}
             {feedback && (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     {feedback}
                 </p>
             )}

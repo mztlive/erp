@@ -68,7 +68,7 @@ export function RequestMaterials({
             aria-label="申请提交时的采购与销售单据"
         >
             <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="text-base font-semibold">
+                <h3 className="text-body-compact font-semibold">
                     {summary || concise ? "审核材料" : "采购、销售与审核材料"}
                 </h3>
                 {action}
@@ -82,12 +82,15 @@ export function RequestMaterials({
                 </p>
             )}
             {query.isPending ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     正在读取来源资料…
                 </p>
             ) : query.isError ? (
                 <div className="space-y-2">
-                    <p role="alert" className="text-sm text-destructive">
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
                         {getErrorMessage(query.error, "资料读取失败")}
                     </p>
                     <Button
@@ -147,7 +150,7 @@ export function RequestMaterials({
                         ))}
                     </div>
                     {query.data.purchases.length === 0 && (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             暂无可预览的采购资料。
                         </p>
                     )}
@@ -157,7 +160,7 @@ export function RequestMaterials({
                 <ul className="divide-y divide-border">
                     {files.map((file) => (
                         <li
-                            className="flex items-center justify-between gap-4 py-3 text-sm"
+                            className="flex items-center justify-between gap-4 py-3 text-body-compact"
                             key={file.file_asset_id}
                         >
                             <div className="flex min-w-0 items-center gap-3">
@@ -192,7 +195,7 @@ export function RequestMaterials({
                 </p>
             ) : null}
             {download.isError && (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {getErrorMessage(download.error, "附件读取失败")}
                 </p>
             )}

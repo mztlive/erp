@@ -83,13 +83,15 @@ export function PortalAvailabilityForm({
                 void form.handleSubmit()
             }}
         >
-            <h2 className="font-semibold">更新可供情况</h2>
-            <p className="text-sm text-muted-foreground">
+            <h2 className="text-section-title font-semibold tracking-tight">
+                更新可供情况
+            </h2>
+            <p className="text-xs text-muted-foreground">
                 更新商品当前是否有货及可供数量；若商品处于暂停或停止供货状态，仅更新库存不会自动恢复供货。
             </p>
             <PortalError error={error} />
             {saved && (
-                <p role="status" className="text-sm text-success">
+                <p role="status" className="text-body-compact text-success">
                     可供情况已保存。重新核对最新资料后可继续报送。
                 </p>
             )}

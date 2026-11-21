@@ -113,7 +113,7 @@ export function PeriodBasisPanel({
                 </div>
                 <div className="col-span-2 space-y-1.5">
                     <Label>所选期间</Label>
-                    <p className="num text-sm font-medium">
+                    <p className="num text-body-compact font-medium">
                         {from} ~ {to}
                     </p>
                 </div>

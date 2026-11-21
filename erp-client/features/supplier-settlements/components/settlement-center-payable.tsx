@@ -31,7 +31,9 @@ function SettlementCenterPayable({
             className={cn(surfaceInsetClassName, "shadow-none ring-0")}
         >
             <CardHeader className="rounded-t-lg border-b border-grid py-3">
-                <CardTitle className="text-base">应付与票款</CardTitle>
+                <CardTitle className="text-section-title font-semibold tracking-tight">
+                    应付与票款
+                </CardTitle>
                 <CardDescription>
                     确认后形成唯一应付；付款/进项发票/核销进入供应商往来，不在本页复制
                 </CardDescription>
@@ -39,13 +41,13 @@ function SettlementCenterPayable({
             <CardContent className="space-y-3 pt-4">
                 {payable ? (
                     <>
-                        <p className="text-sm">
+                        <p className="text-body-compact">
                             应付编号{" "}
                             <span className="num font-medium">
                                 {payable.payableNo}
                             </span>
                         </p>
-                        <p className="text-sm">
+                        <p className="text-body-compact">
                             含税金额{" "}
                             <MoneyValue
                                 value={payable.grossAmount}
@@ -65,7 +67,7 @@ function SettlementCenterPayable({
                         </Button>
                     </>
                 ) : (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         尚未确认结算，无应付编号。确认成功后此处展示应付与成本差额结果。
                     </p>
                 )}

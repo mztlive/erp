@@ -428,7 +428,7 @@ function SidebarGroupLabel({
             {
                 className: cn(
                     // 飞书侧栏分组标题：低噪音小号字，避免与可点击项抢戏
-                    "flex h-6 shrink-0 items-center rounded-md px-2.5 text-tiny font-medium text-muted-foreground/80 ring-sidebar-ring outline-hidden transition-[margin,opacity] duration-200 ease-linear group-data-[collapsible=icon]:-mt-6 group-data-[collapsible=icon]:opacity-0 focus-visible:ring-3 [&>svg]:size-4 [&>svg]:shrink-0",
+                    "flex h-6 shrink-0 items-center rounded-md px-2.5 text-xs font-medium text-muted-foreground/80 ring-sidebar-ring outline-hidden transition-[margin,opacity] duration-200 ease-linear group-data-[collapsible=icon]:-mt-6 group-data-[collapsible=icon]:opacity-0 focus-visible:ring-3 [&>svg]:size-4 [&>svg]:shrink-0",
                     className,
                 ),
             },
@@ -474,7 +474,7 @@ function SidebarGroupContent({
         <div
             data-slot="sidebar-group-content"
             data-sidebar="group-content"
-            className={cn("w-full text-sm", className)}
+            className={cn("w-full text-body-compact", className)}
             {...props}
         />
     )
@@ -515,7 +515,7 @@ const sidebarMenuButtonVariants = cva(
             size: {
                 default: "h-8 text-body-compact",
                 sm: "h-7.5 text-body-compact",
-                lg: "h-11 px-2.5 text-sm group-data-[collapsible=icon]:p-0!",
+                lg: "h-11 px-2.5 text-body-compact group-data-[collapsible=icon]:p-0!",
             },
         },
         defaultVariants: {
@@ -714,7 +714,7 @@ function SidebarMenuSubButton({
         props: mergeProps<"a">(
             {
                 className: cn(
-                    "flex h-7 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-xl px-3 text-sidebar-foreground ring-sidebar-ring outline-hidden group-data-[collapsible=icon]:hidden hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-3 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[size=md]:text-sm data-[size=sm]:text-xs data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-accent-foreground",
+                    "flex h-7 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-xl px-3 text-sidebar-foreground ring-sidebar-ring outline-hidden group-data-[collapsible=icon]:hidden hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-3 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[size=md]:text-body-compact data-[size=sm]:text-xs data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-accent-foreground",
                     className,
                 ),
             },

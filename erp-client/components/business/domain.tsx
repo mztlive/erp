@@ -191,7 +191,9 @@ function PrepaymentGate({
                     className="w-80 space-y-3 p-4 sm:w-96"
                 >
                     <div className="space-y-1">
-                        <p className="text-sm font-medium">{text.title}</p>
+                        <p className="text-body-compact font-medium">
+                            {text.title}
+                        </p>
                         <p className="text-xs text-muted-foreground">
                             {text.description}
                         </p>
@@ -348,7 +350,7 @@ function CostCoverageNotice({
             <CardContent className="space-y-4">
                 <Progress value={coveragePercent}>
                     <ProgressLabel>成本覆盖率</ProgressLabel>
-                    <span className="num ml-auto text-sm text-muted-foreground">
+                    <span className="num ml-auto text-body-compact text-muted-foreground">
                         {coverageLabel}
                     </span>
                 </Progress>

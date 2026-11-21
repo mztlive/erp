@@ -143,7 +143,7 @@ export function SupplierAccountCreateDialog({
                         />
                     )}
                     {failure === "unknown" && (
-                        <p className="text-sm">
+                        <p className="text-body-compact">
                             开通结果尚未确认，请保留本次填写并点击「重试提交」。
                         </p>
                     )}
@@ -325,12 +325,12 @@ export function SupplierAccountEditDialog({
                         />
                     )}
                     {failure === "unknown" && (
-                        <p className="text-sm">
+                        <p className="text-body-compact">
                             配置结果尚未确认，请保留填写并点击「重试提交」。
                         </p>
                     )}
                     {failure === "conflict" && (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             当前读取的岗位：
                             {account.role === "maintainer"
                                 ? "供给维护员"
@@ -372,7 +372,7 @@ export function SupplierAccountEditDialog({
                             )}
                         </form.AppField>
                     </div>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         停用后，该人员将无法继续访问供应商门户。
                     </p>
                     <DialogFooter>

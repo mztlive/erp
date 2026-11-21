@@ -47,7 +47,7 @@ export function ApprovalCopyHistory({
     })
     if (query.isError)
         return (
-            <div role="alert" className="text-sm">
+            <div role="alert" className="text-body-compact">
                 {getErrorMessage(query.error)}
                 <Button
                     id={`${idPrefix}-retry`}
@@ -62,9 +62,12 @@ export function ApprovalCopyHistory({
     if (!items.length) return null
     return (
         <section className="space-y-3">
-            <h3 className="text-sm font-medium">抄送记录</h3>
+            <h3 className="font-medium">抄送记录</h3>
             {items.map((row) => (
-                <div key={row.id} className="rounded-md border p-3 text-sm">
+                <div
+                    key={row.id}
+                    className="rounded-md border p-3 text-body-compact"
+                >
                     <p>
                         {row.recipient_name} ·{" "}
                         {COPY_TRIGGER_LABELS[row.trigger]} · 第 {row.round_no}{" "}

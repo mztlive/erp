@@ -92,10 +92,7 @@ export function IntegrationActionZone({
             className="space-y-4 border-t border-grid pt-5"
         >
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h3
-                    id="integration-action-heading"
-                    className="text-sm font-semibold"
-                >
+                <h3 id="integration-action-heading" className="font-semibold">
                     {can("RESOLVE") ? "确认处理" : "处理异常"}
                 </h3>
                 {can("RESOLVE") ? (
@@ -108,7 +105,7 @@ export function IntegrationActionZone({
             !canClose &&
             !direct &&
             item.actionBlockers.length === 0 ? (
-                <div className="flex items-start gap-2 text-sm text-muted-foreground">
+                <div className="flex items-start gap-2 text-body-compact text-muted-foreground">
                     <InfoIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
                     <p>
                         {item.workItem?.allowedActions.includes("PROCESS")
@@ -134,7 +131,7 @@ export function IntegrationActionZone({
                 <details className="group">
                     <summary
                         id="integration-action-comment-toggle"
-                        className="inline-flex cursor-pointer list-none items-center gap-1 rounded-sm text-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="inline-flex cursor-pointer list-none items-center gap-1 rounded-sm text-body-compact text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                         添加处理说明（可选）
                         <ChevronDownIcon

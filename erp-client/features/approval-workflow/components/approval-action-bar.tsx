@@ -225,7 +225,7 @@ export function ApprovalActionBar({
                 </Button>
             ) : null}
             {!canReadSensitive ? (
-                <p className="w-full text-sm text-muted-foreground">
+                <p className="w-full text-xs text-muted-foreground">
                     当前账号无权查看部分业务字段
                 </p>
             ) : null}

@@ -68,7 +68,7 @@ export function FulfillmentAddressList({
             className="flex min-h-0 min-w-0 flex-col lg:h-full"
         >
             <div className="shrink-0 space-y-3 pb-3">
-                <div className="flex items-center justify-between gap-2 text-sm">
+                <div className="flex items-center justify-between gap-2 text-body-compact">
                     <span className="font-medium">
                         收货地址 ·{" "}
                         <span className="text-muted-foreground">{total}</span>
@@ -170,7 +170,7 @@ export function FulfillmentAddressList({
                                     "bg-muted font-medium hover:bg-muted",
                             )}
                         >
-                            <span className="min-w-0 flex-1 truncate text-sm">
+                            <span className="min-w-0 flex-1 truncate text-body-compact">
                                 <span>
                                     {destination.recipient || "待补收货地址"}
                                 </span>

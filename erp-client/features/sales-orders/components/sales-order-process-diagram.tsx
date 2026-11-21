@@ -108,7 +108,7 @@ function Step({ step, data }: { step: ProcessStep; data: DiagramData }) {
             <StateIcon state={step.state} />
             <div
                 className={cn(
-                    "inline-flex min-h-8 w-fit items-center rounded-md border px-3 py-1 text-sm font-semibold",
+                    "inline-flex min-h-8 w-fit items-center rounded-md border px-3 py-1 text-body-compact font-semibold",
                     stateStyles[step.state],
                     data.selectedId === step.id &&
                         "ring-2 ring-ring ring-offset-2",
@@ -118,7 +118,7 @@ function Step({ step, data }: { step: ProcessStep; data: DiagramData }) {
             </div>
             <div className="col-start-2 min-w-0 space-y-1.5">
                 <p className="sr-only">{stateNames[step.state]}</p>
-                <p className="text-xs leading-5 text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     {group
                         ? `${group.owner} · ${group.count} 项${step.groups.length > 1 ? `，另 ${step.groups.length - 1} 组` : ""}`
                         : step.owner || step.description}
@@ -194,7 +194,7 @@ function ProcessNode({ id, data }: NodeProps<DiagramNode>) {
                     )}
                 >
                     <StateIcon state={root.state} />
-                    <div className="text-base font-semibold leading-6">
+                    <div className="text-body-compact font-semibold leading-6">
                         <p>{root.title}</p>
                         <p>{root.description}</p>
                         {root.state === "active" ? (
@@ -252,7 +252,7 @@ function ProcessNode({ id, data }: NodeProps<DiagramNode>) {
                 className="invisible"
                 style={{ top: 43 }}
             />
-            <div className="flex w-36 shrink-0 items-center gap-2 rounded-lg bg-muted/70 px-3 py-3 text-sm font-semibold">
+            <div className="flex w-36 shrink-0 items-center gap-2 rounded-lg bg-muted/70 px-3 py-3 text-body-compact font-semibold">
                 <Icon className="size-5" aria-hidden="true" />
                 {data.lane.title}
             </div>
@@ -398,7 +398,9 @@ export function SalesOrderProcessDiagram({
             />
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-baseline gap-4">
-                    <h2 className="text-lg font-semibold">全流程进度</h2>
+                    <h2 className="text-section-title font-semibold tracking-tight">
+                        全流程进度
+                    </h2>
                     <p className="text-xs text-muted-foreground">
                         交付、回款与开票分别推进
                     </p>

@@ -96,7 +96,7 @@ export function PurchaseOrderCreateSourcePickerDialog({
                         {draftOrder ? (
                             <SourcingSalesOrderPaper order={draftOrder} />
                         ) : (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 当前没有可预览的销售单。
                             </p>
                         )}

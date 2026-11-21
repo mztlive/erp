@@ -51,22 +51,22 @@ export function PurchaseOrderDetailSidebar({
             <section aria-labelledby="purchase-order-amount-heading">
                 <h2
                     id="purchase-order-amount-heading"
-                    className="text-sm font-semibold"
+                    className="text-section-title font-semibold tracking-tight"
                 >
                     金额信息
                 </h2>
-                <p className="mt-5 text-sm text-muted-foreground">
+                <p className="mt-5 text-xs text-muted-foreground">
                     采购金额（含税）
                 </p>
                 <div className="mt-1 wrap-anywhere">
                     {costMasked ? (
-                        <span className="text-3xl leading-tight font-semibold tracking-tight">
+                        <span className="num text-value-summary font-semibold tracking-tight">
                             •••
                         </span>
                     ) : (
                         <MoneyValue
                             value={order.currentContent.totals.gross}
-                            className="text-3xl font-semibold tracking-tight"
+                            className="text-value-summary font-semibold tracking-tight"
                         />
                     )}
                 </div>
@@ -79,7 +79,7 @@ export function PurchaseOrderDetailSidebar({
                             <dt className="text-xs text-muted-foreground">
                                 {item.label}
                             </dt>
-                            <dd className="wrap-anywhere text-right text-sm font-semibold">
+                            <dd className="wrap-anywhere text-right text-body-compact font-semibold">
                                 {amount(item.value)}
                             </dd>
                         </div>
@@ -90,7 +90,7 @@ export function PurchaseOrderDetailSidebar({
                         尚未形成应付（需审批通过）。
                     </p>
                 ) : null}
-                <dl className="mt-4 space-y-2 border-t border-border/70 pt-4 text-sm">
+                <dl className="mt-4 space-y-2 border-t border-border/70 pt-4 text-body-compact">
                     <div className="flex justify-between gap-4">
                         <dt className="text-muted-foreground">不含税金额</dt>
                         <dd className="min-w-0 wrap-anywhere text-right">
@@ -111,7 +111,7 @@ export function PurchaseOrderDetailSidebar({
             >
                 <h2
                     id="purchase-order-progress-heading"
-                    className="text-sm font-semibold"
+                    className="text-section-title font-semibold tracking-tight"
                 >
                     办理进度
                 </h2>
@@ -132,7 +132,7 @@ export function PurchaseOrderDetailSidebar({
                     {tracks.map((item) => (
                         <div
                             key={item.label}
-                            className="flex items-baseline justify-between gap-4 text-sm"
+                            className="flex items-baseline justify-between gap-4 text-body-compact"
                         >
                             <dt className="inline-flex items-center gap-3 text-muted-foreground">
                                 <span
@@ -149,11 +149,11 @@ export function PurchaseOrderDetailSidebar({
                 </dl>
                 {gate.state !== "NOT_APPLICABLE" ? (
                     <div className="mt-5 rounded-lg border border-border/70 p-3">
-                        <p className="text-sm font-medium">
+                        <p className="text-body-compact font-medium">
                             先款条件 ·{" "}
                             {gate.state === "SATISFIED" ? "已满足" : "未满足"}
                         </p>
-                        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                        <p className="mt-2 text-xs text-muted-foreground">
                             {gate.message}
                         </p>
                         <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
@@ -166,7 +166,7 @@ export function PurchaseOrderDetailSidebar({
                                     <dt className="text-muted-foreground">
                                         {item.label}
                                     </dt>
-                                    <dd className="mt-1 wrap-anywhere text-sm">
+                                    <dd className="mt-1 wrap-anywhere text-body-compact">
                                         {amount(item.value)}
                                     </dd>
                                 </div>
@@ -187,11 +187,11 @@ export function PurchaseOrderDetailSidebar({
             >
                 <h2
                     id="purchase-order-owner-heading"
-                    className="text-sm font-semibold"
+                    className="text-section-title font-semibold tracking-tight"
                 >
                     责任人信息
                 </h2>
-                <dl className="mt-4 grid grid-cols-2 gap-4 text-sm">
+                <dl className="mt-4 grid grid-cols-2 gap-4 text-body-compact">
                     {[
                         { label: "负责人", value: order.header.ownerName },
                         {

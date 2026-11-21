@@ -35,7 +35,7 @@ export function AcceptancePanel({ order }: { order: SalesOrderDetailView }) {
         )
     if (!query.data)
         return (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 当前未查到可查看的验收记录。
             </p>
         )
@@ -84,12 +84,12 @@ export function AcceptancePanel({ order }: { order: SalesOrderDetailView }) {
             <AcceptanceProgressTable
                 progress={progress}
                 showSummary={!hasUnit}
-                className="border-0 py-0 [&_h2]:text-sm [&>div:last-child]:pt-3"
+                className="border-0 py-0 [&_h2]:text-body-compact [&>div:last-child]:pt-3"
             />
             <div className="border-t border-border/70 pt-5">
                 {query.data.history.length === 0 ? (
                     <DetailRecordSection title="验收记录" compact>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             暂无验收记录
                         </p>
                     </DetailRecordSection>
@@ -99,7 +99,7 @@ export function AcceptancePanel({ order }: { order: SalesOrderDetailView }) {
                         canReverse={false}
                         onReverse={() => undefined}
                         showGuidance={false}
-                        className="border-0 py-0 [&_h2]:text-sm [&>div:last-child]:pt-3"
+                        className="border-0 py-0 [&_h2]:text-body-compact [&>div:last-child]:pt-3"
                     />
                 )}
             </div>

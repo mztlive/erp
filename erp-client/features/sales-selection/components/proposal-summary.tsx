@@ -45,7 +45,7 @@ export function ProposalSummary({ proposal }: { proposal: ProposalView }) {
                         : countDescription
                 }
             />
-            <dl className="mt-6 space-y-5 border-t border-border pt-6 text-sm sm:mt-0 sm:border-t-0 sm:pt-0 xl:mt-6 xl:border-t xl:pt-6">
+            <dl className="mt-6 space-y-5 border-t border-border pt-6 text-body-compact sm:mt-0 sm:border-t-0 sm:pt-0 xl:mt-6 xl:border-t xl:pt-6">
                 <div className="flex items-baseline justify-between gap-4">
                     <dt className="text-muted-foreground">{countLabel}</dt>
                     <dd className="num font-medium">{count} 款</dd>
@@ -65,10 +65,12 @@ export function ProposalSummary({ proposal }: { proposal: ProposalView }) {
             </dl>
             {proposal.recipient && (
                 <section
-                    className="mt-6 space-y-2 border-t border-border pt-6 text-sm"
+                    className="mt-6 space-y-2 border-t border-border pt-6 text-body-compact"
                     aria-label="收件信息"
                 >
-                    <h2 className="font-medium">收件信息</h2>
+                    <h2 className="text-section-title font-semibold tracking-tight">
+                        收件信息
+                    </h2>
                     <p>
                         {proposal.recipient.name} · {proposal.recipient.phone}
                     </p>

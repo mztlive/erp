@@ -32,7 +32,7 @@ const progressLabel: Record<string, string> = {
 function BasisAmount({ title, value }: { title: string; value?: string }) {
     return (
         <div className="min-w-0 space-y-1">
-            <dt className="text-xs leading-5 text-muted-foreground">{title}</dt>
+            <dt className="text-xs text-muted-foreground">{title}</dt>
             <dd>
                 <MoneyValue value={value} />
                 {value == null && (
@@ -52,7 +52,7 @@ function OrderBasis({ line, draft }: { line: RequestLine; draft: boolean }) {
                 className="space-y-3 rounded-md bg-info-soft/35 p-4"
                 aria-label={draft ? "保存时依据" : "提交时依据"}
             >
-                <h4 className="text-sm font-semibold">
+                <h4 className="text-body-compact font-semibold">
                     {draft ? "保存时依据" : "提交时依据"}
                 </h4>
                 <dl className="grid grid-cols-2 gap-x-5 gap-y-3 2xl:grid-cols-4">
@@ -72,7 +72,7 @@ function OrderBasis({ line, draft }: { line: RequestLine; draft: boolean }) {
                 className="space-y-3 rounded-md bg-success-soft/35 p-4"
                 aria-label="当前进度"
             >
-                <h4 className="text-sm font-semibold">当前进度</h4>
+                <h4 className="text-body-compact font-semibold">当前进度</h4>
                 <dl className="grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-3">
                     <BasisAmount
                         title="采购剩余应付"
@@ -83,7 +83,7 @@ function OrderBasis({ line, draft }: { line: RequestLine; draft: boolean }) {
                         value={line.current_reserved_amount}
                     />
                     <div className="space-y-1">
-                        <dt className="text-xs leading-5 text-muted-foreground">
+                        <dt className="text-xs text-muted-foreground">
                             履约进度
                         </dt>
                         <dd>
@@ -136,12 +136,12 @@ export function RequestOrderDetails({
     return (
         <section className="space-y-4" aria-label="逐采购申请与付款进度">
             <div className="flex items-center justify-between gap-3">
-                <h3 className="text-base font-semibold">采购单明细</h3>
+                <h3 className="text-body-compact font-semibold">采购单明细</h3>
                 <span className="text-xs text-muted-foreground">
                     共 {request.lines.length} 笔
                 </span>
             </div>
-            <p className="text-xs leading-5 text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 {draft
                     ? "以下为保存草稿时核对的生效来源，提交时将再次校验。"
                     : "展开采购单，核对提交时依据与当前付款、履约进度。"}
@@ -222,7 +222,7 @@ export function RequestOrderDetails({
                                                     <Link
                                                         id={`ppr-order-${key}-open`}
                                                         href={`/procurement/orders/${encodeURIComponent(line.purchase_order_id)}?${new URLSearchParams({ section: "payable", returnTo })}`}
-                                                        className="num min-w-0 truncate text-sm text-primary underline-offset-2 hover:underline"
+                                                        className="num min-w-0 truncate text-body-compact text-primary underline-offset-2 hover:underline"
                                                         title={
                                                             line.purchase_order_no
                                                         }
@@ -231,7 +231,7 @@ export function RequestOrderDetails({
                                                     </Link>
                                                 ) : (
                                                     <span
-                                                        className="num min-w-0 truncate text-sm"
+                                                        className="num min-w-0 truncate text-body-compact"
                                                         title={
                                                             line.purchase_order_no
                                                         }

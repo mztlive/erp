@@ -36,11 +36,11 @@ export function SalesOrderCreateEntry({
             <div className="mx-auto w-full max-w-7xl px-1 py-8 sm:px-6 sm:py-10 lg:px-14 lg:py-12">
                 <h2
                     id="sales-orders-create-entry-title"
-                    className="text-xl font-semibold tracking-tight sm:text-2xl"
+                    className="text-section-title font-semibold tracking-tight"
                 >
                     导入合同，开始开单
                 </h2>
-                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                <p className="mt-3 text-body-compact leading-relaxed text-muted-foreground">
                     上传已签署合同，核对归档后自动带入开单信息。
                 </p>
                 <FileUpload
@@ -62,7 +62,7 @@ export function SalesOrderCreateEntry({
                     }}
                 />
                 {selectedFileName ? (
-                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-body-compact">
                         <p className="min-w-0 break-all text-muted-foreground">
                             已选择：{selectedFileName}
                         </p>
@@ -77,7 +77,7 @@ export function SalesOrderCreateEntry({
                         </Button>
                     </div>
                 ) : null}
-                <div className="mt-5 flex items-start gap-2.5 rounded-lg bg-muted/50 px-4 py-3 text-sm leading-relaxed text-muted-foreground">
+                <div className="mt-5 flex items-start gap-2.5 rounded-lg bg-muted/50 px-4 py-3 text-body-compact leading-relaxed text-muted-foreground">
                     <InfoIcon
                         className="mt-0.5 size-4 shrink-0"
                         aria-hidden="true"
@@ -86,7 +86,7 @@ export function SalesOrderCreateEntry({
                         核对归档后，自动带入客户、结算主体、有效合同及结算条款。
                     </p>
                 </div>
-                <h3 className="mb-3 mt-9 text-base font-semibold sm:mt-10">
+                <h3 className="mb-3 mt-9 text-body-compact font-semibold sm:mt-10">
                     其他开单方式
                 </h3>
                 <div className="divide-y divide-border border-y border-border">
@@ -135,10 +135,10 @@ export function SalesOrderCreateEntry({
                                 aria-hidden="true"
                             />
                             <span className="min-w-0 flex-1 space-y-1.5">
-                                <span className="block text-sm font-semibold">
+                                <span className="block text-body-compact font-semibold">
                                     {title}
                                 </span>
-                                <span className="block text-sm leading-relaxed text-muted-foreground">
+                                <span className="block text-body-compact leading-relaxed text-muted-foreground">
                                     {description}
                                 </span>
                             </span>

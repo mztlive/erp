@@ -202,7 +202,10 @@ export function ApprovalCopiesPage() {
             ]}
             alerts={
                 mark.isError ? (
-                    <p role="alert" className="text-sm text-destructive">
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
                         {getErrorMessage(mark.error)}
                     </p>
                 ) : null

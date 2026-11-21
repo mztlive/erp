@@ -40,7 +40,7 @@ export function MasterDataPreviewPanel({
     )
 
     return (
-        <div className="space-y-6 text-sm [&_dd]:min-w-0 [&_dd]:break-words [&_dd]:text-right [&_dd]:text-body-compact [&_dt]:text-xs [&_h3]:text-sm [&_h3]:font-medium [&_h3]:text-foreground">
+        <div className="space-y-6 text-body-compact [&_dd]:min-w-0 [&_dd]:break-words [&_dd]:text-right [&_dd]:text-body-compact [&_dt]:text-xs [&_h3]:text-body-compact [&_h3]:font-medium [&_h3]:text-foreground">
             <section className="space-y-2">
                 <h3 className="text-xs font-medium text-muted-foreground">
                     {masterDataCopy.previewIdentity}

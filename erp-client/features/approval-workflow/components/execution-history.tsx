@@ -94,7 +94,7 @@ function HistoryEntry({ item }: { item: ApprovalHistoryItem }) {
                 {item.decisionReason ? (
                     <p
                         className={cn(
-                            "mt-2 rounded-lg px-2.5 py-1.5 text-sm",
+                            "mt-2 rounded-lg px-2.5 py-1.5 text-body-compact",
                             rejected
                                 ? "border border-destructive-border bg-destructive-soft text-destructive-soft-foreground"
                                 : "bg-muted text-foreground",
@@ -138,7 +138,7 @@ export function ExecutionHistory({
     const content = (
         <div className="flex flex-col gap-5">
             {rounds.length === 0 ? (
-                <p className="text-sm text-muted-foreground">暂无审批记录</p>
+                <p className="text-xs text-muted-foreground">暂无审批记录</p>
             ) : (
                 rounds.map((round) => (
                     <section

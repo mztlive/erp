@@ -40,7 +40,7 @@ export function FulfillmentReceiptForm({
 }) {
     return (
         <section className="space-y-3" aria-label="入库表单">
-            <h3 className="text-sm font-semibold">入库作业</h3>
+            <h3 className="font-semibold">入库作业</h3>
             <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                     <Label htmlFor="fulfillment-operations-receipt-form-warehouse">
@@ -85,7 +85,7 @@ export function FulfillmentReceiptForm({
                         key={line.purchaseRevisionLineId}
                         className="space-y-3 rounded-xl border border-border p-3"
                     >
-                        <p className="text-sm font-medium">
+                        <p className="text-body-compact font-medium">
                             {lineItemTitle(src?.itemName, i)}
                             {displayText(src?.remainingQuantity)
                                 ? ` · 剩余可收 ${src?.remainingQuantity}${displayText(src?.unitCode)}`

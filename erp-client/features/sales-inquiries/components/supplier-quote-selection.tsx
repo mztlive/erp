@@ -188,7 +188,7 @@ export function SupplierQuoteSelection({
                 </TableToolbar>
                 <div className="max-h-80 divide-y overflow-y-auto">
                     {!groups.length && (
-                        <p className="p-3 text-sm text-muted-foreground">
+                        <p className="p-3 text-xs text-muted-foreground">
                             请先选择有供给关系的商品。
                         </p>
                     )}

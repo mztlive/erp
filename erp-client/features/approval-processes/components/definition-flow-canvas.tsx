@@ -321,7 +321,7 @@ export function DefinitionFlowCanvas({
         >
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
                 <div className="flex min-w-0 items-center gap-2">
-                    <h3 className="text-sm font-medium">审批流程</h3>
+                    <h3 className="font-medium">审批流程</h3>
                     <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                         {nodes.length} 个审批步骤
                     </span>
@@ -341,10 +341,10 @@ export function DefinitionFlowCanvas({
                             <CircleHelpIcon />
                         </PopoverTrigger>
                         <PopoverContent align="start" className="w-80">
-                            <PopoverTitle className="text-sm">
+                            <PopoverTitle className="text-section-title font-semibold tracking-tight">
                                 画布操作
                             </PopoverTitle>
-                            <PopoverDescription className="space-y-2 text-xs leading-5">
+                            <PopoverDescription className="space-y-2 text-xs">
                                 <span className="block">
                                     拖动节点或分组标题调整显示位置，审批人可在组内单独摆放。
                                 </span>

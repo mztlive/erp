@@ -47,6 +47,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 金额、数量、税率用 `lib/fixed-decimal.ts`。不用 `Number()`、`parseFloat` 或 epsilon 比较。`lint:fixed-decimal` 会检查。
 - `features/*` 之间禁止循环 import。`lint:feature-cycles` 会检查。
 - UI 用 `components/ui`（shadcn / Base UI）和 `components/business`。列表点读见第 7 节。
+- 字号与排版遵循[排版与字号设计系统](../docs/typography-design-system.md)，由 `npm run lint:ui-theme` 自动校验。
 
 ## 5. 用户可见文案
 

@@ -147,7 +147,7 @@ export function ContractDetailHeader({
                 </>
             }
         >
-            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-2 text-body-compact text-muted-foreground">
                 <span>
                     有效期{" "}
                     <span className="num text-foreground">

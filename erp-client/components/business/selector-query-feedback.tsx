@@ -23,7 +23,7 @@ export function SelectorQueryFeedback({
     return (
         <div
             role={failed ? "alert" : "status"}
-            className="text-sm text-muted-foreground"
+            className="text-body-compact text-muted-foreground"
         >
             <span>
                 {failed

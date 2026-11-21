@@ -122,7 +122,7 @@ export function FulfillmentAddressDialog({
                         </Button>
                     </div>
                 ) : (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         正在读取地址…
                     </p>
                 )}
@@ -313,14 +313,14 @@ function AddressEditor({
             }}
         >
             {unavailable && (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {unavailable}
                 </p>
             )}
             {data.source_changed && (
                 <p
                     role="status"
-                    className="text-sm text-warning-soft-foreground"
+                    className="text-body-compact text-warning-soft-foreground"
                 >
                     {action.mode === "edit"
                         ? "销售内容已变化，请核对最新收件信息。"
@@ -328,7 +328,7 @@ function AddressEditor({
                 </p>
             )}
             {action.mode === "delete" ? (
-                <p className="text-sm leading-6">
+                <p className="text-body-compact leading-6">
                     {action.destination.recipient} · {action.destination.phone}
                     <br />
                     {action.destination.address}
@@ -439,7 +439,7 @@ function AddressEditor({
                                 compareDecimal(maximum(line.line_id), "0", 6) <=
                                 0,
                         ) && (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 当前商品已全部分配，暂无可分配到新地址的商品。
                             </p>
                         )}
@@ -486,13 +486,13 @@ function AddressEditor({
             )}
             <FormValidationSummary form={form} />
             {mutation.isError && (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {mutation.error.message}。输入已保留。
                 </p>
             )}
             {refreshError && (
                 <div role="alert">
-                    <p className="text-sm">
+                    <p className="text-body-compact">
                         地址已保存，任务刷新失败：{refreshError}
                     </p>
                     <Button

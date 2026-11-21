@@ -186,7 +186,7 @@ export function PermissionOptionsPanel({
                                                 panel.setActiveGroup(group.name)
                                             }
                                             className={cn(
-                                                "flex min-h-10 w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left text-sm focus-visible:outline-2 focus-visible:-outline-offset-2",
+                                                "flex min-h-10 w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left text-body-compact focus-visible:outline-2 focus-visible:-outline-offset-2",
                                                 panel.activeGroup?.name ===
                                                     group.name
                                                     ? "bg-muted font-medium"
@@ -206,7 +206,7 @@ export function PermissionOptionsPanel({
                         </div>
                     ))}
                     {areas.length === 0 && (
-                        <p className="px-2 text-sm text-muted-foreground">
+                        <p className="px-2 text-xs text-muted-foreground">
                             没有匹配模块
                         </p>
                     )}
@@ -253,7 +253,7 @@ export function PermissionOptionsPanel({
                         />
                     ) : (
                         <div
-                            className="flex min-h-48 flex-col items-center justify-center gap-3 text-sm text-muted-foreground"
+                            className="flex min-h-48 flex-col items-center justify-center gap-3 text-body-compact text-muted-foreground"
                             role="status"
                         >
                             <p>
@@ -318,8 +318,10 @@ function PermissionSection({
         <section aria-label={`${group.name}权限`}>
             <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                 <div>
-                    <h2 className="text-base font-semibold">{group.name}</h2>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    <h2 className="text-section-title font-semibold tracking-tight">
+                        {group.name}
+                    </h2>
+                    <p className="mt-1 text-xs text-muted-foreground">
                         {group.description}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
@@ -360,7 +362,7 @@ function PermissionSection({
                 </div>
             </div>
             {specialPermissions.length > 0 && (
-                <p className="mb-3 rounded-md bg-muted px-3 py-2 text-xs leading-5 text-muted-foreground">
+                <p className="mb-3 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
                     包含整模块全选授权：
                     {specialPermissions.map(permissionLabel).join("、")}
                     。如改为按单项操作授权，系统将仅保留本次勾选的操作（后续新增功能需手动勾选）；跨模块全选授权的操作不可单独取消。
@@ -371,7 +373,7 @@ function PermissionSection({
                     <fieldset key={row.resource} className="min-w-0 py-4">
                         <legend
                             className={cn(
-                                "float-left w-full pb-2 text-sm font-medium",
+                                "float-left w-full pb-2 text-xs font-medium",
                                 group.rows.length === 1 &&
                                     row.label === group.name &&
                                     "sr-only",
@@ -400,7 +402,7 @@ function PermissionSection({
                                             ),
                                         ].join("；")}
                                         className={cn(
-                                            "flex min-h-10 cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 text-sm hover:bg-muted/60",
+                                            "flex min-h-10 cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 text-xs hover:bg-muted/60",
                                             checked
                                                 ? "border-border bg-muted/40"
                                                 : "border-transparent",

@@ -89,7 +89,7 @@ export function AdjustmentEditDialog({
                     </DialogDescription>
                 </DialogHeader>
                 {query.isPending ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         正在加载原草稿…
                     </p>
                 ) : query.data ? (
@@ -97,7 +97,7 @@ export function AdjustmentEditDialog({
                         {query.isError ? (
                             <p
                                 role="alert"
-                                className="text-sm text-destructive"
+                                className="text-body-compact text-destructive"
                             >
                                 {getErrorMessage(
                                     query.error,
@@ -117,7 +117,10 @@ export function AdjustmentEditDialog({
                     </>
                 ) : query.isError ? (
                     <div className="space-y-3">
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {getErrorMessage(
                                 query.error,
                                 "加载原草稿失败，请重试。",
@@ -330,7 +333,7 @@ function AdjustmentEditForm({
                 void form.handleSubmit()
             }}
         >
-            <p className="text-sm font-medium">
+            <p className="text-body-compact font-medium">
                 {draft.warehouseName} · {draft.lines.length} 项明细
             </p>
             {error ? (
@@ -372,7 +375,7 @@ function AdjustmentEditForm({
                         key={line.lineId}
                         className="space-y-2 rounded-lg border p-3"
                     >
-                        <div className="text-sm font-medium">
+                        <div className="text-body-compact font-medium">
                             {line.skuName}{" "}
                             <span className="num text-muted-foreground">
                                 {line.skuCode}

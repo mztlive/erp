@@ -44,7 +44,7 @@ export const InquiryDemandHeader = withForm({
                     }
                 >
                     {([deadline, note]) => (
-                        <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
+                        <div className="flex flex-wrap gap-x-6 gap-y-2 text-body-compact text-muted-foreground">
                             <span>询价截止：{inquiryDate(deadline)}</span>
                             <p className="flex min-w-0 gap-2">
                                 <span className="shrink-0">需求说明</span>

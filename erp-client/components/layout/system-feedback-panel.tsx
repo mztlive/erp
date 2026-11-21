@@ -122,7 +122,7 @@ export function SystemFeedbackPanel() {
                 <CircleAlertIcon className="size-4" aria-hidden />
                 <span className="sr-only">系统提示</span>
                 {problemCount > 0 ? (
-                    <span className="num pointer-events-none absolute top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-2xs font-semibold leading-none text-destructive-foreground ring-2 ring-card">
+                    <span className="num pointer-events-none absolute top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-tiny font-semibold leading-none text-destructive-foreground ring-2 ring-card">
                         {problemCount > 99 ? "99+" : problemCount}
                     </span>
                 ) : null}
@@ -162,7 +162,7 @@ export function SystemFeedbackPanel() {
                 <TooltipProvider delay={250}>
                     <div className="min-h-0 flex-1 space-y-3 overflow-y-auto border-t border-border/70 bg-muted/25 px-sheet-inline py-4">
                         {problems.length === 0 ? (
-                            <p className="py-6 text-center text-sm text-muted-foreground">
+                            <p className="py-6 text-center text-body-compact text-muted-foreground">
                                 {all
                                     ? "本次会话没有系统提示。"
                                     : "当前工作页没有系统提示。"}
@@ -223,7 +223,7 @@ function ProblemCard({ problem }: { problem: SystemProblem }) {
                     <div className="min-w-0 flex-1 space-y-1 pt-0.5">
                         <h3
                             id={`${id}-title`}
-                            className="text-sm leading-5 font-semibold wrap-anywhere"
+                            className="text-body-compact leading-5 font-semibold wrap-anywhere"
                         >
                             {problem.title}
                         </h3>
@@ -268,7 +268,7 @@ function ProblemCard({ problem }: { problem: SystemProblem }) {
                         {copied ? systemFeedbackText.copied : ""}
                     </span>
                 </div>
-                <p className="text-sm leading-relaxed wrap-anywhere text-muted-foreground">
+                <p className="text-body-compact leading-relaxed wrap-anywhere text-muted-foreground">
                     {problem.description}
                 </p>
                 {problem.requiredPermission && (
@@ -282,7 +282,7 @@ function ProblemCard({ problem }: { problem: SystemProblem }) {
                     </dl>
                 )}
                 {problem.fields.length > 0 && (
-                    <ul className="list-disc space-y-1 pl-4 text-sm wrap-anywhere">
+                    <ul className="list-disc space-y-1 pl-4 text-body-compact wrap-anywhere">
                         {problem.fields.map((field) => (
                             <li key={field}>{field}</li>
                         ))}

@@ -44,14 +44,14 @@ export function SupplierDeliveryTemplatesSection({
                 <div className="space-y-1">
                     <h2
                         id="supplier-delivery-templates-title"
-                        className="text-base font-semibold"
+                        className="text-section-title font-semibold tracking-tight"
                     >
                         配送模板
                     </h2>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         供给未指定模板时跟随供应商默认模板；都没有时按全国配送、包邮判定。
                     </p>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         模板单独保存并立即生效，无需保存供应商资料。修改模板会影响使用该模板的供给，调整默认模板会影响跟随默认的供给。
                     </p>
                 </div>
@@ -74,7 +74,10 @@ export function SupplierDeliveryTemplatesSection({
                 />
             ) : query.isError ? (
                 <div className="space-y-2">
-                    <p role="alert" className="text-sm text-destructive">
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
                         {getErrorMessage(
                             query.error,
                             "配送模板加载失败，请重试。",
@@ -90,7 +93,7 @@ export function SupplierDeliveryTemplatesSection({
                     </Button>
                 </div>
             ) : templates.length === 0 ? (
-                <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                <p className="rounded-lg border border-dashed p-4 text-xs text-muted-foreground">
                     该供应商还没有配送模板，其供给按全国配送、包邮判定。
                 </p>
             ) : (
@@ -134,21 +137,21 @@ export function SupplierDeliveryTemplatesSection({
                                         </span>
                                     ) : null}
                                 </div>
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-xs text-muted-foreground">
                                     代发：
                                     {ruleSetSummary(
                                         "dropship",
                                         template.dropship,
                                     )}
                                 </p>
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-xs text-muted-foreground">
                                     集采：
                                     {ruleSetSummary("bulk", template.bulk)}
                                 </p>
                                 <details>
                                     <summary
                                         id={`${id}-rules`}
-                                        className="cursor-pointer text-sm"
+                                        className="cursor-pointer text-body-compact"
                                     >
                                         查看配送规则
                                     </summary>

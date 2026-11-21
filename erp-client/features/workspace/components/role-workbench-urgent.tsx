@@ -47,11 +47,11 @@ export function RoleWorkbenchUrgent({
                     <div>
                         <h2
                             id="role-workbench-urgent-title"
-                            className="flex items-center gap-2 text-sm font-semibold text-foreground"
+                            className="flex items-center gap-2 text-section-title font-semibold text-foreground tracking-tight"
                         >
                             需优先处理
                             {urgent.items.length > 0 ? (
-                                <span className="num rounded-full bg-destructive-soft px-1.5 text-2xs font-semibold leading-4.5 text-destructive-soft-foreground">
+                                <span className="num rounded-full bg-destructive-soft px-1.5 text-tiny font-semibold leading-4.5 text-destructive-soft-foreground">
                                     {urgent.items.length}
                                 </span>
                             ) : null}
@@ -132,7 +132,7 @@ export function RoleWorkbenchUrgent({
                         >
                             <CircleCheckIcon className="size-4.5" />
                         </span>
-                        <p className="text-sm font-medium text-foreground">
+                        <p className="text-body-compact font-medium text-foreground">
                             当前无紧急待办
                         </p>
                         <p className="text-xs text-muted-foreground">

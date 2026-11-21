@@ -23,7 +23,7 @@ export function CustomerQualityPageAlerts({
                 description="已保留上次成功结果，业务记录未被修改。请稍后刷新或联系管理员。"
             />
             {freshness.state === "stale" || refreshError || backgroundFailed ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     当前显示上次成功结果，更新于{" "}
                     {formatDateTime(
                         freshness.projectedAt,
@@ -38,7 +38,7 @@ export function CustomerQualityPageAlerts({
                 </p>
             ) : null}
             {freshness.state === "rebuilding" ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     数据更新中，已保留最近成功结果。
                 </p>
             ) : null}

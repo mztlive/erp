@@ -39,7 +39,7 @@ export function SourcingCompactFacts({
                         <span>
                             含税单价{" "}
                             <MoneyValue
-                                className="text-sm font-semibold text-foreground"
+                                className="text-body-compact font-semibold text-foreground"
                                 display="exact"
                                 value={option.unitCostGross}
                             />

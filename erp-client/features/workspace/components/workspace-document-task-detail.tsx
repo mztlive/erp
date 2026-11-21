@@ -406,11 +406,11 @@ export function WorkspaceDocumentTaskDetail({
                                 ) : null}
                             </div>
                         )}
-                        <h2 className="break-words text-xl font-medium tracking-tight">
+                        <h2 className="break-words text-section-title font-semibold tracking-tight">
                             {canReadSensitive ? headerTitle : "业务详情"}
                         </h2>
                         {rework && submission ? (
-                            <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
+                            <div className="flex flex-wrap gap-x-6 gap-y-1 text-body-compact text-muted-foreground">
                                 <p className="min-w-0 break-all">
                                     单号：
                                     <span className="num text-foreground select-all">
@@ -420,7 +420,7 @@ export function WorkspaceDocumentTaskDetail({
                                 <p>提交版本 {submission.subject_version}</p>
                             </div>
                         ) : !rework ? (
-                            <p className="break-all text-sm text-muted-foreground">
+                            <p className="break-all text-xs text-muted-foreground">
                                 {documentNumber}
                             </p>
                         ) : null}
@@ -529,7 +529,7 @@ export function WorkspaceDocumentTaskDetail({
                 {rework && (!instanceId || !canReadSubmission) ? (
                     <DetailBlock>
                         <p
-                            className="text-sm text-muted-foreground"
+                            className="text-xs text-muted-foreground"
                             role="status"
                         >
                             {canReadSubmission
@@ -540,7 +540,7 @@ export function WorkspaceDocumentTaskDetail({
                 ) : rework && !specializedApproval && materials.isPending ? (
                     <DetailBlock>
                         <p
-                            className="text-sm text-muted-foreground"
+                            className="text-xs text-muted-foreground"
                             role="status"
                         >
                             正在读取本次提交资料…
@@ -559,7 +559,7 @@ export function WorkspaceDocumentTaskDetail({
                 !item.summarySections?.length &&
                 !item.briefLines?.length ? (
                     <p
-                        className="px-5 py-4 text-sm text-muted-foreground"
+                        className="px-5 py-4 text-xs text-muted-foreground"
                         role="status"
                     >
                         此次提交的单据摘要暂不可用。
@@ -598,7 +598,7 @@ export function WorkspaceDocumentTaskDetail({
                             <div className="flex flex-col gap-1">
                                 <span
                                     className={cn(
-                                        "num text-3xl font-semibold tracking-tight",
+                                        "num text-value-summary font-semibold tracking-tight",
                                         "text-foreground",
                                     )}
                                 >
@@ -617,7 +617,7 @@ export function WorkspaceDocumentTaskDetail({
                                 >
                                     <span
                                         className={cn(
-                                            "num text-lg font-medium",
+                                            "num text-value-compact font-semibold tracking-tight",
                                             taxAmountToneClass(amount.label),
                                         )}
                                     >
@@ -630,7 +630,7 @@ export function WorkspaceDocumentTaskDetail({
                             ))}
                             {purchaseApproval && lineCount > 0 && (
                                 <div className="flex flex-col gap-1">
-                                    <span className="num text-lg font-medium">
+                                    <span className="num text-value-compact font-semibold tracking-tight">
                                         {lineCount} 项
                                     </span>
                                     <span className="text-xs text-muted-foreground">
@@ -640,7 +640,7 @@ export function WorkspaceDocumentTaskDetail({
                             )}
                             {purchaseApproval && purchasePaymentTerm && (
                                 <div className="flex flex-col gap-1">
-                                    <span className="text-sm font-medium">
+                                    <span className="text-body-compact font-medium">
                                         {purchasePaymentTerm}
                                     </span>
                                     <span className="text-xs text-muted-foreground">
@@ -661,7 +661,7 @@ export function WorkspaceDocumentTaskDetail({
                   !deliveryBrief &&
                   documentFacts.isPending ? (
                     <DetailBlock title="金额">
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             正在加载单据详情…
                         </p>
                     </DetailBlock>
@@ -738,7 +738,7 @@ export function WorkspaceDocumentTaskDetail({
                         title={approvalDocument ? "提交资料摘要" : "明细"}
                         description={`${lineCount} 行`}
                     >
-                        <ul className="flex flex-col text-sm">
+                        <ul className="flex flex-col text-body-compact">
                             {briefLines.map((line, lineIndex) => (
                                 <li
                                     key={`${lineIndex}:${line.title}`}
@@ -861,7 +861,7 @@ function DetailBlock({
         >
             {title ? (
                 <header className="flex items-baseline gap-2">
-                    <h3 className="text-sm font-medium">{title}</h3>
+                    <h3 className="font-medium">{title}</h3>
                     {description ? (
                         <p className="text-xs text-muted-foreground">
                             {description}

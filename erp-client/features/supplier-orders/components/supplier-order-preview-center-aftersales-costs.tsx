@@ -43,7 +43,7 @@ export function AftersalesSection({
             description="售后请求 + 余额恢复 / 供应商退款两类记录分别展示"
         >
             {afterSales.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     暂无售后申请记录。如需取消订单或申请退款，请先由关联销售单或采购单发起售后。
                 </p>
             ) : (

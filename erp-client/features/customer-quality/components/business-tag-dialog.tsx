@@ -33,7 +33,7 @@ export function BusinessTagDialog({
                     </DialogDescription>
                 </DialogHeader>
                 {tag ? (
-                    <div className="space-y-3 text-sm">
+                    <div className="space-y-3 text-body-compact">
                         <div className="flex flex-wrap items-center gap-2">
                             <BusinessStatusBadge
                                 context="list"

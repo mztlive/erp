@@ -9,14 +9,14 @@ export function ArrangementSummary({ salesOrderId }: { salesOrderId: string }) {
     const query = useArrangement("sales-orders", salesOrderId, true)
     if (query.isPending)
         return (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 正在读取当前收货安排…
             </p>
         )
     if (query.isError)
         return (
             <section className="space-y-2 rounded-lg border p-4">
-                <p className="text-sm">
+                <p className="text-body-compact">
                     当前收货安排暂不可用：{query.error.message}
                 </p>
                 <Button
@@ -33,7 +33,9 @@ export function ArrangementSummary({ salesOrderId }: { salesOrderId: string }) {
     return (
         <section className="space-y-3 rounded-lg border border-border/70 p-4 md:p-5">
             <div>
-                <h2 className="text-lg font-semibold">当前收货安排</h2>
+                <h2 className="text-section-title font-semibold tracking-tight">
+                    当前收货安排
+                </h2>
                 <p className="text-xs text-muted-foreground">
                     通过页面上方「收货安排」补充或调整未发部分，已发包裹保持原地址。
                 </p>
@@ -50,7 +52,7 @@ export function ArrangementSummary({ salesOrderId }: { salesOrderId: string }) {
                 return (
                     <div
                         key={line.line_id}
-                        className="space-y-1.5 border-t pt-3 text-sm"
+                        className="space-y-1.5 border-t pt-3 text-body-compact"
                     >
                         <p className="font-medium">
                             {line.item_name} · {compactFixed(line.quantity)}{" "}

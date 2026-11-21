@@ -103,7 +103,7 @@ function BusinessDetailContent({
                 {query.isPending ? (
                     <p
                         role="status"
-                        className="py-8 text-sm text-muted-foreground"
+                        className="py-8 text-xs text-muted-foreground"
                     >
                         正在读取业务明细…
                     </p>
@@ -120,7 +120,7 @@ function BusinessDetailContent({
                     />
                 ) : (
                     <>
-                        <p className="mb-2 text-sm font-medium">
+                        <p className="mb-2 text-body-compact font-medium">
                             {metric.label}：
                             {overviewValue(metric, data) == null ? (
                                 "暂不可用"
@@ -132,24 +132,24 @@ function BusinessDetailContent({
                                 />
                             )}
                         </p>
-                        <p className="mb-4 text-xs leading-5 text-muted-foreground">
+                        <p className="mb-4 text-xs text-muted-foreground">
                             {data?.scopeSummary || "当前授权范围"}
                             {data?.asOf
                                 ? ` · 数据时间 ${new Date(data.asOf).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}`
                                 : ""}
                         </p>
                         {data?.note && (
-                            <p className="mb-4 rounded-lg bg-muted/40 p-3 text-sm leading-6">
+                            <p className="mb-4 rounded-lg bg-muted/40 p-3 text-body-compact leading-6">
                                 {data.note}
                             </p>
                         )}
                         {metric.field === "overdue" && (
-                            <p className="mb-4 text-xs leading-5 text-muted-foreground">
+                            <p className="mb-4 text-xs text-muted-foreground">
                                 逾期金额按每笔应收款的到期日计算。下方展示当前权限范围内的全部客户应收款余额（含未逾期），可点击进入客户往来查看逾期明细。
                             </p>
                         )}
                         {!data?.rows.length ? (
-                            <p className="py-10 text-center text-sm text-muted-foreground">
+                            <p className="py-10 text-center text-xs text-muted-foreground">
                                 {data?.noScope
                                     ? "暂无数据查看权限"
                                     : "当前范围暂无业务记录"}
@@ -166,7 +166,7 @@ function BusinessDetailContent({
                                             className="flex flex-wrap items-center justify-between gap-3 py-4"
                                         >
                                             <div className="min-w-0 flex-1">
-                                                <p className="break-words text-sm font-medium">
+                                                <p className="break-words text-body-compact font-medium">
                                                     {row.title}
                                                 </p>
                                                 <p className="mt-1 break-words text-xs text-muted-foreground">
@@ -177,7 +177,7 @@ function BusinessDetailContent({
                                                 </p>
                                             </div>
                                             {amount !== undefined && (
-                                                <span className="text-sm tabular-nums">
+                                                <span className="text-body-compact tabular-nums">
                                                     {amount == null ? (
                                                         "金额受限或暂不可用"
                                                     ) : (

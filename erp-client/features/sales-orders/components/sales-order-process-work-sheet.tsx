@@ -46,10 +46,10 @@ export function SalesOrderProcessWorkSheet({
                             key={group.id}
                             className="space-y-3 border-b pb-5 last:border-0 last:pb-0"
                         >
-                            <h3 className="text-sm font-semibold">
+                            <h3 className="font-semibold">
                                 {group.label} · {group.count} 项
                             </h3>
-                            <dl className="space-y-3 text-sm">
+                            <dl className="space-y-3 text-body-compact">
                                 <div>
                                     <dt className="text-xs text-muted-foreground">
                                         当前责任人
@@ -81,7 +81,7 @@ export function SalesOrderProcessWorkSheet({
                     )
                 })}
                 {!step?.groups.length ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         当前环节暂无待处理事项。
                     </p>
                 ) : null}

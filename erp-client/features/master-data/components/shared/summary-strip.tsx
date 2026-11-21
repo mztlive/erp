@@ -22,7 +22,7 @@ export function MasterDataSummaryStrip({
                         {row.label}
                     </dt>
                     <dd
-                        className="mt-0.5 truncate text-sm font-medium text-foreground"
+                        className="mt-0.5 truncate text-body-compact font-medium text-foreground"
                         title={row.value}
                     >
                         {row.value}

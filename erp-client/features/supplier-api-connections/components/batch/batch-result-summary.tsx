@@ -90,13 +90,15 @@ export function BatchResultSummary({
                         />
                     </div>
                     <div className="min-w-0 space-y-2" role="status">
-                        <h2 className="text-xl font-semibold">{title}</h2>
+                        <h2 className="text-section-title font-semibold tracking-tight">
+                            {title}
+                        </h2>
                         {counts.succeeded > 0 ? (
                             <p className="flex flex-wrap items-baseline gap-2">
-                                <span className="num text-2xl font-semibold">
+                                <span className="num text-value-section font-semibold tracking-tight">
                                     {counts.succeeded}
                                 </span>
-                                <span className="text-sm text-muted-foreground">
+                                <span className="text-body-compact text-muted-foreground">
                                     个 SKU 入库成功
                                 </span>
                             </p>
@@ -121,7 +123,7 @@ export function BatchResultSummary({
                             </div>
                         ) : null}
                         {running ? (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 后台持续处理，结果自动更新
                             </p>
                         ) : null}

@@ -123,7 +123,7 @@ function FinancialDraftEditor({
                     </DialogDescription>
                 </DialogHeader>
                 {profile.isPending ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         正在核对操作权限…
                     </p>
                 ) : profile.isError || !permitted ? (
@@ -136,7 +136,7 @@ function FinancialDraftEditor({
                         </AlertDescription>
                     </Alert>
                 ) : query.isPending ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         正在读取原单…
                     </p>
                 ) : query.isError && !query.data ? (
@@ -463,7 +463,7 @@ function FinancialDraftForm({
                     void form.handleSubmit()
                 }}
             >
-                <p className="num text-sm text-muted-foreground">
+                <p className="num text-xs text-muted-foreground">
                     单号：
                     {draft.receipt_no ??
                         draft.refund_no ??
@@ -478,7 +478,7 @@ function FinancialDraftForm({
                         </AlertDescription>
                     </Alert>
                 ) : !canSave ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         {profileQuery.isPending
                             ? "正在核对操作权限…"
                             : "当前账号没有修改此原单的权限。"}
@@ -558,7 +558,7 @@ function FinancialDraftForm({
                                 ),
                             )}
                             {!defaultValues.allocations.length ? (
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-xs text-muted-foreground">
                                     原单未保存核销来源，当前只能保存到账信息。
                                 </p>
                             ) : null}
@@ -585,14 +585,17 @@ function FinancialDraftForm({
                     />
                 ) : null}
                 {saved && !error ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         {kind === "customer_receipt"
                             ? "到账信息已暂存；提交审批时将一并更新核销明细。"
                             : "修改已保存。"}
                     </p>
                 ) : null}
                 {error ? (
-                    <p role="alert" className="text-sm text-destructive">
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
                         {error}
                     </p>
                 ) : null}

@@ -134,7 +134,7 @@ export function SalesOrderCreateLineItemTable({
                             ) ? (
                                 <p
                                     role="status"
-                                    className="mt-3 text-sm text-destructive"
+                                    className="mt-3 text-destructive"
                                 >
                                     {procurementError
                                         ? "采购负责人暂时无法匹配，请稍后重试。"

@@ -48,7 +48,7 @@ export function InquiryFees({
         rounds.find((item) => item.round === selectedRound) ?? rounds[0]
     if (!feedback)
         return (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 采购尚未发布费用结果。
             </p>
         )
@@ -90,7 +90,7 @@ export function InquiryFees({
         <section className="space-y-4" aria-label="询价费用">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <div className="flex flex-wrap items-center gap-2 text-body-compact">
                         <span className="font-medium">
                             第 {feedback.round} 轮反馈
                         </span>
@@ -141,7 +141,7 @@ export function InquiryFees({
                     </div>
                 )}
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-body-compact text-muted-foreground">
                 <p>{context}</p>
                 {hasHandling && !showHandling && basis && (
                     <Button
@@ -175,7 +175,7 @@ export function InquiryFees({
 function FeeQuoteTable({ feedback }: { feedback: InquiryFeedback }) {
     if (feedback.data.fees.length === 0)
         return (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 本轮未提出额外费用。
             </p>
         )

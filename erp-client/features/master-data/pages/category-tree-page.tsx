@@ -130,12 +130,12 @@ export function CategoryTreePage() {
                 {pending ? (
                     <p
                         role="status"
-                        className="py-8 text-center text-sm text-muted-foreground"
+                        className="py-8 text-center text-xs text-muted-foreground"
                     >
                         正在加载分类…
                     </p>
                 ) : failed ? (
-                    <p className="py-8 text-center text-sm text-muted-foreground">
+                    <p className="py-8 text-center text-xs text-muted-foreground">
                         分类加载失败，请重试。
                     </p>
                 ) : (
@@ -246,7 +246,7 @@ export function CategoryTreePage() {
                     {pending ? (
                         <div
                             role="status"
-                            className="p-8 text-sm text-muted-foreground"
+                            className="p-8 text-body-compact text-muted-foreground"
                         >
                             正在加载分类资料…
                         </div>
@@ -270,7 +270,7 @@ export function CategoryTreePage() {
                     ) : state.listQuery.isPlaceholderData ? (
                         <div
                             role="status"
-                            className="p-8 text-sm text-muted-foreground"
+                            className="p-8 text-body-compact text-muted-foreground"
                         >
                             正在查询分类…
                         </div>

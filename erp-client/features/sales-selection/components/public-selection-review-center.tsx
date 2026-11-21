@@ -207,7 +207,7 @@ export const SelectionReviewCenter = ({
                         <h1 className="text-xs sm:text-sm font-bold text-foreground">
                             方案核对与确认
                         </h1>
-                        <p className="text-2xs text-muted-foreground font-medium truncate max-w-[160px]">
+                        <p className="text-xs text-muted-foreground font-medium truncate max-w-[160px]">
                             {page.customer_name}
                         </p>
                     </div>
@@ -252,7 +252,7 @@ export const SelectionReviewCenter = ({
                                     <h2 className="text-xs font-bold text-foreground">
                                         已选方案概览
                                     </h2>
-                                    <p className="text-2xs text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         涵盖 {groupedChoices.length} 个商品大类
                                     </p>
                                 </div>
@@ -264,29 +264,29 @@ export const SelectionReviewCenter = ({
 
                         <div className="grid grid-cols-3 gap-2 pt-2 border-t border-grid text-center">
                             <div className="rounded-xl bg-background/80 p-2 border border-border">
-                                <p className="text-2xs text-muted-foreground">
+                                <p className="text-xs text-muted-foreground">
                                     已选款式
                                 </p>
                                 <p className="text-sm font-bold text-foreground mt-0.5">
                                     {page.choices.length}{" "}
-                                    <span className="text-2xs font-normal text-muted-foreground">
+                                    <span className="text-xs font-normal text-muted-foreground">
                                         款
                                     </span>
                                 </p>
                             </div>
                             <div className="rounded-xl bg-background/80 p-2 border border-border">
-                                <p className="text-2xs text-muted-foreground">
+                                <p className="text-xs text-muted-foreground">
                                     采购总件数
                                 </p>
                                 <p className="text-sm font-bold text-foreground mt-0.5">
                                     {totalPieces}{" "}
-                                    <span className="text-2xs font-normal text-muted-foreground">
+                                    <span className="text-xs font-normal text-muted-foreground">
                                         份
                                     </span>
                                 </p>
                             </div>
                             <div className="rounded-xl bg-info-soft/60 p-2 border border-info-border">
-                                <p className="text-2xs text-primary font-medium">
+                                <p className="text-xs text-primary font-medium">
                                     {mall ? "模式" : "方案总金额"}
                                 </p>
                                 <p className="text-sm font-bold text-primary mt-0.5 truncate">
@@ -358,7 +358,7 @@ export const SelectionReviewCenter = ({
                                 ))}
                             </div>
 
-                            <div className="flex items-center gap-1 shrink-0 text-2xs text-muted-foreground">
+                            <div className="flex items-center gap-1 shrink-0 text-xs text-muted-foreground">
                                 <button
                                     id="sales-selection-public-review-expand-all"
                                     type="button"
@@ -409,7 +409,7 @@ export const SelectionReviewCenter = ({
                                             <span className="text-xs font-bold text-foreground">
                                                 {group.category}
                                             </span>
-                                            <span className="rounded-full bg-muted/70 text-muted-foreground px-1.5 py-0.2 text-2xs font-bold">
+                                            <span className="rounded-full bg-muted/70 text-muted-foreground px-1.5 py-0.2 text-tiny font-bold">
                                                 {group.items.length} 款
                                             </span>
                                         </div>
@@ -475,7 +475,7 @@ export const SelectionReviewCenter = ({
                                                                                     key={
                                                                                         s.name
                                                                                     }
-                                                                                    className="rounded bg-muted px-1 py-0.2 text-2xs text-muted-foreground"
+                                                                                    className="rounded bg-muted px-1 py-0.2 text-xs text-muted-foreground"
                                                                                 >
                                                                                     {
                                                                                         s.name
@@ -492,7 +492,7 @@ export const SelectionReviewCenter = ({
                                                                 {item.members
                                                                     .length >
                                                                     0 && (
-                                                                    <div className="mt-1 pl-1.5 border-l-2 border-border text-2xs text-muted-foreground space-y-0.5">
+                                                                    <div className="mt-1 pl-1.5 border-l-2 border-border text-xs text-muted-foreground space-y-0.5">
                                                                         {item.members.map(
                                                                             (
                                                                                 m,
@@ -533,7 +533,7 @@ export const SelectionReviewCenter = ({
                                                             <div className="text-right shrink-0">
                                                                 {choice.quantity !=
                                                                     null && (
-                                                                    <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-2xs font-semibold text-foreground">
+                                                                    <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-xs font-semibold text-foreground">
                                                                         ×{" "}
                                                                         {
                                                                             choice.quantity
@@ -571,7 +571,7 @@ export const SelectionReviewCenter = ({
                                                                             item.item_id,
                                                                         )
                                                                     }
-                                                                    className="mt-1 h-auto text-2xs text-muted-foreground hover:text-primary disabled:opacity-40 transition-colors border-0 bg-transparent p-0 cursor-pointer ml-auto"
+                                                                    className="mt-1 h-auto text-xs text-muted-foreground hover:text-primary disabled:opacity-40 transition-colors border-0 bg-transparent p-0 cursor-pointer ml-auto"
                                                                 >
                                                                     {removingId ===
                                                                     item.item_id
@@ -615,7 +615,7 @@ export const SelectionReviewCenter = ({
                         {page.notices.map((n) => (
                             <p
                                 key={n}
-                                className="text-2xs text-warning-soft-foreground"
+                                className="text-xs text-warning-soft-foreground"
                             >
                                 · {n}
                             </p>

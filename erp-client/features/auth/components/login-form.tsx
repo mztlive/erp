@@ -45,7 +45,9 @@ export function LoginForm() {
             <CardHeader className="gap-4">
                 <LoginModeSwitch mode="admin" />
                 <div className="flex flex-col gap-1.5">
-                    <CardTitle className="text-login-title">登录</CardTitle>
+                    <CardTitle className="text-2xl font-semibold tracking-tight">
+                        登录
+                    </CardTitle>
                     <CardDescription>使用后台账号进入工作台</CardDescription>
                 </div>
             </CardHeader>

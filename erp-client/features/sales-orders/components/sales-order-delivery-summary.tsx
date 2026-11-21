@@ -52,7 +52,7 @@ export function SalesOrderDeliverySummary({
                 line.sku && line.sku !== "无规格" ? line.sku : undefined
             }
             identity="交付地址"
-            summary={<p className="text-sm text-muted-foreground">{summary}</p>}
+            summary={<p className="text-xs text-muted-foreground">{summary}</p>}
             trigger={
                 <SheetTrigger
                     id={`${prefix}-trigger`}
@@ -93,12 +93,12 @@ export function SalesOrderDeliverySummary({
                     >
                         <div className="flex flex-wrap items-baseline justify-between gap-2">
                             <h3 className="font-medium">地址 {index + 1}</h3>
-                            <span className="num text-sm">
+                            <span className="num text-body-compact">
                                 分配数量：
                                 {compactFixed(allocation.quantity)} {line.unit}
                             </span>
                         </div>
-                        <dl className="grid grid-cols-[4rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
+                        <dl className="grid grid-cols-[4rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-body-compact">
                             <dt className="text-muted-foreground">收货人</dt>
                             <dd className="break-words">
                                 {allocation.recipient}

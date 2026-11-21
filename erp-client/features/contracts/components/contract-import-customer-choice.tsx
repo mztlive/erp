@@ -45,7 +45,7 @@ export function ContractImportCustomerChoice({
         >
             <h4
                 id="contract-import-customer-heading"
-                className="text-sm font-semibold"
+                className="text-body-compact font-semibold"
             >
                 客户（对方签约主体）
             </h4>
@@ -67,7 +67,7 @@ export function ContractImportCustomerChoice({
                 >
                     合同识别名称
                 </p>
-                <p className="break-words text-sm font-medium">
+                <p className="break-words text-body-compact font-medium">
                     {recognizedName || "未识别客户名称"}
                 </p>
                 <p

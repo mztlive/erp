@@ -201,11 +201,14 @@ export function InquiryRatioPricing({
                             )}
                         />
                     </div>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         系统供给价的运费与交期须另行核对；已登记报价按含运费参考单价计算。只更新单价和税率，供给结论及数量保留。
                     </p>
                     {failed ? (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {getErrorMessage(
                                 quotes.error ?? offerings.error,
                                 "报价资料读取失败，请重试",
@@ -219,12 +222,15 @@ export function InquiryRatioPricing({
                         </p>
                     ) : null}
                     {error && (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {error}
                         </p>
                     )}
                     <div className="max-h-72 overflow-auto rounded-md border">
-                        <Table className="w-full text-sm">
+                        <Table className="w-full text-body-compact">
                             <TableHeader>
                                 <TableRow>
                                     <TableHead className="p-2 text-left">
@@ -270,7 +276,7 @@ export function InquiryRatioPricing({
                         </Table>
                     </div>
                     <DialogFooter>
-                        <p className="mr-auto text-sm text-muted-foreground">
+                        <p className="mr-auto text-xs text-muted-foreground">
                             将覆盖 {count} 项单价和税率，其他商品保留原值。
                         </p>
                         <Button

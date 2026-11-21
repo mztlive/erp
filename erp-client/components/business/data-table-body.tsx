@@ -294,7 +294,7 @@ export function DataTableBody<TData>({
                         <div className="sticky left-0 w-[calc(100cqw-3rem)] max-w-full whitespace-normal">
                             {emptyState ?? (
                                 <div className="flex flex-col items-center gap-2 py-2 text-center">
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-body-compact text-muted-foreground">
                                         {emptyTitle ?? "当前筛选没有结果"}
                                     </p>
                                     {emptyDescription != null ? (

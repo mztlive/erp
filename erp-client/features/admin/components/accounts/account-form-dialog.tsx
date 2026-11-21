@@ -220,7 +220,7 @@ export function AccountFormDialog({
                 >
                     <div className="min-h-0 overflow-y-auto pr-1">
                         {isEdit && departmentLabel ? (
-                            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/30 p-3 text-sm">
+                            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/30 p-3 text-body-compact">
                                 <span>所属部门：{departmentLabel}</span>
                                 {onAdjustDepartment ? (
                                     <form.Subscribe
@@ -378,7 +378,7 @@ export function AccountFormDialog({
                                                         )
                                                     }}
                                                 />
-                                                <p className="text-xs leading-5 text-muted-foreground">
+                                                <p className="text-xs text-muted-foreground">
                                                     部门与业务数据范围在人员资料中设置。
                                                 </p>
                                                 {isInvalid ? (

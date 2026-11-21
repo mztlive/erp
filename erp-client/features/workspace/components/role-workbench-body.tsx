@@ -124,7 +124,7 @@ function RoleWorkbenchTiming({ role }: { role: Role }) {
                     <div>
                         <h2
                             id={`${presentation.prefix}-workbench-timing-title`}
-                            className="text-sm font-semibold text-foreground"
+                            className="text-section-title font-semibold text-foreground tracking-tight"
                         >
                             {presentation.timingTitle}
                         </h2>
@@ -297,7 +297,7 @@ function RoleWorkbenchStages({
                     <div>
                         <h2
                             id={`${presentation.prefix}-workbench-stages-title`}
-                            className="text-sm font-semibold text-foreground"
+                            className="text-section-title font-semibold text-foreground tracking-tight"
                         >
                             {presentation.stagesTitle}
                         </h2>

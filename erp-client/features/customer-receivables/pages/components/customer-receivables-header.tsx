@@ -123,7 +123,7 @@ export function CustomerReceivablesHeader({
                 )}
             >
                 <div className="flex min-w-0 flex-col gap-1">
-                    <h3 className="text-sm font-medium">本单回款与开票</h3>
+                    <h3 className="font-medium">本单回款与开票</h3>
                     <p className="text-xs text-muted-foreground">
                         {salesOrderNo
                             ? `当前仅处理销售单 ${salesOrderNo} 的往来记录。`

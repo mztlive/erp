@@ -30,7 +30,9 @@ function PendingFact({ label, value }: { label: string; value: string }) {
     return (
         <div className="min-w-0">
             <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd className="mt-0.5 truncate text-sm font-medium">{value}</dd>
+            <dd className="mt-0.5 truncate text-body-compact font-medium">
+                {value}
+            </dd>
         </div>
     )
 }
@@ -102,7 +104,7 @@ export function ChangeOrderPendingCard({
                     <div className="flex flex-wrap items-center gap-2">
                         <h2
                             id={`${id}-title`}
-                            className="text-sm font-semibold"
+                            className="text-section-title font-semibold tracking-tight"
                         >
                             {title}
                         </h2>
@@ -111,7 +113,7 @@ export function ChangeOrderPendingCard({
                             label={changeOrder.statusLabel}
                         />
                     </div>
-                    <p className="text-xs leading-5 text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         {base ? `基于 ${base} · ` : ""}
                         {createdAt} 发起。生效前{counterparty}仍按
                         {base ? ` ${base} ` : "当前版本"}执行。

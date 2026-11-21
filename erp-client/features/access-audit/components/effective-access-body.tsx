@@ -22,7 +22,7 @@ function RolePermissionOverview({
     disabled: boolean
 }) {
     return (
-        <div className="space-y-6 text-sm">
+        <div className="space-y-6 text-body-compact">
             <section className="space-y-3">
                 <h3 className="font-medium">操作权限</h3>
                 <p className="text-muted-foreground">
@@ -50,7 +50,7 @@ function RolePermissionOverview({
                     </dl>
                 )}
             </section>
-            <p className="border-t border-border pt-4 text-xs leading-5 text-muted-foreground">
+            <p className="border-t border-border pt-4 text-xs text-muted-foreground">
                 {disabled
                     ? "此角色已停用，当前不会向关联人员授予操作权限。"
                     : "角色操作权限由所有关联人员共用，修改后会对这些人员生效。"}
@@ -69,19 +69,21 @@ function PermissionLead({
             <h3 className="text-xs font-medium text-muted-foreground">
                 操作权限
             </h3>
-            <p className="mt-2 text-value-summary font-semibold leading-10 tracking-tight">
+            <p className="mt-2 font-semibold">
                 {preview.allPermissions ? (
                     "全部操作权限"
                 ) : (
                     <>
-                        <span className="num">{preview.count}</span>
-                        <span className="ml-2 text-sm font-normal text-muted-foreground">
+                        <span className="num text-value-summary tracking-tight">
+                            {preview.count}
+                        </span>
+                        <span className="ml-2 text-body-compact font-normal text-muted-foreground">
                             项
                         </span>
                     </>
                 )}
             </p>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+            <p className="mt-2 text-xs text-muted-foreground">
                 {preview.allPermissions
                     ? "可进入全部模块。具体数据访问仍须符合业务范围、来源关系或任务指派规则。"
                     : preview.groups.length > 0
@@ -139,11 +141,11 @@ function DataScopeSection({
     return (
         <section className="space-y-3">
             <h3 className="font-medium">数据访问依据</h3>
-            <p className="text-xs leading-5 text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 在具备功能权限的前提下，实际可查看或处理的单据还需满足以下数据范围规则。
             </p>
             {groups.length === 0 ? (
-                <p className="text-xs leading-5 text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     暂无可展示的访问依据，具体业务须在访问时校验。
                 </p>
             ) : (
@@ -168,7 +170,7 @@ function DataScopeSection({
 function EffectiveAccessBody({ query, previewRole }: EffectiveAccessBodyProps) {
     if (!previewRole && query.isPending) {
         return (
-            <p role="status" className="text-sm text-muted-foreground">
+            <p role="status" className="text-xs text-muted-foreground">
                 正在读取角色权限…
             </p>
         )
@@ -216,7 +218,7 @@ function EffectiveAccessBody({ query, previewRole }: EffectiveAccessBodyProps) {
     const blockers = query.data?.actionBlockers ?? []
 
     return (
-        <div className="space-y-6 text-sm">
+        <div className="space-y-6 text-body-compact">
             <PermissionLead preview={preview} />
             <DataScopeSection query={query} />
 
@@ -230,7 +232,7 @@ function EffectiveAccessBody({ query, previewRole }: EffectiveAccessBodyProps) {
                                     {item.layerLabel}
                                 </Badge>
                             </div>
-                            <p className="text-xs leading-5 text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 {item.message}
                             </p>
                         </div>
@@ -252,7 +254,7 @@ function EffectiveAccessBody({ query, previewRole }: EffectiveAccessBodyProps) {
                     <h3 className="text-xs font-medium text-muted-foreground">
                         查询范围
                     </h3>
-                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                    <p className="mt-2 text-xs text-muted-foreground">
                         以上为当前人员的操作权限与数据访问政策。具体业务操作是否允许，以执行时的权限校验为准。
                     </p>
                 </section>

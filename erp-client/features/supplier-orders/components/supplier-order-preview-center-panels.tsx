@@ -161,7 +161,7 @@ export function StatusAlertsPanel({
                 description="当前订单和物流状态保留最近已确认的结果，请刷新执行状态或联系管理员。"
             />
             {trackingError ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     当前显示最近已确认的订单和物流状态。
                 </p>
             ) : null}

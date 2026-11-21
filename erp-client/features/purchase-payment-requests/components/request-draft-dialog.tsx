@@ -246,10 +246,10 @@ function RequestDraftForm({
                                 <p className="num font-medium">
                                     {row.request_no}
                                 </p>
-                                <p className="mt-1 text-sm text-muted-foreground">
+                                <p className="mt-1 text-xs text-muted-foreground">
                                     {row.supplier_name} · {row.our_company_name}
                                 </p>
-                                <p className="mt-2 text-sm">
+                                <p className="mt-2 text-body-compact">
                                     {row.lines.length} 张采购单 ·{" "}
                                     <MoneyValue value={row.total_amount} />
                                 </p>
@@ -307,7 +307,11 @@ function RequestDraftForm({
         >
             <DialogHeader className="shrink-0 border-b px-6 py-4 pr-16">
                 <DialogTitle
-                    className={fixedOrder ? "text-xl font-semibold" : undefined}
+                    className={
+                        fixedOrder
+                            ? "text-section-title font-semibold tracking-tight"
+                            : undefined
+                    }
                 >
                     {request
                         ? "修改付款申请"
@@ -404,7 +408,7 @@ function RequestDraftForm({
                                 {step === 2 && !!errors.length && (
                                     <p
                                         role="alert"
-                                        className="text-sm text-destructive"
+                                        className="text-body-compact text-destructive"
                                     >
                                         {fixedOrder
                                             ? "请核对必填项和申请金额；当前采购单不可申请时，请关闭弹窗后刷新详情。"
@@ -414,7 +418,7 @@ function RequestDraftForm({
                                 {error && (
                                     <p
                                         role="alert"
-                                        className="text-sm text-destructive"
+                                        className="text-body-compact text-destructive"
                                     >
                                         {getErrorMessage(
                                             error,
@@ -425,7 +429,10 @@ function RequestDraftForm({
                                     </p>
                                 )}
                                 {unknown && (
-                                    <p role="alert" className="text-sm">
+                                    <p
+                                        role="alert"
+                                        className="text-body-compact"
+                                    >
                                         提交结果暂无法确认。请点击“查询本次提交结果”，系统将查询上次提交结果，不会重复生成申请或占用余额。
                                     </p>
                                 )}
@@ -465,7 +472,7 @@ function RequestDraftForm({
                                                     }
                                                     className={
                                                         fixedOrder
-                                                            ? "text-lg font-semibold"
+                                                            ? "text-value-compact font-semibold tracking-tight"
                                                             : undefined
                                                     }
                                                 />

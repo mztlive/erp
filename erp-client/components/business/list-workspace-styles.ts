@@ -5,7 +5,7 @@ export const listWorkspaceStyles = {
     eyebrow:
         "inline-flex shrink-0 items-center rounded-sm bg-muted/80 px-1.5 py-0.5 text-tiny leading-4 font-medium text-muted-foreground",
     title: "text-page-title font-semibold tracking-tight text-foreground",
-    description: "mt-0.5 text-xs leading-4.5 text-muted-foreground/85",
+    description: "mt-0.5 text-xs text-muted-foreground/85",
     headerActions:
         "flex max-w-full shrink-0 flex-wrap items-center justify-end gap-1.5 [&_[data-slot=button]]:h-control [&_[data-slot=button]]:px-3",
     quietButton:

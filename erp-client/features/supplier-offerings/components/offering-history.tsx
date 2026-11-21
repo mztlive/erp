@@ -23,7 +23,7 @@ export function OfferingHistory({
         revisions.find((row) => row.id === selectedId) ?? revisions[0]
     if (query.isPending)
         return (
-            <p role="status" className="p-6 text-sm text-muted-foreground">
+            <p role="status" className="p-6 text-xs text-muted-foreground">
                 正在加载条款历史…
             </p>
         )
@@ -45,7 +45,7 @@ export function OfferingHistory({
         )
     return (
         <div className="space-y-5">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 按版本查看当时保存的价格与供应条件。可供状态和数量独立更新，不属于条款历史。
             </p>
             <div className="grid min-w-0 gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
@@ -104,7 +104,7 @@ export function OfferingHistory({
                     aria-label={`条款 v${selected.revision_no}`}
                 >
                     <div>
-                        <h2 className="text-base font-semibold">
+                        <h2 className="text-section-title font-semibold tracking-tight">
                             条款 v{selected.revision_no}
                         </h2>
                         <p className="num mt-1 text-xs text-muted-foreground">

@@ -290,7 +290,7 @@ export function RequestDetail({
                 }}
             />
             {submitUnknown && (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     提交结果暂无法确认，请再次确认本次提交以查询上次提交结果。
                 </p>
             )}
@@ -396,18 +396,21 @@ function ReasonCommandDialog({
                         )}
                     </form.AppField>
                     {!terminatePaidAuthorization && (
-                        <p className="text-sm">
+                        <p className="text-body-compact">
                             本次释放未付金额{" "}
                             <MoneyValue value={request.unpaid_amount} />
                         </p>
                     )}
                     {command.isError && (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {getErrorMessage(command.error, "操作失败，请重试")}
                         </p>
                     )}
                     {unknown && (
-                        <p className="text-sm">
+                        <p className="text-body-compact">
                             操作结果暂无法确认，请重新点击确认以查看上次提交结果。
                         </p>
                     )}

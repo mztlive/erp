@@ -119,7 +119,7 @@ export function OfferingSummary({
                                 unit=""
                             />
                         ) : (
-                            <span className="text-base font-medium text-muted-foreground">
+                            <span className="text-body-compact font-medium text-muted-foreground">
                                 数量未提供
                             </span>
                         )}
@@ -165,7 +165,7 @@ export function OfferingTermsCard({
             <CardHeader>
                 <CardTitle id="offering-terms-title">
                     商业条款
-                    <span className="ml-2 text-sm font-normal text-muted-foreground">
+                    <span className="ml-2 text-body-compact font-normal text-muted-foreground">
                         当前第 {offering.current_revision_no ?? "—"} 版
                     </span>
                 </CardTitle>

@@ -50,7 +50,9 @@ export function SalesOrderCreateContractSection({
             {basis === "contract" && !customerLocked ? (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-4">
                     <div>
-                        <p className="text-sm font-medium">导入合同并开单</p>
+                        <p className="text-body-compact font-medium">
+                            导入合同并开单
+                        </p>
                         <p className="mt-1 text-xs text-muted-foreground">
                             核对后归档，自动选择客户与合同，带入付款、开票要求和税率
                         </p>
@@ -73,7 +75,7 @@ export function SalesOrderCreateContractSection({
                         <Field className="gap-2 sm:grid sm:grid-cols-[auto_1fr] sm:gap-x-6">
                             <div
                                 id="sales-orders-create-basis-label"
-                                className="flex items-center text-sm font-medium"
+                                className="flex items-center text-body-compact font-medium"
                             >
                                 开单方式
                                 <span className="ml-1 text-destructive">*</span>

@@ -116,23 +116,33 @@ export function BrandImportDialog({
                         }}
                     />
                     {read.isPending && (
-                        <p role="status" className="text-sm">
+                        <p role="status" className="text-body-compact">
                             正在读取文件…
                         </p>
                     )}
                     {error && (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {getErrorMessage(error, "操作失败，请重试")}
                         </p>
                     )}
                     {uncertain && (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {getErrorMessage(mutation.error, "提交响应未收到")}
                             。网络响应超时，暂未确认是否提交成功，请点击「重新确认」（不会重复创建记录）。
                         </p>
                     )}
                     {source && (
-                        <p role="status" aria-live="polite" className="text-sm">
+                        <p
+                            role="status"
+                            aria-live="polite"
+                            className="text-body-compact"
+                        >
                             共 {rows.length} 行 ，{failed}{" "}
                             行读取异常。提交后由后台逐行核对并保存结果。
                         </p>

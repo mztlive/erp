@@ -176,7 +176,7 @@ export function CanvasNodeWithMenu(props: NodeProps<CanvasNode>) {
                 {(unavailable ||
                     data.kind === "person" ||
                     data.kind === "join") && (
-                    <p className="max-w-72 px-2 py-1.5 text-xs leading-5 text-muted-foreground">
+                    <p className="max-w-72 px-2 py-1.5 text-xs text-muted-foreground">
                         {data.disabled
                             ? "当前不可编辑审批流程"
                             : data.nodeLimitReached

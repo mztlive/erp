@@ -817,7 +817,7 @@ function FeedbackEditorContent({
                                 className="min-w-0 space-y-4"
                             >
                                 <div className="flex items-center justify-between">
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         共 {values.fees.length} 项费用
                                     </p>
                                     <Button
@@ -836,7 +836,7 @@ function FeedbackEditorContent({
                                     </Button>
                                 </div>
                                 {values.fees.length === 0 && (
-                                    <p className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+                                    <p className="rounded-lg border border-dashed px-4 py-8 text-center text-xs text-muted-foreground">
                                         暂无额外成本，点击“添加费用”登记。
                                     </p>
                                 )}
@@ -878,7 +878,7 @@ function FeedbackEditorContent({
                                                             className="space-y-4 rounded-xl border bg-background p-4 sm:p-5"
                                                         >
                                                             <div className="flex items-center justify-between gap-3 border-b pb-3">
-                                                                <p className="text-sm font-medium">
+                                                                <p className="text-body-compact font-medium">
                                                                     费用{" "}
                                                                     {index + 1}
                                                                 </p>

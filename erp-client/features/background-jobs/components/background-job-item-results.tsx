@@ -53,7 +53,7 @@ export function BackgroundJobItemResults({
                     >
                         上一页
                     </Button>
-                    <span className="text-sm">
+                    <span className="text-body-compact">
                         第 {itemsPage} 页，共 {totalPages} 页
                     </span>
                     <Button

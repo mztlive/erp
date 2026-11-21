@@ -267,7 +267,7 @@ export function BusinessDiffPanel({
             {...props}
         >
             <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
-                <h3 className="text-sm font-semibold text-card-foreground">
+                <h3 className="text-body-compact font-semibold text-card-foreground">
                     {title}
                 </h3>
                 <Badge variant="neutral">{badgeCount} 项</Badge>
@@ -348,7 +348,10 @@ export function AuditTimeline({
             <p
                 data-slot="audit-timeline-empty"
                 role="status"
-                className={cn("text-sm text-muted-foreground", className)}
+                className={cn(
+                    "text-body-compact text-muted-foreground",
+                    className,
+                )}
             >
                 {emptyMessage}
             </p>
@@ -508,7 +511,7 @@ export function ImportStageIndicator({
                         }
                         className="flex min-w-0 flex-col items-start gap-2 p-3"
                     >
-                        <span className="text-sm font-medium text-card-foreground">
+                        <span className="text-body-compact font-medium text-card-foreground">
                             {stageLabels?.[stage.key] ?? stage.label}
                         </span>
                         <StatusBadge
@@ -735,7 +738,7 @@ export function BatchOperationResult({
             <header className="flex flex-wrap items-center gap-2">
                 <h3
                     id={titleId}
-                    className="text-sm font-semibold text-foreground"
+                    className="text-body-compact font-semibold text-foreground"
                 >
                     {title}
                 </h3>
@@ -746,7 +749,7 @@ export function BatchOperationResult({
                 </Badge>
             </header>
             <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-                <section className="rounded-lg border border-border bg-card p-3 text-sm">
+                <section className="rounded-lg border border-border bg-card p-3 text-body-compact">
                     <h4 className="flex items-center gap-2 font-medium">
                         <CircleCheckIcon
                             className="size-4 text-success"
@@ -783,7 +786,7 @@ export function BatchOperationResult({
                         )}
                     </div>
                 </section>
-                <section className="rounded-lg border border-border bg-card p-3 text-sm">
+                <section className="rounded-lg border border-border bg-card p-3 text-body-compact">
                     <h4 className="flex items-center gap-2 font-medium">
                         <CircleDashedIcon
                             className="size-4 text-muted-foreground"
@@ -820,7 +823,7 @@ export function BatchOperationResult({
                         )}
                     </div>
                 </section>
-                <section className="rounded-lg border border-border bg-card p-3 text-sm">
+                <section className="rounded-lg border border-border bg-card p-3 text-body-compact">
                     <h4 className="flex items-center gap-2 font-medium">
                         <CircleXIcon
                             className={cn(

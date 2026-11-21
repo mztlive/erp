@@ -134,7 +134,7 @@ function SupplierQuoteExportContent({
     return (
         <>
             {query.isPending && (
-                <p role="status" className="py-8 text-sm text-muted-foreground">
+                <p role="status" className="py-8 text-xs text-muted-foreground">
                     正在读取当前商品和供给关系…
                 </p>
             )}
@@ -206,7 +206,7 @@ function SupplierQuoteExportContent({
                 />
             )}
             {download.isSuccess && (
-                <p role="status" className="text-sm">
+                <p role="status" className="text-body-compact">
                     已生成 {download.data} 张供应商报价表并开始下载 ZIP。
                 </p>
             )}

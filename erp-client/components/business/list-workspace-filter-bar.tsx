@@ -224,7 +224,7 @@ export function ListWorkspaceInlineFilter({
         >
             <label
                 htmlFor={htmlFor}
-                className="shrink-0 text-sm text-muted-foreground"
+                className="shrink-0 text-body-compact text-muted-foreground"
             >
                 {label}
             </label>

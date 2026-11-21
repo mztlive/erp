@@ -13,8 +13,8 @@ export function SalesOrderSelectionSource({
         <div
             className={
                 compact
-                    ? "text-sm text-muted-foreground"
-                    : "flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-lg border border-info-border bg-info-soft px-4 py-3 text-sm text-info-soft-foreground"
+                    ? "text-body-compact text-muted-foreground"
+                    : "flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-lg border border-info-border bg-info-soft px-4 py-3 text-body-compact text-info-soft-foreground"
             }
         >
             {!compact ? <span>来源销售方案</span> : null}

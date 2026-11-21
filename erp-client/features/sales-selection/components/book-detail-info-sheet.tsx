@@ -97,8 +97,8 @@ export function BookDetailInfoSheet({
             }
         >
             <section className="space-y-4">
-                <h3 className="text-sm font-medium">选品册档案</h3>
-                <dl className="space-y-3 text-sm">
+                <h3 className="font-medium">选品册档案</h3>
+                <dl className="space-y-3 text-body-compact">
                     {archiveFields.map(([label, value]) => (
                         <div
                             key={label}
@@ -121,7 +121,7 @@ export function BookDetailInfoSheet({
                 operations.copyLink.data?.public_url) ? (
                 <section className="space-y-3 border-t border-border pt-6">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                        <h3 className="text-sm font-medium">客户选品链接</h3>
+                        <h3 className="font-medium">客户选品链接</h3>
                         <Badge
                             variant={
                                 detail.link_revoked ? "outline" : "default"
@@ -130,7 +130,7 @@ export function BookDetailInfoSheet({
                             {detail.link_revoked ? "已撤销" : "有效（30天）"}
                         </Badge>
                     </div>
-                    <p className="text-xs leading-5 text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         客户在手机端选品，提交后生成销售方案。
                     </p>
                     <InputGroup>
@@ -183,7 +183,7 @@ export function BookDetailInfoSheet({
             {isPackage && detail.tiers.length > 0 ? (
                 <section className="space-y-4 border-t border-border pt-6">
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
-                        <h3 className="text-sm font-medium">档位目标与达成</h3>
+                        <h3 className="font-medium">档位目标与达成</h3>
                         <span className="text-xs text-muted-foreground">
                             共 {detail.tiers.length} 档
                         </span>
@@ -199,7 +199,7 @@ export function BookDetailInfoSheet({
                                     className="space-y-2 py-4 first:pt-0 last:pb-0"
                                 >
                                     <div className="flex flex-wrap items-start justify-between gap-3">
-                                        <h4 className="min-w-0 break-words text-sm font-medium">
+                                        <h4 className="min-w-0 break-words text-body-compact font-medium">
                                             {tier.name}
                                         </h4>
                                         {report?.stop_label ? (
@@ -222,7 +222,7 @@ export function BookDetailInfoSheet({
                                             ±¥{tier.tolerance}
                                         </span>
                                     </div>
-                                    <p className="text-xs leading-5 text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         每套 {tier.sku_count} 件 ·{" "}
                                         {report
                                             ? `达成 ${report.actual_count}/${report.expected_count} 套`

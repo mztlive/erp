@@ -52,7 +52,7 @@ export function PortalSession({ children }: { children: ReactNode }) {
     }, [client, router])
     if (!hasToken || profile.isPending)
         return (
-            <div className="p-8 text-sm text-muted-foreground">
+            <div className="p-8 text-body-compact text-muted-foreground">
                 正在验证登录状态…
             </div>
         )

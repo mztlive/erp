@@ -224,7 +224,7 @@ export const InquiryDeliveryEditor = withForm({
             <>
                 <fieldset disabled={disabled} className="min-w-0 space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
-                        <span className="text-sm font-medium">
+                        <span className="text-body-compact font-medium">
                             需求{" "}
                             <QuantityValue value={line.quantity} unit={unit} />
                         </span>
@@ -243,7 +243,7 @@ export const InquiryDeliveryEditor = withForm({
                             <>
                                 <div className="space-y-3 border-b pb-3">
                                     <div className="flex items-start justify-between gap-3">
-                                        <p className="min-w-0 text-sm leading-6">
+                                        <p className="min-w-0 text-body-compact leading-6">
                                             <span className="font-medium">
                                                 {
                                                     DELIVERY_KINDS.find(
@@ -324,7 +324,7 @@ export const InquiryDeliveryEditor = withForm({
                                 </div>
                                 {removed.length > 0 && (
                                     <div
-                                        className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/40 px-3 py-2 text-sm"
+                                        className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/40 px-3 py-2 text-body-compact"
                                         role="status"
                                     >
                                         <span>
@@ -419,7 +419,7 @@ export const InquiryDeliveryEditor = withForm({
                                     }}
                                 />
                                 {line.fulfillment_kind === "physical" && (
-                                    <p className="text-xs leading-5 text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         提交采购前，收件资料须完整，配送数量合计不得少于需求数量；超量允许保存和提交。
                                     </p>
                                 )}

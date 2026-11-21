@@ -122,7 +122,7 @@ export function UpgradeBindingDialog({
                         ）。确认后本单将按最新流程提交审批，单据内容不会改变。
                     </DialogDescription>
                 </DialogHeader>
-                <div className="space-y-2 text-sm">
+                <div className="space-y-2 text-body-compact">
                     <p>当前路线：{currentRoute || "—"}</p>
                     <p>更新后路线：{targetRoute || "—"}</p>
                 </div>
@@ -145,7 +145,7 @@ export function UpgradeBindingDialog({
                         )}
                     />
                     {conflictMessage ? (
-                        <p className="text-sm text-destructive">
+                        <p className="text-body-compact text-destructive">
                             {conflictMessage}
                         </p>
                     ) : null}

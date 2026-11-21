@@ -92,7 +92,7 @@ export function PersonalGrantList({
                 </Button>
             </div>
             {!value.grants.length ? (
-                <div className="rounded-lg border border-dashed border-grid px-4 py-6 text-center text-sm text-muted-foreground">
+                <div className="rounded-lg border border-dashed border-grid px-4 py-6 text-center text-body-compact text-muted-foreground">
                     {personDefaultScopeDescription(business)}
                 </div>
             ) : (
@@ -124,7 +124,7 @@ export function PersonalGrantList({
                                             {description}
                                         </p>
                                         {!expanded && editable && (
-                                            <p className="text-xs leading-5 text-muted-foreground">
+                                            <p className="text-xs text-muted-foreground">
                                                 {grant.actions.length ===
                                                 business.actions.length
                                                     ? `适用于全部 ${grant.actions.length} 项操作`
@@ -210,7 +210,7 @@ export function PersonalGrantList({
                                                         <label
                                                             key={action}
                                                             htmlFor={`${id}-action-${toAutomationIdSegment(action)}`}
-                                                            className="flex min-h-8 cursor-pointer items-center gap-2 text-sm"
+                                                            className="flex min-h-8 cursor-pointer items-center gap-2 text-xs"
                                                         >
                                                             <Checkbox
                                                                 id={`${id}-action-${toAutomationIdSegment(action)}`}
@@ -254,7 +254,7 @@ export function PersonalGrantList({
                                             </p>
                                         )}
                                         {!editable && (
-                                            <p className="text-xs leading-5 text-muted-foreground">
+                                            <p className="text-xs text-muted-foreground">
                                                 保留的旧版范围规则。如需调整，请移除此条并添加新范围。
                                             </p>
                                         )}

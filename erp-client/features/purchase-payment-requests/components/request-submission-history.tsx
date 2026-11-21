@@ -67,14 +67,14 @@ export function RequestSubmissionHistory({
                     </DialogHeader>
                     <div className="min-h-0 space-y-5 overflow-y-auto pr-1">
                         {query.isPending ? (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 正在读取历史材料…
                             </p>
                         ) : query.isError ? (
                             <div className="space-y-3">
                                 <p
                                     role="alert"
-                                    className="text-sm text-destructive"
+                                    className="text-body-compact text-destructive"
                                 >
                                     {getErrorMessage(
                                         query.error,
@@ -91,7 +91,7 @@ export function RequestSubmissionHistory({
                             </div>
                         ) : query.data && selected != null ? (
                             <>
-                                <dl className="grid gap-4 text-sm sm:grid-cols-2">
+                                <dl className="grid gap-4 text-body-compact sm:grid-cols-2">
                                     <div>
                                         <dt className="text-xs text-muted-foreground">
                                             供应商 / 我方付款主体
@@ -159,7 +159,7 @@ export function RequestSubmissionHistory({
                                     {query.data.lines.map((line) => (
                                         <div
                                             key={line.payable_account_id}
-                                            className="flex flex-wrap justify-between gap-2 border-b pb-2 text-sm"
+                                            className="flex flex-wrap justify-between gap-2 border-b pb-2 text-body-compact"
                                         >
                                             <span className="num">
                                                 {line.purchase_order_no} · V

@@ -25,7 +25,7 @@ export function SessionPool({
 }) {
     return (
         <section className="erp-raised-surface space-y-3 rounded-2xl border bg-card p-4">
-            <h3 className="text-sm font-semibold">
+            <h3 className="font-semibold">
                 待核销应收账款
                 <span className="ml-2 text-xs font-normal text-muted-foreground">
                     仅 {session.counterpartyPartyName}
@@ -36,7 +36,7 @@ export function SessionPool({
             </p>
             <ul className="max-h-72 space-y-2 overflow-auto">
                 {session.pool.length === 0 ? (
-                    <li className="text-sm text-muted-foreground">
+                    <li className="text-body-compact text-muted-foreground">
                         该结算公司下暂无待核销的应收账款
                     </li>
                 ) : (
@@ -50,7 +50,7 @@ export function SessionPool({
                                 className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2"
                             >
                                 <div className="min-w-0">
-                                    <div className="truncate text-sm font-medium">
+                                    <div className="truncate text-body-compact font-medium">
                                         {t.label}
                                     </div>
                                     <div className="text-xs text-muted-foreground">

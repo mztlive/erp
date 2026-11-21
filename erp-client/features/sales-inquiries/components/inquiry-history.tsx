@@ -19,12 +19,15 @@ export function InquiryRequirementSummary({
     return (
         <section className="divide-y" aria-label="需求内容">
             {showNote && requirement.note && (
-                <p className="pb-3 whitespace-pre-wrap break-words text-sm text-muted-foreground">
+                <p className="pb-3 whitespace-pre-wrap break-words text-xs text-muted-foreground">
                     {requirement.note}
                 </p>
             )}
             {requirement.lines.map((line) => (
-                <article key={line.line_id} className="space-y-2 py-3 text-sm">
+                <article
+                    key={line.line_id}
+                    className="space-y-2 py-3 text-body-compact"
+                >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0 flex-1 break-words">
                             <h3 className="font-medium">{line.product_name}</h3>
@@ -40,12 +43,12 @@ export function InquiryRequirementSummary({
                             unit={line.unit_code}
                         />
                     </div>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         要求交付：{inquiryDate(line.delivery_due_at)}
                         {line.delivery_terms ? ` · ${line.delivery_terms}` : ""}
                     </p>
                     {!procurement && line.sales_reference_price_gross && (
-                        <p className="text-sm">
+                        <p className="text-body-compact">
                             销售价：
                             <MoneyValue
                                 value={line.sales_reference_price_gross}
@@ -111,18 +114,18 @@ export function InquiryHistory({
     return (
         <section className="space-y-6" aria-label="询价操作记录">
             {events.length === 0 && reinquiries.length === 0 && (
-                <p className="text-sm text-muted-foreground">暂无处理记录。</p>
+                <p className="text-xs text-muted-foreground">暂无处理记录。</p>
             )}
             {events.length > 0 && (
                 <section aria-label="处理记录">
-                    <h3 className="text-sm font-medium">处理记录</h3>
+                    <h3 className="font-medium">处理记录</h3>
                     <ol className="mt-2 divide-y">
                         {[...events]
                             .sort((left, right) => right.at - left.at)
                             .map((event, index) => (
                                 <li
                                     key={`${toAutomationIdSegment(event.kind)}-${event.at}-${index}`}
-                                    className="space-y-1 py-3 text-sm"
+                                    className="space-y-1 py-3 text-body-compact"
                                 >
                                     <p>
                                         {EVENT_LABEL[event.kind] ?? "询价处理"}
@@ -142,7 +145,7 @@ export function InquiryHistory({
             )}
             {inquiry.requirements.length > 0 && (
                 <section aria-label="需求版本">
-                    <h3 className="text-sm font-medium">
+                    <h3 className="font-medium">
                         需求版本（{inquiry.requirements.length}）
                     </h3>
                     <div className="mt-2 divide-y">
@@ -155,7 +158,7 @@ export function InquiryHistory({
                                 >
                                     <summary
                                         id={`${idPrefix}-requirement-${requirement.version}`}
-                                        className="cursor-pointer rounded-sm py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                        className="cursor-pointer rounded-sm py-3 text-body-compact focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                     >
                                         第 {requirement.version} 版
                                         <span className="ml-2 text-xs text-muted-foreground">
@@ -166,7 +169,7 @@ export function InquiryHistory({
                                     </summary>
                                     <div className="pb-3">
                                         {requirement.change_reason && (
-                                            <p className="mb-3 whitespace-pre-wrap break-words text-sm text-muted-foreground">
+                                            <p className="mb-3 whitespace-pre-wrap break-words text-xs text-muted-foreground">
                                                 变更说明：
                                                 {requirement.change_reason}
                                             </p>
@@ -188,13 +191,13 @@ export function InquiryHistory({
             )}
             {reinquiries.length > 0 && (
                 <div className="divide-y">
-                    <h3 className="pb-2 text-sm font-medium">重询记录</h3>
+                    <h3 className="pb-2 font-medium">重询记录</h3>
                     {[...reinquiries]
                         .sort((left, right) => right.at - left.at)
                         .map((item, index) => (
                             <div
                                 key={`${item.at}-${index}`}
-                                className="py-3 text-sm"
+                                className="py-3 text-body-compact"
                             >
                                 <p>
                                     {inquiryDate(item.at)} · 第{" "}

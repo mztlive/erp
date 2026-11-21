@@ -31,7 +31,7 @@ export function ApprovalPanel({
         historyImpact,
     )
     if (!approval) {
-        return <p className="text-sm text-muted-foreground">暂无审批记录。</p>
+        return <p className="text-xs text-muted-foreground">暂无审批记录。</p>
     }
     if (!instance) {
         return (
@@ -54,7 +54,7 @@ export function ApprovalPanel({
             />
             {history.data?.pages[0]?.route ? (
                 <section className="space-y-4" aria-label="本次审批路线">
-                    <h3 className="text-sm font-medium">
+                    <h3 className="font-medium">
                         审批链条{" "}
                         <span className="ml-2 text-xs font-normal text-muted-foreground">
                             共 {history.data.pages[0].route.nodes.length} 个节点
@@ -79,14 +79,14 @@ export function ApprovalPanel({
                 />
             ) : null}
             {orientation === "horizontal" && history.isPending ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     正在读取完整审批链…
                 </p>
             ) : null}
             {orientation === "horizontal" &&
             history.isSuccess &&
             !history.data.pages[0]?.route ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     本次审批链暂不可用，请刷新后重试。
                 </p>
             ) : null}
@@ -98,7 +98,7 @@ export function ApprovalPanel({
                     id={`${idPrefix}-records-toggle`}
                     className={
                         orientation === "horizontal"
-                            ? "cursor-pointer text-sm font-medium"
+                            ? "cursor-pointer text-body-compact font-medium"
                             : "hidden"
                     }
                 >
@@ -107,7 +107,7 @@ export function ApprovalPanel({
                 {history.isPending && items.length === 0 ? (
                     <p
                         role="status"
-                        className="py-4 text-sm text-muted-foreground"
+                        className="py-4 text-xs text-muted-foreground"
                     >
                         正在读取审批记录…
                     </p>
@@ -120,7 +120,7 @@ export function ApprovalPanel({
                         hasMore={hasMore}
                     />
                 ) : !history.isError ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         暂无审批记录。
                     </p>
                 ) : null}

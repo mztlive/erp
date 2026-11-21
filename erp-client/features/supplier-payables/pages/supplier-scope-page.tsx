@@ -682,7 +682,7 @@ export function SupplierScopePage() {
                     <Skeleton className="h-24" aria-busy />
                 ) : detailQuery.isError ? (
                     <div className="flex flex-col items-start gap-3">
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             {getErrorMessage(
                                 detailQuery.error,
                                 "详情加载失败，请重试。",
@@ -699,7 +699,7 @@ export function SupplierScopePage() {
                         </Button>
                     </div>
                 ) : detail?.kind === "payable" ? (
-                    <div className="flex flex-col gap-6 text-sm">
+                    <div className="flex flex-col gap-6 text-body-compact">
                         <PreviewAmount
                             label="权限内已核销"
                             value={detail.payable.visible_settled_share}
@@ -734,7 +734,7 @@ export function SupplierScopePage() {
                         ) : null}
                     </div>
                 ) : detail?.kind === "payment" ? (
-                    <div className="flex flex-col gap-6 text-sm">
+                    <div className="flex flex-col gap-6 text-body-compact">
                         <PreviewAmount
                             label="权限内已分配"
                             value={detail.payment.visible_allocated_share}
@@ -769,7 +769,7 @@ export function SupplierScopePage() {
                         ) : null}
                     </div>
                 ) : (
-                    <div className="text-sm text-muted-foreground">
+                    <div className="text-body-compact text-muted-foreground">
                         未找到该笔记录，可能已超出当前数据范围。
                     </div>
                 )}

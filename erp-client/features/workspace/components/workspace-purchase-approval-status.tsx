@@ -24,7 +24,7 @@ export function WorkspacePurchaseApprovalStatus({
     return (
         <div className="ml-auto flex flex-wrap items-center gap-3 self-center">
             {instance?.status === "RUNNING" ? (
-                <span className="inline-flex items-center gap-2 rounded-lg bg-info-soft px-3 py-2 text-sm font-medium text-info-soft-foreground">
+                <span className="inline-flex items-center gap-2 rounded-lg bg-info-soft px-3 py-2 text-body-compact font-medium text-info-soft-foreground">
                     <Clock3Icon className="size-4" aria-hidden="true" />
                     {displayReadableName(instance.currentNodeName) || "审批"}中
                 </span>

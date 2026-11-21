@@ -66,7 +66,7 @@ function SourceDifference({
                 idPrefix={prefix}
             />
             {canResolve && adoptBlocked ? (
-                <p className="text-sm text-warning-soft-foreground">
+                <p className="text-body-compact text-warning-soft-foreground">
                     {difference.application_blocker ??
                         "供应商图片或资料尚待核验，暂不能采用。可以保留公司版本，完成核验后再处理更新。"}
                 </p>
@@ -336,7 +336,7 @@ export function ProductSourceDiff({
                             </Alert>
                         ) : null}
                         {!query.isError && view?.pending_count === 0 ? (
-                            <p className="py-8 text-center text-sm text-muted-foreground">
+                            <p className="py-8 text-center text-xs text-muted-foreground">
                                 当前没有待确认的资料更新
                             </p>
                         ) : null}

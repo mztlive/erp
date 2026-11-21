@@ -154,7 +154,9 @@ export function InquiryInternalQuotes({
         <section className="space-y-4" aria-label="采购内部报价">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h2 className="text-lg font-medium">供应商报价</h2>
+                    <h2 className="text-section-title font-semibold tracking-tight">
+                        供应商报价
+                    </h2>
                     <p className="mt-1 text-xs text-muted-foreground">
                         仅当前责任采购可见。每次保存新增报价版本，不修改已发布的对销售结果。
                     </p>
@@ -238,7 +240,7 @@ export function InquiryInternalQuotes({
             ) : quotes.isPending ? (
                 <p role="status">正在读取内部报价…</p>
             ) : visibleQuotes.length === 0 ? (
-                <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                <p className="rounded-lg border border-dashed p-4 text-xs text-muted-foreground">
                     尚未登记内部报价。
                 </p>
             ) : (
@@ -379,7 +381,7 @@ export function InquiryInternalQuotes({
                                     quote.internal_note) && (
                                     <div className="space-y-3 border-t p-4">
                                         {excluded && (
-                                            <p className="flex items-start gap-2 rounded-md bg-warning-soft/60 px-3 py-2 text-xs leading-5 text-warning-soft-foreground">
+                                            <p className="flex items-start gap-2 rounded-md bg-warning-soft/60 px-3 py-2 text-xs text-warning-soft-foreground">
                                                 <CircleAlertIcon
                                                     aria-hidden="true"
                                                     className="mt-0.5 size-3.5 shrink-0"
@@ -504,7 +506,7 @@ export function InquiryInternalQuotes({
                                             </dl>
                                         )}
                                         {!excluded && line && (
-                                            <p className="text-xs leading-5 text-muted-foreground">
+                                            <p className="text-xs text-muted-foreground">
                                                 {quote.system_price_kind ? (
                                                     "系统供给参考价的运费与交期尚待确认，发布前须核对实际供给条件。"
                                                 ) : (
@@ -519,7 +521,7 @@ export function InquiryInternalQuotes({
                                             </p>
                                         )}
                                         {quote.internal_note && (
-                                            <p className="flex items-start gap-2 border-t pt-3 text-xs leading-5 text-muted-foreground">
+                                            <p className="flex items-start gap-2 border-t pt-3 text-xs text-muted-foreground">
                                                 <StickyNoteIcon
                                                     aria-hidden="true"
                                                     className="mt-0.5 size-3.5 shrink-0"
@@ -589,11 +591,11 @@ function QuoteFact({
 }) {
     return (
         <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-            <dt className="flex items-center gap-2 text-sm text-muted-foreground">
+            <dt className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Icon aria-hidden="true" className="size-4 shrink-0" />
                 <span>{label}</span>
             </dt>
-            <dd className="min-w-0 wrap-anywhere text-right text-sm font-medium tabular-nums">
+            <dd className="min-w-0 wrap-anywhere text-right text-body-compact font-medium tabular-nums">
                 {children}
             </dd>
         </div>
@@ -795,7 +797,7 @@ function QuoteEditor({
                                                         SKU {line.sku_code}
                                                     </p>
                                                 </div>
-                                                <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+                                                <div className="flex flex-wrap gap-x-6 gap-y-2 text-body-compact">
                                                     <span className="text-muted-foreground">
                                                         需求数量{" "}
                                                         <QuantityValue
@@ -909,7 +911,7 @@ function QuoteEditor({
                                         >
                                             <summary
                                                 id="procurement-inquiry-quote-more"
-                                                className="cursor-pointer px-4 py-3 text-sm font-medium"
+                                                className="cursor-pointer px-4 py-3 text-body-compact font-medium"
                                             >
                                                 数量、交期及税率{" "}
                                                 <span className="ml-2 font-normal text-muted-foreground">

@@ -68,7 +68,7 @@ export function RuntimeSummary({
                         审批摘要
                     </ApprovalSectionHeading>
                 </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
+                <CardContent className="text-body-compact text-muted-foreground">
                     当前没有可展示的审批进度
                 </CardContent>
             </Card>

@@ -124,8 +124,10 @@ export function PortalOfferingImpacts({
         <section className="min-w-0 space-y-4 rounded-xl border bg-card p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                    <h2 className="font-semibold">当前采购与履约影响</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
+                    <h2 className="text-section-title font-semibold tracking-tight">
+                        当前采购与履约影响
+                    </h2>
+                    <p className="mt-1 text-xs text-muted-foreground">
                         表内仅显示当前账号可查看的关联采购单与待处理任务。请核对采购负责人及未完成履约情况；已生效的历史采购单价格、付款条件及供货关系保持原值。
                     </p>
                 </div>
@@ -145,7 +147,7 @@ export function PortalOfferingImpacts({
                     {query.data.warning ? (
                         <div
                             role="status"
-                            className="space-y-1 rounded-lg border border-warning-soft-foreground/30 bg-warning-soft/30 p-3 text-sm"
+                            className="space-y-1 rounded-lg border border-warning-soft-foreground/30 bg-warning-soft/30 p-3 text-body-compact"
                         >
                             <p className="font-medium">
                                 {warningLabels[query.data.warning.code] ??
@@ -156,11 +158,11 @@ export function PortalOfferingImpacts({
                             </p>
                         </div>
                     ) : (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             当前可供情况未触发缺货或停供提示，仍须按各采购单的真实履约进度核对。
                         </p>
                     )}
-                    <p className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+                    <p className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
                         {query.data.association_notice ||
                             "采购关联范围说明暂缺，请重新核对后确认。"}
                     </p>
@@ -170,7 +172,7 @@ export function PortalOfferingImpacts({
                 ariaLabel="供给关联的采购与履约影响"
                 selectionBar={
                     query.data ? (
-                        <span className="text-sm">
+                        <span className="text-body-compact">
                             共{query.data.total}张当前可查看的关联采购单
                         </span>
                     ) : undefined
@@ -199,7 +201,7 @@ export function PortalOfferingImpacts({
                             ) : undefined
                         }
                         emptyState={
-                            <p className="p-6 text-sm text-muted-foreground">
+                            <p className="p-6 text-xs text-muted-foreground">
                                 当前权限范围内暂未查到受影响的未完成采购单；如存在早期历史采购单，仍需人工核对。
                             </p>
                         }

@@ -42,7 +42,7 @@ export function SalesOrderApprovalHistory({
     const rounds = [...groupByRound(items)].reverse()
     return (
         <section aria-label="审批记录" className="space-y-3">
-            <h3 className="text-sm font-medium">审批记录</h3>
+            <h3 className="font-medium">审批记录</h3>
             <div className="divide-y divide-border/70">
                 {rounds.map((round, index) => (
                     <ApprovalRound
@@ -101,7 +101,7 @@ function ApprovalRound({
         >
             <summary
                 id={`${idPrefix}-round-${roundNo}`}
-                className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-2 rounded-md py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
+                className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-2 rounded-md py-3 text-body-compact focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
             >
                 <ChevronRightIcon
                     aria-hidden="true"
@@ -166,7 +166,7 @@ function ApprovalEntry({
                     appearance="text"
                 />
                 {actor ? (
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-body-compact text-muted-foreground">
                         {actor}
                     </span>
                 ) : null}
@@ -178,7 +178,7 @@ function ApprovalEntry({
             </TimelineHeader>
             {reason ? (
                 longReason ? (
-                    <details className="group/reason mt-2 text-sm text-muted-foreground">
+                    <details className="group/reason mt-2 text-body-compact text-muted-foreground">
                         <summary
                             id={`${idPrefix}-reason-${toAutomationIdSegment(item.executionId)}`}
                             className="cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -193,7 +193,7 @@ function ApprovalEntry({
                         </p>
                     </details>
                 ) : (
-                    <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">
+                    <p className="mt-2 whitespace-pre-wrap break-words text-body-compact leading-6 text-muted-foreground">
                         {reason}
                     </p>
                 )

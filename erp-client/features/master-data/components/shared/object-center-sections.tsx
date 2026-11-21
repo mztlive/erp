@@ -34,7 +34,7 @@ export function ObjectCenterOverviewSection({
             title={masterDataCopy.centerOverview}
             description={masterDataCopy.centerOverviewDesc}
         >
-            <dl className="grid gap-x-8 gap-y-6 text-sm sm:grid-cols-2 [&>div]:min-w-0 [&_dd]:mt-1 [&_dd]:break-words [&_dd]:leading-6">
+            <dl className="grid gap-x-8 gap-y-6 text-body-compact sm:grid-cols-2 [&>div]:min-w-0 [&_dd]:mt-1 [&_dd]:break-words [&_dd]:leading-6">
                 <div>
                     <dt className="text-xs text-muted-foreground">
                         {masterDataCopy.colStableNo}
@@ -92,7 +92,7 @@ export function ObjectCenterOverviewSection({
                     {data.sensitiveFields.map((field) => (
                         <div
                             key={field.label}
-                            className="flex flex-wrap items-center gap-2 text-sm"
+                            className="flex flex-wrap items-center gap-2 text-body-compact"
                         >
                             <span className="text-muted-foreground">
                                 {field.label}
@@ -122,7 +122,7 @@ export function ObjectCenterOverviewSection({
                     <div
                         className={cn(
                             surfaceInsetClassName,
-                            "mt-4 space-y-2 p-3 text-sm",
+                            "mt-4 space-y-2 p-3 text-body-compact",
                         )}
                     >
                         <p className="text-xs text-muted-foreground">
@@ -198,11 +198,11 @@ export function ObjectCenterAuditSection({
             description={masterDataCopy.centerAuditDesc}
         >
             {data.auditEvents.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     {masterDataCopy.centerNoAudit}
                 </p>
             ) : (
-                <ul className="space-y-2 text-sm">
+                <ul className="space-y-2 text-body-compact">
                     {data.auditEvents.map((event) => (
                         <li
                             key={event.id}

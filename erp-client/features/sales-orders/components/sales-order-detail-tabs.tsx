@@ -101,7 +101,7 @@ export function SalesOrderDetailTabs({
                 warning || changing || pending || approving ? (
                     <Badge
                         variant={warning || changing ? "warning" : "info"}
-                        className="h-5 px-1.5 text-2xs font-normal"
+                        className="h-5 px-1.5 text-xs font-normal"
                     >
                         {warning
                             ? "异常"
@@ -242,7 +242,7 @@ export function SalesOrderDetailTabs({
                             <AcceptancePanel order={order} />
                         )
                     ) : (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             当前无法读取客户验收资料，请核对账号权限。
                         </p>
                     )

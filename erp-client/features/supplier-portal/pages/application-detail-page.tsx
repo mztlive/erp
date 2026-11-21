@@ -92,7 +92,7 @@ export function PortalApplicationDetailPage({
                 <Link
                     id="supplier-portal-application-back"
                     href="/supplier-portal/applications"
-                    className="text-sm text-primary"
+                    className="text-body-compact text-primary"
                 >
                     返回我的申请
                 </Link>

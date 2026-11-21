@@ -156,7 +156,7 @@ export function MediaListField({
                     htmlFor={
                         disabled ? undefined : `${basePrefix}-upload-select`
                     }
-                    className="text-sm font-medium"
+                    className="font-medium"
                 >
                     {label}
                 </Label>
@@ -200,7 +200,7 @@ export function MediaListField({
                                 </span>
                                 <span
                                     className={cn(
-                                        "min-w-0 flex-1 truncate text-sm",
+                                        "min-w-0 flex-1 truncate text-body-compact",
                                         canPreview &&
                                             "text-primary underline-offset-2 hover:underline",
                                     )}

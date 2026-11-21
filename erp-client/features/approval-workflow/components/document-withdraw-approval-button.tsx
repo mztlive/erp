@@ -136,7 +136,7 @@ export function DocumentWithdrawApprovalButton<TCommand>({
                     <div className="space-y-2">
                         <label
                             htmlFor={ids.reason}
-                            className="text-sm font-medium"
+                            className="text-xs font-medium"
                         >
                             撤回原因
                             <RequiredMark />
@@ -151,7 +151,7 @@ export function DocumentWithdrawApprovalButton<TCommand>({
                         />
                         {confirmError ? (
                             <p
-                                className="text-sm text-destructive"
+                                className="text-body-compact text-destructive"
                                 role="alert"
                             >
                                 {confirmError}

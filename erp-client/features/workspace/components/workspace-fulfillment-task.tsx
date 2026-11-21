@@ -117,7 +117,7 @@ export function WorkspaceFulfillmentTask({
                 deliveryDialog ? (
                     <DialogHeader className="min-w-0 pr-10">
                         <div className="flex flex-wrap items-center gap-3">
-                            <DialogTitle className="text-xl font-semibold">
+                            <DialogTitle className="text-section-title font-semibold tracking-tight">
                                 登记发货
                             </DialogTitle>
                             {operationType ? (

@@ -184,7 +184,9 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                 aria-label="选品册访问密码"
             >
                 <div className="space-y-1">
-                    <h2 className="text-sm font-semibold">访问密码</h2>
+                    <h2 className="text-section-title font-semibold tracking-tight">
+                        访问密码
+                    </h2>
                     <p className="text-xs text-muted-foreground">
                         {detail.access_password_set
                             ? "客户需验证访问密码后查看选品册。"
@@ -282,7 +284,7 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                 <PreviewGrid
                     summary={
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-                            <h2 className="text-sm font-semibold text-foreground">
+                            <h2 className="text-section-title font-semibold text-foreground tracking-tight">
                                 陈列预览
                             </h2>
                             <dl

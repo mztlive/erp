@@ -49,7 +49,7 @@ function SnapshotField({
             <dt className="text-xs text-muted-foreground">{label}</dt>
             <dd
                 className={cn(
-                    "mt-0.5 truncate text-sm font-medium text-foreground",
+                    "mt-0.5 truncate text-body-compact font-medium text-foreground",
                     numeric && "num",
                 )}
             >
@@ -171,7 +171,7 @@ function VersionRecord({
                         {lines.map((line) => (
                             <li
                                 key={`${rev.revisionNo}-${line.lineNo}`}
-                                className="flex items-start justify-between gap-3 px-3 py-1.5 text-sm"
+                                className="flex items-start justify-between gap-3 px-3 py-1.5 text-body-compact"
                             >
                                 <div className="min-w-0">
                                     <div className="truncate font-medium">
@@ -193,14 +193,14 @@ function VersionRecord({
                         ))}
                     </ul>
                 ) : (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         {displayText(rev.lineSummary)}
                     </p>
                 )}
             </div>
 
             {rev.businessRemark ? (
-                <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                <p className="mt-3 text-xs text-muted-foreground">
                     {rev.businessRemark}
                 </p>
             ) : null}
@@ -218,7 +218,7 @@ function HistoricalVersion({
 }) {
     return (
         <Collapsible>
-            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-body-compact">
                 <p className="flex flex-wrap items-baseline gap-x-1.5 text-muted-foreground">
                     <span>当时成交</span>
                     <MoneyValue
@@ -270,7 +270,7 @@ export function RevisionHistoryCard({
             <div className="flex items-center gap-2">
                 <h2
                     id="sales-order-revisions-title"
-                    className="text-sm font-semibold"
+                    className="text-section-title font-semibold tracking-tight"
                 >
                     版本记录
                 </h2>

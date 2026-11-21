@@ -29,7 +29,7 @@ export function ImportFailuresDownload({
                 {pending ? "准备下载…" : "下载待处理行"}
             </LoadingButton>
             {failed ? (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {getErrorMessage(error, "下载失败，请重试")}
                 </p>
             ) : null}

@@ -53,7 +53,7 @@ export function TimelineEvents({
 }) {
     if (events.length === 0)
         return (
-            <p className="py-5 text-sm text-muted-foreground">
+            <p className="py-5 text-xs text-muted-foreground">
                 暂无相关业务动态。
             </p>
         )
@@ -187,7 +187,7 @@ function TimelineEventList({
                             </p>
                         )}
                         {event.amount != null && (
-                            <p className="mt-2 text-sm">
+                            <p className="mt-2 text-body-compact">
                                 {event.amount_label}：
                                 <MoneyValue value={event.amount} />
                             </p>
@@ -200,7 +200,7 @@ function TimelineEventList({
                         {event.details.length > 0 && (
                             <div
                                 className={cn(
-                                    "mt-2 text-xs leading-5",
+                                    "mt-2 text-xs",
                                     rejected && !plainApprovalReasons
                                         ? "rounded-lg border border-destructive-border bg-destructive-soft px-3 py-2 text-destructive-soft-foreground"
                                         : "text-muted-foreground",

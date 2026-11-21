@@ -140,13 +140,13 @@ function BankRequestPaymentForm({
             {blocked && !unknown && (
                 <p
                     role="alert"
-                    className="rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+                    className="rounded-md bg-destructive/10 p-3 text-body-compact text-destructive"
                 >
                     {blocked}
                 </p>
             )}
-            <h3 className="text-sm font-semibold">付款与收款信息</h3>
-            <dl className="grid gap-x-8 gap-y-4 text-sm lg:grid-cols-2">
+            <h3 className="font-semibold">付款与收款信息</h3>
+            <dl className="grid gap-x-8 gap-y-4 text-body-compact lg:grid-cols-2">
                 <div>
                     <dt className="text-xs text-muted-foreground">
                         我方付款主体
@@ -194,7 +194,7 @@ function BankRequestPaymentForm({
                 }}
             >
                 <div className="space-y-4 border-t pt-5">
-                    <h3 className="text-sm font-semibold">登记实际付款</h3>
+                    <h3 className="font-semibold">登记实际付款</h3>
                     <form.AppField name="amount">
                         {(field) => (
                             <field.TextField
@@ -290,7 +290,7 @@ function BankRequestPaymentForm({
                 <form.Subscribe selector={(state) => state.values.amount}>
                     {(amount) => (
                         <WorkspaceTaskFooter>
-                            <div className="mr-auto text-sm">
+                            <div className="mr-auto text-body-compact">
                                 本次登记{" "}
                                 <MoneyValue
                                     value={
@@ -316,7 +316,7 @@ function BankRequestPaymentForm({
                         errors.length ? (
                             <p
                                 role="alert"
-                                className="text-sm text-destructive"
+                                className="text-body-compact text-destructive"
                             >
                                 请核对实际付款金额、付款时间及银行回单。
                             </p>
@@ -325,12 +325,12 @@ function BankRequestPaymentForm({
                 </form.Subscribe>
             </form>
             {result && (
-                <p role="status" className="text-sm text-success">
+                <p role="status" className="text-body-compact text-success">
                     {result}
                 </p>
             )}
             {payment.isError && (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {getErrorMessage(
                         payment.error,
                         "付款登记失败，请核对后重试",
@@ -339,7 +339,7 @@ function BankRequestPaymentForm({
             )}
             {unknown && (
                 <div role="status" className="space-y-3 rounded-md border p-4">
-                    <p className="text-sm">
+                    <p className="text-body-compact">
                         付款结果暂无法确认。本次金额和回单已保留，请查询上次付款结果后继续。
                     </p>
                     <Button
@@ -392,7 +392,7 @@ export function RequestPaymentForm(props: {
     }
     if (!props.request.payment_recipient)
         return (
-            <p role="alert" className="text-sm text-destructive">
+            <p role="alert" className="text-body-compact text-destructive">
                 原银行付款申请缺少冻结的收款资料，请先核对原申请。
             </p>
         )

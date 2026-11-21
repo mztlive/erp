@@ -67,7 +67,7 @@ export function SupplierTaxRatesField({
                         <Badge
                             key={rate}
                             variant="secondary"
-                            className="h-control-sm gap-1 pl-3 pr-1 text-sm"
+                            className="h-control-sm gap-1 pl-3 pr-1 text-body-compact"
                         >
                             <span className="num">{percent}%</span>
                             <Button
@@ -94,7 +94,7 @@ export function SupplierTaxRatesField({
                     )
                 })}
                 {rates.length === 0 && (
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-body-compact text-muted-foreground">
                         未登记
                     </span>
                 )}
@@ -229,7 +229,7 @@ export function SupplierTaxRatesField({
             </div>
             <p
                 id={`${id}-description`}
-                className="text-xs leading-5 text-muted-foreground"
+                className="text-xs text-muted-foreground"
             >
                 仅作为商品供给的候选税率；每条供给须确定一个实际税率。
             </p>

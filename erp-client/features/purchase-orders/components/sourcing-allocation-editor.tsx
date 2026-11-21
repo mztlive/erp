@@ -314,7 +314,7 @@ function SourcingOptionFacts({
             <div className="rounded-lg border border-border/70 bg-muted/25 px-3 py-2.5">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <Badge variant="secondary">现有库存</Badge>
-                    <span className="text-sm font-medium">
+                    <span className="text-body-compact font-medium">
                         {option.warehouseName || option.supplierName}
                     </span>
                 </div>
@@ -352,7 +352,7 @@ function SourcingOptionFacts({
                     ) : null}
                 </div>
                 <div className="shrink-0 text-right">
-                    <p className="text-sm font-semibold">
+                    <p className="text-body-compact font-semibold">
                         <MoneyValue
                             display="exact"
                             value={option.unitCostGross}

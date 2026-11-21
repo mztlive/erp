@@ -86,7 +86,7 @@ export function WorkspacePurchasePayment({
             aria-label="采购付款"
             className="min-w-0 scroll-m-4 outline-none"
         >
-            <h3 className="text-sm font-semibold">采购付款</h3>
+            <h3 className="font-semibold">采购付款</h3>
             {query.isError ? (
                 <BusinessFailureState
                     title="付款信息加载失败"
@@ -94,7 +94,7 @@ export function WorkspacePurchasePayment({
                     onRetry={() => void query.refetch()}
                 />
             ) : !payment ? (
-                <p role="status" className="mt-3 text-sm text-muted-foreground">
+                <p role="status" className="mt-3 text-xs text-muted-foreground">
                     正在加载采购付款信息…
                 </p>
             ) : (
@@ -112,13 +112,13 @@ export function WorkspacePurchasePayment({
                                 <dd className="mt-1 break-all">
                                     <MoneyValue
                                         value={value}
-                                        className="text-lg font-semibold"
+                                        className="text-value-compact font-semibold tracking-tight"
                                     />
                                 </dd>
                             </div>
                         ))}
                     </dl>
-                    <dl className="mt-4 space-y-3 text-sm">
+                    <dl className="mt-4 space-y-3 text-body-compact">
                         <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-3">
                             <dt className="text-xs text-muted-foreground">
                                 付款条件

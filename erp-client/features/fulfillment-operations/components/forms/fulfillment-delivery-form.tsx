@@ -65,7 +65,7 @@ export function FulfillmentDeliveryForm(props: DeliveryFormProps) {
                 <p
                     id="fulfillment-packing-source"
                     tabIndex={-1}
-                    className="rounded-lg border p-4 text-sm"
+                    className="rounded-lg border p-4 text-body-compact"
                 >
                     {props.draft.packingUnavailableReason}
                 </p>
@@ -224,10 +224,7 @@ function DeliveryForm({
                 aria-labelledby={`${prefix}-title`}
             >
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <h3
-                        id={`${prefix}-title`}
-                        className="text-sm font-semibold"
-                    >
+                    <h3 id={`${prefix}-title`} className="font-semibold">
                         {compact ? "商品与物流" : "发货明细与物流号"}
                     </h3>
                     <p
@@ -309,7 +306,7 @@ function DeliveryForm({
                     <div id={`${prefix}-batch-editor`} hidden={!batchOpen}>
                         <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                                <p className="text-sm font-medium">
+                                <p className="text-body-compact font-medium">
                                     {selectedIds.length
                                         ? `为已选 ${selectedIds.length} 项商品追加物流`
                                         : "请先勾选要登记物流的商品"}
@@ -486,7 +483,7 @@ function DeliveryForm({
                                     <TableRow>
                                         <TableCell
                                             colSpan={4}
-                                            className="py-6 text-center text-sm text-muted-foreground"
+                                            className="py-6 text-center text-body-compact text-muted-foreground"
                                         >
                                             {rows.length
                                                 ? "没有符合条件的商品"
@@ -512,7 +509,7 @@ function DeliveryForm({
                         </Table>
                     </div>
                 </TableToolbarScope>
-                <p className="text-xs leading-5 text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     按 Enter
                     或点击“添加”；支持一次粘贴多个单号。同一商品可登记多个物流号，同一包裹包含多个商品时可勾选后批量登记。
                 </p>
@@ -542,7 +539,10 @@ function DeliveryForm({
             </section>
             {orphaned.length ? (
                 <div className="space-y-2 rounded-lg border border-destructive p-3">
-                    <p role="alert" className="text-sm text-destructive">
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
                         有 {orphaned.length}{" "}
                         个物流号不属于当前发货明细。请移除后重新登记，其他明细的物流号保持原归属。
                     </p>

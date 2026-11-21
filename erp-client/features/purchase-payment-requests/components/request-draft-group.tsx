@@ -61,7 +61,7 @@ export function RequestDraftGroup({
                 >
                     申请 {index + 1} · 采购来源不可用
                 </h3>
-                <p className="mt-3 text-sm text-warning-soft-foreground">
+                <p className="mt-3 text-body-compact text-warning-soft-foreground">
                     {fixedOrder
                         ? "当前采购单已不可申请，请关闭弹窗后刷新详情。"
                         : "请返回上一步重新选择采购单。"}
@@ -105,14 +105,11 @@ export function RequestDraftGroup({
                 <h3
                     id={`${id}-title`}
                     tabIndex={-1}
-                    className={cn(
-                        "break-words font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        fixedOrder ? "text-base" : "text-lg",
-                    )}
+                    className="break-words text-body-compact font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                     {first.supplier_name}
                 </h3>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     付款主体：{first.our_company_name}
                 </p>
                 {fixedOrder &&
@@ -122,7 +119,7 @@ export function RequestDraftGroup({
                             className="border-t pt-3"
                         >
                             {candidate.purchase_summary && (
-                                <p className="text-sm font-medium">
+                                <p className="text-body-compact font-medium">
                                     {candidate.purchase_summary}
                                 </p>
                             )}
@@ -258,7 +255,7 @@ export function RequestDraftGroup({
                                         }
                                         inputClassName={
                                             fixedOrder
-                                                ? "h-10 text-lg font-medium md:text-lg"
+                                                ? "h-10 font-medium md:text-body-compact"
                                                 : undefined
                                         }
                                         id={`ppr-create-line-${toAutomationIdSegment(candidate.payable_account_id)}`}

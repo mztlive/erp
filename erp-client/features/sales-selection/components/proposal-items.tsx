@@ -100,7 +100,7 @@ export function ProposalItems({ proposal }: { proposal: ProposalView }) {
             <div className="mb-4 flex items-baseline gap-3">
                 <h2
                     id="selection-proposal-items-title"
-                    className="text-base font-semibold"
+                    className="text-section-title font-semibold tracking-tight"
                 >
                     {title}
                 </h2>

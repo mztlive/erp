@@ -95,7 +95,7 @@ export function CategoryTreeDetailPanel({
     const ancestors = collectAncestorItems(rows, selected?.parentStableId)
     if (selectedId && !selected)
         return (
-            <section className="px-6 py-12 text-sm text-muted-foreground">
+            <section className="px-6 py-12 text-body-compact text-muted-foreground">
                 <p>该分类已不可用，请重新选择。</p>
                 <Button
                     id={`${prefix}-missing-back`}
@@ -155,7 +155,7 @@ export function CategoryTreeDetailPanel({
             <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0 space-y-2">
                     <div className="flex flex-wrap items-center gap-3">
-                        <h2 className="text-2xl font-semibold tracking-tight break-words">
+                        <h2 className="text-section-title font-semibold tracking-tight break-words">
                             {selected?.name ??
                                 (filterActive ? "分类查询结果" : "全部分类")}
                         </h2>
@@ -167,7 +167,7 @@ export function CategoryTreeDetailPanel({
                             />
                         ) : null}
                     </div>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         {selected
                             ? `直接子分类 ${selectedNode?.children.length ?? 0} 个`
                             : filterActive
@@ -274,7 +274,7 @@ export function CategoryTreeDetailPanel({
                         <dt className="text-xs text-muted-foreground">
                             分类代码
                         </dt>
-                        <dd className="num break-all text-sm">
+                        <dd className="num break-all text-body-compact">
                             {selected.dictionaryCode ?? selected.stableNo}
                         </dd>
                     </div>
@@ -282,7 +282,7 @@ export function CategoryTreeDetailPanel({
                         <dt className="text-xs text-muted-foreground">
                             上级分类
                         </dt>
-                        <dd className="text-sm">
+                        <dd className="text-body-compact">
                             {selected.parentStableId
                                 ? (rows.find(
                                       (item) =>
@@ -296,7 +296,7 @@ export function CategoryTreeDetailPanel({
                         <dt className="text-xs text-muted-foreground">
                             适用商品类型
                         </dt>
-                        <dd className="text-sm">
+                        <dd className="text-body-compact">
                             {selected.productKind ?? "未填写"}
                         </dd>
                     </div>
@@ -329,7 +329,7 @@ export function CategoryTreeDetailPanel({
                 </div>
             ) : null}
             <div className="mt-7 flex items-center justify-between gap-3">
-                <h3 className="text-sm font-semibold">
+                <h3 className="font-semibold">
                     {selected
                         ? "直接子分类"
                         : filterActive
@@ -360,7 +360,7 @@ export function CategoryTreeDetailPanel({
                                 >
                                     <span className="min-w-0">
                                         <span
-                                            className="block truncate text-sm font-medium"
+                                            className="block truncate text-body-compact font-medium"
                                             title={node.item.name}
                                         >
                                             <CategoryName
@@ -393,7 +393,7 @@ export function CategoryTreeDetailPanel({
                                             {node.children.length} 个子分类
                                         </span>
                                     </span>
-                                    <span className="hidden text-sm text-muted-foreground sm:block">
+                                    <span className="hidden text-body-compact text-muted-foreground sm:block">
                                         {node.item.productKind ?? "未填写"}
                                     </span>
                                     <span className="hidden sm:block">
@@ -405,7 +405,7 @@ export function CategoryTreeDetailPanel({
                                             tone={node.item.lifecycleTone}
                                         />
                                     </span>
-                                    <span className="num hidden text-right text-sm text-muted-foreground sm:block">
+                                    <span className="num hidden text-right text-body-compact text-muted-foreground sm:block">
                                         {node.children.length}
                                     </span>
                                     <ChevronRightIcon className="size-4 text-muted-foreground" />
@@ -417,14 +417,14 @@ export function CategoryTreeDetailPanel({
             ) : (
                 <div className="flex flex-col items-center gap-3 py-14 text-center">
                     <FolderTreeIcon className="size-8 text-muted-foreground/60" />
-                    <p className="text-sm font-medium">
+                    <p className="text-body-compact font-medium">
                         {selected
                             ? "暂无子分类"
                             : filterActive
                               ? "没有匹配的分类"
                               : "开始建立商品分类"}
                     </p>
-                    <p className="max-w-sm text-sm text-muted-foreground">
+                    <p className="max-w-sm text-xs text-muted-foreground">
                         {selected
                             ? "可在当前分类下继续细分，建立清晰的商品归属。"
                             : filterActive

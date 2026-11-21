@@ -49,7 +49,7 @@ export function WorkspacePurchaseApproval({
                     aria-label="供应商与客户"
                     role="status"
                 >
-                    <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <p className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Spinner />
                         正在读取供应商与客户…
                     </p>
@@ -86,10 +86,10 @@ export function WorkspacePurchaseApproval({
                 aria-label="供应商与客户"
             >
                 <div className="min-w-0 space-y-3">
-                    <h3 className="text-sm font-medium text-muted-foreground">
+                    <h3 className="font-medium text-muted-foreground">
                         供应商
                     </h3>
-                    <p className="text-sm font-semibold wrap-anywhere">
+                    <p className="text-body-compact font-semibold wrap-anywhere">
                         {displayName(
                             display.source.extra_sections.find(
                                 (field) => field.label === "供应商",
@@ -104,7 +104,7 @@ export function WorkspacePurchaseApproval({
                 </div>
                 <div className="min-w-0 space-y-3 border-t border-grid pt-4 @min-[720px]/document:border-t-0 @min-[720px]/document:border-l @min-[720px]/document:pt-0 @min-[720px]/document:pl-6">
                     <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                        <h3 className="text-sm font-medium text-muted-foreground">
+                        <h3 className="font-medium text-muted-foreground">
                             客户与销售单
                         </h3>
                         <p className="text-xs text-muted-foreground">
@@ -117,11 +117,11 @@ export function WorkspacePurchaseApproval({
                                 key={sales.revision_id}
                                 className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2"
                             >
-                                <p className="min-w-0 basis-full text-sm font-semibold wrap-anywhere">
+                                <p className="min-w-0 basis-full text-body-compact font-semibold wrap-anywhere">
                                     {displayName(sales.source.customer) ||
                                         "未记录客户名称"}
                                 </p>
-                                <p className="min-w-0 text-sm wrap-anywhere">
+                                <p className="min-w-0 text-body-compact wrap-anywhere">
                                     <span className="num">
                                         {displayBusinessText(
                                             sales.document_no,
@@ -155,7 +155,7 @@ export function WorkspacePurchaseApproval({
                                     .map((field) => (
                                         <p
                                             key={field.label}
-                                            className="text-sm text-warning-soft-foreground basis-full"
+                                            className="text-body-compact text-warning-soft-foreground basis-full"
                                         >
                                             {field.value}
                                         </p>
@@ -163,7 +163,7 @@ export function WorkspacePurchaseApproval({
                             </div>
                         ))
                     ) : (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             此次提交未保留来源销售资料，请联系申请人核对后再审批。
                         </p>
                     )}
@@ -175,7 +175,7 @@ export function WorkspacePurchaseApproval({
                 aria-label="采购与销售对照"
             >
                 <header className="flex items-baseline gap-2">
-                    <h3 className="text-sm font-semibold">采购与销售对照</h3>
+                    <h3 className="font-semibold">采购与销售对照</h3>
                     {lines && (
                         <span className="text-xs text-muted-foreground">
                             共 {lines.length} 项
@@ -183,7 +183,7 @@ export function WorkspacePurchaseApproval({
                     )}
                 </header>
                 {extraCost ? (
-                    <p className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+                    <p className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
                         来源销售单已有附加费用（不含本次提交）：已发生{" "}
                         <MoneyValue value={extraCost.occurred_gross_total} />
                         ，待发生{" "}
@@ -202,11 +202,11 @@ export function WorkspacePurchaseApproval({
                     />
                 ) : (
                     <>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             此次提交暂无可用的逐行对照，请核对提交资料及附件。
                         </p>
                         {display.source.lines.length > 0 && (
-                            <ul className="divide-y text-sm">
+                            <ul className="divide-y text-body-compact">
                                 {display.source.lines.map((line, index) => (
                                     <li
                                         key={`${line.title}:${index}`}

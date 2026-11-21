@@ -159,10 +159,10 @@ export function TemplateApplyDialog({
                 </DialogHeader>
                 {created ? (
                     <div className="space-y-4">
-                        <p className="num text-xl font-semibold">
+                        <p className="num text-body-compact font-semibold">
                             {created.contract_no}
                         </p>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             编号已写入 Word 第一页右上角。下载后用 Word
                             打开并打印；重新下载使用同一编号。
                         </p>
@@ -209,7 +209,7 @@ export function TemplateApplyDialog({
                             void form.handleSubmit()
                         }}
                     >
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             使用 {template.group}{" "}
                             销售合同编号。同一编号组的公司共用年度流水，新申请后号码不回收。
                         </p>
@@ -248,7 +248,10 @@ export function TemplateApplyDialog({
                     </form>
                 )}
                 {error && (
-                    <p role="alert" className="text-sm text-destructive">
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
                         {error}
                     </p>
                 )}

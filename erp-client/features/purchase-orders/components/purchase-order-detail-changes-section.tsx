@@ -31,6 +31,7 @@ export function PurchaseOrderDetailChangesSection({
             <DetailSummary label="采购变更摘要">
                 <DetailSummaryItem
                     label="当前有效版本"
+                    valueRole="text"
                     value={
                         order.identity.revisionNo == null
                             ? "尚未生效"
@@ -39,6 +40,7 @@ export function PurchaseOrderDetailChangesSection({
                 />
                 <DetailSummaryItem
                     label="当前变更"
+                    valueRole="text"
                     value={order.activeChangeOrder?.statusLabel ?? "无在途变更"}
                 />
             </DetailSummary>
@@ -66,7 +68,7 @@ export function PurchaseOrderDetailChangesSection({
                     compact={order.changes.length === 0}
                 >
                     {order.changes.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             暂无采购变更
                         </p>
                     ) : (
@@ -74,7 +76,7 @@ export function PurchaseOrderDetailChangesSection({
                             {order.changes.map((change) => (
                                 <li
                                     key={change.changeId}
-                                    className="flex items-start justify-between gap-4 py-3 text-sm first:pt-0 last:pb-0"
+                                    className="flex items-start justify-between gap-4 py-3 text-body-compact first:pt-0 last:pb-0"
                                 >
                                     <div className="min-w-0">
                                         <p className="break-words font-medium">

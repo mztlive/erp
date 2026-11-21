@@ -28,7 +28,7 @@ export function SourcingAllocationSummary({ row }: { row: SourcingEditorRow }) {
         <dl className="grid shrink-0 grid-cols-2 gap-x-6 gap-y-2 border-b border-border px-5 py-3 sm:grid-cols-4">
             <div>
                 <dt className="text-xs text-muted-foreground">需求</dt>
-                <dd className="mt-1 text-lg font-medium">
+                <dd className="num mt-1 text-value-compact font-semibold tracking-tight">
                     <QuantityValue
                         value={row.product.remainingQuantity}
                         unit={row.product.unit}
@@ -37,7 +37,7 @@ export function SourcingAllocationSummary({ row }: { row: SourcingEditorRow }) {
             </div>
             <div>
                 <dt className="text-xs text-muted-foreground">已分配</dt>
-                <dd className="mt-1 text-lg font-medium">
+                <dd className="num mt-1 text-value-compact font-semibold tracking-tight">
                     <QuantityValue
                         value={row.quantity}
                         unit={row.product.unit}
@@ -53,13 +53,13 @@ export function SourcingAllocationSummary({ row }: { row: SourcingEditorRow }) {
                 >
                     {excess ? "超出需求" : "待分配"}
                 </dt>
-                <dd className="mt-1 text-lg font-medium">
+                <dd className="num mt-1 text-value-compact font-semibold tracking-tight">
                     <QuantityValue value={remaining} unit={row.product.unit} />
                 </dd>
             </div>
             <div>
                 <dt className="text-xs text-muted-foreground">最晚交付日期</dt>
-                <dd className="num mt-1 text-lg font-medium">
+                <dd className="num mt-1 text-body-compact font-medium">
                     {row.product.deliveryDeadline || "未限定"}
                 </dd>
             </div>

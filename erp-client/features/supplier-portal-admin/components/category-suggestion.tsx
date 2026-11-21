@@ -19,8 +19,8 @@ export function PortalCategoryMappingEvidence({
     if (!suggestion)
         return (
             <section className="space-y-2 rounded-lg border p-4">
-                <h3 className="text-sm font-medium">此前分类核对记录</h3>
-                <p className="text-sm text-muted-foreground">
+                <h3 className="font-medium">此前分类核对记录</h3>
+                <p className="text-xs text-muted-foreground">
                     当前未读取到此前确认的分类记录，请按本次原始资料核对分类。
                 </p>
             </section>
@@ -31,12 +31,12 @@ export function PortalCategoryMappingEvidence({
     return (
         <section className="space-y-3 rounded-lg border p-4">
             <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-sm font-medium">此前分类核对记录</h3>
+                <h3 className="font-medium">此前分类核对记录</h3>
                 <Badge variant={requiresRecheck ? "warning" : "info"}>
                     {requiresRecheck ? "需重新核对" : "待本次人工确认"}
                 </Badge>
             </div>
-            <dl className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-[auto_1fr]">
+            <dl className="grid gap-x-4 gap-y-2 text-body-compact sm:grid-cols-[auto_1fr]">
                 <dt className="text-muted-foreground">商品类型</dt>
                 <dd>
                     {productKindLabels[suggestion.product_kind] ?? "待核对"}
@@ -54,7 +54,7 @@ export function PortalCategoryMappingEvidence({
                     {category?.path || category?.name || "当前已无可选分类"}
                 </dd>
             </dl>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 {!category
                     ? "先前确认的分类当前不可选，需要重新匹配。本次审核仍须保留供应商原始路径。"
                     : requiresRecheck

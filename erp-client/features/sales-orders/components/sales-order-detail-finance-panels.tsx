@@ -38,8 +38,10 @@ export function VersionsPanel({
 export function CollaborationPanel({ order }: { order: SalesOrderDetailView }) {
     return (
         <section aria-label="卡券履约" className="space-y-4">
-            <h2 className="text-lg font-semibold">卡券履约</h2>
-            <dl className="grid gap-4 text-sm sm:grid-cols-2">
+            <h2 className="text-section-title font-semibold tracking-tight">
+                卡券履约
+            </h2>
+            <dl className="grid gap-4 text-body-compact sm:grid-cols-2">
                 <div>
                     <dt className="text-muted-foreground">履约期限</dt>
                     <dd className="mt-1">
@@ -51,11 +53,11 @@ export function CollaborationPanel({ order }: { order: SalesOrderDetailView }) {
                     <dd className="mt-1">{order.fulfillment.label}</dd>
                 </div>
             </dl>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 卡券按履约期限判定交付完成，无需登记客户验收；回款和开票在票款分区跟进。
             </p>
             {order.originSystem === "mall" ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     本单由商城开立，商业变更由商城处理。
                 </p>
             ) : null}

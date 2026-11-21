@@ -70,7 +70,9 @@ export function WorkspaceInvoiceApproval({
     return (
         <>
             <section className={sectionClass} aria-label="本次提交的开票资料">
-                <h3 className="text-base font-semibold">本次提交的开票资料</h3>
+                <h3 className="text-body-compact font-semibold">
+                    本次提交的开票资料
+                </h3>
                 {materials.isPending ? (
                     <Loading>正在读取开票资料…</Loading>
                 ) : materials.isError ? (
@@ -88,7 +90,9 @@ export function WorkspaceInvoiceApproval({
             </section>
             <section className={sectionClass} aria-label="当前票款核对">
                 <header className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-base font-semibold">当前票款核对</h3>
+                    <h3 className="text-body-compact font-semibold">
+                        当前票款核对
+                    </h3>
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         {review.data && (
                             <time
@@ -141,7 +145,7 @@ export function WorkspaceInvoiceApproval({
             >
                 <summary
                     id={`${prefix}-sales-basis-toggle`}
-                    className="cursor-pointer text-sm font-semibold"
+                    className="cursor-pointer text-body-compact font-semibold"
                 >
                     销售来源与开票依据
                 </summary>
@@ -174,7 +178,7 @@ export function WorkspaceInvoiceApproval({
                                 ),
                             )
                         ) : (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 本次申请的销售依据按当前生效版本展示。
                             </p>
                         )}
@@ -195,7 +199,7 @@ export function WorkspaceInvoiceApproval({
                             !currentBasis && (
                                 <p
                                     role="alert"
-                                    className="text-sm text-muted-foreground"
+                                    className="text-xs text-muted-foreground"
                                 >
                                     {materials.data.current_sales_basis_error ??
                                         "销售依据暂不可读取，请刷新后重试。"}
@@ -211,7 +215,7 @@ export function WorkspaceInvoiceApproval({
             >
                 <summary
                     id={`${prefix}-materials-toggle`}
-                    className="cursor-pointer text-sm font-semibold"
+                    className="cursor-pointer text-body-compact font-semibold"
                 >
                     合同与提交凭证
                 </summary>
@@ -254,7 +258,7 @@ export function WorkspaceInvoiceApproval({
                         />
                     </div>
                 ) : !materials.data?.attachments.length ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         {materials.isPending
                             ? "正在读取销售合同与凭证…"
                             : "销售合同与凭证读取失败，请刷新后重试。"}
@@ -311,7 +315,7 @@ function CurrentReview({
     ]
     return (
         <>
-            <p className="break-words text-sm text-muted-foreground">
+            <p className="break-words text-xs text-muted-foreground">
                 {data.account_label}
             </p>
             {(data.warnings.length > 0 || hasShortage) && (
@@ -352,10 +356,10 @@ function CurrentReview({
                         key={label}
                         className="min-w-0 @min-[480px]/document:px-5 @min-[480px]/document:first:pl-0 @min-[480px]/document:last:pr-0"
                     >
-                        <dt className="text-sm text-muted-foreground">
+                        <dt className="text-xs text-muted-foreground">
                             {label}
                         </dt>
-                        <dd className="mt-2 break-words text-2xl font-semibold tabular-nums">
+                        <dd className="num mt-2 break-words text-value-section font-semibold tracking-tight">
                             <MoneyValue value={value} />
                         </dd>
                     </div>
@@ -364,7 +368,7 @@ function CurrentReview({
             <details id={`${idPrefix}-amounts`} className="group/amounts">
                 <summary
                     id={`${idPrefix}-amounts-toggle`}
-                    className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 rounded-sm py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
+                    className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 rounded-sm py-2 text-body-compact outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
                 >
                     <span className="text-muted-foreground">
                         {hasOtherReservations
@@ -401,7 +405,7 @@ function CurrentReview({
                             <MoneyValue value={data.amounts.other_approved} />
                         </Fact>
                     </dl>
-                    <p className="text-sm leading-6 text-muted-foreground">
+                    <p className="text-body-compact leading-6 text-muted-foreground">
                         可再申请金额已扣除本次及其他申请的有效占用；已批准申请仅占用尚未开票部分。
                     </p>
                     <details
@@ -410,11 +414,11 @@ function CurrentReview({
                     >
                         <summary
                             id={`${idPrefix}-related-toggle`}
-                            className="cursor-pointer text-sm font-medium"
+                            className="cursor-pointer text-body-compact font-medium"
                         >
                             占用额度的开票申请（{data.request_count}）
                         </summary>
-                        <ul className="mt-2 divide-y divide-grid text-sm">
+                        <ul className="mt-2 divide-y divide-grid text-body-compact">
                             {data.requests.map((row) => (
                                 <li
                                     key={row.request_no}
@@ -471,10 +475,10 @@ function CurrentReview({
                     id={`${idPrefix}-collection-toggle`}
                     className="flex cursor-pointer list-none flex-wrap items-center gap-x-5 gap-y-2 rounded-sm py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
                 >
-                    <span className="self-start text-sm font-semibold leading-6">
+                    <span className="self-start text-body-compact font-semibold leading-6">
                         回款与履约
                     </span>
-                    <span className="min-w-0 flex-1 basis-48 text-sm leading-6">
+                    <span className="min-w-0 flex-1 basis-48 text-body-compact leading-6">
                         <span className="flex flex-wrap items-center gap-x-2">
                             <span>
                                 本笔未回款{" "}
@@ -492,7 +496,7 @@ function CurrentReview({
                             按合同约定核对开票时点。
                         </span>
                     </span>
-                    <span className="ml-auto flex items-center gap-1 text-sm">
+                    <span className="ml-auto flex items-center gap-1 text-body-compact">
                         <span className="group-open/collection:hidden">
                             查看详情
                         </span>
@@ -516,7 +520,7 @@ function CurrentReview({
                             {data.sales_owner || "未记录"}
                         </Fact>
                     </dl>
-                    <p className="text-sm leading-6 text-muted-foreground">
+                    <p className="text-body-compact leading-6 text-muted-foreground">
                         仅统计已核销至本笔应收的回款；未回款或未履约不自动代表不能开票。
                     </p>
                     <RecordList
@@ -548,7 +552,7 @@ function Source({
                 <Button
                     id={id}
                     variant="link"
-                    className="h-auto max-w-full whitespace-normal p-0 text-left text-sm font-medium"
+                    className="h-auto max-w-full whitespace-normal p-0 text-left text-body-compact font-medium"
                     onClick={onOpen}
                 >
                     <FileTextIcon aria-hidden="true" />
@@ -578,7 +582,7 @@ function Source({
                     </Fact>
                 ))}
             </dl>
-            <ul className="divide-y divide-grid border-t border-grid text-sm">
+            <ul className="divide-y divide-grid border-t border-grid text-body-compact">
                 {source.source.lines.map((line, index) => (
                     <li
                         key={`${index}:${line.title}`}
@@ -607,7 +611,7 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
     return (
         <div className="min-w-0">
             <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd className="mt-1 break-words text-sm">{children}</dd>
+            <dd className="mt-1 break-words text-body-compact">{children}</dd>
         </div>
     )
 }
@@ -615,7 +619,7 @@ function Loading({ children }: { children: ReactNode }) {
     return (
         <p
             role="status"
-            className="flex items-center gap-2 text-sm text-muted-foreground"
+            className="flex items-center gap-2 text-xs text-muted-foreground"
         >
             <Spinner />
             {children}
@@ -638,12 +642,12 @@ function RecordList({
         <details id={id} className="border-t border-grid pt-3">
             <summary
                 id={`${id}-toggle`}
-                className="cursor-pointer text-sm font-medium"
+                className="cursor-pointer text-body-compact font-medium"
             >
                 {title}（{count}）
             </summary>
             {rows.length ? (
-                <ul className="mt-2 divide-y divide-grid text-sm">
+                <ul className="mt-2 divide-y divide-grid text-body-compact">
                     {rows.map((row) => (
                         <li
                             key={`${row.number}:${row.status}`}
@@ -665,7 +669,7 @@ function RecordList({
                     ))}
                 </ul>
             ) : (
-                <p className="mt-2 text-sm text-muted-foreground">
+                <p className="mt-2 text-xs text-muted-foreground">
                     暂无已登记记录
                 </p>
             )}

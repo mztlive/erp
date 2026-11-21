@@ -178,7 +178,7 @@ export function CustomerDetailAuditTab({
                 <DetailRecordColumns>
                     <DetailRecordColumn label="当前责任关系">
                         {owners.length === 0 ? (
-                            <p className="py-2 text-sm text-muted-foreground">
+                            <p className="py-2 text-xs text-muted-foreground">
                                 暂无负责销售
                             </p>
                         ) : (
@@ -204,7 +204,7 @@ export function CustomerDetailAuditTab({
                     </DetailRecordColumn>
                     <DetailRecordColumn label="修改记录">
                         {customer.revisionTimeline.length === 0 ? (
-                            <p className="py-2 text-sm text-muted-foreground">
+                            <p className="py-2 text-xs text-muted-foreground">
                                 暂无修改记录
                             </p>
                         ) : (

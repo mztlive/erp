@@ -236,7 +236,7 @@ export function SupplyExceptionTaskPanel({
                             <dt className="text-xs text-muted-foreground">
                                 受影响的供应商品
                             </dt>
-                            <dd className="mt-1 text-sm font-medium">
+                            <dd className="mt-1 text-body-compact font-medium">
                                 {sourceLabel(task, offering)}
                             </dd>
                         </div>
@@ -244,7 +244,7 @@ export function SupplyExceptionTaskPanel({
                             <dt className="text-xs text-muted-foreground">
                                 当前负责人
                             </dt>
-                            <dd className="mt-1 text-sm font-medium">
+                            <dd className="mt-1 text-body-compact font-medium">
                                 {responsibility(task)}
                             </dd>
                             <div className="mt-1 text-xs text-muted-foreground">
@@ -259,7 +259,9 @@ export function SupplyExceptionTaskPanel({
                             <div className="text-xs font-medium text-muted-foreground">
                                 本次停供影响
                             </div>
-                            <p className="mt-1 text-sm">{task.impactSummary}</p>
+                            <p className="mt-1 text-body-compact">
+                                {task.impactSummary}
+                            </p>
                             <p className="mt-2 text-xs text-muted-foreground">
                                 原因：{task.reasonLabel}。
                             </p>
@@ -272,7 +274,7 @@ export function SupplyExceptionTaskPanel({
                                 />
                                 当前需要你核对
                             </div>
-                            <ul className="mt-2 list-disc space-y-1 pl-4 text-sm">
+                            <ul className="mt-2 list-disc space-y-1 pl-4 text-body-compact">
                                 <li>核实供应商和停止供应的商品。</li>
                                 <li>核对本次记录的停供原因和影响范围。</li>
                                 <li>填写核对凭据和结论，再提交完成待办。</li>
@@ -328,7 +330,7 @@ export function SupplyExceptionTaskPanel({
                         }}
                     >
                         <div>
-                            <h3 className="text-sm font-semibold">完成核对</h3>
+                            <h3 className="font-semibold">完成核对</h3>
                             <p className="mt-1 text-xs text-muted-foreground">
                                 填写可查验的凭据编号或链接及核对结论。提交后本条待办结束，供应和商品发布继续暂停。
                             </p>

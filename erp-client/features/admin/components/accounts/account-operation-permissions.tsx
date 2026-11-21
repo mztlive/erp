@@ -109,14 +109,14 @@ export function AccountOperationPermissions({
     return (
         <section
             aria-labelledby="account-operation-permissions-title"
-            className="space-y-4 text-sm"
+            className="space-y-4 text-body-compact"
         >
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                         <h2
                             id="account-operation-permissions-title"
-                            className="font-semibold"
+                            className="text-section-title font-semibold tracking-tight"
                         >
                             已有操作权限
                         </h2>
@@ -128,7 +128,7 @@ export function AccountOperationPermissions({
                             </Badge>
                         ) : null}
                     </div>
-                    <p className="text-xs leading-5 text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         按已保存角色合并，权限按业务模块分组展示。
                     </p>
                 </div>
@@ -202,7 +202,7 @@ export function AccountOperationPermissions({
                                         : "尚未读取到可展示的权限。"}
                                 </p>
                             )}
-                            <p className="text-xs leading-5 text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 可访问的数据见“数据范围”；具体操作仍需满足业务及审批条件。
                             </p>
                         </>

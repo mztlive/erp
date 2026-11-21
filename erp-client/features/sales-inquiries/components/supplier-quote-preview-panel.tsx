@@ -22,7 +22,7 @@ export function SupplierQuotePreviewPanel({
 }) {
     return (
         <>
-            <p className="text-sm">
+            <p className="text-body-compact">
                 读取 {preview.rows.length} 条回复，未报价 {preview.skipped}{" "}
                 行，已导入{" "}
                 {preview.rows.filter((row) => row.status === "已导入").length}{" "}
@@ -44,7 +44,7 @@ export function SupplierQuotePreviewPanel({
                     <div
                         key={`${row.quote.supplier_id}:${row.quote.line_id}`}
                         id={`${idPrefix}-${toAutomationIdSegment(row.quote.supplier_id)}-${toAutomationIdSegment(row.quote.line_id)}`}
-                        className="space-y-1 p-3 text-sm"
+                        className="space-y-1 p-3 text-body-compact"
                     >
                         <div className="flex justify-between gap-3">
                             <strong>

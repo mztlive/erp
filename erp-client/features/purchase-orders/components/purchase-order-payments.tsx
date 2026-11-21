@@ -31,7 +31,7 @@ export function PurchaseOrderPayments({
                 显示已核销到本采购单的付款；合并付款仅列出本单核销金额。
             </p>
             {query.isPending ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     正在加载付款单…
                 </p>
             ) : query.isError ? (
@@ -53,7 +53,7 @@ export function PurchaseOrderPayments({
                             >
                                 <div className="flex flex-wrap items-start justify-between gap-4">
                                     <div className="min-w-0 space-y-1">
-                                        <p className="num break-all text-sm font-medium">
+                                        <p className="num break-all text-body-compact font-medium">
                                             {payment.payment_no}
                                         </p>
                                         <p className="text-xs text-muted-foreground">
@@ -70,7 +70,7 @@ export function PurchaseOrderPayments({
                                         <p className="text-xs text-muted-foreground">
                                             本单核销金额
                                         </p>
-                                        <p className="mt-1 text-lg font-semibold">
+                                        <p className="num mt-1 text-value-compact font-semibold tracking-tight">
                                             {costMasked ? (
                                                 "•••"
                                             ) : (
@@ -85,7 +85,7 @@ export function PurchaseOrderPayments({
                                 </div>
                                 {file ? (
                                     <div className="flex flex-wrap items-center justify-between gap-3">
-                                        <p className="min-w-0 break-all text-sm text-muted-foreground">
+                                        <p className="min-w-0 break-all text-xs text-muted-foreground">
                                             银行回单：{file.file_name}
                                         </p>
                                         <div className="flex shrink-0 gap-2">
@@ -129,7 +129,7 @@ export function PurchaseOrderPayments({
                                         </div>
                                     </div>
                                 ) : (
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         暂无可查看的银行回单
                                     </p>
                                 )}
@@ -146,7 +146,7 @@ export function PurchaseOrderPayments({
                     })}
                 </ul>
             ) : (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     暂无已核销到本采购单的付款记录
                 </p>
             )}
@@ -179,7 +179,7 @@ function ReceiptPreview({
         )
     if (!url)
         return (
-            <p role="status" className="text-sm text-muted-foreground">
+            <p role="status" className="text-xs text-muted-foreground">
                 正在加载回单…
             </p>
         )

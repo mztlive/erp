@@ -99,7 +99,7 @@ export function PeriodBlockerCard({
                 </CardContent>
                 {periodPolicy?.presets && periodPolicy.presets.length > 0 ? (
                     <CardContent className="border-t pt-4">
-                        <p className="mb-2 text-sm text-muted-foreground">
+                        <p className="mb-2 text-xs text-muted-foreground">
                             或选择快捷期间：
                         </p>
                         <div className="flex flex-wrap gap-2">

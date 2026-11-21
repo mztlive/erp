@@ -43,7 +43,7 @@ export function SalesInvoiceRequestRecords({
         >
             <CollapsibleTrigger
                 id="sales-invoice-requests-toggle"
-                className="flex w-full items-center justify-between gap-3 rounded-md text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex w-full items-center justify-between gap-3 rounded-md text-body-compact font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
                 <span>
                     申请记录
@@ -64,7 +64,7 @@ export function SalesInvoiceRequestRecords({
                 {list.isPending ? (
                     <p
                         role="status"
-                        className="py-4 text-sm text-muted-foreground"
+                        className="py-4 text-xs text-muted-foreground"
                     >
                         正在读取申请记录…
                     </p>
@@ -150,7 +150,7 @@ export function SalesInvoiceRequestRecords({
                                         </p>
                                     ) : null}
                                 </div>
-                                <dl className="flex gap-6 text-sm sm:text-right">
+                                <dl className="flex gap-6 text-body-compact sm:text-right">
                                     <div>
                                         <dt className="text-xs text-muted-foreground">
                                             申请金额
@@ -176,7 +176,7 @@ export function SalesInvoiceRequestRecords({
                         ))}
                     </ul>
                 ) : (
-                    <p className="py-4 text-sm text-muted-foreground">
+                    <p className="py-4 text-xs text-muted-foreground">
                         暂无开票申请
                     </p>
                 )}

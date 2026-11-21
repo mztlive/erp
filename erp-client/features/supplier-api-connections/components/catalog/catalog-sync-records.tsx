@@ -34,7 +34,7 @@ function jobTime(timestamp: number) {
 
 function JobDetails({ job }: { job: CatalogJob }) {
     return (
-        <div className="space-y-4 text-sm">
+        <div className="space-y-4 text-body-compact">
             <dl className="grid gap-2 text-xs text-muted-foreground">
                 <div className="flex flex-wrap gap-x-3 gap-y-1">
                     <dt>同步编号</dt>
@@ -96,9 +96,7 @@ export function CatalogSyncRecords({ data }: { data: CatalogResult }) {
                 >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="space-y-1">
-                            <h3 className="text-sm font-medium">
-                                最近一次同步
-                            </h3>
+                            <h3 className="font-medium">最近一次同步</h3>
                             <p className="num text-xs text-muted-foreground">
                                 {jobTime(latest.created_at)} 开始
                             </p>
@@ -115,7 +113,7 @@ export function CatalogSyncRecords({ data }: { data: CatalogResult }) {
                                 <dt className="text-xs text-muted-foreground">
                                     {label}
                                 </dt>
-                                <dd className="num text-xl font-semibold">
+                                <dd className="num text-value-compact font-semibold tracking-tight">
                                     {count}
                                 </dd>
                             </div>
@@ -132,7 +130,7 @@ export function CatalogSyncRecords({ data }: { data: CatalogResult }) {
                     <details className="group border-t pt-3">
                         <summary
                             id={`supplier-catalog-sync-${toAutomationIdSegment(latest.job_id)}-details`}
-                            className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-medium [&::-webkit-details-marker]:hidden"
+                            className="flex cursor-pointer list-none items-center justify-between gap-2 text-body-compact font-medium [&::-webkit-details-marker]:hidden"
                         >
                             {latest.error_summary || latest.skipped_count > 0
                                 ? "查看异常详情"
@@ -148,7 +146,7 @@ export function CatalogSyncRecords({ data }: { data: CatalogResult }) {
                     </details>
                 </section>
             ) : (
-                <p className="py-8 text-center text-sm text-muted-foreground">
+                <p className="py-8 text-center text-xs text-muted-foreground">
                     尚无同步记录
                 </p>
             )}
@@ -163,7 +161,7 @@ export function CatalogSyncRecords({ data }: { data: CatalogResult }) {
             </p>
             {history.length > 0 ? (
                 <section aria-label="历史同步记录" className="space-y-2">
-                    <h3 className="text-sm font-medium">
+                    <h3 className="font-medium">
                         历史记录{" "}
                         <span className="ml-1 font-normal text-muted-foreground">
                             {history.length}
@@ -178,7 +176,7 @@ export function CatalogSyncRecords({ data }: { data: CatalogResult }) {
                                 >
                                     <div className="min-w-0 flex-1 space-y-2">
                                         <div className="flex flex-wrap items-center gap-2">
-                                            <span className="num text-sm font-medium">
+                                            <span className="num text-body-compact font-medium">
                                                 {jobTime(job.created_at)}
                                             </span>
                                             <JobStatus job={job} />

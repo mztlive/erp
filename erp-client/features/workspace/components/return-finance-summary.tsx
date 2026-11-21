@@ -47,25 +47,25 @@ export function ReturnFinanceSummary({
                         key={label}
                         className="space-y-2 rounded-lg border bg-muted/30 p-4"
                     >
-                        <dt className="text-sm text-muted-foreground">
+                        <dt className="text-xs text-muted-foreground">
                             {label}
                         </dt>
                         <dd>
                             <MoneyValue
                                 value={amount}
-                                className="text-xl font-semibold"
+                                className="text-value-compact font-semibold tracking-tight"
                             />
                         </dd>
                     </div>
                 ))}
             </dl>
             {!invoiceTask ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     以上为当前方案扣除已提交金额后的剩余额度；审批中的金额不重复提交。
                 </p>
             ) : null}
             <section
-                className="space-y-2 rounded-lg border p-4 text-sm"
+                className="space-y-2 rounded-lg border p-4 text-body-compact"
                 aria-label="采购确认方案"
             >
                 <h3 className="font-medium">采购已确认的方案与供应商依据</h3>

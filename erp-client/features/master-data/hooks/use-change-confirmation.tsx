@@ -51,14 +51,17 @@ export function useChangeConfirmation(id: string) {
                     </DialogDescription>
                 </DialogHeader>
                 {request?.details?.length ? (
-                    <ul className="max-h-60 list-disc overflow-y-auto pl-5 text-sm">
+                    <ul className="max-h-60 list-disc overflow-y-auto pl-5 text-body-compact">
                         {request.details.map((detail, i) => (
                             <li key={i}>{detail}</li>
                         ))}
                     </ul>
                 ) : null}
                 {error ? (
-                    <p role="alert" className="text-sm text-destructive">
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
                         {error}
                     </p>
                 ) : null}

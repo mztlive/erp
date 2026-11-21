@@ -486,7 +486,7 @@ export function FulfillmentPackingForm({
                                     className="min-h-0 min-w-0 lg:overflow-y-auto lg:overscroll-contain lg:border-l lg:border-border/60 lg:px-5"
                                 >
                                     {!selectedDestination && (
-                                        <p className="py-12 text-center text-sm text-muted-foreground">
+                                        <p className="py-12 text-center text-xs text-muted-foreground">
                                             没有符合条件的收货地址
                                         </p>
                                     )}
@@ -507,7 +507,7 @@ export function FulfillmentPackingForm({
                                                             </h3>
                                                             {arrangementAction}
                                                         </div>
-                                                        <p className="text-sm text-muted-foreground">
+                                                        <p className="text-xs text-muted-foreground">
                                                             以下商品本次暂不发货。补齐地址后可登记包裹，其他商品可以先发。
                                                         </p>
                                                     </div>
@@ -517,7 +517,7 @@ export function FulfillmentPackingForm({
                                                                 key={
                                                                     item.delivery_line_id
                                                                 }
-                                                                className="flex justify-between gap-4 text-sm"
+                                                                className="flex justify-between gap-4 text-body-compact"
                                                             >
                                                                 <span>
                                                                     {itemName(
@@ -598,18 +598,18 @@ export function FulfillmentPackingForm({
                                                 <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
                                                     <div className="min-w-0 flex-1">
                                                         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                                                            <h3 className="text-lg font-semibold">
+                                                            <h3 className="text-body-compact font-semibold">
                                                                 {
                                                                     destination.recipient
                                                                 }
                                                             </h3>
-                                                            <span className="text-sm">
+                                                            <span className="text-body-compact">
                                                                 {
                                                                     destination.phone
                                                                 }
                                                             </span>
                                                         </div>
-                                                        <p className="mt-1.5 break-words text-sm text-muted-foreground">
+                                                        <p className="mt-1.5 break-words text-xs text-muted-foreground">
                                                             {
                                                                 destination.address
                                                             }
@@ -684,7 +684,7 @@ export function FulfillmentPackingForm({
                                                                     className="space-y-3 py-4 outline-none"
                                                                 >
                                                                     <div className="flex flex-wrap items-center gap-3">
-                                                                        <span className="text-sm font-medium">
+                                                                        <span className="text-body-compact font-medium">
                                                                             {parcels.length ===
                                                                             1
                                                                                 ? "物流"
@@ -1235,7 +1235,7 @@ export function FulfillmentPackingForm({
                                                     })()}
                                                     <div className="min-w-0 border-t border-border">
                                                         <div className="flex flex-wrap items-center justify-between gap-3 py-3">
-                                                            <h4 className="text-sm font-semibold">
+                                                            <h4 className="text-body-compact font-semibold">
                                                                 商品 ·{" "}
                                                                 {
                                                                     destination
@@ -1428,7 +1428,7 @@ export function FulfillmentPackingForm({
                                                                                             )}
                                                                                     </TableCell>
                                                                                     {showAllocation && (
-                                                                                        <TableCell className="whitespace-normal text-sm">
+                                                                                        <TableCell className="whitespace-normal text-body-compact">
                                                                                             {assigned.length ? (
                                                                                                 assigned
                                                                                                     .map(
@@ -1472,7 +1472,7 @@ export function FulfillmentPackingForm({
                                                             </Table>
                                                         </div>
                                                         {!matchedItems.length && (
-                                                            <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+                                                            <p className="px-4 py-6 text-center text-xs text-muted-foreground">
                                                                 没有匹配的商品，请更换搜索词。
                                                             </p>
                                                         )}

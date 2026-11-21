@@ -156,11 +156,11 @@ export function SalesOrderInquiryPickerDialog({
                             }
                         />
                     ) : list.isPending ? (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             正在加载询价…
                         </p>
                     ) : list.data.items.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             没有符合条件的询价，请调整搜索条件或取消后核对客户。
                         </p>
                     ) : (
@@ -198,7 +198,7 @@ export function SalesOrderInquiryPickerDialog({
                     )}
                 </div>
                 {list.data && !list.isError && (
-                    <div className="flex items-center justify-between gap-2 text-sm">
+                    <div className="flex items-center justify-between gap-2 text-body-compact">
                         <span className="text-muted-foreground">
                             共 {list.data.total} 张询价 · 第 {query.page} 页
                         </span>
@@ -230,7 +230,7 @@ export function SalesOrderInquiryPickerDialog({
                 {selected && (
                     <div
                         aria-live="polite"
-                        className="rounded-lg border p-3 text-sm"
+                        className="rounded-lg border p-3 text-body-compact"
                     >
                         {basis.isFetching ? (
                             "正在核对已接受结果和剩余数量…"
@@ -257,7 +257,10 @@ export function SalesOrderInquiryPickerDialog({
                     </div>
                 )}
                 {discardsChanges && (
-                    <p role="alert" className="text-sm text-destructive">
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
                         确认后将放弃当前页面已填内容和已选文件，按询价结果重新开单。取消选择可继续编辑当前内容。
                     </p>
                 )}

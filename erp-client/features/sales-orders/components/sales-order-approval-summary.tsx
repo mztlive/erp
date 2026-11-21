@@ -38,7 +38,7 @@ export function SalesOrderApprovalSummary({
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 space-y-2">
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                        <h3 className="text-base font-semibold">
+                        <h3 className="text-body-compact font-semibold">
                             {inProgress ? node || "当前审批" : "审批结果"}
                         </h3>
                         <StatusBadge
@@ -46,7 +46,7 @@ export function SalesOrderApprovalSummary({
                             label={displayInstanceStatus(instance.status)}
                         />
                         {inProgress ? (
-                            <span className="text-sm">
+                            <span className="text-body-compact">
                                 {assignee || "审批人待确认"}
                             </span>
                         ) : null}

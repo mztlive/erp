@@ -47,7 +47,7 @@ export function SupplierAccountRecordBody({
     const total = payment?.amount ?? invoice?.grossAmount ?? unallocated?.amount
     const allocated = payment?.allocatedTotal ?? invoice?.allocatedTotal
     return (
-        <div className="space-y-6 text-sm">
+        <div className="space-y-6 text-body-compact">
             <PreviewAmount
                 label={isPayment ? "待核销付款" : "待分配金额（含税）"}
                 value={row.unallocatedAmount}

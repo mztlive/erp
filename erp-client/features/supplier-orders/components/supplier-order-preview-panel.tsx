@@ -36,7 +36,7 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
             <ScrollArea className="min-h-0 flex-1">
                 <div className="space-y-6 px-7 py-6">
                     <Alert variant="info" className="py-3">
-                        <AlertTitle className="text-sm">
+                        <AlertTitle className="text-body-compact">
                             供应商接口履约
                         </AlertTitle>
                         <AlertDescription>{o.executionNotice}</AlertDescription>
@@ -177,7 +177,7 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                             {order.items.map((item) => (
                                 <li
                                     key={item.itemId}
-                                    className="border-b border-border py-3 text-sm last:border-b-0"
+                                    className="border-b border-border py-3 text-body-compact last:border-b-0"
                                 >
                                     <div className="font-medium">
                                         {item.productName}
@@ -206,7 +206,7 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                                     </div>
                                     <Badge
                                         variant="secondary"
-                                        className="mt-1 text-2xs"
+                                        className="mt-1 text-xs"
                                     >
                                         下单记录不可变
                                     </Badge>
@@ -272,5 +272,5 @@ function Field({ label, value }: { label: string; value: ReactNode }) {
 }
 
 function SectionTitle({ children }: { children: ReactNode }) {
-    return <h3 className="text-sm font-medium text-foreground">{children}</h3>
+    return <h3 className="font-medium text-foreground">{children}</h3>
 }

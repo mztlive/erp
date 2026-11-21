@@ -92,7 +92,7 @@ export function SettlementListPreviewSheet({
                 </>
             }
         >
-            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-7 py-6 text-sm">
+            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-7 py-6 text-body-compact">
                 {row ? (
                     <>
                         <section className="space-y-3 border-b border-border pb-6">
@@ -162,12 +162,12 @@ export function SettlementListPreviewSheet({
                                 </div>
                             </dl>
                         </section>
-                        <p className="border-t border-border pt-6 text-xs leading-5 text-muted-foreground">
+                        <p className="border-t border-border pt-6 text-xs text-muted-foreground">
                             详情页可继续提交复核并查询处理结果。
                         </p>
                     </>
                 ) : (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         未找到预览行，可能已被移出当前筛选范围。
                     </p>
                 )}

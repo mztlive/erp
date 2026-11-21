@@ -161,7 +161,7 @@ export function CancelAdjustmentApprovalDialog({
                         />
                         {conflictMessage ? (
                             <p
-                                className="text-sm text-destructive"
+                                className="text-body-compact text-destructive"
                                 role="alert"
                                 aria-live="assertive"
                             >

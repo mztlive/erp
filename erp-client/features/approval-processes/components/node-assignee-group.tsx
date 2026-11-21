@@ -53,7 +53,7 @@ export function PersonPicker({
                             "rounded-md outline-none hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
                             compact
                                 ? "inline-flex size-6 shrink-0 items-center justify-center"
-                                : "flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-sm",
+                                : "flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-body-compact",
                         )}
                     />
                 }
@@ -74,7 +74,7 @@ export function PersonPicker({
                 onClick={(event) => event.stopPropagation()}
             >
                 <div className="flex items-center justify-between gap-2">
-                    <PopoverTitle className="text-sm">
+                    <PopoverTitle className="text-section-title font-semibold tracking-tight">
                         {person ? "更换审批人" : "添加审批人"}
                     </PopoverTitle>
                     <Button

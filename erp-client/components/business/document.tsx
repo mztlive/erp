@@ -120,12 +120,7 @@ function DocumentHeader({
                 />
                 {titleExtra}
             </div>
-            <div
-                className={cn(
-                    "flex flex-wrap items-center gap-x-2.5 gap-y-1 text-muted-foreground",
-                    compact ? "text-xs" : "text-sm",
-                )}
-            >
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
                 <span>
                     单号{" "}
                     <span className="num text-foreground">
@@ -135,10 +130,8 @@ function DocumentHeader({
                 {version != null ? (
                     <span
                         className={cn(
-                            "num text-muted-foreground",
-                            compact
-                                ? "px-1.5 py-0.5 text-tiny"
-                                : "px-2 py-1 text-xs",
+                            "num text-xs text-muted-foreground",
+                            compact ? "px-1.5 py-0.5" : "px-2 py-1",
                         )}
                     >
                         版本 {version}
@@ -307,9 +300,11 @@ function DocumentSection({
 }: DocumentSectionProps) {
     const heading = (
         <div className="min-w-0">
-            <h2 className="font-heading text-base font-semibold">{title}</h2>
+            <h2 className="font-heading text-section-title font-semibold tracking-tight">
+                {title}
+            </h2>
             {description != null ? (
-                <div className="mt-1 text-sm text-muted-foreground">
+                <div className="mt-1 text-xs text-muted-foreground">
                     {description}
                 </div>
             ) : null}
@@ -465,7 +460,7 @@ function RevisionTimeline({
                     ))}
                 </Timeline>
             ) : (
-                <div className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">
+                <div className="rounded-lg bg-muted px-4 py-3 text-body-compact text-muted-foreground">
                     {emptyContent}
                 </div>
             )}
@@ -609,7 +604,7 @@ function RelatedDocumentList({
                                         <div
                                             className={
                                                 nameFirst
-                                                    ? "text-sm font-medium break-words"
+                                                    ? "text-body-compact font-medium break-words"
                                                     : "text-xs text-muted-foreground"
                                             }
                                         >
@@ -623,7 +618,7 @@ function RelatedDocumentList({
                                             className={
                                                 nameFirst
                                                     ? "num mt-1 truncate text-xs text-muted-foreground"
-                                                    : "num truncate text-sm font-medium"
+                                                    : "num truncate text-body-compact font-medium"
                                             }
                                         >
                                             {document.documentNumber}
@@ -692,7 +687,7 @@ function RelatedDocumentList({
                                         </div>
                                         <div
                                             className={cn(
-                                                "num text-sm font-medium",
+                                                "num text-body-compact font-medium",
                                                 taxAmountToneClass(
                                                     measureLabel,
                                                 ),
@@ -720,7 +715,7 @@ function RelatedDocumentList({
                                             责任人
                                         </div>
                                         <div
-                                            className="truncate text-sm"
+                                            className="truncate text-body-compact"
                                             title={document.owner}
                                         >
                                             {document.owner}
@@ -742,7 +737,7 @@ function RelatedDocumentList({
                     </ul>
                 </>
             ) : (
-                <div className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">
+                <div className="rounded-lg bg-muted px-4 py-3 text-body-compact text-muted-foreground">
                     {emptyContent}
                 </div>
             )}

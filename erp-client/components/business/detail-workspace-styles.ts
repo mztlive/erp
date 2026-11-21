@@ -7,7 +7,7 @@ export const detailWorkspaceStyles = {
     chrome: "sticky top-0 z-20 border-b border-border/60 bg-card transition-shadow duration-150",
     header: "flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 py-3.5",
     title: "min-w-0 max-w-full break-words text-page-title font-semibold tracking-tight text-foreground",
-    meta: "flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs leading-4.5 text-muted-foreground",
+    meta: "flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground",
     headerActions:
         "ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-1.5 [&_[data-slot=button]]:h-control [&_[data-slot=button]]:px-3",
     quietButton:
@@ -30,6 +30,6 @@ export const detailWorkspaceStyles = {
         "flex flex-wrap items-center justify-between gap-x-4 gap-y-2",
     sectionTitle:
         "text-section-title font-semibold tracking-tight text-foreground",
-    sectionSubtitle: "text-xs leading-4.5 text-muted-foreground",
+    sectionSubtitle: "text-xs text-muted-foreground",
     inlineTableWrapper: "w-full max-w-full border-y border-border/70",
 } as const

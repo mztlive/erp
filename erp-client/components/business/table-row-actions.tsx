@@ -146,7 +146,7 @@ function MenuAction({ action }: { action: TableRowAction }) {
             disabled={action.disabled || action.loading}
             aria-busy={action.loading || undefined}
             title={action.disabledReason}
-            className="min-h-8 gap-2 rounded-md text-[13px] [&_svg]:text-muted-foreground data-[variant=destructive]:[&_svg]:text-destructive"
+            className="min-h-8 gap-2 rounded-md text-body-compact [&_svg]:text-muted-foreground data-[variant=destructive]:[&_svg]:text-destructive"
             render={
                 action.href && !action.disabled && !action.loading ? (
                     <Link href={action.href} />

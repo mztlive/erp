@@ -19,7 +19,9 @@ function SettlementCenterTotals({ detail }: { detail: SettlementDetailView }) {
     return (
         <Card size="sm" className={surfacePanelClassName}>
             <CardHeader className="rounded-t-lg border-b border-grid py-3">
-                <CardTitle className="text-base">金额摘要</CardTitle>
+                <CardTitle className="text-section-title font-semibold tracking-tight">
+                    金额摘要
+                </CardTitle>
                 <CardDescription>
                     订单、运费、服务费、退款与 ERP
                     计算金额、供应商账单金额、差异方向对比 · 全部

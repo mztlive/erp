@@ -109,7 +109,7 @@ export function AcceptanceRegisterDialog({
                 </DialogHeader>
 
                 {pendingCount === 0 ? (
-                    <p className="px-6 py-4 text-sm text-muted-foreground">
+                    <p className="px-6 py-4 text-xs text-muted-foreground">
                         当前没有待验收的交付记录。
                     </p>
                 ) : (
@@ -172,7 +172,7 @@ export function AcceptanceRegisterDialog({
                                 {activeLine ? (
                                     <section className="flex flex-col gap-3">
                                         <header className="flex flex-col gap-1">
-                                            <h3 className="text-sm font-semibold">
+                                            <h3 className="font-semibold">
                                                 明细 {activeLine.lineNo} ·{" "}
                                                 {activeLine.itemSnapshot}
                                             </h3>
@@ -272,7 +272,7 @@ export function AcceptanceRegisterDialog({
                                 <details className="mt-4 border-t border-grid pt-3">
                                     <summary
                                         id="sales-orders-acceptance-comment-toggle"
-                                        className="w-fit cursor-pointer rounded-sm text-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                        className="w-fit cursor-pointer rounded-sm text-body-compact text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                     >
                                         添加内部备注（选填）
                                     </summary>
@@ -301,7 +301,7 @@ export function AcceptanceRegisterDialog({
 
                                 {postBlockerMessage ? (
                                     <p
-                                        className="mt-3 text-sm text-destructive"
+                                        className="mt-3 text-body-compact text-destructive"
                                         role="alert"
                                     >
                                         {postBlockerMessage}
@@ -318,7 +318,7 @@ export function AcceptanceRegisterDialog({
                         role="status"
                         aria-live="polite"
                     >
-                        <p className="text-sm font-medium text-foreground">
+                        <p className="text-body-compact font-medium text-foreground">
                             本次登记 {selection.selected.size} 批
                         </p>
                         <p className="mt-1">

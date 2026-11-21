@@ -44,7 +44,7 @@ export function DefinitionBindingCard({
                         审批流程
                     </ApprovalSectionHeading>
                 </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
+                <CardContent className="text-body-compact text-muted-foreground">
                     {emptyLabel}
                 </CardContent>
             </Card>
@@ -66,11 +66,11 @@ export function DefinitionBindingCard({
             </CardHeader>
             <CardContent>
                 {nodes.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         当前流程尚未配置审批节点
                     </p>
                 ) : (
-                    <ol className="space-y-2 text-sm">
+                    <ol className="space-y-2 text-body-compact">
                         {nodes.map((node, index) => {
                             const assigneeName = displayActorName(
                                 node.assigneeName,

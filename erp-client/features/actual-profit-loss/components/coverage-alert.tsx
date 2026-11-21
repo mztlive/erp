@@ -22,11 +22,11 @@ export function CoverageAlert({ data }: { data: ProfitLossView }) {
                     value={coveragePercentNumber(data.coverage.coverageRate)}
                 >
                     <span className="text-xs">成本归集完整率</span>
-                    <span className="num ml-auto text-sm">
+                    <span className="num ml-auto text-body-compact">
                         {data.coverage.coverageRate}
                     </span>
                 </Progress>
-                <div className="grid gap-2 text-sm sm:grid-cols-3">
+                <div className="grid gap-2 text-body-compact sm:grid-cols-3">
                     <div>
                         <span className="text-muted-foreground">
                             已归集成本收入{" "}

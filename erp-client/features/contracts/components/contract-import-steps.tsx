@@ -38,14 +38,14 @@ export function ContractImportSteps({
                             }
                             onClick={() => onChange(index as ImportReviewStep)}
                             className={cn(
-                                "mx-auto flex w-fit max-w-full items-center justify-center gap-2 border-b-2 border-transparent px-2 pb-4 sm:px-6 text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-70 sm:gap-3",
+                                "mx-auto flex w-fit max-w-full items-center justify-center gap-2 border-b-2 border-transparent px-2 pb-4 sm:px-6 text-body-compact text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-70 sm:gap-3",
                                 step === index &&
                                     "border-foreground font-medium text-foreground",
                             )}
                         >
                             <span
                                 className={cn(
-                                    "flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm",
+                                    "flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-body-compact",
                                     step === index &&
                                         "bg-primary text-primary-foreground",
                                 )}

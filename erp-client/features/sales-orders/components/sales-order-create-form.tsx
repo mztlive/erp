@@ -665,7 +665,7 @@ export function SalesOrderCreateForm({
         <>
             {canChooseInquiry && !entryOpen && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         已有采购反馈？可从已接受的询价结果带入开单信息。
                     </p>
                     <Button
@@ -811,7 +811,7 @@ export function SalesOrderCreateForm({
                                                 <h2
                                                     id="sales-create-contract-title"
                                                     tabIndex={-1}
-                                                    className="font-heading text-base font-semibold outline-none"
+                                                    className="font-heading text-section-title font-semibold outline-none tracking-tight"
                                                 >
                                                     {showContractSummary
                                                         ? "合同信息"
@@ -906,7 +906,7 @@ export function SalesOrderCreateForm({
                                     >
                                         <h2
                                             id="sales-create-settlement-title"
-                                            className="font-heading text-base font-semibold"
+                                            className="font-heading text-section-title font-semibold tracking-tight"
                                         >
                                             本次销售信息
                                         </h2>

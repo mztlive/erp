@@ -65,7 +65,7 @@ export function SupplierOrderExecutionTree({
         >
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="space-y-1">
-                    <h3 className="text-sm font-semibold">供应商订单</h3>
+                    <h3 className="font-semibold">供应商订单</h3>
                     <p className="text-xs text-muted-foreground">
                         主订单号：
                         <span className="num">{tree.root_order_no}</span>
@@ -120,7 +120,7 @@ export function SupplierOrderExecutionTree({
                 </p>
             ) : null}
             {current.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     暂未获取到供应商拆分后的子订单明细。
                 </p>
             ) : (
@@ -131,7 +131,7 @@ export function SupplierOrderExecutionTree({
                             className="space-y-3 py-4 first:pt-0 last:pb-0"
                         >
                             <div className="flex flex-wrap items-center justify-between gap-3">
-                                <h4 className="text-sm font-medium">
+                                <h4 className="text-body-compact font-medium">
                                     {node.role === "RESERVATION_ROOT"
                                         ? "锁库单"
                                         : "子订单"}{" "}
@@ -198,7 +198,7 @@ export function SupplierOrderExecutionTree({
                                     </span>
                                 </p>
                             ) : null}
-                            <ul className="space-y-2 text-sm">
+                            <ul className="space-y-2 text-body-compact">
                                 {node.lines.map((line, index) => (
                                     <li
                                         key={`${line.sku_code}-${index}`}
@@ -251,7 +251,7 @@ export function SupplierOrderExecutionTree({
                     </ul>
                 </details>
             ) : null}
-            <p className="text-xs leading-5 text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 历史主单仅作关联追溯；实际发货数量以系统确认的交付记录为准。
             </p>
         </section>

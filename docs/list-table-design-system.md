@@ -83,6 +83,8 @@
 
 ### 2.2 字体与字号阶梯（Typography）
 
+完整约定见[排版与字号设计系统](./typography-design-system.md)。
+
 - **中文字体栈**：内置 `@fontsource-variable/noto-sans-sc`，完整回退链 `"Noto Sans SC Variable", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif`，全局开启 `-webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility`。
 - **等宽数字工具类 `.num`**：应用 `font-variant-numeric: tabular-nums lining-nums slashed-zero` 与 `"tnum" 1, "lnum" 1, "zero" 1`。所有编号、金额、数量、页码、版本号、计数**必须**加 `.num`（右对齐表格列 `data-align="end"` 已在 `globals.css` 自动附加 `.num`）。
 
@@ -90,7 +92,7 @@
 | --- | --- | --- | --- | --- |
 | 页面主标题 | `text-page-title` | `18px / 26px` (`1.125rem / 1.625rem`) | `font-semibold` (600) + `tracking-tight` | 页头 `<h1>` |
 | **工作面核心正文** | `text-body-compact` | `13px / 20px` (`0.8125rem / 1.25rem`) | `font-normal` (400) / 主列 `font-medium` (500) | 表格 `<table>` 全局默认字号、按钮、工具栏输入/下拉、视图页签、批量勾选条、行操作按钮、下拉菜单项 |
-| 辅助信息与表头 | `text-xs` | `12px / 16px` (`0.75rem / 1rem`) | 表头/徽章/分组 `font-medium`；说明/单位 `font-normal` | 表头 `<th>`、`StatusBadge`、名称下方次身份编号、数量单位、已选 `FilterChip`、分页条、高级筛选分组 `legend`、局部加载/失败态 |
+| 辅助信息与表头 | `text-xs` | `12px / 18px` (`0.75rem / 1.125rem`) | 表头/徽章/分组 `font-medium`；说明/单位 `font-normal` | 表头 `<th>`、`StatusBadge`、名称下方次身份编号、数量单位、已选 `FilterChip`、分页条、高级筛选分组 `legend`、局部加载/失败态 |
 | 微标与计数角标 | `text-tiny` | `11px / 16px` (`0.6875rem / 1rem`) | `font-medium` / 角标 `font-semibold` | `待查询` 胶囊、更多筛选已生效数字角标、Eyebrow 标签 |
 
 > **关键约束**：`<Table>` 根节点已设为 `text-body-compact`（13px）。**单元格内普通文本禁止手写 `text-sm`（14px）**，否则会导致单行字号突兀放大、破坏整体紧凑节奏。
@@ -520,7 +522,7 @@ export function StandardEntityListPage() {
                     onClick: onCreate,
                 },
             ]}
-            alerts={actionError ? <p className="text-sm text-destructive" role="alert">{actionError}</p> : null}
+            alerts={actionError ? <p className="text-body-compact text-destructive" role="alert">{actionError}</p> : null}
             resultsLabel={`单据列表 · ${rows.length} 条结果`}
             resultsHeadingRef={resultsHeadingRef}
             loading={listQuery.isPending}

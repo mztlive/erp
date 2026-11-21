@@ -15,7 +15,7 @@ export function OrganizationAccessImpact({
                 : "所选人员"
             : "此人"
     return (
-        <div className="space-y-2 rounded-md bg-muted/40 p-3 text-sm">
+        <div className="space-y-2 rounded-md bg-muted/40 p-3 text-body-compact">
             <p className="font-medium">权限影响</p>
             <p className="text-xs text-muted-foreground">
                 {`所属部门变更会重算${subject}已配置的“所属部门”范围。`}

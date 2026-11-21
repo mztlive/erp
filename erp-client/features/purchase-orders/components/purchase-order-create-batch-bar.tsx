@@ -157,7 +157,7 @@ export function PurchaseOrderCreateBatchBar({
                         />
                         <p
                             role="status"
-                            className="text-sm text-muted-foreground"
+                            className="text-xs text-muted-foreground"
                         >
                             将更新 {applicableCount} 行。
                             {selectedCount > applicableCount

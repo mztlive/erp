@@ -40,7 +40,7 @@ export function ContractDetailSalesOrders({
             }
         >
             {contract.relatedSalesOrders.length === 0 ? (
-                <p className="text-sm leading-relaxed text-muted-foreground">
+                <p className="text-body-compact leading-relaxed text-muted-foreground">
                     暂无关联销售单。
                 </p>
             ) : (

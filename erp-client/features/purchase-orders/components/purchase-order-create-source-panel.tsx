@@ -125,16 +125,16 @@ export function PurchaseOrderCreateSourcePanel({
             >
                 <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 flex-col gap-1">
-                        <h2 className="font-heading text-sm font-semibold">
+                        <h2 className="font-heading text-section-title font-semibold tracking-tight">
                             来源销售单
                         </h2>
                         {selectedOrder ? (
                             <>
-                                <p className="num text-xl font-semibold tracking-tight">
+                                <p className="num text-body-compact font-semibold tracking-tight">
                                     {selectedOrder.salesOrderNo}
                                 </p>
                                 {subtitle ? (
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         {subtitle}
                                     </p>
                                 ) : null}
@@ -217,7 +217,7 @@ function SourceSnapshot({ summary }: { summary: SourcingOrderSummary }) {
             <div className="flex flex-col gap-1">
                 <MoneyValue
                     value={summary.minEstimatedGross}
-                    className="text-2xl font-semibold tracking-tight"
+                    className="text-value-section font-semibold tracking-tight"
                 />
                 <span className="text-xs text-muted-foreground">
                     推荐采购估算
@@ -243,7 +243,9 @@ function SourceSnapshot({ summary }: { summary: SourcingOrderSummary }) {
 function SnapshotStat({ label, value }: { label: string; value: string }) {
     return (
         <div className="flex flex-col gap-1">
-            <span className="num text-lg font-medium">{value}</span>
+            <span className="num text-value-compact font-semibold tracking-tight">
+                {value}
+            </span>
             <span className="text-xs text-muted-foreground">{label}</span>
         </div>
     )

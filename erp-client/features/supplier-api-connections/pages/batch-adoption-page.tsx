@@ -90,7 +90,7 @@ export function BatchAdoptionPage() {
     if (query.isPending || account.isPending || waitingForResult)
         return (
             <PageScaffold>
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     正在恢复已保存的入库批次…
                 </p>
             </PageScaffold>

@@ -23,7 +23,7 @@ export function ChangeOrderSection({
                 <div className="min-w-0 space-y-1">
                     <h3
                         id={`${id}-title`}
-                        className="font-heading text-base font-semibold"
+                        className="font-heading text-section-title font-semibold"
                     >
                         {title}
                     </h3>

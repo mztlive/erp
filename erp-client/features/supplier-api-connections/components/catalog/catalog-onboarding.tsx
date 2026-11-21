@@ -52,7 +52,9 @@ export function CatalogOnboarding({
                             {index + 1}
                         </span>
                         <div className="flex flex-col gap-1">
-                            <p className="text-sm font-medium">{item.title}</p>
+                            <p className="text-body-compact font-medium">
+                                {item.title}
+                            </p>
                             <p className="text-xs leading-relaxed text-muted-foreground">
                                 {item.description}
                             </p>

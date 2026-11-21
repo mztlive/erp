@@ -45,17 +45,17 @@ export function AccountProfileOverview({
     return (
         <section
             aria-labelledby="account-profile-title"
-            className="space-y-4 text-sm"
+            className="space-y-4 text-body-compact"
         >
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 space-y-1">
                     <h2
                         id="account-profile-title"
-                        className="font-semibold text-foreground"
+                        className="text-section-title font-semibold tracking-tight text-foreground"
                     >
                         账号资料
                     </h2>
-                    <p className="text-xs leading-5 text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         人员姓名、所属部门与角色统一保存后生效。
                     </p>
                 </div>
@@ -83,12 +83,12 @@ export function AccountProfileOverview({
                     <div className="flex min-w-0 items-center gap-3 lg:w-64 lg:shrink-0">
                         <span
                             aria-hidden="true"
-                            className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-base font-semibold text-primary"
+                            className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-body-compact font-semibold text-primary"
                         >
                             {initial}
                         </span>
                         <div className="min-w-0">
-                            <p className="truncate text-base leading-6 font-semibold">
+                            <p className="truncate text-body-compact leading-6 font-semibold">
                                 {account.name}
                             </p>
                             <p className="mt-0.5 truncate text-xs text-muted-foreground">
@@ -166,7 +166,7 @@ export function AccountProfileOverview({
                         ) : !roleCount ? (
                             <div className="rounded-lg border border-dashed border-border px-3 py-3">
                                 <p className="font-medium">尚未分配角色</p>
-                                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                <p className="mt-1 text-xs text-muted-foreground">
                                     没有角色的账号无法执行任何业务操作。
                                     {canEdit && "可点击“编辑资料”分配。"}
                                 </p>
@@ -225,7 +225,7 @@ export function AccountProfileOverview({
                                 })}
                             </ul>
                         )}
-                        <p className="text-xs leading-5 text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             角色决定可以执行的操作；可访问的数据在“数据范围”中设置。
                         </p>
                     </section>
@@ -243,7 +243,7 @@ export function AccountProfileOverview({
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <div className="min-w-0">
                                 <p className="font-medium">登录密码</p>
-                                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                <p className="mt-1 text-xs text-muted-foreground">
                                     修改密码单独保存，不影响其他资料。
                                 </p>
                             </div>

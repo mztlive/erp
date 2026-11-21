@@ -33,7 +33,7 @@ function taxRatePercent(inputTaxRate: string) {
 }
 
 function MaskedAmount() {
-    return <span className="text-sm text-muted-foreground">•••</span>
+    return <span className="text-muted-foreground">•••</span>
 }
 
 function buildPurchaseOrderLinesColumns(

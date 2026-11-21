@@ -189,7 +189,7 @@ export function FlowCanvasNode({
                                     )}
                                 </>
                             ) : (
-                                <span className="flex items-center gap-2 px-3 py-2 text-sm">
+                                <span className="flex items-center gap-2 px-3 py-2 text-body-compact">
                                     <UserRoundIcon className="size-3.5 shrink-0" />
                                     {node.assignee_source ===
                                     "APPLICANT_TEAM_LEADER"
@@ -203,7 +203,7 @@ export function FlowCanvasNode({
             ) : (
                 <div
                     id={`${data.domId}-drag`}
-                    className="approval-node-drag cursor-grab px-5 py-3 text-center text-sm font-medium active:cursor-grabbing"
+                    className="approval-node-drag cursor-grab px-5 py-3 text-center text-body-compact font-medium active:cursor-grabbing"
                 >
                     {data.kind === "start" ? "提交申请" : "审批完成"}
                 </div>

@@ -104,23 +104,23 @@ function BatchImpactPreview({
             <CardContent className="space-y-4">
                 <dl className="grid gap-3 sm:grid-cols-2">
                     <div className="rounded-xl border border-border bg-muted p-4">
-                        <dt className="flex items-center gap-2 text-sm font-medium text-foreground">
+                        <dt className="flex items-center gap-2 text-body-compact font-medium text-foreground">
                             <FilterIcon aria-hidden="true" className="size-4" />
                             当前筛选
                         </dt>
-                        <dd className="mt-2 text-sm text-muted-foreground">
+                        <dd className="mt-2 text-body-compact text-muted-foreground">
                             {filterSummary}
                         </dd>
                     </div>
                     <div className="rounded-xl border border-border bg-muted p-4">
-                        <dt className="flex items-center gap-2 text-sm font-medium text-foreground">
+                        <dt className="flex items-center gap-2 text-body-compact font-medium text-foreground">
                             <ShieldCheckIcon
                                 aria-hidden="true"
                                 className="size-4"
                             />
                             选择范围
                         </dt>
-                        <dd className="mt-2 text-sm text-muted-foreground">
+                        <dd className="mt-2 text-body-compact text-muted-foreground">
                             {selectionScope}
                         </dd>
                     </div>
@@ -128,42 +128,42 @@ function BatchImpactPreview({
 
                 <dl className="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-3">
                     <div className="bg-card p-4">
-                        <dt className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <dt className="flex items-center gap-2 text-body-compact text-muted-foreground">
                             <ListChecksIcon
                                 aria-hidden="true"
                                 className="size-4"
                             />
                             {estimatedLabel}
                         </dt>
-                        <dd className="num mt-2 text-2xl font-semibold text-foreground">
+                        <dd className="num mt-2 text-value-section font-semibold tracking-tight text-foreground">
                             {estimated.toLocaleString("zh-CN")}
                         </dd>
                     </div>
                     <div className="bg-card p-4">
-                        <dt className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <dt className="flex items-center gap-2 text-body-compact text-muted-foreground">
                             <CircleCheckIcon
                                 aria-hidden="true"
                                 className="size-4"
                             />
                             {processableLabel}
                         </dt>
-                        <dd className="num mt-2 text-2xl font-semibold text-foreground">
+                        <dd className="num mt-2 text-value-section font-semibold tracking-tight text-foreground">
                             {processable.toLocaleString("zh-CN")}
                         </dd>
                     </div>
                     <div className="bg-card p-4">
-                        <dt className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <dt className="flex items-center gap-2 text-body-compact text-muted-foreground">
                             <TriangleAlertIcon
                                 aria-hidden="true"
                                 className="size-4"
                             />
                             {skippedLabel}
                         </dt>
-                        <dd className="num mt-2 text-2xl font-semibold text-foreground">
+                        <dd className="num mt-2 text-value-section font-semibold tracking-tight text-foreground">
                             {skipped.toLocaleString("zh-CN")}
                         </dd>
                         {skippedReason != null ? (
-                            <div className="mt-2 text-sm text-muted-foreground">
+                            <div className="mt-2 text-body-compact text-muted-foreground">
                                 {skippedReason}
                             </div>
                         ) : null}
@@ -263,7 +263,7 @@ function ConflictResolutionDialog({
                 <div className="space-y-4">
                     <dl className="grid gap-3 sm:grid-cols-2">
                         <div className="rounded-xl border border-border bg-muted p-4">
-                            <dt className="text-sm font-medium text-muted-foreground">
+                            <dt className="text-body-compact font-medium text-muted-foreground">
                                 当前系统版本
                             </dt>
                             <dd className="mt-2 flex flex-wrap items-center gap-2">
@@ -278,7 +278,7 @@ function ConflictResolutionDialog({
                             </dd>
                         </div>
                         <div className="rounded-xl border border-border bg-muted p-4">
-                            <dt className="text-sm font-medium text-muted-foreground">
+                            <dt className="text-body-compact font-medium text-muted-foreground">
                                 你输入的内容版本
                             </dt>
                             <dd className="mt-2 flex flex-wrap items-center gap-2">
@@ -310,7 +310,7 @@ function ConflictResolutionDialog({
                     <section aria-labelledby="conflict-diff-title">
                         <h3
                             id="conflict-diff-title"
-                            className="flex items-center gap-2 text-sm font-medium text-foreground"
+                            className="flex items-center gap-2 text-body-compact font-medium text-foreground"
                         >
                             <ListChecksIcon
                                 aria-hidden="true"

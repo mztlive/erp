@@ -95,11 +95,11 @@ export function TaskTimeline({
                     </p>
                 )}
                 {query.isPending ? (
-                    <p role="status" className="text-sm text-muted-foreground">
+                    <p role="status" className="text-xs text-muted-foreground">
                         正在读取记录…
                     </p>
                 ) : query.isError ? (
-                    <div role="alert" className="space-y-3 text-sm">
+                    <div role="alert" className="space-y-3 text-body-compact">
                         <p className="text-destructive">
                             办理记录暂时无法读取。
                         </p>

@@ -507,7 +507,7 @@ export function InquiryImportPreviewPanel({
                             </span>
                         </summary>
                         <div className="space-y-3 border-t px-4 py-3">
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 {line.specification || "未标注规格"}
                                 ；要求交付日期：
                                 {inquiryDateInput(line.delivery_due_at) ||
@@ -516,7 +516,7 @@ export function InquiryImportPreviewPanel({
                                 {line.delivery_terms || "未标注"}
                             </p>
                             {line.sales_reference_price_gross ? (
-                                <p className="text-sm">
+                                <p className="text-body-compact">
                                     销售价：
                                     <MoneyValue
                                         value={line.sales_reference_price_gross}

@@ -33,7 +33,7 @@ export function WorkspaceSupplierRating({
     ]
     return (
         <div className="space-y-2">
-            <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+            <dl className="flex flex-wrap gap-x-6 gap-y-2 text-body-compact">
                 {fields.map((field) => (
                     <div
                         key={field.label}

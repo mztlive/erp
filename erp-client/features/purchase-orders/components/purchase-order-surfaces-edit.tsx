@@ -561,7 +561,7 @@ export function EditSurface({
                             <div
                                 className={cn(
                                     surfaceInsetClassName,
-                                    "px-3 py-2 text-sm",
+                                    "px-3 py-2 text-body-compact",
                                 )}
                             >
                                 {order.header.supplierSnapshot}
@@ -572,7 +572,7 @@ export function EditSurface({
                             <div
                                 className={cn(
                                     surfaceInsetClassName,
-                                    "px-3 py-2 text-sm",
+                                    "px-3 py-2 text-body-compact",
                                 )}
                             >
                                 {PURCHASE_TYPE_LABEL[order.header.purchaseType]}{" "}
@@ -589,7 +589,7 @@ export function EditSurface({
                             <div
                                 className={cn(
                                     surfaceInsetClassName,
-                                    "px-3 py-2 text-sm",
+                                    "px-3 py-2 text-body-compact",
                                 )}
                             >
                                 {order.header.paymentTermLabel}

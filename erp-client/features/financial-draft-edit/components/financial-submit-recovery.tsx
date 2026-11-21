@@ -86,7 +86,7 @@ export function FinancialSubmitRecovery({
         }
     }
     return (
-        <div className="space-y-2 rounded-lg border p-3 text-sm">
+        <div className="space-y-2 rounded-lg border p-3 text-body-compact">
             <p>若该单据已由他人修改或处理，可刷新查看最新单据状态。</p>
             <LoadingButton
                 id={`${idPrefix}-read-latest`}

@@ -38,13 +38,13 @@ export function GroupedTimelineEvents({
                                 className="mt-0.5 size-5 shrink-0 text-muted-foreground"
                                 aria-hidden="true"
                             />
-                            <span className="w-24 shrink-0 text-sm text-muted-foreground">
+                            <span className="w-24 shrink-0 text-body-compact text-muted-foreground">
                                 {new Date(
                                     latest.occurred_at * 1000,
                                 ).toLocaleDateString("zh-CN")}
                             </span>
                             <span className="min-w-0 flex-1 space-y-1">
-                                <span className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                                <span className="flex flex-wrap items-center gap-2 text-body-compact font-medium">
                                     {latest.title}
                                     {latest.approval ? (
                                         <StatusBadge

@@ -745,7 +745,7 @@ export function PortalBatchDialog({
     function renderTable(rows: BatchEditorRow[]) {
         return (
             <div className="overflow-x-auto rounded-lg border">
-                <Table className="w-full text-sm">
+                <Table className="w-full text-body-compact">
                     <TableHeader className="bg-muted/40">
                         <TableRow>
                             <TableHead className="min-w-48 px-3 py-3 text-left font-medium">
@@ -1146,7 +1146,7 @@ export function PortalBatchDialog({
                                             {values.notice && (
                                                 <p
                                                     role="status"
-                                                    className="whitespace-pre-line rounded-lg border bg-muted/30 p-3 text-sm"
+                                                    className="whitespace-pre-line rounded-lg border bg-muted/30 p-3 text-body-compact"
                                                 >
                                                     {values.notice}
                                                 </p>
@@ -1188,7 +1188,7 @@ export function PortalBatchDialog({
                                                 <>
                                                     <section className="space-y-3 rounded-lg border p-4">
                                                         <div className="flex flex-wrap items-center justify-between gap-3">
-                                                            <p className="text-sm font-medium">
+                                                            <p className="text-body-compact font-medium">
                                                                 从表格加入资料
                                                             </p>
                                                             <LoadingButton
@@ -1311,7 +1311,7 @@ export function PortalBatchDialog({
                                                         )}
                                                     </section>
                                                     <div className="flex flex-wrap items-center justify-between gap-3">
-                                                        <p className="text-sm">
+                                                        <p className="text-body-compact">
                                                             共
                                                             {values.rows.length}
                                                             条数据 · 待处理

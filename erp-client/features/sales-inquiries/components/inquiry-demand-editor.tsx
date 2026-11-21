@@ -417,7 +417,7 @@ function DemandEditorContent({
                         <div className="space-y-4">
                             <div className="space-y-1">
                                 <h3 className="font-medium">修改需求</h3>
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-xs text-muted-foreground">
                                     直接修改商品数量，点击“编辑配送”调整地址。提交后建立新需求版本并重新询价，历史报价及已有销售单保留原版本。
                                 </p>
                             </div>
@@ -546,13 +546,13 @@ function DemandEditorContent({
                                 >
                                     {(count) =>
                                         inquiry ? (
-                                            <p className="text-sm font-medium">
+                                            <p className="text-body-compact font-medium">
                                                 共 {count} 项商品
                                             </p>
                                         ) : (
-                                            <h2 className="text-xl font-semibold">
+                                            <h2 className="text-section-title font-semibold tracking-tight">
                                                 商品需求
-                                                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                                                <span className="ml-2 text-body-compact font-normal text-muted-foreground">
                                                     {count} 项
                                                 </span>
                                             </h2>
@@ -622,7 +622,7 @@ function DemandEditorContent({
                                     (line) => !deliveryProgress(line).complete,
                                 ).length
                                 return (
-                                    <p className="text-sm font-medium">
+                                    <p className="text-body-compact font-medium">
                                         已选 {lines.length} 项商品
                                         {pending > 0
                                             ? ` · ${pending} 项待完善配送`

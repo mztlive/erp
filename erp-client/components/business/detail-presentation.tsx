@@ -32,7 +32,7 @@ export function DetailHint({
                 {icon ?? <InfoIcon className="size-3.5" aria-hidden="true" />}
             </PopoverTrigger>
             <PopoverContent
-                className="max-w-[calc(100vw-2rem)] rounded-lg text-xs leading-5"
+                className="max-w-[calc(100vw-2rem)] rounded-lg text-xs"
                 side="bottom"
                 align="start"
             >
@@ -70,23 +70,34 @@ export function DetailSummaryItem({
     title,
     label,
     value,
+    valueRole = "value",
     detail,
     hint,
 }: {
     title?: ReactNode
     label: string
     value: ReactNode
+    valueRole?: "value" | "text"
     detail?: ReactNode
     hint?: ReactNode
 }) {
     return (
         <div className="min-w-0 px-5 py-4">
             {title ? (
-                <div className="mb-3 text-sm font-semibold">{title}</div>
+                <div className="mb-3 text-body-compact font-semibold">
+                    {title}
+                </div>
             ) : null}
             <dl>
                 <dt className="text-xs text-muted-foreground">{label}</dt>
-                <dd className="num mt-1.5 text-2xl font-semibold tracking-tight">
+                <dd
+                    className={cn(
+                        "num mt-1.5 font-semibold tracking-tight",
+                        valueRole === "value"
+                            ? "text-value-section"
+                            : "text-body-compact",
+                    )}
+                >
                     {value}
                 </dd>
             </dl>
@@ -123,7 +134,9 @@ export function DetailRecordSection({
             )}
         >
             <div className="flex shrink-0 items-center gap-2">
-                <h2 className="text-sm font-semibold">{title}</h2>
+                <h2 className="text-section-title font-semibold tracking-tight">
+                    {title}
+                </h2>
                 {count != null && count > 0 ? (
                     <span className="num rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                         {count}

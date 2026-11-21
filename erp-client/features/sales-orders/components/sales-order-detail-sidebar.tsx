@@ -33,7 +33,9 @@ export function SalesOrderDetailSidebar({
             aria-label="履约与票款进度"
             className="min-w-0 rounded-lg border border-border/70 p-5"
         >
-            <h2 className="text-lg font-semibold">履约与票款进度</h2>
+            <h2 className="text-section-title font-semibold tracking-tight">
+                履约与票款进度
+            </h2>
             {order.activeChangeOrder ? (
                 <p className="mt-2 text-xs text-muted-foreground">
                     以下为当前生效版本的执行情况，尚未包含本次改单。
@@ -75,7 +77,7 @@ export function SalesOrderDetailSidebar({
                     onClick={() => onSelectSection("receivable")}
                 >
                     {effective ? (
-                        <span className="text-sm">
+                        <span className="text-body-compact">
                             待回款{" "}
                             <MoneyValue
                                 value={remainingReceivableAmount(
@@ -85,7 +87,7 @@ export function SalesOrderDetailSidebar({
                             />
                         </span>
                     ) : (
-                        <span className="text-sm text-muted-foreground">
+                        <span className="text-body-compact text-muted-foreground">
                             生效后形成应收
                         </span>
                     )}
@@ -102,7 +104,7 @@ export function SalesOrderDetailSidebar({
                     title="开票进度"
                     onClick={() => onSelectSection("invoice")}
                 >
-                    <span className="text-sm">
+                    <span className="text-body-compact">
                         已开 <MoneyValue value={order.invoicedAmount} />
                     </span>
                     <p className="mt-1 text-xs text-muted-foreground">
@@ -118,17 +120,17 @@ export function SalesOrderDetailSidebar({
                     {closed ? "已结案" : effective ? "未结案原因" : "办理状态"}
                 </h3>
                 {!effective ? (
-                    <p className="mt-3 text-sm text-muted-foreground">
+                    <p className="mt-3 text-xs text-muted-foreground">
                         {order.primaryStatus.code === "voided"
                             ? "本单已作废。"
                             : "审批通过、生效后进入交付与票款处理。"}
                     </p>
                 ) : closed ? (
-                    <p className="mt-3 text-sm text-muted-foreground">
+                    <p className="mt-3 text-xs text-muted-foreground">
                         履约已完成，应收已结清。
                     </p>
                 ) : (
-                    <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                    <div className="mt-3 space-y-2 text-body-compact text-muted-foreground">
                         {order.closeEligibility.blockers.length ? (
                             order.closeEligibility.blockers.map((reason) => (
                                 <p key={reason}>{reason}</p>
@@ -144,7 +146,7 @@ export function SalesOrderDetailSidebar({
                     </div>
                 )}
                 {effective ? (
-                    <p className="mt-4 border-t border-border/70 pt-3 text-xs leading-5 text-muted-foreground">
+                    <p className="mt-4 border-t border-border/70 pt-3 text-xs text-muted-foreground">
                         全部履约完成且应收结清后自动结案；未完成的开票事项继续保留。
                     </p>
                 ) : null}
@@ -172,7 +174,7 @@ function FollowUp({
                 {icon}
             </span>
             <div className="min-w-0 flex-1 space-y-1">
-                <h3 className="text-sm font-medium">{title}</h3>
+                <h3 className="font-medium">{title}</h3>
                 <div>{children}</div>
             </div>
             <Button

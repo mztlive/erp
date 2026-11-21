@@ -45,7 +45,7 @@ function ReviewImage({
                         id={`supplier-portal-review-image-download-${toAutomationIdSegment(id)}`}
                         href={url}
                         download={label}
-                        className="text-sm text-primary"
+                        className="text-body-compact text-primary"
                     >
                         下载原图
                     </a>
@@ -97,7 +97,9 @@ export function PortalReviewImages({
     if (!unique.length) return null
     return (
         <section className="space-y-3">
-            <h2 className="font-semibold">供应商提报图片及资料</h2>
+            <h2 className="text-section-title font-semibold tracking-tight">
+                供应商提报图片及资料
+            </h2>
             <div className="flex flex-wrap gap-3">
                 {unique.map((row) => (
                     <ReviewImage

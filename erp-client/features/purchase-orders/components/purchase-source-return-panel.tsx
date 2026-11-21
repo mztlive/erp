@@ -36,7 +36,7 @@ export function PurchaseSourceReturnPanel({
             className="space-y-3 rounded-lg border p-4 @container/return-lines"
             aria-label="当前处理事项"
         >
-            <h3 className="text-base font-semibold">
+            <h3 className="text-body-compact font-semibold">
                 {physicalPending
                     ? "当前需要你处理：核实退货收货结果"
                     : !progress.decisionCurrent
@@ -45,7 +45,7 @@ export function PurchaseSourceReturnPanel({
             </h3>
             {physicalPending ? (
                 <>
-                    <p className="text-sm leading-relaxed">
+                    <p className="text-body-compact leading-relaxed">
                         {canRegister
                             ? "请与销售及供应商核实客户退回商品的接收结果，再登记供应商实际收到的数量和收货凭据。"
                             : "请核对商品原发货来源，并按对应退货流程办理。当前没有可在此登记的供应商直发数量。"}
@@ -56,15 +56,15 @@ export function PurchaseSourceReturnPanel({
                                 key={line.purchase_line_id}
                                 className="space-y-3 py-4"
                             >
-                                <h4 className="text-sm font-medium">
+                                <h4 className="text-body-compact font-medium">
                                     {line.item_name}
                                 </h4>
                                 <dl className="grid grid-cols-1 gap-3 @sm/return-lines:grid-cols-3">
                                     <div className="space-y-1 rounded-lg bg-muted/50 p-3">
-                                        <dt className="text-sm text-muted-foreground">
+                                        <dt className="text-xs text-muted-foreground">
                                             本采购当前数量
                                         </dt>
-                                        <dd className="text-lg">
+                                        <dd className="num text-value-compact font-semibold tracking-tight">
                                             <QuantityValue
                                                 value={line.purchased_quantity}
                                                 unit={line.unit}
@@ -72,10 +72,10 @@ export function PurchaseSourceReturnPanel({
                                         </dd>
                                     </div>
                                     <div className="space-y-1 rounded-lg bg-muted/50 p-3">
-                                        <dt className="text-sm text-muted-foreground">
+                                        <dt className="text-xs text-muted-foreground">
                                             调整后目标数量
                                         </dt>
-                                        <dd className="text-lg">
+                                        <dd className="num text-value-compact font-semibold tracking-tight">
                                             <QuantityValue
                                                 value={line.target_quantity}
                                                 unit={line.unit}
@@ -83,10 +83,10 @@ export function PurchaseSourceReturnPanel({
                                         </dd>
                                     </div>
                                     <div className="space-y-1 rounded-lg border border-warning-border bg-warning-soft p-3 text-warning-soft-foreground">
-                                        <dt className="text-sm">
+                                        <dt className="text-xs">
                                             尚待确认退回
                                         </dt>
-                                        <dd className="text-lg font-semibold">
+                                        <dd className="num text-value-compact font-semibold tracking-tight">
                                             <QuantityValue
                                                 value={line.required_return}
                                                 unit={line.unit}
@@ -94,7 +94,7 @@ export function PurchaseSourceReturnPanel({
                                         </dd>
                                     </div>
                                 </dl>
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-xs text-muted-foreground">
                                     已登记供应商收到退货：
                                     <QuantityValue
                                         value={line.returned_quantity}
@@ -105,7 +105,7 @@ export function PurchaseSourceReturnPanel({
                         ))}
                     </div>
                     {canRegister ? (
-                        <div className="space-y-2 border-t pt-3 text-sm leading-relaxed">
+                        <div className="space-y-2 border-t pt-3 text-body-compact leading-relaxed">
                             <p>
                                 供应商尚未收到退货时，暂不登记，本待办继续保留。支持分批登记，按本次实际收到的数量填写。
                             </p>
@@ -124,7 +124,7 @@ export function PurchaseSourceReturnPanel({
             ) : (
                 <>
                     {!order.currentContent.costMasked ? (
-                        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+                        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-body-compact">
                             {refundPending ? (
                                 <>
                                     <dt className="text-muted-foreground">
@@ -150,7 +150,7 @@ export function PurchaseSourceReturnPanel({
                         </dl>
                     ) : null}
                     {progress.decisionCurrent ? (
-                        <div className="space-y-2 text-sm">
+                        <div className="space-y-2 text-body-compact">
                             {(plan.finance_tasks ?? []).map((task) => (
                                 <p key={task.work_item_id}>
                                     {task.kind === "PURCHASE_RETURN_REFUND"
@@ -175,7 +175,7 @@ export function PurchaseSourceReturnPanel({
                             ))}
                         </div>
                     ) : (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             请先与供应商确定退款或留抵及金额，再交给财务。
                         </p>
                     )}

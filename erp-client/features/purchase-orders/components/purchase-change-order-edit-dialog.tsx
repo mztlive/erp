@@ -134,12 +134,15 @@ export function PurchaseChangeOrderEditDialog({
                     </DialogDescription>
                 </DialogHeader>
                 {query.isPending || optionsQuery.isPending ? (
-                    <p role="status" className="text-sm text-muted-foreground">
+                    <p role="status" className="text-xs text-muted-foreground">
                         正在读取原单…
                     </p>
                 ) : loadError || !complete || !draft ? (
                     <div className="space-y-3">
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {loadError
                                 ? getErrorMessage(loadError)
                                 : "改单明细暂无法完整读取，请重新读取后再提交。"}
@@ -434,7 +437,7 @@ function PurchaseChangeEditForm({
                     onRetry={() => void centerQuery.refetch()}
                 />
             ) : !centerQuery.data ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     正在读取费用发生情况，请稍候…
                 </p>
             ) : null}
@@ -447,14 +450,14 @@ function PurchaseChangeEditForm({
                 occurredExpenseIds={occurredExpenseIds}
             />
             {saved ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     修改已保存，尚未重新提交审批。
                 </p>
             ) : null}
             {rework.field}
             <SubmissionRouteConfirmation definition={approval?.definition} />
             {error ? (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {error}
                 </p>
             ) : null}

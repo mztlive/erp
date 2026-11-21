@@ -307,7 +307,7 @@ export function PersonalGrantEditor({
                                     key={mode}
                                     htmlFor={`${idPrefix}-mode-${mode}`}
                                     className={cn(
-                                        "flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
+                                        "flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors",
                                         value.mode === mode
                                             ? "border-foreground/50 bg-accent text-accent-foreground"
                                             : "border-input bg-background hover:bg-muted/50",
@@ -371,7 +371,7 @@ export function PersonalGrantEditor({
                         {(field) => (
                             <label
                                 htmlFor={`${idPrefix}-descendants`}
-                                className="flex items-center gap-2 text-sm"
+                                className="flex items-center gap-2 text-xs"
                             >
                                 <Checkbox
                                     id={`${idPrefix}-descendants`}

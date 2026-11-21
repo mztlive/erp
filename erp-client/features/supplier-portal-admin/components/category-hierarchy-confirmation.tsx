@@ -22,7 +22,7 @@ export function PortalCategoryHierarchyConfirmation({
         valid && JSON.stringify(value) === JSON.stringify(hierarchy)
     return (
         <div className="space-y-2 rounded-lg border p-3">
-            <p className="text-sm">
+            <p className="text-body-compact">
                 本次公司完整分类：
                 {hierarchy.map((node) => node.name).join(" / ") || "待选择"}
             </p>
@@ -30,7 +30,7 @@ export function PortalCategoryHierarchyConfirmation({
                 核对全部父级和商品类型；确认后父级改名、移动或停用均需重新核对。
             </p>
             {!valid && category && (
-                <p className="text-sm">
+                <p className="text-body-compact">
                     所选分类版本已变化，或路径未完整读取，请重新核对；供应商已选资料变化须退回确认。
                 </p>
             )}

@@ -231,7 +231,7 @@ function DeliveryAllocationSection({
                     <div className="flex items-baseline gap-2">
                         <h2
                             id="sales-delivery-title"
-                            className="font-heading text-base font-semibold"
+                            className="font-heading text-section-title font-semibold tracking-tight"
                         >
                             收货安排
                         </h2>
@@ -239,7 +239,7 @@ function DeliveryAllocationSection({
                             选填
                         </span>
                     </div>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         {common
                             ? `全部 ${lines.length} 项商品送到同一地址`
                             : allocatedCount
@@ -285,7 +285,7 @@ function DeliveryAllocationSection({
                         className="mt-0.5 size-4 shrink-0 text-muted-foreground"
                         aria-hidden="true"
                     />
-                    <div className="min-w-0 space-y-1 text-sm">
+                    <div className="min-w-0 space-y-1 text-body-compact">
                         <p className="break-words font-medium">
                             {common.recipient}
                             <span className="ml-3 font-normal">

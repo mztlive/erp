@@ -37,7 +37,7 @@ export function SalesLinePriceComparison({
                     <MoneyValue
                         display="exact"
                         value={prices.procurement_supply_price_gross}
-                        className="text-sm font-semibold"
+                        className="text-body-compact font-semibold"
                     />
                     {hasWarningChange ? (
                         <Badge variant="warning" className="text-xs">

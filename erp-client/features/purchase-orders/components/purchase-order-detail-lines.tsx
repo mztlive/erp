@@ -35,7 +35,7 @@ export function PurchaseOrderDetailLines({
         )
 
     if (lines.length === 0) {
-        return <p className="text-sm text-muted-foreground">暂无采购明细</p>
+        return <p className="text-xs text-muted-foreground">暂无采购明细</p>
     }
 
     return (
@@ -86,11 +86,11 @@ export function PurchaseOrderDetailLines({
                     return (
                         <TableRow key={line.lineId}>
                             <TableCell className="space-y-1 py-3 align-top whitespace-normal wrap-anywhere">
-                                <h3 className="text-sm leading-5 font-medium">
+                                <h3 className="leading-5 font-medium">
                                     {line.itemName}
                                 </h3>
                                 {isFee || line.procurementConfirmationLineId ? (
-                                    <div className="flex flex-wrap gap-x-2 text-xs leading-5 text-muted-foreground">
+                                    <div className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
                                         {isFee ? <span>费用</span> : null}
                                         {line.procurementConfirmationLineId ? (
                                             <span>
@@ -101,7 +101,7 @@ export function PurchaseOrderDetailLines({
                                     </div>
                                 ) : null}
                                 {quote ? (
-                                    <p className="text-xs leading-5 text-muted-foreground wrap-anywhere">
+                                    <p className="text-xs text-muted-foreground wrap-anywhere">
                                         {quote.inquiry_no
                                             ? `询价 ${quote.inquiry_no}`
                                             : "来源询价"}
@@ -140,7 +140,7 @@ export function PurchaseOrderDetailLines({
                             <TableCell className="py-3 text-right align-top whitespace-normal wrap-anywhere">
                                 {isFee ? "—" : amount(line.unitCostGross, true)}
                                 {isFee || !costMasked ? (
-                                    <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                                    <div className="mt-1 text-xs text-muted-foreground">
                                         税率 {taxRate}
                                     </div>
                                 ) : null}
@@ -159,7 +159,7 @@ export function PurchaseOrderDetailLines({
                                 <div className="font-medium">
                                     {amount(line.grossAmount)}
                                 </div>
-                                <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                                <div className="mt-1 text-xs text-muted-foreground">
                                     税额 {amount(line.taxAmount)}
                                 </div>
                             </TableCell>

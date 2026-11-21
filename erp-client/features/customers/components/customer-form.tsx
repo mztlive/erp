@@ -343,7 +343,7 @@ export function CustomerForm({
                             </div>
                             <p
                                 id="customers-form-reuse-party-help"
-                                className="text-sm text-muted-foreground"
+                                className="text-xs text-muted-foreground"
                             >
                                 同一企业已登记为供应商等主体时，沿用已有名称、简称、信用代码、联系人、地址和银行账户，只新增客户档案及付款条件；尚未建档时按本次填写内容创建。
                             </p>

@@ -70,10 +70,10 @@ export function ProductSaveDialog({
                         className="rounded-lg bg-muted/40 p-4"
                         aria-label="本次修改摘要"
                     >
-                        <h3 className="text-sm font-medium">
+                        <h3 className="font-medium">
                             {effective.isCreate ? "新建商品资料" : "本次修改"}
                         </h3>
-                        <ul className="mt-2 max-h-36 space-y-1 overflow-y-auto break-words text-sm text-muted-foreground">
+                        <ul className="mt-2 max-h-36 space-y-1 overflow-y-auto break-words text-body-compact text-muted-foreground">
                             {(changes.length
                                 ? changes
                                 : [

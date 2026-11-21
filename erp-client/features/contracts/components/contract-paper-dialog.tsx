@@ -193,7 +193,7 @@ function ContractPaperDocument({ contract }: { contract: ContractCenterView }) {
                     id: "content",
                     header: "内容",
                     cell: (row) => (
-                        <span className="whitespace-normal text-sm">
+                        <span className="whitespace-normal text-body-compact">
                             {row.content}
                         </span>
                     ),

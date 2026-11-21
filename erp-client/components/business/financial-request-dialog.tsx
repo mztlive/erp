@@ -125,7 +125,7 @@ export function FinancialRequestDialog({
                         void form.handleSubmit()
                     }}
                 >
-                    <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-lg bg-muted/50 p-3 text-sm">
+                    <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-lg bg-muted/50 p-3 text-body-compact">
                         <dt className="text-muted-foreground">原单</dt>
                         <dd>{sourceLabel || "—"}</dd>
                         <dt className="text-muted-foreground">
@@ -165,14 +165,17 @@ export function FinancialRequestDialog({
                     />
                     {approvalContent}
                     {error ? (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {error}
                         </p>
                     ) : null}
                     {unknown ? (
                         <p
                             role="status"
-                            className="text-sm text-muted-foreground"
+                            className="text-body-compact text-muted-foreground"
                         >
                             提交结果尚未确定，请保持原内容并核对结果。
                         </p>

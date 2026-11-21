@@ -61,20 +61,20 @@ function CurrentPaymentTask({
     // 完成后旧任务不再具备材料读取资格，等待队列切换时不展示其刷新错误。
     if (completed)
         return (
-            <p role="status" className="p-7 text-sm text-muted-foreground">
+            <p role="status" className="p-7 text-xs text-muted-foreground">
                 当前任务已处理，正在更新待办…
             </p>
         )
     if (query.isPending)
         return (
-            <p className="p-7 text-sm text-muted-foreground">
+            <p className="p-7 text-xs text-muted-foreground">
                 正在读取付款申请…
             </p>
         )
     if (query.isError)
         return (
             <div className="space-y-3 p-7">
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {getErrorMessage(query.error, "付款申请读取失败")}
                 </p>
                 <Button
@@ -122,13 +122,13 @@ function PaymentSubmissionTask({ item }: { item: PaymentTaskContext }) {
     )
     if (!validVersion)
         return (
-            <p role="alert" className="p-7 text-sm text-destructive">
+            <p role="alert" className="p-7 text-body-compact text-destructive">
                 本次审批缺少提交版本，请刷新后重试。
             </p>
         )
     if (query.isPending)
         return (
-            <p role="status" className="p-7 text-sm text-muted-foreground">
+            <p role="status" className="p-7 text-xs text-muted-foreground">
                 正在读取本次付款申请…
             </p>
         )
@@ -154,7 +154,7 @@ function PaymentSubmissionTask({ item }: { item: PaymentTaskContext }) {
         request.approval_instance_id !== item.approvalProcessInstanceId
     )
         return (
-            <p role="alert" className="p-7 text-sm text-destructive">
+            <p role="alert" className="p-7 text-body-compact text-destructive">
                 付款申请与本次审批不一致，请刷新后重试。
             </p>
         )

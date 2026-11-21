@@ -195,7 +195,7 @@ export function WorkspaceApprovalProgress({
                         "@min-[640px]/document:w-28 @min-[640px]/document:shrink-0 @min-[640px]/document:flex-col @min-[640px]/document:items-start",
                 )}
             >
-                <h3 className="text-sm font-semibold">审批进度</h3>
+                <h3 className="font-semibold">审批进度</h3>
                 <span className="text-xs text-muted-foreground">
                     {[
                         processName && processName !== "审批流程"
@@ -267,7 +267,7 @@ export function WorkspaceApprovalProgress({
                             </span>
                             <span
                                 className={cn(
-                                    "max-w-full text-sm leading-5 wrap-anywhere",
+                                    "max-w-full text-body-compact leading-5 wrap-anywhere",
                                     step.state === "active" ||
                                         step.state === "blocked"
                                         ? "font-semibold"
@@ -285,7 +285,7 @@ export function WorkspaceApprovalProgress({
                             </span>
                             <span
                                 className={cn(
-                                    "text-xs leading-5 wrap-anywhere",
+                                    "text-xs wrap-anywhere",
                                     showVertical && "col-start-2",
                                     step.state === "approved"
                                         ? "text-success-soft-foreground"

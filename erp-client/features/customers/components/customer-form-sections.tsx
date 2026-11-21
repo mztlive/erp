@@ -36,7 +36,7 @@ export function FormSection({
             <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
                     <div>
-                        <p className="text-sm font-medium text-foreground">
+                        <p className="text-body-compact font-medium text-foreground">
                             {title}
                         </p>
                         {description ? (

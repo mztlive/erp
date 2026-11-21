@@ -100,7 +100,7 @@ export function AdjustmentDetailSheet({
                 </div>
             ) : detail ? (
                 <div className="flex flex-col gap-6">
-                    <div className="border-b border-border pb-6 text-sm">
+                    <div className="border-b border-border pb-6 text-body-compact">
                         <div className="font-medium">
                             {detail.adjustment.reasonTypeLabel} ·{" "}
                             {detail.adjustment.direction === "increase"

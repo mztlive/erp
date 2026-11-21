@@ -34,7 +34,7 @@ export function AuditLogDetails({ row }: { row: AuditLogItem }) {
     ]
 
     return (
-        <div className="flex flex-col gap-5 text-sm">
+        <div className="flex flex-col gap-5 text-body-compact">
             <DescriptionList columns="two" aria-label="业务操作记录">
                 <DescriptionItem>
                     <DescriptionTerm>操作人</DescriptionTerm>
@@ -78,7 +78,7 @@ export function AuditLogDetails({ row }: { row: AuditLogItem }) {
             </DescriptionList>
 
             <section className="flex flex-col gap-2">
-                <h3 className="text-sm font-medium">业务结果</h3>
+                <h3 className="font-medium">业务结果</h3>
                 {event && event.facts.length > 0 ? (
                     <DescriptionList columns="two" aria-label="业务结果">
                         {event.facts.map((fact) => (
@@ -98,7 +98,7 @@ export function AuditLogDetails({ row }: { row: AuditLogItem }) {
             </section>
 
             <section className="flex flex-col gap-2">
-                <h3 className="text-sm font-medium">字段变化</h3>
+                <h3 className="font-medium">字段变化</h3>
                 {event && event.field_changes.length > 0 ? (
                     <DescriptionList columns="one" aria-label="字段变化">
                         {event.field_changes.map((change) => (

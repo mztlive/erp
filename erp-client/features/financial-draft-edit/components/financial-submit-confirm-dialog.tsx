@@ -99,7 +99,7 @@ export function FinancialSubmitConfirmDialog({
                     {unknown ? (
                         <p
                             role="status"
-                            className="text-sm text-muted-foreground"
+                            className="text-xs text-muted-foreground"
                         >
                             本次提交结果待确认，说明已保留。可重试本次提交，或暂时关闭后核对原单；再次打开仍使用本次内容。
                         </p>

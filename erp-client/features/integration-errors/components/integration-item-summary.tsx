@@ -45,7 +45,7 @@ export function IntegrationItemSummary({
                         id="integration-item-title"
                         ref={headingRef}
                         tabIndex={-1}
-                        className="break-words text-base font-semibold outline-none"
+                        className="break-words text-body-compact font-semibold outline-none"
                     >
                         {[item.identity.number, item.businessObject.title]
                             .filter(Boolean)
@@ -130,7 +130,7 @@ export function IntegrationItemSummary({
                     ) : null}
                     {item.classification.errorClass ===
                     "parameter-or-mapping" ? (
-                        <span className="text-sm text-muted-foreground">
+                        <span className="text-body-compact text-muted-foreground">
                             请先修正关联的商品、客户或供应商资料，再重新核对。
                         </span>
                     ) : null}
@@ -147,7 +147,7 @@ export function IntegrationItemSummary({
                             </time>
                         ) : null}
                     </div>
-                    <p className="break-words text-sm leading-relaxed">
+                    <p className="break-words text-body-compact leading-relaxed">
                         {failureMessage ||
                             "原始失败摘要暂不可用，请打开接口设置查看检查与同步记录。"}
                     </p>
@@ -203,7 +203,7 @@ export function IntegrationItemSummary({
             ) : null}
 
             {item.originalAction || item.message ? (
-                <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+                <dl className="grid gap-x-6 gap-y-3 text-body-compact sm:grid-cols-2">
                     {item.originalAction ? (
                         <Fact
                             label="原动作"

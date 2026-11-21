@@ -133,11 +133,14 @@ export function WorkspaceReturnFinance({
                 <div className="flex-1 space-y-5 overflow-y-auto px-7 py-6">
                     {order.isPending ||
                     (sources.isPending && !order.isError) ? (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             正在读取退货和款票依据…
                         </p>
                     ) : order.isError || sources.isError ? (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {getErrorMessage(
                                 order.error ?? sources.error,
                                 "读取失败，请刷新后重试",
@@ -148,7 +151,7 @@ export function WorkspaceReturnFinance({
                             {!current ? (
                                 <p
                                     role="alert"
-                                    className="text-sm text-destructive"
+                                    className="text-body-compact text-destructive"
                                 >
                                     当前退货或款项方案尚不满足办理条件。请联系采购负责人核对实际退货和处理方案，再刷新办理。
                                 </p>
@@ -165,14 +168,14 @@ export function WorkspaceReturnFinance({
                                         decision={decision}
                                     />
                                     {(plan?.settlements ?? []).length > 0 ? (
-                                        <h3 className="text-sm font-medium">
+                                        <h3 className="font-medium">
                                             已提交的款项及办理状态
                                         </h3>
                                     ) : null}
                                     {(plan?.settlements ?? []).map((row) => (
                                         <div
                                             key={row.id}
-                                            className="flex flex-wrap justify-between gap-2 text-sm"
+                                            className="flex flex-wrap justify-between gap-2 text-body-compact"
                                         >
                                             <span>
                                                 {row.method ===
@@ -200,7 +203,7 @@ export function WorkspaceReturnFinance({
                                             {availableInvoices.map((row) => (
                                                 <div
                                                     key={row.invoiceId}
-                                                    className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"
+                                                    className="flex flex-wrap items-center justify-between gap-3 py-3 text-body-compact"
                                                 >
                                                     <div className="space-y-1">
                                                         <p>
@@ -318,7 +321,7 @@ export function WorkspaceReturnFinance({
                                                     return (
                                                         <div
                                                             key={row.paymentId}
-                                                            className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"
+                                                            className="flex flex-wrap items-center justify-between gap-3 py-3 text-body-compact"
                                                         >
                                                             <div>
                                                                 <p>
@@ -393,7 +396,7 @@ export function WorkspaceReturnFinance({
                                         ) > 0 && (
                                             <p
                                                 role="status"
-                                                className="text-sm text-muted-foreground"
+                                                className="text-xs text-muted-foreground"
                                             >
                                                 未找到本采购可红冲的蓝票，请核对原票分配或联系财务负责人后刷新。
                                             </p>
@@ -402,7 +405,7 @@ export function WorkspaceReturnFinance({
                                         compareDecimal(refund, "0", 2) === 0 &&
                                         compareDecimal(credit, "0", 2) ===
                                             0 && (
-                                            <p className="text-sm text-muted-foreground">
+                                            <p className="text-xs text-muted-foreground">
                                                 {(plan?.settlements ?? []).some(
                                                     (row) =>
                                                         row.status ===
@@ -421,7 +424,7 @@ export function WorkspaceReturnFinance({
                     {result && (
                         <div
                             role="status"
-                            className="rounded-md border p-3 text-sm"
+                            className="rounded-md border p-3 text-body-compact"
                         >
                             <p className="font-medium">{result.title}</p>
                             <p className="mt-1 text-muted-foreground">

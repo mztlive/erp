@@ -336,7 +336,7 @@ function MediaListEditor({
                                             className="size-6 text-muted-foreground/70"
                                             aria-hidden
                                         />
-                                        <span className="line-clamp-2 break-all text-2xs text-muted-foreground">
+                                        <span className="line-clamp-2 break-all text-xs text-muted-foreground">
                                             {name}
                                         </span>
                                     </>
@@ -346,16 +346,16 @@ function MediaListEditor({
                             {/* 左上角角标：首图徽章或柔和序号 */}
                             <div className="pointer-events-none absolute left-1.5 top-1.5 z-10 flex items-center gap-1">
                                 {mode === "carousel" && index === 0 ? (
-                                    <Badge className="h-5 rounded-sm bg-primary/90 px-1.5 text-2xs font-medium text-primary-foreground shadow-xs">
+                                    <Badge className="h-5 rounded-sm bg-primary/90 px-1.5 text-xs font-medium text-primary-foreground shadow-xs">
                                         首图
                                     </Badge>
                                 ) : (
-                                    <span className="num inline-flex h-5 min-w-5 items-center justify-center rounded-sm bg-foreground/65 px-1 text-2xs font-medium text-card backdrop-blur-xs">
+                                    <span className="num inline-flex h-5 min-w-5 items-center justify-center rounded-sm bg-foreground/65 px-1 text-tiny font-medium text-card backdrop-blur-xs">
                                         {index + 1}
                                     </span>
                                 )}
                                 {isPending ? (
-                                    <span className="inline-flex h-5 items-center rounded-sm bg-warning px-1.5 text-2xs font-medium text-warning-foreground shadow-xs">
+                                    <span className="inline-flex h-5 items-center rounded-sm bg-warning px-1.5 text-tiny font-medium text-warning-foreground shadow-xs">
                                         待保存
                                     </span>
                                 ) : null}
@@ -452,7 +452,7 @@ function MediaListEditor({
                                             type="button"
                                             variant="ghost"
                                             size="xs"
-                                            className="pointer-events-auto h-6 rounded-sm px-1.5 text-2xs font-medium text-card hover:bg-card/20 hover:text-card"
+                                            className="pointer-events-auto h-6 rounded-sm px-1.5 text-xs font-medium text-card hover:bg-card/20 hover:text-card"
                                             onClick={() =>
                                                 onChange(
                                                     moveListItem(
@@ -710,7 +710,7 @@ function ProductBasicMediaRail({
                                 <Maximize2Icon className="size-4" aria-hidden />
                             </span>
                         </button>
-                        <span className="pointer-events-none absolute left-1.5 top-1.5 rounded-sm bg-primary/90 px-1.5 py-0.5 text-2xs leading-none font-medium text-primary-foreground">
+                        <span className="pointer-events-none absolute left-1.5 top-1.5 rounded-sm bg-primary/90 px-1.5 py-0.5 text-tiny leading-none font-medium text-primary-foreground">
                             首图
                         </span>
                         {editable ? (
@@ -866,7 +866,7 @@ function ProductBasicMediaRail({
                                 className="flex aspect-square flex-col items-center justify-center gap-0.5 rounded-md border border-dashed border-border/90 bg-muted/25 text-muted-foreground transition-colors hover:border-primary/50 hover:bg-sidebar-accent/35 hover:text-primary"
                             >
                                 <PlusIcon className="size-4" aria-hidden />
-                                <span className="text-2xs">上传</span>
+                                <span className="text-xs">上传</span>
                             </button>
                         ) : null}
                     </div>

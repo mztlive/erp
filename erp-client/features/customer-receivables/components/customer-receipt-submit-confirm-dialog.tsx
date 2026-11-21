@@ -75,7 +75,7 @@ export function CustomerReceiptSubmitConfirmDialog({
                                 <p className="text-xs text-muted-foreground">
                                     结算主体
                                 </p>
-                                <p className="mt-1 break-words text-sm font-medium">
+                                <p className="mt-1 break-words text-body-compact font-medium">
                                     {counterpartyName}
                                 </p>
                             </div>

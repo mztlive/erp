@@ -50,7 +50,7 @@ export function SalesOrderCreateContractSummary({
         <div className="space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className={compact ? "min-w-0 space-y-1.5" : "space-y-2"}>
-                    <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <p className="flex items-center gap-2 text-xs text-muted-foreground">
                         <CheckCircle2Icon
                             className="size-4 text-success"
                             aria-hidden="true"
@@ -67,8 +67,8 @@ export function SalesOrderCreateContractSummary({
                                 <p
                                     className={
                                         compact
-                                            ? "break-words text-base font-semibold"
-                                            : "text-lg font-semibold"
+                                            ? "break-words text-body-compact font-semibold"
+                                            : "text-body-compact font-semibold"
                                     }
                                 >
                                     {values.customerName}
@@ -125,7 +125,7 @@ export function SalesOrderCreateContractSummary({
                     ) : null}
                 </div>
             </div>
-            <dl className="grid grid-cols-1 gap-3 rounded-lg bg-muted/40 p-3 text-sm sm:grid-cols-3">
+            <dl className="grid grid-cols-1 gap-3 rounded-lg bg-muted/40 p-3 text-body-compact sm:grid-cols-3">
                 <form.AppField name="paymentTerms">
                     {(field) => (
                         <div

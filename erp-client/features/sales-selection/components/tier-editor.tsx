@@ -78,7 +78,7 @@ export const TierEditor = ({
                     <CardContent className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
                         <div className="grid gap-1.5 sm:col-span-2">
                             <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium">
+                                <span className="text-body-compact font-medium">
                                     档位 {index + 1}
                                 </span>
                                 <Button

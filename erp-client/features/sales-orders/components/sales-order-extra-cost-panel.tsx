@@ -93,7 +93,7 @@ export function ExtraCostPanel({ order }: { order: SalesOrderDetailView }) {
             </div>
             <DocumentSection
                 title="费用明细"
-                className="border-0 py-0 [&_h2]:text-sm [&>div:last-child]:pt-3"
+                className="border-0 py-0 [&_h2]:text-body-compact [&>div:last-child]:pt-3"
                 description="已发生的费用计入本单实际经营盈亏；待发生的采购费用确认发生后才计入。"
                 action={
                     canCreate && effective ? (
@@ -109,7 +109,7 @@ export function ExtraCostPanel({ order }: { order: SalesOrderDetailView }) {
                 }
             >
                 {list.items.length === 0 ? (
-                    <p className="py-6 text-sm text-muted-foreground">
+                    <p className="py-6 text-xs text-muted-foreground">
                         本单还没有附加费用。
                     </p>
                 ) : (

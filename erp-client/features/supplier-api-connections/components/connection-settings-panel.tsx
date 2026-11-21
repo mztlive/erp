@@ -73,8 +73,8 @@ export function ConnectionSettingsPanel({
             role={failed ? "alert" : "status"}
             className={
                 failed
-                    ? "text-sm text-destructive"
-                    : "text-sm text-muted-foreground"
+                    ? "text-body-compact text-destructive"
+                    : "text-xs text-muted-foreground"
             }
         >
             {message}
@@ -109,14 +109,14 @@ export function ConnectionSettingsPanel({
                 <section aria-label="自动下单" className="space-y-4 p-6">
                     <div className="flex flex-wrap items-start justify-between gap-4">
                         <div className="min-w-0 space-y-2">
-                            <h2 className="flex items-center gap-2 text-base font-semibold">
+                            <h2 className="flex items-center gap-2 text-section-title font-semibold tracking-tight">
                                 <ShoppingCartIcon
                                     className="size-4 text-muted-foreground"
                                     aria-hidden="true"
                                 />
                                 自动下单
                             </h2>
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 {enabled
                                     ? "允许向供应商发送新的采购订单。"
                                     : "已暂停向供应商发送新的采购订单。"}
@@ -166,7 +166,7 @@ export function ConnectionSettingsPanel({
                             </LoadingButton>
                         </PermissionGuard>
                     </div>
-                    <p className="text-sm leading-6 text-muted-foreground">
+                    <p className="text-body-compact leading-6 text-muted-foreground">
                         开启前自动验证连接，采购审批与执行条件仍须满足。
                         关闭不影响商品同步、选品、原请求查询、取消处理和已有订单跟踪。
                     </p>
@@ -178,7 +178,7 @@ export function ConnectionSettingsPanel({
                                 `supplier_api_connection:${enabled ? "disable" : "enable"}`,
                             ]}
                         >
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 {blocker?.message ??
                                     (!canCreateOrders && !enabled
                                         ? "当前接口未具备采购下单能力，请联系管理员核验配置和接入条件。"
@@ -196,14 +196,14 @@ export function ConnectionSettingsPanel({
                 <section aria-label="连接测试" className="space-y-4 p-6">
                     <div className="flex flex-wrap items-start justify-between gap-4">
                         <div className="min-w-0 space-y-2">
-                            <h2 className="flex items-center gap-2 text-base font-semibold">
+                            <h2 className="flex items-center gap-2 text-section-title font-semibold tracking-tight">
                                 <PlugZapIcon
                                     className="size-4 text-muted-foreground"
                                     aria-hidden="true"
                                 />
                                 连接测试
                             </h2>
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 验证供应商接口访问权限，不会创建订单。
                             </p>
                         </div>
@@ -246,7 +246,7 @@ export function ConnectionSettingsPanel({
                                 "supplier_api_connection:health_check",
                             ]}
                         >
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 {testBlocker?.message ??
                                     "当前账号没有测试连接的权限。"}
                             </p>
@@ -259,17 +259,17 @@ export function ConnectionSettingsPanel({
                 </section>
                 <section aria-label="接口信息" className="space-y-4 p-6">
                     <div className="space-y-2">
-                        <h2 className="text-base font-semibold">
+                        <h2 className="text-section-title font-semibold tracking-tight">
                             {conn.connectorTypeLabel}
                         </h2>
                         {conn.deploymentMessage && canCreateOrders ? (
-                            <p className="text-sm leading-6 text-muted-foreground">
+                            <p className="text-body-compact leading-6 text-muted-foreground">
                                 {conn.deploymentMessage}
                             </p>
                         ) : null}
                     </div>
                     <div className="space-y-3">
-                        <h3 className="text-sm font-medium">支持的功能</h3>
+                        <h3 className="font-medium">支持的功能</h3>
                         <div className="flex flex-wrap gap-2">
                             {conn.declaredCapabilities.map((code) => (
                                 <Badge key={code} variant="outline">
@@ -278,7 +278,7 @@ export function ConnectionSettingsPanel({
                             ))}
                         </div>
                         {conn.declaredCapabilities.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 当前没有已实现并通过配置校验的接口能力，请先核验配置与账号授权。
                             </p>
                         ) : null}

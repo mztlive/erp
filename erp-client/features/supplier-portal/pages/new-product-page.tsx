@@ -589,7 +589,9 @@ export function PortalNewProductEditor({
                 )}
             </form.AppField>
             <section className="space-y-3">
-                <h2 className="font-semibold">商品图片与资料</h2>
+                <h2 className="text-section-title font-semibold tracking-tight">
+                    商品图片与资料
+                </h2>
                 {draft ? (
                     <>
                         <form.AppField name="imageAssetIds">
@@ -623,7 +625,7 @@ export function PortalNewProductEditor({
                         </form.AppField>
                     </>
                 ) : (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         先保存草稿，再上传商品及规格图片、PDF资料。上传完成后保存并提交审核。
                     </p>
                 )}
@@ -632,7 +634,7 @@ export function PortalNewProductEditor({
                 {(array) => (
                     <section className="space-y-4">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                            <h2 className="font-semibold">
+                            <h2 className="text-section-title font-semibold tracking-tight">
                                 规格及首次报价 · {array.state.value.length} 行
                             </h2>
                             <Button
@@ -803,7 +805,7 @@ export function PortalNewProductEditor({
                                             )}
                                         </form.AppField>
                                     </div>
-                                    <div className="flex flex-wrap items-center gap-3 text-sm">
+                                    <div className="flex flex-wrap items-center gap-3 text-body-compact">
                                         <span>
                                             本规格实际报送时间：
                                             {timeLabel(sku.reportedAt)}
@@ -827,7 +829,7 @@ export function PortalNewProductEditor({
                                         </Button>
                                     </div>
                                     <section className="space-y-3 rounded-lg bg-muted/30 p-4">
-                                        <h4 className="text-sm font-medium">
+                                        <h4 className="text-body-compact font-medium">
                                             存在包装换算时填写
                                         </h4>
                                         <p className="text-xs text-muted-foreground">
@@ -888,7 +890,7 @@ export function PortalNewProductEditor({
                                             {(field) => (
                                                 <label
                                                     htmlFor={`${prefix}-pack-confirmed`}
-                                                    className="flex items-start gap-2 text-sm"
+                                                    className="flex items-start gap-2 text-xs"
                                                 >
                                                     <NativeCheckbox
                                                         id={`${prefix}-pack-confirmed`}
@@ -951,7 +953,10 @@ export function PortalNewProductEditor({
                 )}
             </form.AppField>
             {complete && (
-                <p role="status" className="whitespace-pre-line text-sm">
+                <p
+                    role="status"
+                    className="whitespace-pre-line text-body-compact"
+                >
                     {complete}
                 </p>
             )}

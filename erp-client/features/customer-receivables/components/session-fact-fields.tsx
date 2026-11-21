@@ -27,7 +27,7 @@ export function SessionFactFields({
 }) {
     return (
         <section className="erp-raised-surface space-y-3 rounded-2xl border bg-card p-4">
-            <h3 className="text-sm font-semibold">
+            <h3 className="font-semibold">
                 {isReceipt ? "回款记录" : "销项发票记录"}
             </h3>
             <p className="text-xs text-muted-foreground">

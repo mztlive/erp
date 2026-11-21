@@ -36,7 +36,7 @@ export function FilesSection({ batch }: { batch: ImportBatchView }) {
                         展示本次上传的期初数据文件基本信息与检查状态。
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3 pt-4 text-sm">
+                <CardContent className="space-y-3 pt-4 text-body-compact">
                     {batch.inputAsset ? (
                         <>
                             <Fact
@@ -103,14 +103,14 @@ export function FilesSection({ batch }: { batch: ImportBatchView }) {
                 </CardHeader>
                 <CardContent className="space-y-3 pt-4">
                     {batch.resultAssets.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             暂无结果文件。
                         </p>
                     ) : (
                         batch.resultAssets.map((a) => (
                             <div
                                 key={a.assetId}
-                                className="rounded-lg border px-3 py-2 text-sm"
+                                className="rounded-lg border px-3 py-2 text-body-compact"
                             >
                                 <div className="font-medium">{a.fileName}</div>
                                 <div className="mt-1 text-xs text-muted-foreground">

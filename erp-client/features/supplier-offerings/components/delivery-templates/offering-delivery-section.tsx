@@ -83,11 +83,11 @@ export function OfferingDeliverySection({
             </CardHeader>
             <CardContent className="space-y-4">
                 {templates.isError ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         配送规则读取失败，请稍后刷新。
                     </p>
                 ) : templates.isPending ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         正在读取配送规则…
                     </p>
                 ) : (
@@ -95,7 +95,7 @@ export function OfferingDeliverySection({
                 )}
                 {empty && canEdit ? (
                     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed px-4 py-3">
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             该供应商还没有配送模板。新建后可标注不配送地区、集采运费另计地区。
                         </p>
                     </div>

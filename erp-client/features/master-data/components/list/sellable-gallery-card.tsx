@@ -110,14 +110,14 @@ export function SellableGalleryCard({
                                     </span>
                                     <MoneyValue
                                         display="exact"
-                                        className="text-sm font-semibold"
+                                        className="text-body-compact font-semibold"
                                         value={value}
                                     />
                                 </div>
                             ))}
                         </div>
                         <CardTitle
-                            className="line-clamp-2 text-sm leading-5 font-medium"
+                            className="line-clamp-2 text-section-title font-semibold tracking-tight"
                             title={row.name}
                         >
                             {row.name}

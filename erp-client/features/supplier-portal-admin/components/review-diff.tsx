@@ -339,8 +339,10 @@ export function PortalReviewDiff({
     return (
         <section className="space-y-5 rounded-xl border bg-card p-5">
             <div>
-                <h2 className="font-semibold">逐项核对及生效影响</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <h2 className="text-section-title font-semibold tracking-tight">
+                    逐项核对及生效影响
+                </h2>
+                <p className="mt-1 text-xs text-muted-foreground">
                     本次拟生效值采用供应商本次提交内容。采购确认前，当前价格、供货条款及合作条件继续有效。
                 </p>
             </div>
@@ -348,7 +350,7 @@ export function PortalReviewDiff({
                 (application.kind === "terms" ||
                     application.kind === "cooperation" ||
                     application.kind === "stop") && (
-                    <p className="rounded-lg border p-3 text-sm text-warning-soft-foreground">
+                    <p className="rounded-lg border p-3 text-body-compact text-warning-soft-foreground">
                         当前生效资料尚未读取，请重新读取申请并核对当前资料后再确认；不能据此认定条款没有变化。
                     </p>
                 )}
@@ -450,7 +452,7 @@ export function PortalReviewDiff({
                     })}
                 </>
             )}
-            <div className="space-y-2 rounded-lg border bg-muted/30 p-4 text-sm">
+            <div className="space-y-2 rounded-lg border bg-muted/30 p-4 text-body-compact">
                 {(application.kind === "quote" || newProduct) && (
                     <p>
                         复用已上架的公司商品规格并增加有效供货后，可能立即参与或恢复销售及采购供应选择；须确认目标规格、基础单位及供货资格。

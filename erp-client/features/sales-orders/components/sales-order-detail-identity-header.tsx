@@ -106,7 +106,7 @@ function SalesOrderAmountSummary({ order }: { order: SalesOrderDetailView }) {
                 value={
                     <MoneyValue
                         value={order.amountGross}
-                        className="text-2xl font-semibold sm:text-3xl"
+                        className="text-value-section font-semibold sm:text-value-summary tracking-tight"
                     />
                 }
             />

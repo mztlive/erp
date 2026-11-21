@@ -47,7 +47,7 @@ export function ContractImportHistory({
         <Collapsible className="border-y border-border">
             <CollapsibleTrigger
                 id="contract-import-history-toggle"
-                className="group flex w-full items-center gap-3 py-4 text-left text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="group flex w-full items-center gap-3 py-4 text-left text-body-compact font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
                 <HistoryIcon
                     className="size-4 text-muted-foreground"
@@ -63,13 +63,13 @@ export function ContractImportHistory({
             <CollapsibleContent>
                 <div className="space-y-2 pb-4">
                     {loading ? (
-                        <p className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
+                        <p className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
                             <Spinner />
                             加载导入记录…
                         </p>
                     ) : null}
                     {!loading && items.length === 0 ? (
-                        <p className="py-3 text-sm text-muted-foreground">
+                        <p className="py-3 text-xs text-muted-foreground">
                             暂无导入记录
                         </p>
                     ) : null}
@@ -92,7 +92,7 @@ export function ContractImportHistory({
                             >
                                 <span className="min-w-0 flex-1">
                                     <span
-                                        className="block truncate text-sm font-medium"
+                                        className="block truncate text-body-compact font-medium"
                                         title={item.file_name}
                                     >
                                         {item.file_name}

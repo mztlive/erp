@@ -242,7 +242,7 @@ function PersonPickerSession(props: PersonPickerDialogProps) {
                         {error ? (
                             <div
                                 role="alert"
-                                className="space-y-3 px-3 py-10 text-center text-sm"
+                                className="space-y-3 px-3 py-10 text-center text-body-compact"
                             >
                                 <p className="text-destructive">{error}</p>
                                 {onRetry && (
@@ -383,7 +383,10 @@ function PersonPickerSession(props: PersonPickerDialogProps) {
                 </p>
             )}
             <div className="mx-6 mt-4 flex flex-wrap items-center justify-between gap-3 border-t py-4">
-                <div className="min-w-0 flex-1 text-sm" aria-live="polite">
+                <div
+                    className="min-w-0 flex-1 text-body-compact"
+                    aria-live="polite"
+                >
                     {multiple ? (
                         `已选择 ${draft.length} 人`
                     ) : draft.length ? (

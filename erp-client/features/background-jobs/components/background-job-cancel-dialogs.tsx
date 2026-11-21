@@ -39,7 +39,10 @@ export function BackgroundJobCancelDialog({
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 {error ? (
-                    <p className="text-sm text-destructive" role="alert">
+                    <p
+                        className="text-body-compact text-destructive"
+                        role="alert"
+                    >
                         {error}
                     </p>
                 ) : null}
@@ -82,7 +85,7 @@ export function BackgroundJobsStopAllDialog({
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 {result ? (
-                    <p className="text-sm text-muted-foreground" role="status">
+                    <p className="text-xs text-muted-foreground" role="status">
                         已取消 {result.cancelled_count} 个任务
                         {result.skipped_count > 0
                             ? `，跳过 ${result.skipped_count} 个已结束或不可取消的任务`
@@ -94,7 +97,10 @@ export function BackgroundJobsStopAllDialog({
                     </p>
                 ) : null}
                 {error ? (
-                    <p className="text-sm text-destructive" role="alert">
+                    <p
+                        className="text-body-compact text-destructive"
+                        role="alert"
+                    >
                         {error}
                     </p>
                 ) : null}

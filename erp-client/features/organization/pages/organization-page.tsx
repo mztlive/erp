@@ -166,7 +166,7 @@ export function OrganizationPage() {
                 table={
                     pending ? (
                         <p
-                            className="p-4 text-sm text-muted-foreground"
+                            className="p-4 text-xs text-muted-foreground"
                             role="status"
                         >
                             正在重新读取组织资料…
@@ -200,7 +200,7 @@ export function OrganizationPage() {
                         <div className="grid min-h-0 min-w-0 flex-1 overflow-hidden grid-rows-[minmax(0,40%)_minmax(0,1fr)] lg:grid-cols-[288px_minmax(0,1fr)] lg:grid-rows-1">
                             <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden border-b border-border bg-muted/20 lg:border-r lg:border-b-0">
                                 <div className="flex shrink-0 items-center justify-between gap-3 px-4 pt-4 pb-4 lg:px-5 lg:pt-5">
-                                    <h2 className="text-sm font-medium">
+                                    <h2 className="text-section-title font-semibold tracking-tight">
                                         组织目录
                                     </h2>
                                     <span className="text-xs text-muted-foreground">
@@ -232,7 +232,7 @@ export function OrganizationPage() {
                 }
             />
 
-            <div className="shrink-0 space-y-1 text-xs leading-5 text-muted-foreground">
+            <div className="shrink-0 space-y-1 text-xs text-muted-foreground">
                 <p>{ORGANIZATION_BOUNDARY_NOTICE}</p>
                 {view ? <p>当前范围：{view.scopeSummary}</p> : null}
             </div>

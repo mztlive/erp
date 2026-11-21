@@ -74,8 +74,8 @@ export function SupplierPaymentSubmitConfirmDialog({
                     </section>
 
                     <section aria-label="收款信息" className="space-y-3">
-                        <h3 className="text-sm font-medium">收款信息</h3>
-                        <dl className="space-y-3 text-sm">
+                        <h3 className="font-medium">收款信息</h3>
+                        <dl className="space-y-3 text-body-compact">
                             {recipientFields.map(([label, value]) => (
                                 <div
                                     key={label}
@@ -98,9 +98,7 @@ export function SupplierPaymentSubmitConfirmDialog({
                             className="space-y-3 border-t border-border pt-4"
                         >
                             <div className="flex items-baseline justify-between gap-3">
-                                <h3 className="text-sm font-medium">
-                                    登记后结果
-                                </h3>
+                                <h3 className="font-medium">登记后结果</h3>
                                 <span className="text-xs text-muted-foreground">
                                     共 {paymentResults.length} 笔
                                 </span>
@@ -109,7 +107,7 @@ export function SupplierPaymentSubmitConfirmDialog({
                                 {paymentResults.map((result) => (
                                     <div
                                         key={result.id}
-                                        className="space-y-2 text-sm"
+                                        className="space-y-2 text-body-compact"
                                     >
                                         <p className="num break-all text-xs text-muted-foreground">
                                             采购单 {result.documentNo}
@@ -127,7 +125,7 @@ export function SupplierPaymentSubmitConfirmDialog({
                                                 />
                                             </span>
                                         </div>
-                                        <p className="text-sm leading-relaxed text-muted-foreground">
+                                        <p className="text-body-compact leading-relaxed text-muted-foreground">
                                             {result.outcome}
                                         </p>
                                     </div>

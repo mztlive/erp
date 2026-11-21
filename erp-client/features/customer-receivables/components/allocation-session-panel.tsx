@@ -300,7 +300,7 @@ export function AllocationSessionPanel({
                             <div className="border-b border-border pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-8">
                                 <div className="space-y-5 lg:sticky lg:top-4">
                                     <div className="space-y-1">
-                                        <h2 className="text-sm font-semibold text-foreground">
+                                        <h2 className="text-section-title font-semibold text-foreground tracking-tight">
                                             到账信息
                                         </h2>
                                         <p className="text-xs text-muted-foreground">
@@ -336,7 +336,7 @@ export function AllocationSessionPanel({
                                 {removedLine ? (
                                     <div
                                         role="status"
-                                        className="flex items-center justify-between gap-3 rounded-md bg-muted px-3.5 py-2 text-sm"
+                                        className="flex items-center justify-between gap-3 rounded-md bg-muted px-3.5 py-2 text-body-compact"
                                     >
                                         <span>
                                             已移除 {removedLine.line.label}
@@ -409,7 +409,7 @@ export function AllocationSessionPanel({
                             {removedLine ? (
                                 <div
                                     role="status"
-                                    className="flex items-center justify-between gap-3 rounded-lg bg-muted px-3 py-2 text-sm"
+                                    className="flex items-center justify-between gap-3 rounded-lg bg-muted px-3 py-2 text-body-compact"
                                 >
                                     <span>已移除 {removedLine.line.label}</span>
                                     {canOperate && (
@@ -486,7 +486,7 @@ export function AllocationSessionPanel({
                                         header: "待核销单据",
                                         renderValue: ({ item }) => (
                                             <div>
-                                                <div className="text-sm">
+                                                <div className="text-body-compact">
                                                     {item.label}
                                                 </div>
                                                 <div className="num text-xs text-muted-foreground">

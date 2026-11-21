@@ -81,7 +81,7 @@ export function WorkspaceReceiptApproval({
                         <dt className="text-xs text-muted-foreground">
                             本次登记回款
                         </dt>
-                        <dd className="num mt-1 text-3xl font-semibold tracking-tight">
+                        <dd className="num mt-1 text-value-summary font-semibold tracking-tight">
                             {amount ? (
                                 <WorkspaceMoney value={amount} />
                             ) : (
@@ -93,7 +93,7 @@ export function WorkspaceReceiptApproval({
                         <dt className="text-xs text-muted-foreground">
                             到账日期
                         </dt>
-                        <dd className="num mt-1 text-base font-medium">
+                        <dd className="num mt-1 text-body-compact font-medium">
                             {field("到账日") || "未记录"}
                         </dd>
                     </div>
@@ -101,7 +101,7 @@ export function WorkspaceReceiptApproval({
                         <dt className="text-xs text-muted-foreground">
                             本次拟核销
                         </dt>
-                        <dd className="mt-1 text-base font-medium">
+                        <dd className="mt-1 text-body-compact font-medium">
                             {field("待核销") ||
                                 (lines.length
                                     ? `${lines.length + moreCount} 笔`
@@ -119,13 +119,13 @@ export function WorkspaceReceiptApproval({
             </section>
 
             <section className={sectionClass} aria-label="到账依据">
-                <h3 className="text-sm font-semibold">到账依据</h3>
+                <h3 className="font-semibold">到账依据</h3>
                 <dl className="grid gap-3 @min-[540px]/document:grid-cols-2">
                     <div>
                         <dt className="text-xs text-muted-foreground">
                             付款主体
                         </dt>
-                        <dd className="mt-1 break-words text-sm">
+                        <dd className="mt-1 break-words text-body-compact">
                             {field("往来主体") ||
                                 materials.data?.display.counterparty_label ||
                                 item.counterpartyName ||
@@ -136,7 +136,7 @@ export function WorkspaceReceiptApproval({
                         <dt className="text-xs text-muted-foreground">
                             银行流水／凭证引用
                         </dt>
-                        <dd className="num mt-1 break-all text-sm">
+                        <dd className="num mt-1 break-all text-body-compact">
                             {bankReference || "本次提交未记录"}
                         </dd>
                     </div>
@@ -151,7 +151,7 @@ export function WorkspaceReceiptApproval({
                     {materials.isPending ? (
                         <p
                             role="status"
-                            className="text-sm text-muted-foreground"
+                            className="text-xs text-muted-foreground"
                         >
                             正在读取此次提交的凭证…
                         </p>
@@ -174,7 +174,7 @@ export function WorkspaceReceiptApproval({
             </section>
 
             <section className={sectionClass} aria-label="本次拟核销明细">
-                <h3 className="text-sm font-semibold">本次拟核销明细</h3>
+                <h3 className="font-semibold">本次拟核销明细</h3>
                 {lines.length ? (
                     <Table>
                         <TableHeader>
@@ -204,7 +204,7 @@ export function WorkspaceReceiptApproval({
                         </TableBody>
                     </Table>
                 ) : (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         暂无可查看的核销分配明细，请联系提交人核对。
                     </p>
                 )}
@@ -217,21 +217,21 @@ export function WorkspaceReceiptApproval({
                         </AlertDescription>
                     </Alert>
                 ) : null}
-                <p className="text-xs leading-5 text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     以上为本次提交的分配方案，不代表已核销金额。
                 </p>
             </section>
 
             {additionalFields.length ? (
                 <section className={sectionClass} aria-label="补充资料">
-                    <h3 className="text-sm font-semibold">补充资料</h3>
+                    <h3 className="font-semibold">补充资料</h3>
                     <dl className="grid gap-3 @min-[540px]/document:grid-cols-2">
                         {additionalFields.map((entry) => (
                             <div key={entry.label}>
                                 <dt className="text-xs text-muted-foreground">
                                     {entry.label}
                                 </dt>
-                                <dd className="mt-1 break-words text-sm">
+                                <dd className="mt-1 break-words text-body-compact">
                                     {entry.value}
                                 </dd>
                             </div>

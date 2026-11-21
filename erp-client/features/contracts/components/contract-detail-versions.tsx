@@ -19,7 +19,7 @@ export function ContractDetailVersions({
                 description="每个版本对应已上传的签署 PDF。"
             >
                 {contract.revisionTimeline.length === 0 ? (
-                    <p className="text-sm leading-relaxed text-muted-foreground">
+                    <p className="text-body-compact leading-relaxed text-muted-foreground">
                         尚无已确认修订。
                     </p>
                 ) : (
@@ -79,7 +79,7 @@ export function ContractDetailVersions({
                 description="PDF 上传、版本归档、终止与下载等处理动作。"
             >
                 {contract.auditTimeline.length === 0 ? (
-                    <p className="text-sm leading-relaxed text-muted-foreground">
+                    <p className="text-body-compact leading-relaxed text-muted-foreground">
                         暂无审计记录。
                     </p>
                 ) : (
@@ -93,7 +93,7 @@ export function ContractDetailVersions({
                                 )}
                             >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <span className="text-sm font-medium">
+                                    <span className="text-body-compact font-medium">
                                         {CONTRACT_AUDIT_ACTION_LABEL[
                                             event.action
                                         ] ?? event.action}

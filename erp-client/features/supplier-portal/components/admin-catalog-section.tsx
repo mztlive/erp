@@ -179,7 +179,7 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                 </Button>
             )}
             {failure === "unknown" && (
-                <p className="text-sm">
+                <p className="text-body-compact">
                     配置结果尚未确认，请保留原内容并重试原目录配置。
                 </p>
             )}
@@ -224,7 +224,7 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
             )}
             {canUpdate && reviewedBody && (
                 <div className="space-y-2 rounded-lg border p-4">
-                    <p className="text-sm">
+                    <p className="text-body-compact">
                         已核对最新目录，原填写的目标仍为
                         {reviewedBody.active
                             ? "开放此SKU报价"
@@ -251,11 +251,11 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                 <div className="space-y-1">
                     <h2
                         id="supplier-catalog-title"
-                        className="text-base font-semibold"
+                        className="text-section-title font-semibold tracking-tight"
                     >
                         SKU 定向开放
                     </h2>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         选择允许当前供应商报价的公司规格，开放报价不改变商品上架状态。
                     </p>
                 </div>
@@ -350,7 +350,7 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                                 {(field) => (
                                     <div className="space-y-2">
                                         <label
-                                            className="text-sm"
+                                            className="text-xs"
                                             htmlFor="supplier-portal-grant-sku"
                                         >
                                             精确公司SKU

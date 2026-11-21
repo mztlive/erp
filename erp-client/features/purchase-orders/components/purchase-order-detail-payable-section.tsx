@@ -58,7 +58,7 @@ export function PurchaseOrderDetailPayableSection({
     if (!summary) {
         return (
             <DetailRecordSection title="本单应付" compact>
-                <p className="text-sm text-muted-foreground">尚未形成应付</p>
+                <p className="text-xs text-muted-foreground">尚未形成应付</p>
             </DetailRecordSection>
         )
     }
@@ -135,7 +135,7 @@ export function PurchaseOrderDetailPayableSection({
                 }
             >
                 {arrangement.isPending ? (
-                    <p role="status" className="text-sm text-muted-foreground">
+                    <p role="status" className="text-xs text-muted-foreground">
                         正在读取付款申请…
                     </p>
                 ) : arrangement.isError ? (
@@ -157,12 +157,12 @@ export function PurchaseOrderDetailPayableSection({
                                             <Link
                                                 id={`purchase-order-payment-request-${toAutomationIdSegment(request.request_id)}`}
                                                 href={`/procurement/payment-requests/${encodeURIComponent(request.request_id)}?returnTo=${encodeURIComponent(orderPath)}`}
-                                                className="num text-sm font-medium text-primary underline-offset-2 hover:underline"
+                                                className="num text-body-compact font-medium text-primary underline-offset-2 hover:underline"
                                             >
                                                 {request.request_no}
                                             </Link>
                                         ) : (
-                                            <span className="num text-sm font-medium">
+                                            <span className="num text-body-compact font-medium">
                                                 {request.request_no}
                                             </span>
                                         )}
@@ -185,7 +185,7 @@ export function PurchaseOrderDetailPayableSection({
                                         {request.desired_payment_date}
                                     </p>
                                 </div>
-                                <dl className="grid min-w-0 grid-cols-1 gap-4 rounded-lg bg-muted/35 px-4 py-3 text-sm sm:grid-cols-3">
+                                <dl className="grid min-w-0 grid-cols-1 gap-4 rounded-lg bg-muted/35 px-4 py-3 text-body-compact sm:grid-cols-3">
                                     <div>
                                         <dt className="text-xs text-muted-foreground">
                                             本单申请
@@ -215,7 +215,7 @@ export function PurchaseOrderDetailPayableSection({
                         ))}
                     </ul>
                 ) : (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         暂无关联付款申请。
                     </p>
                 )}

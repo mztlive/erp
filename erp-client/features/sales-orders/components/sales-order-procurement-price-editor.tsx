@@ -24,7 +24,7 @@ export function SalesProcurementBasisEditor({
     if (!line) return null
     if (inquiryLocked)
         return (
-            <span className="flex min-h-control items-center text-sm">
+            <span className="flex min-h-control items-center text-body-compact">
                 询价覆盖
             </span>
         )
@@ -80,7 +80,7 @@ export function SalesProcurementPriceEditor({
     return (
         <div className="w-40 space-y-1">
             {inquiryLocked ? (
-                <span className="flex min-h-control items-center justify-end text-sm">
+                <span className="flex min-h-control items-center justify-end text-body-compact">
                     <MoneyValue value={line.procurementSupplyPrice || null} />
                 </span>
             ) : (

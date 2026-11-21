@@ -98,7 +98,7 @@ export function SupplierOrdersListExportPreview({
             <div className="flex flex-wrap gap-2">
                 {isError ? (
                     <p
-                        className="w-full text-sm text-destructive"
+                        className="w-full text-body-compact text-destructive"
                         aria-live="polite"
                     >
                         {getErrorMessage(

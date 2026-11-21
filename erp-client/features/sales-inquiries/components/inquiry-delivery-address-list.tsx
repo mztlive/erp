@@ -126,7 +126,7 @@ export function InquiryDeliveryAddressList({
                     </div>
                 </TableToolbar>
                 {allocations.length === 0 ? (
-                    <p className="rounded-md border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+                    <p className="rounded-md border border-dashed px-4 py-8 text-center text-xs text-muted-foreground">
                         暂无配送地址。添加时默认分配剩余需求数量。
                     </p>
                 ) : (
@@ -244,7 +244,7 @@ export function InquiryDeliveryAddressList({
                                                         </Badge>
                                                     ) : null}
                                                 </div>
-                                                <p className="mt-1 text-xs leading-5 text-muted-foreground wrap-anywhere">
+                                                <p className="mt-1 text-xs text-muted-foreground wrap-anywhere">
                                                     {allocation.region_name ||
                                                         (allocation.region_code ? (
                                                             <RegionName

@@ -15,7 +15,7 @@ function SettlementCenterLoading() {
             <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
             <div className="h-24 animate-pulse rounded-lg bg-muted" />
             <div className="h-96 animate-pulse rounded-lg bg-muted" />
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 正在加载结算单，请稍候…
             </p>
         </PageScaffold>

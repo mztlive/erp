@@ -149,7 +149,7 @@ export function AllocationFactFormCard({
         >
             {hideHeading ? null : (
                 <div className="border-b border-border px-4 py-3">
-                    <h2 className="text-sm font-semibold">
+                    <h2 className="text-section-title font-semibold tracking-tight">
                         {track === "payment" ? "付款信息" : "本次进项发票记录"}
                     </h2>
                     <p className="mt-0.5 text-xs text-muted-foreground">
@@ -375,7 +375,7 @@ export function AllocationFactFormCard({
                             <div
                                 className={cn(
                                     surfaceInsetClassName,
-                                    "space-y-1 px-3 py-3 text-sm",
+                                    "space-y-1 px-3 py-3 text-body-compact",
                                 )}
                             >
                                 <div>原发票 {existingDocumentNo}</div>

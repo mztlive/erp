@@ -354,7 +354,7 @@ export function PersonalGrantForm({
                     </DialogDescription>
                 </DialogHeader>
                 <form
-                    className="flex min-h-0 flex-col text-sm"
+                    className="flex min-h-0 flex-col text-body-compact"
                     onSubmit={(event) => {
                         event.preventDefault()
                         event.stopPropagation()
@@ -393,7 +393,7 @@ export function PersonalGrantForm({
                             )}
                             {business && (
                                 <>
-                                    <div className="flex items-start gap-2 rounded-lg bg-muted/40 px-3 py-2.5 text-xs leading-5 text-muted-foreground">
+                                    <div className="flex items-start gap-2 rounded-lg bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
                                         <LockKeyholeIcon
                                             className="mt-0.5 size-4 shrink-0"
                                             aria-hidden
@@ -446,7 +446,7 @@ export function PersonalGrantForm({
                                                 {(field) => (
                                                     <label
                                                         htmlFor="person-scope-convert-legacy"
-                                                        className="flex items-start gap-2 text-xs leading-5"
+                                                        className="flex items-start gap-2 text-xs"
                                                     >
                                                         <Checkbox
                                                             id="person-scope-convert-legacy"
@@ -507,7 +507,7 @@ export function PersonalGrantForm({
                         <p
                             id="person-scope-save-hint"
                             role="status"
-                            className="mr-auto min-w-0 basis-full text-xs leading-5 text-muted-foreground sm:flex-1 sm:basis-auto"
+                            className="mr-auto min-w-0 basis-full text-xs text-muted-foreground sm:flex-1 sm:basis-auto"
                         >
                             {stale
                                 ? "请先刷新并核对配置"

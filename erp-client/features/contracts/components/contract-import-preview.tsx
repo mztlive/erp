@@ -30,7 +30,7 @@ export function ContractImportPreview({
                     <FileTextIcon className="size-5" aria-hidden="true" />
                 </div>
                 <div className="min-w-0 flex-1">
-                    <p className="break-words text-sm font-medium">
+                    <p className="break-words text-body-compact font-medium">
                         {task.file_name}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
@@ -64,7 +64,7 @@ export function ContractImportPreview({
                 </>
             ) : preview.isError ? (
                 <div className="flex flex-1 flex-col items-center justify-center gap-3 p-4 text-center">
-                    <p className="text-sm text-muted-foreground" role="alert">
+                    <p className="text-xs text-muted-foreground" role="alert">
                         {getErrorMessage(preview.error, "原文加载失败，请重试")}
                     </p>
                     <Button
@@ -79,7 +79,7 @@ export function ContractImportPreview({
                 </div>
             ) : (
                 <p
-                    className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground"
+                    className="flex flex-1 items-center justify-center gap-2 text-xs text-muted-foreground"
                     role="status"
                 >
                     <Spinner />

@@ -51,7 +51,10 @@ export function CatalogIdentityReviewDialog({
                     <p role="status">正在读取核对资料…</p>
                 ) : null}
                 {query.error ? (
-                    <p role="alert" className="text-sm text-destructive">
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
                         {query.error.message}
                     </p>
                 ) : null}
@@ -136,7 +139,7 @@ function IdentityReviewForm({
                 void form.handleSubmit()
             }}
         >
-            <dl className="grid grid-cols-2 gap-3 rounded-md border p-3 text-sm">
+            <dl className="grid grid-cols-2 gap-3 rounded-md border p-3 text-body-compact">
                 <div>
                     <dt className="text-muted-foreground">供应商当前规格</dt>
                     <dd>{view.source_specification}</dd>
@@ -218,7 +221,7 @@ function IdentityReviewForm({
                 )}
             </form.AppField>
             {mutation.error ? (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {mutation.error.message}。资料有变化时，请重新读取后核对。
                 </p>
             ) : null}

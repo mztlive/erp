@@ -70,7 +70,7 @@ export function SourceFieldEdit({
     })
     return (
         <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
-            <p className="text-sm font-medium">
+            <p className="text-body-compact font-medium">
                 编辑后确认 · {difference.label}
             </p>
             <form.Field name="value">
@@ -145,7 +145,7 @@ export function SourceFieldEdit({
                                                         alt={`已选第 ${index + 1} 张图片`}
                                                         thumbnail
                                                     />
-                                                    <span className="flex-1 text-sm">
+                                                    <span className="flex-1 text-body-compact">
                                                         第 {index + 1} 张
                                                         {!image.file_asset_id
                                                             ? " · 未保存"
@@ -253,7 +253,7 @@ export function SourceFieldEdit({
                                 <p
                                     key={`${prefix}-error-${index}`}
                                     role="alert"
-                                    className="text-sm text-destructive"
+                                    className="text-body-compact text-destructive"
                                 >
                                     {String(error)}
                                 </p>

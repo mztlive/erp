@@ -179,7 +179,9 @@ export function SalesWorkbenchPeriod({
     return (
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <div className="flex items-center gap-1.5">
-                <h2 className="text-sm font-semibold">业务概览</h2>
+                <h2 className="text-section-title font-semibold tracking-tight">
+                    业务概览
+                </h2>
                 <WorkbenchDataInfo
                     id="sales-workbench-scope-info"
                     title="业务概览"
@@ -253,7 +255,7 @@ export function SalesWorkbenchPeriod({
                         align="end"
                         className="w-80 max-w-[calc(100vw-2rem)]"
                     >
-                        <PopoverTitle className="text-sm">
+                        <PopoverTitle className="text-section-title font-semibold tracking-tight">
                             自定义新增单据期间
                         </PopoverTitle>
                         <PopoverDescription className="text-xs">

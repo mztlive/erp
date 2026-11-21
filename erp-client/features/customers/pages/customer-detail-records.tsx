@@ -48,7 +48,7 @@ export function DetailRecordRow({
     return (
         <div
             className={cn(
-                "flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1 py-1.5 text-sm",
+                "flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1 py-1.5 text-body-compact",
                 className,
             )}
         >

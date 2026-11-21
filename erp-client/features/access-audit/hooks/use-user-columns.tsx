@@ -53,7 +53,7 @@ function useUserColumns({
                             {row.original.displayName.slice(0, 1)}
                         </span>
                         <div className="min-w-0">
-                            <div className="truncate text-sm font-medium">
+                            <div className="truncate font-medium">
                                 {row.original.displayName}
                             </div>
                             <div className="truncate font-mono text-tiny text-muted-foreground">
@@ -69,7 +69,7 @@ function useUserColumns({
                 cell: ({ row }) => {
                     if (row.original.activeRoles === "—") {
                         return (
-                            <span className="text-sm text-muted-foreground">
+                            <span className="text-muted-foreground">
                                 暂无角色
                             </span>
                         )
@@ -103,8 +103,8 @@ function useUserColumns({
                     <span
                         className={
                             row.original.dataScopeSummary === "—"
-                                ? "text-sm text-muted-foreground"
-                                : "text-sm"
+                                ? "text-muted-foreground"
+                                : ""
                         }
                     >
                         {row.original.dataScopeSummary}

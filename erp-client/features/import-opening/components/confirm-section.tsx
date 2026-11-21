@@ -197,7 +197,7 @@ export function ConfirmSection({
                         >
                             <CardHeader className="border-b border-grid">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <CardTitle className="text-base">
+                                    <CardTitle className="text-section-title font-semibold tracking-tight">
                                         {
                                             CONFIRMATION_SCOPE_LABEL[
                                                 confirmation.scope
@@ -241,7 +241,7 @@ export function ConfirmSection({
                                           : " · 只读"}
                                 </CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-3 pt-4 text-sm">
+                            <CardContent className="space-y-3 pt-4 text-body-compact">
                                 {confirmation.confirmedByLabel ? (
                                     <p>
                                         确认人 {confirmation.confirmedByLabel}
@@ -309,7 +309,7 @@ export function ConfirmSection({
             </div>
 
             {confirmBlocked.length > 0 ? (
-                <ul className="space-y-1 text-sm text-muted-foreground">
+                <ul className="space-y-1 text-body-compact text-muted-foreground">
                     {confirmBlocked.map((blocker) => (
                         <li key={`${blocker.action}-${blocker.code}`}>
                             {blocker.message}

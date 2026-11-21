@@ -236,7 +236,10 @@ export function RegisterExtraCostDialog({
                         )}
                     />
                     {failure ? (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {failure}
                         </p>
                     ) : null}
@@ -394,7 +397,10 @@ export function ReduceExtraCostDialog({
                         )}
                     />
                     {failure ? (
-                        <p role="alert" className="text-sm text-destructive">
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
                             {failure}
                         </p>
                     ) : null}

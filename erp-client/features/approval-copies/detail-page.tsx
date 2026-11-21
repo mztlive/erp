@@ -86,7 +86,7 @@ function CopyDetailPane({ id }: { id: string }) {
                 </span>
             </div>
             {mark.isError && (
-                <div role="alert" className="text-sm">
+                <div role="alert" className="text-body-compact">
                     已读状态保存失败。
                     <Button
                         id="copy-read-retry"
@@ -110,7 +110,7 @@ function CopyDetailPane({ id }: { id: string }) {
                     key={order.revision.id}
                     className="rounded-lg border p-4"
                 >
-                    <summary className="cursor-pointer text-sm font-medium">
+                    <summary className="cursor-pointer text-body-compact font-medium">
                         查看关联销售单完整资料 · {order.document_no}
                     </summary>
                     <ApprovalSubmittedMaterialsContent
@@ -119,7 +119,7 @@ function CopyDetailPane({ id }: { id: string }) {
                         view="source-sales"
                         sourceRevisionId={order.revision.id}
                         attachmentContent={
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 附件请在上方本次提交资料中查看。
                             </p>
                         }
@@ -127,11 +127,13 @@ function CopyDetailPane({ id }: { id: string }) {
                 </details>
             ))}
             <section className="space-y-3 rounded-lg border p-4">
-                <h2 className="font-medium">审批进度</h2>
+                <h2 className="text-section-title font-semibold tracking-tight">
+                    审批进度
+                </h2>
                 {data.history.items.map((item) => (
                     <div
                         key={item.execution_id}
-                        className="border-t pt-3 text-sm"
+                        className="border-t pt-3 text-body-compact"
                     >
                         <p>
                             第 {item.round_no} 轮 · {item.node_name} ·{" "}

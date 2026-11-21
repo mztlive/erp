@@ -183,13 +183,13 @@ export function CustomerConflictDialog({
                     </DialogDescription>
                 </DialogHeader>
                 {query.isFetching ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         正在读取最新资料…
                     </p>
                 ) : null}
                 {query.isError ||
                 (!query.isPending && !query.isFetching && !query.data) ? (
-                    <div role="alert" className="space-y-2 text-sm">
+                    <div role="alert" className="space-y-2 text-body-compact">
                         <p>
                             {query.isError
                                 ? getErrorMessage(
@@ -210,19 +210,22 @@ export function CustomerConflictDialog({
                 ) : null}
                 {query.data &&
                 !query.data.allowedActions.includes("EDIT_CUSTOMER") ? (
-                    <p role="alert" className="text-sm">
+                    <p role="alert" className="text-body-compact">
                         当前已无客户资料修改权限。你的输入仍已保留，请联系有权限的同事处理。
                     </p>
                 ) : null}
                 {blockedGroups.length ? (
-                    <p role="alert" className="text-sm text-destructive">
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
                         你选择保留的部分联系人、地址或银行账户已被其他人替换，无法直接沿用原来的敏感资料。请选择采用最新内容，或返回表单补充需要重新保存的手机号、地址或账号；已输入内容仍然保留。
                     </p>
                 ) : null}
                 {latest && !query.isError ? (
                     <div className="space-y-4">
                         {changed.length === 0 ? (
-                            <p className="text-sm">
+                            <p className="text-body-compact">
                                 资料内容没有差异，可以采用最新版本继续编辑。
                             </p>
                         ) : null}
@@ -232,7 +235,7 @@ export function CustomerConflictDialog({
                                 className="space-y-2 rounded-md border p-3"
                             >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <span className="text-sm font-medium">
+                                    <span className="text-body-compact font-medium">
                                         {label}
                                     </span>
                                     {!same(initial[field], draft[field]) &&
@@ -281,7 +284,7 @@ export function CustomerConflictDialog({
                                         </span>
                                     )}
                                 </div>
-                                <div className="grid gap-3 text-sm sm:grid-cols-3">
+                                <div className="grid gap-3 text-body-compact sm:grid-cols-3">
                                     {[
                                         ["打开时", initial[field]],
                                         ["当前最新", latest[field]],

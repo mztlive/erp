@@ -253,7 +253,7 @@ export function CategoryFormDialogFrame({
                                             <div className="space-y-1.5">
                                                 <Label
                                                     htmlFor={`${prefix}-parent`}
-                                                    className="text-sm font-medium"
+                                                    className="font-medium"
                                                 >
                                                     {
                                                         masterDataCopy.fParentCategory
@@ -292,7 +292,7 @@ export function CategoryFormDialogFrame({
                                                           : "留空表示一级分类；不可选择自身或下级。"}
                                                 </p>
                                                 {mode === "move" ? (
-                                                    <p className="rounded-lg bg-muted/50 px-3 py-2 text-sm">
+                                                    <p className="rounded-lg bg-muted/50 px-3 py-2 text-body-compact">
                                                         当前位置：
                                                         {currentNode?.pathLabel ??
                                                             "分类路径暂不可用"}

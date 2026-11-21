@@ -29,7 +29,8 @@ import type {
 } from "@/features/customer-receivables/types"
 import { formatDateTime } from "@/lib/datetime"
 
-const bodyClassName = "min-h-0 flex-1 space-y-6 overflow-auto px-7 py-6 text-sm"
+const bodyClassName =
+    "min-h-0 flex-1 space-y-6 overflow-auto px-7 py-6 text-body-compact"
 
 const receivableEntryLabels: Record<string, string> = {
     original: "原始应收",

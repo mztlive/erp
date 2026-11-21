@@ -407,13 +407,13 @@ export function InvoiceRequestForm({
                 </form.AppField>
             ) : null}
             {amounts.data ? (
-                <p className="rounded-lg bg-muted p-3 text-sm">
+                <p className="rounded-lg bg-muted p-3 text-body-compact">
                     本单可申请{" "}
                     <MoneyValue value={amounts.data.available_amount} />
                     ，批准后由财务开票。
                 </p>
             ) : (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     {amounts.isError || accounts.isError
                         ? "销售应收读取失败，请重新选择或刷新。"
                         : selectedOrder &&
@@ -424,7 +424,7 @@ export function InvoiceRequestForm({
                 </p>
             )}
             {amounts.data?.unavailable_reason ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     {amounts.data.unavailable_reason}
                 </p>
             ) : null}
@@ -531,7 +531,7 @@ export function InvoiceRequestForm({
             </fieldset>
             {rework.field}
             {error ? (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {saveUncertain
                         ? "保存结果尚未确认，请核对本次保存结果。"
                         : committedUnreadable
@@ -544,7 +544,7 @@ export function InvoiceRequestForm({
             {saveUncertain ? (
                 <div
                     role="status"
-                    className="space-y-3 rounded-lg border p-3 text-sm"
+                    className="space-y-3 rounded-lg border p-3 text-body-compact"
                 >
                     <p>刚才的保存结果尚未确认，已保留您当前填写的内容。</p>
                     <LoadingButton
@@ -714,7 +714,7 @@ const InvoiceLinesFields = withForm({
                         <div className="flex flex-wrap items-center justify-between gap-2">
                             <h3
                                 id="invoice-request-lines-heading"
-                                className="text-sm font-semibold"
+                                className="font-semibold"
                             >
                                 开票明细 · {array.state.value.length} /{" "}
                                 {INVOICE_REQUEST_LINE_LIMIT} 行
@@ -760,7 +760,7 @@ const InvoiceLinesFields = withForm({
                                     className="flex min-w-0 flex-col gap-3 rounded-lg border border-grid p-3"
                                 >
                                     <div className="flex flex-wrap items-center justify-between gap-2">
-                                        <h4 className="text-sm font-medium">
+                                        <h4 className="text-body-compact font-medium">
                                             第 {index + 1} 行
                                         </h4>
                                         <Button
@@ -827,7 +827,7 @@ const InvoiceLinesFields = withForm({
                                         }}
                                     >
                                         {(lineAmount) => (
-                                            <p className="text-sm text-muted-foreground">
+                                            <p className="text-xs text-muted-foreground">
                                                 行金额：
                                                 {lineAmount === null ? (
                                                     "—"
@@ -859,7 +859,7 @@ const InvoiceLinesFields = withForm({
                             {([total, mismatch]) => (
                                 <div
                                     role="status"
-                                    className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm"
+                                    className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-body-compact"
                                 >
                                     <p className="font-medium">
                                         明细合计：

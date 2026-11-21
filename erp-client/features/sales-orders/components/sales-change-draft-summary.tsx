@@ -14,7 +14,7 @@ export function SalesChangeDraftSummary({
     const query = useSalesChangeDraftQuery(changeOrderId, true)
     if (query.isPending)
         return (
-            <p role="status" className="text-sm text-muted-foreground">
+            <p role="status" className="text-xs text-muted-foreground">
                 正在读取改单草稿…
             </p>
         )
@@ -22,7 +22,7 @@ export function SalesChangeDraftSummary({
         return (
             <div
                 role="alert"
-                className="flex flex-wrap items-center gap-2 text-sm"
+                className="flex flex-wrap items-center gap-2 text-body-compact"
             >
                 <span>改单摘要读取失败，请重试。</span>
                 <Button
@@ -40,7 +40,7 @@ export function SalesChangeDraftSummary({
     // 必须同时核对变更版本，避免把已经保存的恢复内容误报为未修改。
     if (draft.version === 1 && draft.working_copy_version === 1)
         return (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 尚未保存修改，草稿沿用原销售单内容。
             </p>
         )
@@ -65,7 +65,7 @@ export function SalesChangeDraftSummary({
         { maxScale: 2, outputScale: 2 },
     )
     return (
-        <div className="space-y-3 border-t border-warning-border/60 pt-3 text-sm">
+        <div className="space-y-3 border-t border-warning-border/60 pt-3 text-body-compact">
             <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
                 <span className="font-medium">已保存的改单内容</span>
                 <span>

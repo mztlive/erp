@@ -181,7 +181,7 @@ export function WorkspacePurchaseComparisonTable({
                     aria-label="采购与销售明细，可滚动查看"
                     className="max-h-[36rem] overflow-auto rounded-lg border border-grid outline-none focus-visible:ring-2 focus-visible:ring-info [&>[data-slot=table-container]]:overflow-visible"
                 >
-                    <Table className="min-w-[1120px] text-sm">
+                    <Table className="min-w-[1120px]">
                         <TableCaption className="sr-only">
                             本次提交的采购与来源销售逐行对照；筛选及分页不改变整单审批范围。
                         </TableCaption>
@@ -252,7 +252,7 @@ export function WorkspacePurchaseComparisonTable({
                         </TableBody>
                     </Table>
                 </div>
-                <p className="text-xs leading-5 text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     供给价为销售开单时填写的预计采购含税单价；销售数量为来源行全部需求，本次采购仅覆盖其中的采购数量。部分数量采购不直接视为异常。销售日期为客户承诺交期，采购日期为预计交付日。
                 </p>
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-1">

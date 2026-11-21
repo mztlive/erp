@@ -56,7 +56,7 @@ function ProductDetailFeedback({
                     fields,
                 }) ? (
                 <div
-                    className="flex items-start gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm"
+                    className="flex items-start gap-2 rounded-lg border border-border bg-card px-3 py-2 text-body-compact"
                     role="status"
                     aria-live="polite"
                 >

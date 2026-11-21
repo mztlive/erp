@@ -72,7 +72,7 @@ export function ReceiptAllocationTable({
                         <h2
                             id="customer-receivables-session-allocations-title"
                             tabIndex={-1}
-                            className="text-sm font-semibold text-foreground"
+                            className="text-section-title font-semibold text-foreground tracking-tight"
                         >
                             核销应收
                         </h2>
@@ -98,7 +98,7 @@ export function ReceiptAllocationTable({
             </div>
             {allocations.length === 0 ? (
                 <div className="border-y border-border py-14 text-center">
-                    <p className="text-sm font-medium text-foreground">
+                    <p className="font-medium text-foreground">
                         尚未添加待核销应收
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">

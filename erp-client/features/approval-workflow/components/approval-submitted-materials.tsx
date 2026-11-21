@@ -113,27 +113,29 @@ export function ApprovalSubmittedMaterialsContent({
                         <p className="text-xs font-medium text-muted-foreground">
                             审批提交资料 · 提交版本 {version}
                         </p>
-                        <h2 className="text-xl font-semibold">
+                        <h2 className="text-section-title font-semibold tracking-tight">
                             {counterpartyName || "审批提交资料"}
                         </h2>
                         {source.extra_sections.length === 0 &&
                             source.list_summary && (
-                                <p className="text-sm">{source.list_summary}</p>
+                                <p className="text-body-compact">
+                                    {source.list_summary}
+                                </p>
                             )}
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             以下为本次提交审批时的单据内容与附件。
                         </p>
                     </>
                 ) : (
                     <>
-                        <h2 className="text-xl font-semibold">
+                        <h2 className="text-section-title font-semibold tracking-tight">
                             {view === "source-sales"
                                 ? "销售单预览"
                                 : view === "attachments"
                                   ? "合同、凭证及附件"
                                   : "销售单提交预览"}
                         </h2>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             {view === "source-sales"
                                 ? `销售版本 V${sourceSnapshot?.revision_no ?? "—"}`
                                 : `提交版本 ${version}`}{" "}
@@ -154,7 +156,7 @@ export function ApprovalSubmittedMaterialsContent({
                     submitterName={submitterName ?? null}
                 />
             ) : view === "source-sales" ? (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     此次审批的完整来源销售单暂不可读取，请刷新后重试；仍不可用时请联系管理员核对。
                 </p>
             ) : (
@@ -176,7 +178,7 @@ export function ApprovalSubmittedMaterialsContent({
                         .map((sales) => (
                             <article
                                 key={sales.revision_id}
-                                className="space-y-3 rounded-lg border p-4 text-sm"
+                                className="space-y-3 rounded-lg border p-4 text-body-compact"
                             >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <p className="font-medium">
@@ -254,7 +256,7 @@ export function ApprovalSubmittedMaterialsContent({
                         <MaterialSectionHeading
                             title={`当前销售依据 · V${currentBasis.source.revision_no}`}
                         />
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             以下为当前生效销售版本及该版本关联的合同与凭证。
                         </p>
                         <ApprovalSalesOrderPaper
@@ -275,7 +277,7 @@ export function ApprovalSubmittedMaterialsContent({
                     </section>
                 )}
             {view === "all" && data.current_sales_basis_error && (
-                <p role="alert" className="text-sm text-muted-foreground">
+                <p role="alert" className="text-xs text-muted-foreground">
                     {data.current_sales_basis_error}
                 </p>
             )}

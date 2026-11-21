@@ -45,8 +45,8 @@ export function FinancialFileList({
                         <p
                             className={
                                 showDocumentNumber
-                                    ? "truncate text-sm"
-                                    : "text-sm wrap-anywhere"
+                                    ? "truncate text-body-compact"
+                                    : "text-body-compact wrap-anywhere"
                             }
                         >
                             {file.file_name}

@@ -78,8 +78,10 @@ export function PortalStopForm({ draft }: { draft: PortalApplication }) {
                 void form.handleSubmit()
             }}
         >
-            <h2 className="font-semibold">停止供应申请原因</h2>
-            <p className="text-sm text-muted-foreground">
+            <h2 className="text-section-title font-semibold tracking-tight">
+                停止供应申请原因
+            </h2>
+            <p className="text-xs text-muted-foreground">
                 保存草稿后，再提交采购确认。采购确认之前当前供给关系保持原状态；已生效的历史采购单继续按原条件处理。
             </p>
             <PortalError error={error} />
@@ -128,12 +130,12 @@ export function PortalStopForm({ draft }: { draft: PortalApplication }) {
                 }}
             />
             {intent.current && (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     上次保存结果尚未确认，原因已锁定。请重试原保存，确认后再修改。
                 </p>
             )}
             {saved && (
-                <p role="status" className="text-sm text-success">
+                <p role="status" className="text-body-compact text-success">
                     停止供应草稿已保存，待提交采购确认。
                 </p>
             )}
@@ -158,7 +160,7 @@ export function PortalStopForm({ draft }: { draft: PortalApplication }) {
                 />
             </form.AppForm>
             {!editable && (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     {profile?.role === "read_only"
                         ? "当前账号仅可查看，业务经办人可以编辑停止供应申请。"
                         : "本申请当前状态不能修改原因。"}

@@ -28,7 +28,7 @@ export function PortalTermsContent({
     return (
         <section className="space-y-3">
             <h3 className="font-semibold">{title}</h3>
-            <dl className="grid gap-3 text-sm md:grid-cols-2">
+            <dl className="grid gap-3 text-body-compact md:grid-cols-2">
                 <div>
                     <dt className="text-muted-foreground">代发含税供货价</dt>
                     <dd>
@@ -104,16 +104,18 @@ export function PortalApplicationContent({
     return (
         <div className="space-y-5">
             {application.reason && (
-                <p className="text-sm">申请原因：{application.reason}</p>
+                <p className="text-body-compact">
+                    申请原因：{application.reason}
+                </p>
             )}
             {typeof input.supplier_sku_code === "string" && (
-                <p className="text-sm">
+                <p className="text-body-compact">
                     供应商订货编码：{input.supplier_sku_code}
                 </p>
             )}
             {terms && <PortalTermsContent terms={terms} />}
             {application.kind === "quote" && (
-                <div className="grid gap-2 text-sm md:grid-cols-3">
+                <div className="grid gap-2 text-body-compact md:grid-cols-3">
                     <p>
                         可供情况：
                         {availabilityLabels[
@@ -142,7 +144,7 @@ export function PortalApplicationContent({
                 </div>
             )}
             {application.kind === "cooperation" && (
-                <p className="text-sm">
+                <p className="text-body-compact">
                     拟申请付款条件：
                     {typeof input.payment_term === "string"
                         ? paymentTermLabel(input.payment_term)
@@ -164,7 +166,9 @@ export function PortalApplicationContent({
             )}
             {product && showImages && !!product.file_asset_ids?.length && (
                 <section className="space-y-2">
-                    <h2 className="font-semibold">商品资料附件</h2>
+                    <h2 className="text-section-title font-semibold tracking-tight">
+                        商品资料附件
+                    </h2>
                     {product.file_asset_ids.map((id, index) => (
                         <PortalDocument
                             key={id}
@@ -178,10 +182,10 @@ export function PortalApplicationContent({
             )}
             {product && (
                 <section className="space-y-4">
-                    <h2 className="font-semibold">
+                    <h2 className="text-section-title font-semibold tracking-tight">
                         {product.name || "未命名商品"}
                     </h2>
-                    <dl className="grid gap-2 text-sm md:grid-cols-2">
+                    <dl className="grid gap-2 text-body-compact md:grid-cols-2">
                         <div>
                             提报品牌：{product.brand?.raw_name || "未填写"}
                         </div>
@@ -199,7 +203,7 @@ export function PortalApplicationContent({
                             <h3 className="font-medium">
                                 规格 {index + 1} · {sku.name || "未填写名称"}
                             </h3>
-                            <div className="grid gap-2 text-sm md:grid-cols-2">
+                            <div className="grid gap-2 text-body-compact md:grid-cols-2">
                                 <p>
                                     规格：
                                     {sku.spec_entries
@@ -243,13 +247,16 @@ export function PortalApplicationContent({
             )}
             {product?.skus?.some((sku) => sku.packaging) && (
                 <section className="space-y-2 rounded-lg border p-4">
-                    <h2 className="font-semibold">
+                    <h2 className="text-section-title font-semibold tracking-tight">
                         供应商确认的包装及报价依据
                     </h2>
                     {product.skus
                         .filter((sku) => sku.packaging)
                         .map((sku) => (
-                            <div key={sku.row_id} className="space-y-1 text-sm">
+                            <div
+                                key={sku.row_id}
+                                className="space-y-1 text-body-compact"
+                            >
                                 <p>
                                     {sku.name} · {sku.packaging?.original_unit}{" "}
                                     转 {sku.packaging?.base_unit} · 每包装{" "}
@@ -278,9 +285,11 @@ export function PortalApplicationContent({
             )}
             {application.decisions?.length ? (
                 <section className="space-y-2">
-                    <h2 className="font-semibold">处理记录</h2>
+                    <h2 className="text-section-title font-semibold tracking-tight">
+                        处理记录
+                    </h2>
                     {application.decisions.map((decision, index) => (
-                        <p key={index} className="text-sm">
+                        <p key={index} className="text-body-compact">
                             {statusLabels[decision.decision] ??
                                 (decision.decision === "approve"
                                     ? "通过"
@@ -293,7 +302,9 @@ export function PortalApplicationContent({
             ) : null}
             {showHistory && !!application.submissions?.length && (
                 <section className="space-y-3">
-                    <h2 className="font-semibold">历次提交记录</h2>
+                    <h2 className="text-section-title font-semibold tracking-tight">
+                        历次提交记录
+                    </h2>
                     <Accordion>
                         {application.submissions.map((submission, index) => {
                             const key = String(
@@ -336,8 +347,10 @@ export function PortalApplicationContent({
             )}
             {application.result && (
                 <section className="space-y-2 rounded-lg border bg-muted/30 p-4">
-                    <h2 className="font-semibold">实际处理结果</h2>
-                    <p className="text-sm">
+                    <h2 className="text-section-title font-semibold tracking-tight">
+                        实际处理结果
+                    </h2>
+                    <p className="text-body-compact">
                         {application.result.summary ??
                             (application.kind === "new_product"
                                 ? application.result.product_created
@@ -353,7 +366,7 @@ export function PortalApplicationContent({
                                       : "已建立供给。")}
                     </p>
                     {application.result.skus?.map((sku, index) => (
-                        <p className="text-sm" key={sku.row_id}>
+                        <p className="text-body-compact" key={sku.row_id}>
                             规格 {index + 1}：
                             {sku.sku_created
                                 ? "已入库，待上架"

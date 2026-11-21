@@ -7,7 +7,7 @@ export default function Page() {
     return (
         <Suspense
             fallback={
-                <p className="p-6 text-sm text-muted-foreground">
+                <p className="p-6 text-body-compact text-muted-foreground">
                     正在加载引入批次…
                 </p>
             }

@@ -16,7 +16,9 @@ export default async function PublicSelectionRoute({
     return (
         <>
             <meta name="referrer" content="no-referrer" />
-            <PublicSelectionPage token={token} />
+            <div className="text-sm">
+                <PublicSelectionPage token={token} />
+            </div>
         </>
     )
 }

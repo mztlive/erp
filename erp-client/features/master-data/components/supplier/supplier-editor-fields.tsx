@@ -118,7 +118,7 @@ export function SensitiveEditableField({
             <div className="space-y-1.5">
                 <Label htmlFor={id}>{label}</Label>
                 <div className="flex flex-wrap items-center gap-2">
-                    <code className="num rounded-md bg-muted px-2 py-1.5 text-sm">
+                    <code className="num rounded-md bg-muted px-2 py-1.5 text-body-compact">
                         {maskedValue || "****"}
                     </code>
                     {canReveal && (
@@ -191,7 +191,7 @@ export function CapabilityCheckboxGroup({
             {SUPPLIER_CAPABILITY_OPTIONS.map((option) => (
                 <label
                     key={option}
-                    className="flex items-center gap-2 text-sm leading-none"
+                    className="flex items-center gap-2 text-xs leading-none"
                 >
                     <Checkbox
                         id={`master-data-supplier-capability-${toAutomationIdSegment(option)}`}
@@ -230,11 +230,11 @@ export function SectionPanel({
     return (
         <section className="space-y-5">
             <div className="space-y-1 border-b border-grid pb-3">
-                <h2 className="text-base font-semibold tracking-tight">
+                <h2 className="text-section-title font-semibold tracking-tight">
                     {title}
                 </h2>
                 {description ? (
-                    <p className="max-w-3xl text-sm leading-5 text-muted-foreground">
+                    <p className="max-w-3xl text-xs text-muted-foreground">
                         {description}
                     </p>
                 ) : null}
@@ -256,11 +256,9 @@ export function CredentialGroup({
     return (
         <section className={cn(surfaceInsetClassName, "overflow-hidden")}>
             <div className="border-b border-grid px-4 py-3">
-                <h3 className="text-sm font-semibold text-foreground">
-                    {title}
-                </h3>
+                <h3 className="font-semibold text-foreground">{title}</h3>
                 {description ? (
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    <p className="mt-1 text-xs text-muted-foreground">
                         {description}
                     </p>
                 ) : null}

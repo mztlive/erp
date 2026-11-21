@@ -21,7 +21,7 @@ export function SupplierApiConnectionSettingsPage() {
     if (center.isPending) {
         return (
             <PageScaffold density="compact">
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     正在读取连接…
                 </p>
             </PageScaffold>

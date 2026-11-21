@@ -25,7 +25,7 @@ export function SupplierOrderExecutionShipments({
             aria-label="供应商发货与物流"
         >
             <div className="space-y-1">
-                <h3 className="text-sm font-semibold">供应商发货与物流</h3>
+                <h3 className="font-semibold">供应商发货与物流</h3>
                 <p className="text-xs text-muted-foreground">
                     物流查询与 ERP
                     交付分别记录。已发货数量以已应用的交付记录为准。

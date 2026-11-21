@@ -16,7 +16,7 @@ export function CustomerFormDefaultFlag({
     onCheckedChange: (checked: boolean) => void
 }) {
     return (
-        <Label htmlFor={id} className="flex items-center gap-2 text-sm">
+        <Label htmlFor={id} className="flex items-center gap-2">
             <Checkbox
                 id={id}
                 checked={checked}

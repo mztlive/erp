@@ -116,7 +116,7 @@ export function CaliberQueryBody({
         )
     }
     if (viewQuery.isPending || !data) {
-        return <p className="text-sm text-muted-foreground">{pendingLabel}</p>
+        return <p className="text-xs text-muted-foreground">{pendingLabel}</p>
     }
     if (emptyReason === "no-scope") {
         return (

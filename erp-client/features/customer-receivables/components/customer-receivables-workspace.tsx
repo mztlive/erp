@@ -439,7 +439,7 @@ export function CustomerReceivablesWorkspace({
     if (urlState.sessionId && sessionQuery.data?.mode === "receipt") {
         return (
             <PageScaffold>
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-xs text-muted-foreground">
                     正在打开回款登记…
                 </p>
             </PageScaffold>

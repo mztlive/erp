@@ -47,8 +47,10 @@ export function WorkspaceInvoiceUpload({
             aria-label="实际发票信息"
         >
             <div>
-                <h3 className="text-base font-semibold">实际发票信息</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <h3 className="text-body-compact font-semibold">
+                    实际发票信息
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground">
                     上传本次开票的 PDF
                     或图片，合计金额须与本申请剩余可开票金额一致。此处不能填写部分金额；尚未全部开出时，暂不确认登记。
                 </p>
@@ -103,7 +105,7 @@ export function WorkspaceInvoiceUpload({
                 </Alert>
             ) : null}
             <WorkspaceTaskFooter>
-                <div className="mr-auto min-w-0 space-y-1 text-sm">
+                <div className="mr-auto min-w-0 space-y-1 text-body-compact">
                     <p>
                         本次登记{" "}
                         <MoneyValue value={amount} className="font-semibold" />

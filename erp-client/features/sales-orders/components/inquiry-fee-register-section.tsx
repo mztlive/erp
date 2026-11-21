@@ -157,7 +157,7 @@ export function InquiryFeeRegisterSection({
         >
             <div>
                 <h3 className="font-medium">登记已接受询价费用</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p className="mt-1 text-xs text-muted-foreground">
                     只办理已在 ERP 外支付或无需 ERP
                     付款的费用。已确认询价费用须明确选择原来源，下方手工登记不会按费用名称自动关联。
                 </p>
@@ -255,7 +255,7 @@ export function InquiryFeeRegisterSection({
                     </TableBody>
                 </Table>
             ) : (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     本销售单尚无已明确分摊的询价费用；有询价费用时由销售先确认归属。
                 </p>
             )}
@@ -461,7 +461,7 @@ function InquiryFeeRegistrationForm({
                             。登记后计入本销售单实际经营盈亏，不生成应付。
                         </DialogDescription>
                     </DialogHeader>
-                    <p className="text-sm">
+                    <p className="text-body-compact">
                         可登记：
                         <MoneyValue
                             value={candidate.available_amount}
@@ -546,7 +546,7 @@ function InquiryFeeRegistrationForm({
                                 />
                             )}
                         </form.AppField>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             {candidate.public_note || "按已接受费用条件登记。"}{" "}
                             登记后将自动关联原询价费用并扣减可登记额度；后续若发生费用冲减，原询价额度不会自动恢复。
                         </p>

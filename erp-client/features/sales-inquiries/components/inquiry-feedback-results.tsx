@@ -36,7 +36,7 @@ export function InquiryFeedbackResults({
     )?.data
     if (!feedback)
         return (
-            <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+            <p className="rounded-lg border border-dashed p-6 text-xs text-muted-foreground">
                 采购尚未发布反馈。发布后可查看商品报价及当轮费用。
             </p>
         )
@@ -53,7 +53,7 @@ export function InquiryFeedbackResults({
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-3">
-                        <h2 className="text-lg font-semibold">
+                        <h2 className="text-section-title font-semibold tracking-tight">
                             第 {feedback.round} 轮反馈
                         </h2>
                         {accepted && (
@@ -63,7 +63,7 @@ export function InquiryFeedbackResults({
                             <Badge variant="outline">历史轮次</Badge>
                         )}
                     </div>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         需求第 {feedback.requirement_version} 版 ·{" "}
                         {inquiryDate(feedback.published_at)}
                     </p>
@@ -110,7 +110,7 @@ export function InquiryFeedbackResults({
                           (line) => line.line_id === result.line_id,
                       ),
               ) ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     本轮需求资料缺失或不完整，暂无法展示完整反馈，请联系管理员核对。
                 </p>
             ) : (
@@ -130,14 +130,14 @@ export function InquiryFeedbackResults({
 function FeedbackFees({ feedback }: { feedback: InquiryFeedback }) {
     return (
         <section className="space-y-3" aria-label="本轮额外费用">
-            <h3 className="text-base font-medium">
+            <h3 className="text-body-compact font-medium">
                 本轮额外费用{" "}
-                <span className="text-sm font-normal text-muted-foreground">
+                <span className="text-body-compact font-normal text-muted-foreground">
                     {feedback.data.fees.length} 项
                 </span>
             </h3>
             {feedback.data.fees.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     本轮未提出额外费用。
                 </p>
             ) : (
@@ -150,7 +150,7 @@ function FeedbackFees({ feedback }: { feedback: InquiryFeedback }) {
                             </div>
 
                             {fee.public_note && (
-                                <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                                <p className="whitespace-pre-wrap text-xs text-muted-foreground">
                                     {fee.public_note}
                                 </p>
                             )}

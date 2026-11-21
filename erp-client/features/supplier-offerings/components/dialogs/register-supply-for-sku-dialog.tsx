@@ -63,14 +63,11 @@ function FormSection({
             className="grid min-w-0 gap-4 border-t py-5 first:border-t-0 first:pt-1 md:grid-cols-[168px_minmax(0,1fr)] md:gap-8"
         >
             <div className="space-y-1">
-                <h3
-                    id={`${prefix}-${id}-heading`}
-                    className="text-sm font-semibold"
-                >
+                <h3 id={`${prefix}-${id}-heading`} className="font-semibold">
                     {title}
                 </h3>
                 {description ? (
-                    <p className="text-xs leading-5 text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         {description}
                     </p>
                 ) : null}
@@ -206,7 +203,9 @@ export function RegisterSupplyForSkuDialog({
                     className="flex max-h-[92dvh] w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[920px]"
                 >
                     <DialogHeader className="shrink-0 px-5 pt-5 pb-4 pr-14 sm:px-6 sm:pr-16">
-                        <DialogTitle className="text-xl">添加供给</DialogTitle>
+                        <DialogTitle className="text-section-title font-semibold tracking-tight">
+                            添加供给
+                        </DialogTitle>
                         <DialogDescription>
                             为这个商品规格登记一家供应商：报价、配送范围和当前可供情况。
                         </DialogDescription>
@@ -675,7 +674,7 @@ export function RegisterSupplyForSkuDialog({
                                             ) ? (
                                                 <p
                                                     role="status"
-                                                    className="mt-3 text-sm text-warning-soft-foreground"
+                                                    className="mt-3 text-body-compact text-warning-soft-foreground"
                                                 >
                                                     {status !== "AVAILABLE"
                                                         ? "当前状态不支持销售；恢复可供后还需满足价格和有效期等销售条件。"

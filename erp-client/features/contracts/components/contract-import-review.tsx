@@ -72,7 +72,7 @@ export function ContractImportReview(props: Props) {
     if (matches.isPending)
         return (
             <p
-                className="flex items-center gap-2 py-4 text-sm text-muted-foreground"
+                className="flex items-center gap-2 py-4 text-xs text-muted-foreground"
                 role="status"
             >
                 <Spinner />
@@ -120,7 +120,7 @@ export function ContractImportReview(props: Props) {
                 </Alert>
             ) : matches.isFetching ? (
                 <p
-                    className="flex items-center gap-2 text-sm text-muted-foreground"
+                    className="flex items-center gap-2 text-xs text-muted-foreground"
                     role="status"
                 >
                     <Spinner />
@@ -410,8 +410,10 @@ function ContractImportReviewForm({
                 aria-label="签约双方"
             >
                 <div className="space-y-1">
-                    <h3 className="text-base font-semibold">签约双方</h3>
-                    <p className="text-sm text-muted-foreground">
+                    <h3 className="text-body-compact font-semibold">
+                        签约双方
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
                         核对客户与我方签约主体。
                     </p>
                 </div>
@@ -674,8 +676,10 @@ function ContractImportReviewForm({
                 aria-label="合同与结算条款"
             >
                 <div className="space-y-1">
-                    <h3 className="text-base font-semibold">合同与结算条款</h3>
-                    <p className="text-sm text-muted-foreground">
+                    <h3 className="text-body-compact font-semibold">
+                        合同与结算条款
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
                         核对合同编号、付款与开票约定
                     </p>
                 </div>
@@ -737,8 +741,10 @@ function ContractImportReviewForm({
                 aria-label="日期与业务范围"
             >
                 <div className="space-y-1">
-                    <h3 className="text-base font-semibold">日期与业务范围</h3>
-                    <p className="text-sm text-muted-foreground">
+                    <h3 className="text-body-compact font-semibold">
+                        日期与业务范围
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
                         核对有效期与业务内容，确认后归档
                     </p>
                 </div>

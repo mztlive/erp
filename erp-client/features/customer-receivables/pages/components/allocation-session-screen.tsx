@@ -101,7 +101,9 @@ export function AllocationSessionScreen({
     if (session?.mode === "receipt" && session.status === "posted") {
         return wrap(
             <div className="space-y-4">
-                <h2 className="text-lg font-semibold">回款已登记</h2>
+                <h2 className="text-section-title font-semibold tracking-tight">
+                    回款已登记
+                </h2>
                 <p>
                     {session.existingFactNo} ·{" "}
                     {session.serverStatus === "posted"

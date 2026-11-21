@@ -45,7 +45,9 @@ export function SalesInvoiceOverview({
         >
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-1">
-                    <h2 className="text-sm font-semibold">开票概况</h2>
+                    <h2 className="text-section-title font-semibold tracking-tight">
+                        开票概况
+                    </h2>
                     <DetailHint
                         id="sales-order-invoice-summary-hint"
                         label="开票金额"
@@ -76,7 +78,7 @@ export function SalesInvoiceOverview({
                         <dt className="text-xs text-muted-foreground">
                             {label}
                         </dt>
-                        <dd className="mt-1 text-2xl font-semibold wrap-anywhere">
+                        <dd className="num mt-1 text-value-section font-semibold wrap-anywhere tracking-tight">
                             {value}
                         </dd>
                     </div>

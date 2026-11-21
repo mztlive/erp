@@ -17,7 +17,7 @@ export function SalesOrderEvidenceAttachments({
     return (
         <DocumentSection
             title="开单凭证"
-            className="border-0 py-0 [&_h2]:text-sm [&>div:last-child]:pt-3"
+            className="border-0 py-0 [&_h2]:text-body-compact [&>div:last-child]:pt-3"
             description="随本单归档的开单依据，供履约与审批核对。"
         >
             {files.length ? (
@@ -25,7 +25,7 @@ export function SalesOrderEvidenceAttachments({
                     {files.map((file) => (
                         <li
                             key={file.id}
-                            className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm first:pt-0 last:pb-0"
+                            className="flex flex-wrap items-center justify-between gap-2 py-3 text-body-compact first:pt-0 last:pb-0"
                         >
                             <span className="min-w-0 break-all">
                                 {file.fileName}
@@ -48,7 +48,7 @@ export function SalesOrderEvidenceAttachments({
                     ))}
                 </ul>
             ) : (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     本单没有开单凭证。
                 </p>
             )}

@@ -79,7 +79,7 @@ export function SalesOrderCustomerFinancePanel({
             : undefined
     const summaryAmount = (value?: string) =>
         value === undefined ? (
-            <span className="text-base font-normal text-muted-foreground">
+            <span className="text-body-compact font-normal text-muted-foreground">
                 待确认
             </span>
         ) : (
@@ -216,7 +216,7 @@ export function SalesOrderCustomerFinancePanel({
                                 retry={() => void accounts.refetch()}
                             >
                                 {!readableAccounts?.length ? (
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         {order.currentRevisionNo == null
                                             ? "本单尚未生效，尚未形成应收。"
                                             : "本单已生效，当前可见范围未查到应收记录。"}
@@ -300,7 +300,7 @@ export function SalesOrderCustomerFinancePanel({
                             retry={() => void receipts.refetch()}
                         >
                             {!receipts.data?.items.length ? (
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-xs text-muted-foreground">
                                     暂无回款记录
                                 </p>
                             ) : (
@@ -467,7 +467,7 @@ export function SalesOrderCustomerFinancePanel({
                 ) : previewAccount ? (
                     <ReceivableDetailBody
                         row={previewAccount}
-                        className="space-y-6 text-sm"
+                        className="space-y-6 text-body-compact"
                     />
                 ) : detail.data?.receipt ? (
                     <ReceiptDetailBody row={detail.data.receipt} readOnly />
@@ -496,7 +496,7 @@ function ReadState({
 }) {
     if (pending)
         return (
-            <p role="status" className="text-sm text-muted-foreground">
+            <p role="status" className="text-xs text-muted-foreground">
                 正在加载…
             </p>
         )

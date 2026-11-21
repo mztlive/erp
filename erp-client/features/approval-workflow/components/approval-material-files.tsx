@@ -52,7 +52,7 @@ export function ApprovalMaterialFiles({
                         return (
                             <li
                                 key={file.file_asset_id}
-                                className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm"
+                                className="flex flex-wrap items-center gap-3 px-4 py-3 text-body-compact"
                             >
                                 <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
                                     <kind.Icon
@@ -115,12 +115,12 @@ export function ApprovalMaterialFiles({
                     })}
                 </ul>
             ) : (
-                <p className="rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground">
+                <p className="rounded-lg border border-dashed px-4 py-3 text-xs text-muted-foreground">
                     {emptyMessage}
                 </p>
             )}
             {download.isError && (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-body-compact text-destructive">
                     {getErrorMessage(download.error, "附件读取失败，请重试")}
                 </p>
             )}

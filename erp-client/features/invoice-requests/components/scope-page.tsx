@@ -535,7 +535,7 @@ export function InvoiceRequestScopePage() {
                     className="min-w-0 rounded-xl border p-4"
                 >
                     <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-                        <h2 className="min-w-0 break-words text-sm font-semibold">
+                        <h2 className="min-w-0 break-words text-section-title font-semibold tracking-tight">
                             申请详情
                         </h2>
                         <Button
@@ -552,12 +552,12 @@ export function InvoiceRequestScopePage() {
                         </Button>
                     </div>
                     {detailQuery.isPending ? (
-                        <p className="mt-2 text-sm text-muted-foreground">
+                        <p className="mt-2 text-xs text-muted-foreground">
                             正在读取申请详情…
                         </p>
                     ) : detailQuery.isError ? (
                         <div role="alert" className="mt-2 space-y-2">
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 {getErrorMessage(
                                     detailQuery.error,
                                     "申请详情读取失败",
@@ -643,7 +643,7 @@ export function InvoiceRequestScopePage() {
                             ) : null}
                         </div>
                     ) : (
-                        <p className="mt-2 text-sm text-muted-foreground">
+                        <p className="mt-2 text-xs text-muted-foreground">
                             未找到该申请，可能已超出当前数据范围。
                         </p>
                     )}

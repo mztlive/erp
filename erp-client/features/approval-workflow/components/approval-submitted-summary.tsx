@@ -87,7 +87,7 @@ export function MaterialSectionHeading({
 }) {
     return (
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <h3 className="text-sm font-semibold">{title}</h3>
+            <h3 className="font-semibold">{title}</h3>
             {note ? (
                 <p className="text-xs text-muted-foreground">{note}</p>
             ) : null}
@@ -157,7 +157,7 @@ export function ApprovalSubmittedSummary({
                     note={source.lines.length ? lineDiff : null}
                 />
                 {source.lines.length ? (
-                    <ul className="divide-y rounded-lg border text-sm">
+                    <ul className="divide-y rounded-lg border text-body-compact">
                         {source.lines.map((line, index) => (
                             <SummaryLine
                                 key={`${line.title}:${index}`}
@@ -166,7 +166,7 @@ export function ApprovalSubmittedSummary({
                         ))}
                     </ul>
                 ) : (
-                    <p className="rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground">
+                    <p className="rounded-lg border border-dashed px-4 py-3 text-xs text-muted-foreground">
                         {lineDiff ?? "暂无明细概览，请核对下方单据信息及附件。"}
                     </p>
                 )}
@@ -222,7 +222,7 @@ function SummaryOverview({
                     <p className="text-xs font-medium text-muted-foreground">
                         提交金额
                     </p>
-                    <p className="num text-3xl font-semibold tracking-tight">
+                    <p className="num text-value-summary font-semibold tracking-tight">
                         {source.amount_label}
                     </p>
                     {grossBefore && (
@@ -285,7 +285,7 @@ function ComparisonTable({ comparisons }: { comparisons: Comparison[] }) {
                         : "单据基本信息无变化"
                 }
             />
-            <div className="overflow-hidden rounded-lg border text-sm">
+            <div className="overflow-hidden rounded-lg border text-body-compact">
                 <div
                     aria-hidden="true"
                     className="hidden grid-cols-[7rem_minmax(0,14rem)_1rem_minmax(0,1fr)] gap-x-4 border-b bg-muted/50 px-4 py-2 text-xs font-medium text-muted-foreground sm:grid"

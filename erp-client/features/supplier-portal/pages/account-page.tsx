@@ -52,7 +52,7 @@ export function PortalAccountPage() {
             title="账号设置"
             description="修改密码后使用新密码重新登录。"
         >
-            <div className="rounded-lg border p-5 text-sm">
+            <div className="rounded-lg border p-5 text-body-compact">
                 <p>姓名：{profile?.name}</p>
                 <p>账号：{profile?.account}</p>
                 <p>

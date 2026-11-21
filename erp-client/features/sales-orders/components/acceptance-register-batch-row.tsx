@@ -64,7 +64,7 @@ export function AcceptanceRegisterBatchRow({
         <article className="rounded-lg border border-border bg-card px-3 py-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
-                    <p className="text-sm font-medium">
+                    <p className="text-body-compact font-medium">
                         {FULFILLMENT_TYPE_LABEL[fact.fulfillmentFactType]}{" "}
                         <span className="num font-mono text-xs font-normal">
                             {fact.fulfillmentNo}
@@ -159,7 +159,7 @@ export function AcceptanceRegisterBatchRow({
                                         aria-describedby={`${controlId}-description`}
                                     />
                                     <span className="min-w-0">
-                                        <span className="block text-sm">
+                                        <span className="block text-body-compact">
                                             {copy.label}
                                         </span>
                                         <span
@@ -270,7 +270,7 @@ export function AcceptanceRegisterBatchRow({
                     className="mt-3 rounded-lg border border-warning-border bg-warning-soft p-3"
                     role="alert"
                 >
-                    <p className="text-sm font-medium text-warning-soft-foreground">
+                    <p className="text-body-compact font-medium text-warning-soft-foreground">
                         本明细没有通过数量，暂不能登记验收
                     </p>
                     <p className="mt-1 text-xs text-warning-soft-foreground">
