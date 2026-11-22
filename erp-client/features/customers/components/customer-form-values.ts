@@ -194,6 +194,43 @@ export function countCustomerFormChanges(
     )
 }
 
+/** 生成面向用户可读的变更字段清单，供底部悬浮保存条与确认弹窗展示。 */
+export function describeCustomerFormChanges(
+    before: FormValues,
+    after: FormValues,
+): string[] {
+    const labels: string[] = []
+    const fieldNames: readonly [
+        (
+            | "legalName"
+            | "shortName"
+            | "unifiedCreditCode"
+            | "defaultPaymentTerm"
+            | "status"
+        ),
+        string,
+    ][] = [
+        ["legalName", "法定名称"],
+        ["shortName", "客户简称"],
+        ["unifiedCreditCode", "统一社会信用代码"],
+        ["defaultPaymentTerm", "默认付款条件"],
+        ["status", "客户状态"],
+    ]
+    for (const [field, label] of fieldNames) {
+        if (before[field] !== after[field]) labels.push(label)
+    }
+    if (changedRowFields(before.contacts, after.contacts) > 0) {
+        labels.push("联系人")
+    }
+    if (changedRowFields(before.addresses, after.addresses) > 0) {
+        labels.push("地址")
+    }
+    if (changedRowFields(before.bankAccounts, after.bankAccounts) > 0) {
+        labels.push("银行账户")
+    }
+    return labels
+}
+
 /**
  * 表单值 → 根命令输入：行级 trim、可选字段收口，已存在行保留掩码值时不回写。
  */

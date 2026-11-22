@@ -22,6 +22,7 @@ export function deriveSalesOrderDetailState(
         hasEligibleAcceptance: boolean
         canReadAcceptance?: boolean
         canViewExtraCost?: boolean
+        canAddExpensePurchase?: boolean
         canSupplementContract?: boolean
     },
 ) {
@@ -64,6 +65,7 @@ export function deriveSalesOrderDetailState(
     const visibleNav = navItemsFor(order, {
         canReadAcceptance: input.canReadAcceptance,
         canViewExtraCost: input.canViewExtraCost,
+        canAddExpensePurchase: input.canAddExpensePurchase,
         canSupplementContract: input.canSupplementContract,
     }).filter((item) => item.show)
 

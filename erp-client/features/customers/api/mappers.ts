@@ -201,7 +201,6 @@ export function mapContractSummary(
     return {
         id: contract.id,
         number: contract.contract_no,
-        title: contract.contract_no,
         status: {
             label: CONTRACT_STATUS_LABEL[status] ?? String(contract.status),
             tone: CONTRACT_STATUS_TONE[status] ?? "neutral",
@@ -210,12 +209,24 @@ export function mapContractSummary(
     }
 }
 
+/** 映射销售单结案状态。 */
+function mapSalesOrderCloseStatus(
+    closeStatus: string | undefined,
+): { label: string; tone: "success" | "info" | "neutral" } | undefined {
+    if (closeStatus === "CLOSED") return { label: "已结案", tone: "success" }
+    if (closeStatus === "CLOSEABLE") return { label: "可结案", tone: "info" }
+    if (closeStatus === "NOT_SATISFIED")
+        return { label: "履约中", tone: "neutral" }
+    return undefined
+}
+
 /** 映射销售单摘要。 */
 export function mapSalesOrderSummary(
     order: Pick<
         BackendSalesOrderListRow,
         "id" | "order_no" | "commercial_status"
-    >,
+    > &
+        Partial<Pick<BackendSalesOrderListRow, "close_status" | "created_at">>,
 ): RelatedObjectSummary {
     const status = order.commercial_status
     const meta =
@@ -224,13 +235,18 @@ export function mapSalesOrderSummary(
             : status === "PENDING_REVIEW"
               ? { label: "审核中", tone: "warning" as const }
               : status === "VOIDED"
-                ? { label: "已作废", tone: "neutral" as const }
+                ? { label: "已作废", tone: "void" as const }
                 : { label: "草稿", tone: "neutral" as const }
     return {
         id: order.id,
         number: order.order_no,
-        title: order.order_no,
         status: meta,
+        secondaryStatus:
+            status === "EFFECTIVE"
+                ? mapSalesOrderCloseStatus(order.close_status)
+                : undefined,
+        createdAt:
+            order.created_at != null ? tsToIso(order.created_at) : undefined,
         href: `/sales/orders/${order.id}`,
     }
 }

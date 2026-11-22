@@ -120,8 +120,11 @@ export function SalesOrderDetailSectionContent({
     section,
     navSection,
     visibleNav,
+    canAccept,
     canOperateAcceptance,
     canReadDelivery,
+    canViewExtraCost,
+    canAddExpensePurchase,
     deliveryQuery,
     onSelectSection,
     onApprovalResult,
@@ -130,8 +133,11 @@ export function SalesOrderDetailSectionContent({
     section?: string
     navSection: NavSectionId
     visibleNav: SalesOrderVisibleNavItem[]
+    canAccept: boolean
     canOperateAcceptance: boolean
     canReadDelivery: boolean
+    canViewExtraCost: boolean
+    canAddExpensePurchase: boolean
     deliveryQuery: DeliveryProgressQuery
     onSelectSection: (
         next: NavSectionId | WorkSectionId,
@@ -147,6 +153,13 @@ export function SalesOrderDetailSectionContent({
             !(isCard && item.id === "collaboration"),
     )
     const prefix = toAutomationIdSegment(order.id)
+    const pendingAcceptanceCount =
+        canReadDelivery && !deliveryQuery.isError
+            ? (deliveryQuery.data?.pendingFactCount ?? 0)
+            : 0
+    const pendingFreightCount = canAddExpensePurchase
+        ? (order.related.freightFollowUps?.length ?? 0)
+        : 0
 
     return (
         <>
@@ -167,6 +180,24 @@ export function SalesOrderDetailSectionContent({
                                 : item.id === "acceptance"
                                   ? "客户验收"
                                   : item.label,
+                        badge:
+                            item.id === "acceptance" &&
+                            pendingAcceptanceCount > 0 ? (
+                                <span
+                                    className={
+                                        canAccept
+                                            ? "num rounded-sm bg-info-soft px-1.5 py-0.5 text-tiny leading-3.5 font-medium text-info-soft-foreground"
+                                            : "num rounded-sm bg-muted px-1.5 py-0.5 text-tiny leading-3.5 font-medium text-muted-foreground"
+                                    }
+                                >
+                                    待验 {pendingAcceptanceCount}
+                                </span>
+                            ) : item.id === "extra-cost" &&
+                              pendingFreightCount > 0 ? (
+                                <span className="rounded-sm bg-warning-soft px-1.5 py-0.5 text-tiny leading-3.5 font-medium text-warning-soft-foreground">
+                                    运费待补
+                                </span>
+                            ) : undefined,
                     }))}
                 />
             ) : null}
@@ -209,6 +240,15 @@ export function SalesOrderDetailSectionContent({
                         order={order}
                         deliveryQuery={deliveryQuery}
                         canReadDelivery={canReadDelivery}
+                        canAccept={canAccept}
+                        onStartAcceptance={() =>
+                            onSelectSection("acceptance", { mode: "register" })
+                        }
+                        onOpenExtraCost={
+                            canViewExtraCost || canAddExpensePurchase
+                                ? () => onSelectSection("extra-cost")
+                                : undefined
+                        }
                     />
                 )
             ) : null}
@@ -218,35 +258,37 @@ export function SalesOrderDetailSectionContent({
             ) : null}
 
             {navSection === "extra-cost" ? (
-                <ExtraCostPanel order={order} />
+                <ExtraCostPanel
+                    order={order}
+                    canViewExtraCost={canViewExtraCost}
+                    canAddExpensePurchase={canAddExpensePurchase}
+                />
             ) : null}
 
             {navSection === "acceptance" ? (
                 canReadDelivery ? (
                     canOperateAcceptance &&
                     order.allowedActions.includes("REGISTER_ACCEPTANCE") ? (
-                        <DetailWorkspaceSection width="full">
-                            <AcceptanceWorkspace
-                                key={order.id}
-                                salesOrderId={order.id}
-                                ownerUserId={order.ownerUserId}
-                                ownerName={order.ownerName}
-                                onPosted={({
-                                    acceptanceNo,
-                                    remainingEligibleCount,
-                                }) =>
-                                    onApprovalResult({
-                                        status: "succeeded",
-                                        title: "客户验收已登记",
-                                        description:
-                                            remainingEligibleCount > 0
-                                                ? `还有 ${remainingEligibleCount} 批交付待验收。`
-                                                : "当前交付批次已全部验收，交付进度已更新。",
-                                        reference: acceptanceNo,
-                                    })
-                                }
-                            />
-                        </DetailWorkspaceSection>
+                        <AcceptanceWorkspace
+                            key={order.id}
+                            salesOrderId={order.id}
+                            ownerUserId={order.ownerUserId}
+                            ownerName={order.ownerName}
+                            onPosted={({
+                                acceptanceNo,
+                                remainingEligibleCount,
+                            }) =>
+                                onApprovalResult({
+                                    status: "succeeded",
+                                    title: "客户验收已登记",
+                                    description:
+                                        remainingEligibleCount > 0
+                                            ? `还有 ${remainingEligibleCount} 批交付待验收。`
+                                            : "当前交付批次已全部验收，交付进度已更新。",
+                                    reference: acceptanceNo,
+                                })
+                            }
+                        />
                     ) : (
                         <AcceptancePanel order={order} />
                     )

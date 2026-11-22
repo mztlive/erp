@@ -94,8 +94,10 @@ export type CustomerBankAccountView = Readonly<{
 export type RelatedObjectSummary = Readonly<{
     id: string
     number: string
-    title: string
+    title?: string
     status: { label: string; tone: StatusTone }
+    secondaryStatus?: { label: string; tone: StatusTone }
+    createdAt?: string
     href: string
     detail?: string
 }>
@@ -112,9 +114,11 @@ type CustomerRelationshipMetrics = Readonly<{
 type ReceivableSummary = Readonly<{
     receivableBalance: string
     overdueAmount: string
+    openInvoiceableTotal?: string
     earliestOverdueDate?: string
     collectionProgressLabel?: string
     invoicingProgressLabel?: string
+    projectedAt?: string
     reliabilityNote?: string
 }>
 
@@ -177,7 +181,9 @@ export type CustomerCenterView = Readonly<{
     revisionTimeline: readonly {
         id: string
         revisionNo: number
-        actor: string
+        legalName?: string
+        shortName?: string
+        actor?: string
         effectiveAt: string
         reason: string
         isCurrent: boolean

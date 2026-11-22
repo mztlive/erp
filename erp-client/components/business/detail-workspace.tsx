@@ -776,6 +776,7 @@ export type DetailWorkspaceSubTabItem = Readonly<{
     id: string
     label: React.ReactNode
     title?: string
+    badge?: React.ReactNode
 }>
 
 /**
@@ -822,7 +823,8 @@ export function DetailWorkspaceSubTabs({
                             className={styles.subTab}
                             onClick={() => onValueChange(item.id)}
                         >
-                            {item.label}
+                            <span>{item.label}</span>
+                            {item.badge != null ? item.badge : null}
                         </button>
                     )
                 })}

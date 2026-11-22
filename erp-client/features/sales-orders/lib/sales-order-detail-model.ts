@@ -317,6 +317,7 @@ export function navItemsFor(
     options: {
         canReadAcceptance?: boolean
         canViewExtraCost?: boolean
+        canAddExpensePurchase?: boolean
         canSupplementContract?: boolean
     } = {},
 ): Array<{
@@ -354,20 +355,22 @@ export function navItemsFor(
             show: true,
         },
         {
-            id: "extra-cost",
-            label: "附加费用",
-            hint: "我方承担、不对应销售明细的费用",
-            show:
-                order.nature === "physical_service" &&
-                Boolean(options.canViewExtraCost),
-        },
-        {
             id: "acceptance",
             label: "验收",
             hint: "客户验收与历史",
             show:
                 order.nature === "physical_service" &&
                 Boolean(options.canReadAcceptance),
+        },
+        {
+            id: "extra-cost",
+            label: "附加费用",
+            hint: "我方承担、不对应销售明细的费用与运费采购",
+            show:
+                order.nature === "physical_service" &&
+                Boolean(
+                    options.canViewExtraCost || options.canAddExpensePurchase,
+                ),
         },
         {
             id: "receivable",

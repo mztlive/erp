@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronRightIcon } from "lucide-react"
+import { ChevronRightIcon, MapPinIcon } from "lucide-react"
 
 import { QuickPreviewSheet } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -23,7 +23,8 @@ export function SalesOrderDeliverySummary({
 
     if (!first) {
         return (
-            <span className="text-xs text-muted-foreground">
+            <span className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <MapPinIcon aria-hidden="true" className="size-3 shrink-0" />
                 未指定交付地址
             </span>
         )
@@ -40,6 +41,10 @@ export function SalesOrderDeliverySummary({
         ),
     )
     const summary = `分送 ${allocations.length} 个地址 · 共 ${total} ${line.unit}`
+    const triggerText =
+        allocations.length === 1
+            ? [first.recipient, first.region_name].filter(Boolean).join(" · ")
+            : summary
 
     return (
         <QuickPreviewSheet
@@ -62,30 +67,33 @@ export function SalesOrderDeliverySummary({
                             type="button"
                             variant="link"
                             size="sm"
-                            className="h-auto max-w-60 justify-start px-0 py-1 text-left whitespace-normal"
+                            className="mt-1 h-auto max-w-64 justify-start gap-1 px-0 py-0 text-left text-xs font-normal text-primary/90 hover:text-primary"
                         />
                     }
                 >
-                    <span className="min-w-0 break-words">
-                        {allocations.length === 1
-                            ? [first.recipient, first.region_name]
-                                  .filter(Boolean)
-                                  .join(" · ")
-                            : summary}
-                    </span>
-                    <ChevronRightIcon aria-hidden data-icon="inline-end" />
+                    <MapPinIcon
+                        aria-hidden="true"
+                        className="size-3 shrink-0"
+                    />
+                    <span className="min-w-0 truncate">{triggerText}</span>
+                    <ChevronRightIcon
+                        aria-hidden="true"
+                        className="size-3 shrink-0 opacity-75"
+                    />
                 </SheetTrigger>
             }
             footer={
                 <SheetClose
                     id={`${prefix}-footer-close`}
-                    render={<Button type="button" variant="outline" />}
+                    render={
+                        <Button type="button" variant="outline" size="sm" />
+                    }
                 >
                     关闭
                 </SheetClose>
             }
         >
-            <ol className="divide-y divide-border">
+            <ol className="divide-y divide-border/60">
                 {allocations.map((allocation, index) => (
                     <li
                         key={index}
@@ -108,7 +116,7 @@ export function SalesOrderDeliverySummary({
                                 {allocation.phone}
                             </dd>
                             <dt className="text-muted-foreground">完整地址</dt>
-                            <dd className="break-words leading-6">
+                            <dd className="leading-6 break-words">
                                 {fullDeliveryAddress(allocation)}
                             </dd>
                         </dl>

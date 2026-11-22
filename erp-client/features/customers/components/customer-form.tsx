@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { SaveIcon } from "lucide-react"
 
 import {
     DetailWorkspaceSaveDock,
@@ -8,54 +9,59 @@ import {
     detailWorkspaceStyles,
 } from "@/components/business"
 import { useAppForm, applyApiFormError, FormError } from "@/components/form"
+import { Button } from "@/components/ui/button"
+import { NativeCheckbox } from "@/components/ui/checkbox"
 import { FieldGroup } from "@/components/ui/field"
-import { useSelector } from "@tanstack/react-form"
-import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
+import { Label } from "@/components/ui/label"
+import { LoadingButton } from "@/components/ui/loading-button"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { BankAccountRowsSection } from "@/features/customers/components/customer-form-bank-section"
+import {
+    CustomerFormActionBar,
+    CustomerFormResultPanel,
+} from "@/features/customers/components/customer-form-feedback"
+import {
+    AddressRowsSection,
+    ContactRowsSection,
+    FormSection,
+} from "@/features/customers/components/customer-form-sections"
+import {
+    buildDefaults,
+    buildFormSubmission,
+    countCustomerFormChanges,
+    describeCustomerFormChanges,
+    newIdempotencyKey,
+    type FormValues,
+} from "@/features/customers/components/customer-form-values"
 import {
     useCreateCustomerMutation,
     useQueryCustomerIdempotencyMutation,
     useSaveCustomerDetailsMutation,
 } from "@/features/customers/hooks/queries"
-import { useAccountProfileQuery } from "@/features/auth/queries"
+import {
+    createSchema,
+    editDraftSchema,
+    editSchema,
+} from "@/features/customers/lib/customer-form-schemas"
 import type {
     CreateCustomerInput,
     CustomerCenterView,
     CustomerMutationResult,
     SaveCustomerDetailsInput,
 } from "@/features/customers/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 import { hasPermission } from "@/lib/permissions"
-import {
-    createSchema,
-    editDraftSchema,
-    editSchema,
-} from "@/features/customers/lib/customer-form-schemas"
-import {
-    buildDefaults,
-    buildFormSubmission,
-    countCustomerFormChanges,
-    newIdempotencyKey,
-    type FormValues,
-} from "@/features/customers/components/customer-form-values"
-import {
-    AddressRowsSection,
-    ContactRowsSection,
-    FormSection,
-} from "@/features/customers/components/customer-form-sections"
-import { BankAccountRowsSection } from "@/features/customers/components/customer-form-bank-section"
-import {
-    CustomerFormActionBar,
-    CustomerFormResultPanel,
-} from "@/features/customers/components/customer-form-feedback"
-import { CustomerConflictDialog } from "./customer-conflict-dialog"
-import { CustomerSaveReasonDialog } from "./customer-save-reason-dialog"
-import { Button } from "@/components/ui/button"
-import { LoadingButton } from "@/components/ui/loading-button"
-import { NativeCheckbox } from "@/components/ui/checkbox"
-import { Label } from "@/components/ui/label"
 import { useWorkspaceDirtyState } from "@/lib/workspace-form-guard"
+import { useSelector } from "@tanstack/react-form"
+import { CustomerConflictDialog } from "./customer-conflict-dialog"
+import {
+    CustomerSaveReasonDialog,
+    QUICK_CHANGE_REASONS,
+} from "./customer-save-reason-dialog"
 
 /**
- * 客户资料表单：创建（对话框内）与编辑（详情页直出可编辑）共用同一套字段、
+ * 客户资料表单：创建（对话框内）与编辑（详情页原地编辑）共用同一套字段、
  * 校验、敏感值处理、幂等提交与结果状态；外层只决定容器。
  */
 export function CustomerForm({
@@ -203,11 +209,23 @@ export function CustomerForm({
         },
     })
 
-    const changeCount = useSelector(form.store, (state) =>
-        grouped ? countCustomerFormChanges(defaults, state.values) : 0,
+    const [changeCount, changedLabels, isDirty] = useSelector(
+        form.store,
+        (state) => {
+            if (!grouped) return [0, [] as string[], state.isDirty] as const
+            return [
+                countCustomerFormChanges(defaults, state.values),
+                describeCustomerFormChanges(defaults, state.values),
+                state.isDirty,
+            ] as const
+        },
     )
-    const isDirty = useSelector(form.store, (state) => state.isDirty)
     const dirty = grouped ? changeCount > 0 : isDirty
+    const changeDescription =
+        changedLabels.length > 0
+            ? changedLabels.slice(0, 3).join("、") +
+              (changedLabels.length > 3 ? " 等" : "")
+            : undefined
     const [discardOpen, setDiscardOpen] = React.useState(false)
 
     // 详情页最新资料刷新且当前无未保存修改时，自动同步最新基线，避免冻结旧快照。
@@ -296,6 +314,13 @@ export function CustomerForm({
             focusFirstInvalidField()
             return
         }
+        const inlineReason = form.state.values.changeReason.trim()
+        if (inlineReason.length >= 2) {
+            pendingReasonRef.current = inlineReason
+            await form.handleSubmit()
+            return
+        }
+        setReasonDraft(form.state.values.changeReason)
         setReasonError(null)
         setSaveReasonOpen(true)
     }, [
@@ -353,11 +378,11 @@ export function CustomerForm({
                 <FormSection
                     grouped={grouped}
                     title="客户基本资料"
-                    description="直接修改字段，底部将浮现保存条；修改仅对后续新业务生效，不影响已创建的合同和销售单"
+                    description="修改仅对后续新业务生效，不影响已创建的合同和销售单"
                 >
                     <FieldGroup
                         data-slot="detail-form-grid"
-                        className="grid gap-4 sm:grid-cols-2"
+                        className="grid gap-x-5 gap-y-4 sm:grid-cols-12"
                     >
                         <form.AppField
                             name="legalName"
@@ -366,6 +391,7 @@ export function CustomerForm({
                                     id="customers-form-legal-name"
                                     label="法定名称"
                                     required
+                                    className="sm:col-span-8"
                                 />
                             )}
                         />
@@ -375,6 +401,8 @@ export function CustomerForm({
                                 <field.TextField
                                     id="customers-form-short-name"
                                     label="客户简称"
+                                    placeholder="可选"
+                                    className="sm:col-span-4"
                                 />
                             )}
                         />
@@ -386,6 +414,7 @@ export function CustomerForm({
                                     label="统一社会信用代码"
                                     inputClassName="num"
                                     placeholder="可选，18 位字母或数字"
+                                    className="sm:col-span-5"
                                 />
                             )}
                         />
@@ -397,6 +426,7 @@ export function CustomerForm({
                                     label="默认付款条件"
                                     options={PAYMENT_TERM_OPTIONS}
                                     placeholder="请选择付款条件"
+                                    className="sm:col-span-4"
                                 />
                             )}
                         />
@@ -407,10 +437,12 @@ export function CustomerForm({
                                     id="customers-form-status"
                                     label="客户状态"
                                     required
+                                    allowClear={false}
                                     options={[
                                         { value: "active", label: "启用" },
                                         { value: "disabled", label: "停用" },
                                     ]}
+                                    className="sm:col-span-3"
                                 />
                             )}
                         />
@@ -495,13 +527,23 @@ export function CustomerForm({
             ) : null}
 
             {canWriteContacts ? (
-                <ContactRowsSection form={form} mode={mode} grouped={grouped} />
+                <ContactRowsSection
+                    form={form}
+                    mode={mode}
+                    grouped={grouped}
+                    existingContacts={baseline?.contacts}
+                />
             ) : (
                 (readonlyContactsFallback ?? null)
             )}
 
             {canWriteAddresses ? (
-                <AddressRowsSection form={form} mode={mode} grouped={grouped} />
+                <AddressRowsSection
+                    form={form}
+                    mode={mode}
+                    grouped={grouped}
+                    existingAddresses={baseline?.addresses}
+                />
             ) : (
                 (readonlyAddressesFallback ?? null)
             )}
@@ -511,10 +553,63 @@ export function CustomerForm({
                     form={form}
                     mode={mode}
                     grouped={grouped}
+                    existingBanks={baseline?.bankAccounts}
                 />
             ) : (
                 (readonlyBanksFallback ?? null)
             )}
+
+            {grouped && mode === "edit" ? (
+                <FormSection
+                    grouped={grouped}
+                    title="变更说明"
+                    description="记录本次资料修订原因，将计入版本修改记录（也可在保存时补充）"
+                >
+                    <FieldGroup
+                        data-slot="detail-form-grid"
+                        className="space-y-2.5"
+                    >
+                        <form.AppField
+                            name="changeReason"
+                            children={(field) => (
+                                <field.TextareaField
+                                    id="customers-form-change-reason"
+                                    label="修改原因"
+                                    required
+                                    rows={2}
+                                    placeholder="例如：补录统一社会信用代码、更新默认联系人或付款条件"
+                                />
+                            )}
+                        />
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-xs text-muted-foreground">
+                                快捷填入：
+                            </span>
+                            {QUICK_CHANGE_REASONS.map((preset) => (
+                                <Button
+                                    key={preset}
+                                    id={`customers-form-reason-preset-${toAutomationIdSegment(preset)}`}
+                                    type="button"
+                                    size="xs"
+                                    variant="ghost"
+                                    className={
+                                        detailWorkspaceStyles.subtleButton
+                                    }
+                                    disabled={isPending}
+                                    onClick={() =>
+                                        form.setFieldValue(
+                                            "changeReason",
+                                            preset,
+                                        )
+                                    }
+                                >
+                                    {preset}
+                                </Button>
+                            ))}
+                        </div>
+                    </FieldGroup>
+                </FormSection>
+            ) : null}
 
             <div className={grouped ? "max-w-4xl" : undefined}>
                 <CustomerFormResultPanel
@@ -535,6 +630,8 @@ export function CustomerForm({
                     <DetailWorkspaceSaveDock
                         open={dirty}
                         changeCount={changeCount}
+                        summary={changedLabels.join("；")}
+                        description={changeDescription}
                         saving={isPending}
                         enableSaveShortcut={
                             !shortcutBlocked &&
@@ -557,7 +654,7 @@ export function CustomerForm({
                                         disabled={isPending}
                                         onClick={() => setDiscardOpen(true)}
                                     >
-                                        还原修改
+                                        取消修改
                                     </Button>
                                 ) : null}
                                 <LoadingButton
@@ -572,6 +669,10 @@ export function CustomerForm({
                                         void handleRequestGroupedSave()
                                     }
                                 >
+                                    <SaveIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
                                     {submitLabel}
                                 </LoadingButton>
                             </>
@@ -595,17 +696,19 @@ export function CustomerForm({
             )}
 
             {mode === "edit" && result?.outcome === "conflict" ? (
-                <Button
-                    id="customers-form-review-conflict"
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                        setConflictDraft(structuredClone(form.state.values))
-                        setConflictOpen(true)
-                    }}
-                >
-                    核对最新资料
-                </Button>
+                <div className={grouped ? "max-w-4xl pt-2" : undefined}>
+                    <Button
+                        id="customers-form-review-conflict"
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                            setConflictDraft(structuredClone(form.state.values))
+                            setConflictOpen(true)
+                        }}
+                    >
+                        核对最新资料
+                    </Button>
+                </div>
             ) : null}
 
             {grouped && mode === "edit" ? (
@@ -613,6 +716,7 @@ export function CustomerForm({
                     open={saveReasonOpen}
                     onOpenChange={setSaveReasonOpen}
                     changeCount={changeCount}
+                    changedLabels={changedLabels}
                     reason={reasonDraft}
                     onReasonChange={(next) => {
                         setReasonDraft(next)
@@ -650,7 +754,7 @@ export function CustomerForm({
                 open={discardOpen}
                 onOpenChange={setDiscardOpen}
                 title="放弃未保存的修改？"
-                description="将还原为最近一次保存的客户资料。"
+                description="将还原为最近一次保存的客户资料并退出编辑。"
                 confirmLabel="放弃并还原"
                 onConfirm={() => {
                     setDiscardOpen(false)

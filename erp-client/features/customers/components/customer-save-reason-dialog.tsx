@@ -3,6 +3,7 @@
 import * as React from "react"
 import { SaveIcon } from "lucide-react"
 
+import { detailWorkspaceStyles } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -16,15 +17,25 @@ import { Label } from "@/components/ui/label"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { RequiredMark } from "@/components/ui/required-mark"
 import { Textarea } from "@/components/ui/textarea"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+
+export const QUICK_CHANGE_REASONS = [
+    "更新联系方式",
+    "补录信用代码",
+    "调整付款条件",
+    "维护收货地址",
+    "更新银行账户",
+] as const
 
 /**
  * 客户资料保存原因确认弹窗：
- * 收口必填「修改原因」到点击保存后的轻量确认层，避免页底修改字段时被页顶必填框静音拦截。
+ * 当用户从顶部/悬浮保存条直接保存且尚未填写底部变更说明时弹出，避免长页面来回滚动。
  */
 export function CustomerSaveReasonDialog({
     open,
     onOpenChange,
     changeCount,
+    changedLabels = [],
     reason,
     onReasonChange,
     reasonError,
@@ -34,6 +45,7 @@ export function CustomerSaveReasonDialog({
     open: boolean
     onOpenChange: (open: boolean) => void
     changeCount: number
+    changedLabels?: readonly string[]
     reason: string
     onReasonChange: (value: string) => void
     reasonError: string | null
@@ -69,7 +81,11 @@ export function CustomerSaveReasonDialog({
                         <span className="num font-medium text-foreground">
                             {changeCount}
                         </span>{" "}
-                        项内容，仅对后续新业务生效，不影响已创建的合同与销售单。
+                        项内容
+                        {changedLabels.length > 0
+                            ? `（涉及：${changedLabels.join("、")}）`
+                            : ""}
+                        ，仅对后续新业务生效，不影响已创建的合同与销售单。
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -79,14 +95,14 @@ export function CustomerSaveReasonDialog({
                         if (!pending) onConfirm()
                     }}
                 >
-                    <div className="space-y-1.5">
-                        <Label htmlFor="customers-form-change-reason">
+                    <div className="space-y-2">
+                        <Label htmlFor="customers-form-save-reason-input">
                             修改原因
                             <RequiredMark />
                         </Label>
                         <Textarea
                             ref={textareaRef}
-                            id="customers-form-change-reason"
+                            id="customers-form-save-reason-input"
                             aria-required="true"
                             aria-invalid={reasonError ? true : undefined}
                             value={reason}
@@ -97,9 +113,27 @@ export function CustomerSaveReasonDialog({
                             rows={3}
                             placeholder="例如：更新默认付款条件或联系信息"
                         />
+                        <div className="flex flex-wrap gap-1.5">
+                            {QUICK_CHANGE_REASONS.map((preset) => (
+                                <Button
+                                    key={preset}
+                                    id={`customers-form-save-reason-preset-${toAutomationIdSegment(preset)}`}
+                                    type="button"
+                                    size="xs"
+                                    variant="ghost"
+                                    className={
+                                        detailWorkspaceStyles.subtleButton
+                                    }
+                                    disabled={pending}
+                                    onClick={() => onReasonChange(preset)}
+                                >
+                                    {preset}
+                                </Button>
+                            ))}
+                        </div>
                         {reasonError ? (
                             <p
-                                id="customers-form-change-reason-error"
+                                id="customers-form-save-reason-error"
                                 role="alert"
                                 className="text-xs text-destructive"
                             >

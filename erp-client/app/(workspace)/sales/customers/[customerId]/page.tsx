@@ -24,6 +24,7 @@ export default async function Page({
                     title="客户详情"
                     description="正在加载客户…"
                     summary
+                    sidebar
                 />
             }
         >

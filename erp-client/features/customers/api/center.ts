@@ -117,6 +117,8 @@ export async function fetchCustomerCenter(
             ? {
                   receivableBalance: receivableResult.value.receivable_balance,
                   overdueAmount: receivableResult.value.overdue_amount,
+                  openInvoiceableTotal:
+                      receivableResult.value.open_invoiceable_total,
                   earliestOverdueDate:
                       receivableResult.value.earliest_overdue_date ?? undefined,
                   collectionProgressLabel:
@@ -135,6 +137,7 @@ export async function fetchCustomerCenter(
                       ) === 0
                           ? "已完成"
                           : "存在可开票余额",
+                  projectedAt: tsToIso(receivableResult.value.projected_at),
               }
             : undefined
     const qualitySummary =
@@ -192,7 +195,8 @@ export async function fetchCustomerCenter(
         revisionTimeline: profile.revisions.map((revision) => ({
             id: revision.id,
             revisionNo: revision.revision_no,
-            actor: "—",
+            legalName: revision.legal_name,
+            shortName: revision.short_name ?? undefined,
             effectiveAt: tsToIso(revision.created_at),
             reason: revision.change_reason,
             isCurrent: revision.id === profile.current_revision.id,

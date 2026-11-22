@@ -274,6 +274,11 @@ function SalesOrderDetailContent({
         )
     }
 
+    const canAddExpensePurchase =
+        order.nature === "physical_service" &&
+        order.currentRevisionNo != null &&
+        hasPermission(account.data?.permissions, "purchase_order:create")
+
     const derived = deriveSalesOrderDetailState(order, {
         section,
         fromWorkspace,
@@ -285,6 +290,7 @@ function SalesOrderDetailContent({
             (deliveryQuery.data?.pendingFactCount ?? 0) > 0,
         canReadAcceptance: canReadDelivery,
         canViewExtraCost,
+        canAddExpensePurchase,
         canSupplementContract: canSupplementSalesOrderContract(
             order,
             account.data?.permissions,
@@ -489,8 +495,11 @@ function SalesOrderDetailContent({
                     section={section}
                     navSection={derived.navSection}
                     visibleNav={derived.visibleNav}
+                    canAccept={derived.canAccept}
                     canOperateAcceptance={canOperateAcceptance}
                     canReadDelivery={canReadDelivery}
+                    canViewExtraCost={canViewExtraCost}
+                    canAddExpensePurchase={canAddExpensePurchase}
                     deliveryQuery={deliveryQuery}
                     onSelectSection={selectSection}
                     onApprovalResult={handleActionResult}

@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query"
 import {
     BusinessEmptyState,
     BusinessFailureState,
+    DetailWorkspaceSection,
     WorkspaceTaskFooter,
     useWorkspaceTaskPane,
     workspaceTaskSurfacePadClassName,
@@ -41,7 +42,10 @@ import {
 import { AcceptanceDialogs } from "@/features/sales-orders/components/acceptance-dialogs"
 import { AcceptanceFormalResult } from "@/features/sales-orders/components/acceptance-formal-result"
 import { AcceptanceHistoryList } from "@/features/sales-orders/components/acceptance-history-list"
-import { AcceptanceProgressTable } from "@/features/sales-orders/components/acceptance-progress-table"
+import {
+    AcceptanceProgressTable,
+    AcceptanceSummaryMetrics,
+} from "@/features/sales-orders/components/acceptance-progress-table"
 import { AcceptanceRegisterDialog } from "@/features/sales-orders/components/acceptance-register-dialog"
 
 export function AcceptanceWorkspace({
@@ -171,7 +175,7 @@ export function AcceptanceWorkspace({
         : undefined
     const sectionClassName = inWorkspaceTaskPane
         ? workspaceTaskSurfacePadClassName
-        : "py-0"
+        : undefined
 
     const prefilledOpenRef = React.useRef(false)
     const replaceSelection = selection.replace
@@ -203,6 +207,17 @@ export function AcceptanceWorkspace({
     const isOwner = !ownerId || !currentUserId || currentUserId === ownerId
 
     if (waitingForTask || workspaceQuery.isPending) {
+        if (!inWorkspaceTaskPane) {
+            return (
+                <DetailWorkspaceSection width="form">
+                    <div
+                        className="min-h-40 animate-pulse rounded-md bg-muted/50"
+                        aria-busy="true"
+                        aria-label="正在加载客户验收"
+                    />
+                </DetailWorkspaceSection>
+            )
+        }
         return (
             <div className={insetClassName}>
                 <div
@@ -215,35 +230,47 @@ export function AcceptanceWorkspace({
     }
 
     if (workspaceQuery.isError) {
-        return (
-            <div className={insetClassName}>
-                <BusinessFailureState
-                    title="验收内容加载失败"
-                    error={workspaceQuery.error}
-                    action={
-                        <Button
-                            id="sales-orders-acceptance-retry"
-                            type="button"
-                            onClick={() => void workspaceQuery.refetch()}
-                        >
-                            重试
-                        </Button>
-                    }
-                />
-            </div>
+        const failure = (
+            <BusinessFailureState
+                title="验收内容加载失败"
+                error={workspaceQuery.error}
+                action={
+                    <Button
+                        id="sales-orders-acceptance-retry"
+                        type="button"
+                        onClick={() => void workspaceQuery.refetch()}
+                    >
+                        重试
+                    </Button>
+                }
+            />
         )
+        if (!inWorkspaceTaskPane) {
+            return (
+                <DetailWorkspaceSection width="form">
+                    {failure}
+                </DetailWorkspaceSection>
+            )
+        }
+        return <div className={insetClassName}>{failure}</div>
     }
 
     if (!view) {
-        return (
-            <div className={insetClassName}>
-                <BusinessEmptyState
-                    kind="no-data"
-                    title="暂无可验收内容"
-                    description="请返回销售单检查当前状态。"
-                />
-            </div>
+        const empty = (
+            <BusinessEmptyState
+                kind="no-data"
+                title="暂无可验收内容"
+                description="请返回销售单检查当前状态。"
+            />
         )
+        if (!inWorkspaceTaskPane) {
+            return (
+                <DetailWorkspaceSection width="form">
+                    {empty}
+                </DetailWorkspaceSection>
+            )
+        }
+        return <div className={insetClassName}>{empty}</div>
     }
 
     const acceptanceEntryBlocked = Boolean(view.workItemConfigBlocker)
@@ -302,87 +329,121 @@ export function AcceptanceWorkspace({
             id="sales-orders-acceptance-register-open"
             type="button"
             size="sm"
+            className={!inWorkspaceTaskPane ? "px-3.5" : undefined}
             disabled={!canPost}
             onClick={openRegister}
         >
             登记客户验收
         </Button>
     )
-    return (
-        <div
-            id={baseId}
-            className={cn(
-                "flex min-w-0 flex-col",
-                !inWorkspaceTaskPane && "gap-4",
-            )}
-        >
+
+    const body = (
+        <>
             {view.workItemConfigBlocker ? (
-                <div className={insetClassName}>
-                    <Alert variant="warning" role="alert">
-                        <AlertTitle>暂时不能从这条待办登记</AlertTitle>
-                        <AlertDescription>
-                            {view.workItemConfigBlocker}
-                        </AlertDescription>
-                    </Alert>
-                </div>
+                inWorkspaceTaskPane ? (
+                    <div className={insetClassName}>
+                        <Alert variant="warning" role="alert">
+                            <AlertTitle>暂时不能从这条待办登记</AlertTitle>
+                            <AlertDescription>
+                                {view.workItemConfigBlocker}
+                            </AlertDescription>
+                        </Alert>
+                    </div>
+                ) : (
+                    <DetailWorkspaceSection width="form">
+                        <Alert variant="warning" role="alert">
+                            <AlertTitle>暂时不能从这条待办登记</AlertTitle>
+                            <AlertDescription>
+                                {view.workItemConfigBlocker}
+                            </AlertDescription>
+                        </Alert>
+                    </DetailWorkspaceSection>
+                )
             ) : null}
 
             {pageFormalResult ? (
-                <div className={insetClassName}>
-                    <AcceptanceFormalResult
-                        formalResult={pageFormalResult}
-                        resultRef={resultRef}
-                        onDismiss={() => setFormalResult(null)}
-                        onRetry={() => {
-                            setFormalResult(null)
-                            if (!registerOpen) setRegisterMode(true)
-                            setConfirmOpen(true)
-                        }}
-                    />
-                </div>
+                inWorkspaceTaskPane ? (
+                    <div className={insetClassName}>
+                        <AcceptanceFormalResult
+                            formalResult={pageFormalResult}
+                            resultRef={resultRef}
+                            onDismiss={() => setFormalResult(null)}
+                            onRetry={() => {
+                                setFormalResult(null)
+                                if (!registerOpen) setRegisterMode(true)
+                                setConfirmOpen(true)
+                            }}
+                        />
+                    </div>
+                ) : (
+                    <DetailWorkspaceSection width="form">
+                        <AcceptanceFormalResult
+                            formalResult={pageFormalResult}
+                            resultRef={resultRef}
+                            onDismiss={() => setFormalResult(null)}
+                            onRetry={() => {
+                                setFormalResult(null)
+                                if (!registerOpen) setRegisterMode(true)
+                                setConfirmOpen(true)
+                            }}
+                        />
+                    </DetailWorkspaceSection>
+                )
             ) : null}
 
             {isCard ? (
-                <div className={insetClassName}>
-                    <AcceptanceBlockedState
-                        isCard
-                        blockerMessage={postBlocker?.message}
-                    />
-                </div>
+                inWorkspaceTaskPane ? (
+                    <div className={insetClassName}>
+                        <AcceptanceBlockedState
+                            isCard
+                            blockerMessage={postBlocker?.message}
+                        />
+                    </div>
+                ) : (
+                    <DetailWorkspaceSection width="form">
+                        <AcceptanceBlockedState
+                            isCard
+                            blockerMessage={postBlocker?.message}
+                        />
+                    </DetailWorkspaceSection>
+                )
             ) : view.salesLines.length === 0 && view.history.length === 0 ? (
-                <div className={insetClassName}>
-                    <AcceptanceNoFactsState />
-                </div>
+                inWorkspaceTaskPane ? (
+                    <div className={insetClassName}>
+                        <AcceptanceNoFactsState />
+                    </div>
+                ) : (
+                    <DetailWorkspaceSection width="form">
+                        <AcceptanceNoFactsState />
+                    </DetailWorkspaceSection>
+                )
             ) : (
                 <>
+                    {!inWorkspaceTaskPane ? (
+                        <AcceptanceSummaryMetrics progress={progress} />
+                    ) : null}
+
                     <AcceptanceProgressTable
+                        surface={inWorkspaceTaskPane ? "task" : "detail"}
                         progress={progress}
-                        pendingHint={
-                            inWorkspaceTaskPane ? progressHint : undefined
+                        showSummary={inWorkspaceTaskPane}
+                        pendingHint={progressHint}
+                        actions={
+                            !inWorkspaceTaskPane && canRegister
+                                ? registerButton
+                                : undefined
                         }
                         className={sectionClassName}
                     />
 
-                    {canRegister ? (
-                        <WorkspaceTaskFooter
-                            fallback={
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <p className="text-xs text-muted-foreground">
-                                        {progressHint}
-                                    </p>
-                                    {registerButton}
-                                </div>
-                            }
-                        >
+                    {inWorkspaceTaskPane && canRegister ? (
+                        <WorkspaceTaskFooter fallback={null}>
                             {registerButton}
                         </WorkspaceTaskFooter>
-                    ) : !isOwner && pendingCount > 0 && !inWorkspaceTaskPane ? (
-                        <p className="text-xs text-muted-foreground">
-                            {progressHint}
-                        </p>
                     ) : null}
 
                     <AcceptanceHistoryList
+                        surface={inWorkspaceTaskPane ? "task" : "detail"}
                         history={view.history}
                         canReverse={view.permissions.allowedActions.includes(
                             "REVERSE_ACCEPTANCE",
@@ -520,6 +581,16 @@ export function AcceptanceWorkspace({
                     })
                 }}
             />
+        </>
+    )
+
+    if (!inWorkspaceTaskPane && !baseId) {
+        return body
+    }
+
+    return (
+        <div id={baseId} className="flex min-w-0 flex-col">
+            {body}
         </div>
     )
 }

@@ -7,13 +7,19 @@ import {
     BanIcon,
     CircleAlertIcon,
     CircleCheckIcon,
+    DownloadIcon,
     type LucideIcon,
     RotateCcwIcon,
     TriangleAlertIcon,
     UserRoundIcon,
 } from "lucide-react"
 
-import { BusinessStatusBadge, DocumentSection } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    DetailWorkspaceSection,
+    DocumentSection,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     statusToneMarkerClass,
@@ -46,54 +52,76 @@ export function AcceptanceHistoryList({
     history,
     canReverse,
     onReverse,
+    surface = "task",
     className,
     showGuidance = true,
 }: {
     history: AcceptanceHistoryItem[]
     canReverse: boolean
     onReverse: (item: AcceptanceHistoryItem) => void
+    surface?: "task" | "detail"
     className?: string
     showGuidance?: boolean
 }) {
     const ordered = [...history].sort(compareHistoryNewestFirst)
     const byId = new Map(history.map((item) => [item.acceptanceId, item]))
+    const guidance = showGuidance
+        ? "已确认的验收记录不可修改；如有误录，可通过冲正新增一条反向记录。"
+        : undefined
+
+    const content =
+        ordered.length === 0 ? (
+            <p className="text-xs text-muted-foreground">还没有验收记录。</p>
+        ) : (
+            <Timeline aria-label="验收记录时间线">
+                {ordered.map((item) => (
+                    <HistoryEntry
+                        key={item.acceptanceId}
+                        item={item}
+                        relatedOriginal={
+                            item.reversalOfAcceptanceId
+                                ? byId.get(item.reversalOfAcceptanceId)
+                                : undefined
+                        }
+                        relatedReversal={
+                            item.reversedByAcceptanceId
+                                ? byId.get(item.reversedByAcceptanceId)
+                                : undefined
+                        }
+                        canReverse={canReverse}
+                        onReverse={onReverse}
+                    />
+                ))}
+            </Timeline>
+        )
+
+    if (surface === "detail") {
+        return (
+            <DetailWorkspaceSection
+                width="form"
+                title="验收记录"
+                badge={
+                    ordered.length > 0 ? (
+                        <span className="num text-xs text-muted-foreground">
+                            共 {ordered.length} 条
+                        </span>
+                    ) : undefined
+                }
+                subtitle={guidance}
+                className={className}
+            >
+                {content}
+            </DetailWorkspaceSection>
+        )
+    }
 
     return (
         <DocumentSection
             className={className ?? "py-0"}
             title="验收记录"
-            description={
-                showGuidance
-                    ? "已确认的验收记录不可修改；如有误录，可通过冲正新增一条反向记录。"
-                    : undefined
-            }
+            description={guidance}
         >
-            {ordered.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                    还没有验收记录。
-                </p>
-            ) : (
-                <Timeline aria-label="验收记录时间线">
-                    {ordered.map((item) => (
-                        <HistoryEntry
-                            key={item.acceptanceId}
-                            item={item}
-                            relatedOriginal={
-                                item.reversalOfAcceptanceId
-                                    ? byId.get(item.reversalOfAcceptanceId)
-                                    : undefined
-                            }
-                            relatedReversal={
-                                item.reversedByAcceptanceId
-                                    ? byId.get(item.reversedByAcceptanceId)
-                                    : undefined
-                            }
-                            canReverse={canReverse}
-                            onReverse={onReverse}
-                        />
-                    ))}
-                </Timeline>
-            )}
+            {content}
         </DocumentSection>
     )
 }
@@ -132,19 +160,11 @@ function HistoryEntry({
         item.status === "POSTED" && !item.reversalOfAcceptanceId && canReverse
     const showReversedBy =
         item.status === "REVERSED" && Boolean(relatedReversalNo)
-    const hasDescription =
-        Boolean(recordedBy) ||
-        Boolean(relatedOriginalNo) ||
-        showReversedBy ||
-        Boolean(comment) ||
-        item.lines.length > 0 ||
-        showFactNotice ||
-        Boolean(item.evidenceAttachmentId) ||
-        canReverseThis
+    const hasActions = Boolean(item.evidenceAttachmentId) || canReverseThis
 
     return (
         <TimelineItem
-            className={cn(item.status === "REVERSED" && "opacity-80")}
+            className={cn(item.status === "REVERSED" && "opacity-75")}
         >
             <TimelineMarker className={statusToneMarkerClass[tone]}>
                 <Icon aria-hidden="true" />
@@ -169,66 +189,93 @@ function HistoryEntry({
                     </TimelineTime>
                 ) : null}
             </TimelineHeader>
-            {hasDescription ? (
-                <TimelineDescription className="flex flex-col gap-2">
+            <TimelineDescription className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                     {recordedBy ? (
-                        <p className="inline-flex items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1">
                             <UserRoundIcon
                                 aria-hidden="true"
                                 className="size-3.5 shrink-0"
                             />
                             <span>{recordedBy}</span>
-                        </p>
+                        </span>
                     ) : null}
-                    {relatedOriginalNo ? <p>冲正 {relatedOriginalNo}</p> : null}
+                    {relatedOriginalNo ? (
+                        <span>
+                            {recordedBy ? "· " : ""}冲正 {relatedOriginalNo}
+                        </span>
+                    ) : null}
                     {showReversedBy ? (
-                        <p>已被 {relatedReversalNo} 冲正</p>
+                        <span>
+                            {recordedBy || relatedOriginalNo ? "· " : ""}已被{" "}
+                            {relatedReversalNo} 冲正
+                        </span>
                     ) : null}
-                    {comment ? (
-                        <p className="rounded-lg bg-muted px-2.5 py-1.5 text-body-compact text-foreground">
-                            {comment}
-                        </p>
-                    ) : null}
-                    {item.lines.length > 0 ? (
-                        <ul className="flex flex-col gap-1 text-foreground">
-                            {item.lines.map((line) => (
-                                <li
-                                    key={`${line.salesOrderLineId}-${line.lineNo}`}
-                                >
-                                    {formatHistoryLine(line)}
-                                </li>
-                            ))}
-                        </ul>
-                    ) : null}
-                    {showFactNotice ? (
-                        <p className="text-xs text-warning-soft-foreground">
-                            {FACT_ONLY_NOTICE}
-                        </p>
-                    ) : null}
-                    {item.evidenceAttachmentId ? (
-                        <Button
-                            id={`sales-orders-acceptance-history-${toAutomationIdSegment(item.acceptanceId)}-download`}
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={download.isPending}
-                            onClick={() => download.mutate()}
-                            className="self-start"
-                        >
-                            {download.isPending ? "下载中…" : "下载签收单凭证"}
-                        </Button>
-                    ) : (
-                        <p className="text-xs text-muted-foreground">
+                    {!item.evidenceAttachmentId ? (
+                        <span>
+                            {recordedBy || relatedOriginalNo || showReversedBy
+                                ? "· "
+                                : ""}
                             未上传签收单凭证
-                        </p>
-                    )}
-                    {canReverseThis ? (
-                        <div>
+                        </span>
+                    ) : null}
+                </div>
+
+                {comment ? (
+                    <p className="rounded-lg bg-muted/55 px-3 py-1.5 text-body-compact text-foreground">
+                        {comment}
+                    </p>
+                ) : null}
+
+                {item.lines.length > 0 ? (
+                    <ul className="divide-y divide-border/50 rounded-lg bg-muted/30 px-3 py-1">
+                        {item.lines.map((line) => (
+                            <HistoryLineRow
+                                key={`${line.salesOrderLineId}-${line.lineNo}`}
+                                line={line}
+                            />
+                        ))}
+                    </ul>
+                ) : null}
+
+                {showFactNotice ? (
+                    <p className="text-xs text-warning-soft-foreground">
+                        {FACT_ONLY_NOTICE}
+                    </p>
+                ) : null}
+
+                {hasActions ? (
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        {item.evidenceAttachmentId ? (
+                            <Button
+                                id={`sales-orders-acceptance-history-${toAutomationIdSegment(item.acceptanceId)}-download`}
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className={
+                                    detailWorkspaceStyles.inlineLinkButton
+                                }
+                                disabled={download.isPending}
+                                onClick={() => download.mutate()}
+                            >
+                                <DownloadIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                                {download.isPending
+                                    ? "下载中…"
+                                    : "下载签收单凭证"}
+                            </Button>
+                        ) : null}
+                        {canReverseThis ? (
                             <Button
                                 id={`sales-orders-acceptance-history-${toAutomationIdSegment(item.acceptanceId)}-reverse`}
                                 type="button"
                                 size="sm"
                                 variant="ghost"
+                                className={
+                                    detailWorkspaceStyles.quietDangerButton
+                                }
                                 onClick={() => onReverse(item)}
                             >
                                 <RotateCcwIcon
@@ -237,13 +284,48 @@ function HistoryEntry({
                                 />
                                 冲正误录
                             </Button>
-                        </div>
-                    ) : null}
-                </TimelineDescription>
-            ) : (
-                <TimelineDescription>未上传签收单凭证</TimelineDescription>
-            )}
+                        ) : null}
+                    </div>
+                ) : null}
+            </TimelineDescription>
         </TimelineItem>
+    )
+}
+
+function HistoryLineRow({
+    line,
+}: {
+    line: AcceptanceHistoryItem["lines"][number]
+}) {
+    const hasPass = isPositiveQty(line.acceptedQuantity)
+    const hasShort = isPositiveQty(line.shortQuantity)
+    const hasReject = isPositiveQty(line.rejectedQuantity)
+    return (
+        <li className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-1.5 text-body-compact">
+            <span className="min-w-0 text-foreground">
+                <span className="num text-muted-foreground">
+                    {line.lineNo} ·{" "}
+                </span>
+                {line.itemSnapshot}
+            </span>
+            <span className="num flex shrink-0 flex-wrap items-center gap-x-2 text-xs">
+                {hasPass ? (
+                    <span className="font-medium text-success-soft-foreground">
+                        通过 {qtyWithUnit(line.acceptedQuantity, line.unitCode)}
+                    </span>
+                ) : null}
+                {hasShort ? (
+                    <span className="font-medium text-warning-soft-foreground">
+                        短少 {qtyWithUnit(line.shortQuantity, line.unitCode)}
+                    </span>
+                ) : null}
+                {hasReject ? (
+                    <span className="font-medium text-destructive">
+                        拒收 {qtyWithUnit(line.rejectedQuantity, line.unitCode)}
+                    </span>
+                ) : null}
+            </span>
+        </li>
     )
 }
 
@@ -282,21 +364,4 @@ function historyMarkerIcon(
     if (tone === "warning") return CircleAlertIcon
     if (tone === "destructive") return TriangleAlertIcon
     return BanIcon
-}
-
-function formatHistoryLine(
-    line: AcceptanceHistoryItem["lines"][number],
-): string {
-    const parts: string[] = []
-    if (isPositiveQty(line.acceptedQuantity)) {
-        parts.push(`通过 ${qtyWithUnit(line.acceptedQuantity, line.unitCode)}`)
-    }
-    if (isPositiveQty(line.shortQuantity)) {
-        parts.push(`短少 ${qtyWithUnit(line.shortQuantity, line.unitCode)}`)
-    }
-    if (isPositiveQty(line.rejectedQuantity)) {
-        parts.push(`拒收 ${qtyWithUnit(line.rejectedQuantity, line.unitCode)}`)
-    }
-    const qty = parts.length > 0 ? ` · ${parts.join("、")}` : ""
-    return `${line.lineNo} · ${line.itemSnapshot}${qty}`
 }

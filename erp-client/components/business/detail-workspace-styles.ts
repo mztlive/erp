@@ -38,7 +38,7 @@ export const detailWorkspaceStyles = {
     subTabs:
         "inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-lg bg-muted/55 p-0.5",
     subTab: [
-        "inline-flex h-7 cursor-pointer items-center justify-center rounded-md px-2.5 text-body-compact font-normal text-muted-foreground transition-colors",
+        "inline-flex h-7 cursor-pointer items-center justify-center gap-1.5 rounded-md px-2.5 text-body-compact font-normal text-muted-foreground transition-colors",
         "hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary",
         "data-[active=true]:bg-card data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:shadow-2xs",
     ].join(" "),
