@@ -108,7 +108,7 @@ export function SupplierAccountRecordPreview({
                 onOpenChangeComplete={(open) => {
                     if (!open && !paymentDetailOpen) onClosed?.()
                 }}
-                size="preview"
+                size="detail"
                 identity={
                     documentNo
                         ? `${isPayment ? "付款单" : "发票号码"}：${documentNo}`
@@ -242,7 +242,7 @@ export function SupplierAccountRecordPreview({
                     </>
                 }
             >
-                <div className="space-y-6">
+                <div className="space-y-6 px-7 py-6">
                     {row ? (
                         <SupplierAccountRecordBody
                             payment={payment}

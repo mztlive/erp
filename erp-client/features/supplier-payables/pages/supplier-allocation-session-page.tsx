@@ -1,14 +1,14 @@
 "use client"
 
-import { ArrowLeftIcon, SaveIcon } from "lucide-react"
+import { ArrowLeftIcon, LockKeyholeIcon, SaveIcon } from "lucide-react"
 
 import {
     BusinessEmptyState,
     BusinessFailureState,
     DataFreshness,
+    DetailWorkspaceChrome,
+    DetailWorkspacePage,
     PageActions,
-    PageHeader,
-    PageScaffold,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { SupplierAllocationWorkspace } from "@/features/supplier-payables/components/allocation-workspace"
@@ -93,52 +93,66 @@ export function SupplierAllocationSessionPage({
     const trackLabel = track === "payment" ? "付款核销" : "进项票核销"
 
     const header = (
-        <PageHeader
+        <DetailWorkspaceChrome
             title={title}
-            status={{ label: trackLabel, tone: "info" }}
-            description={
-                session
-                    ? [
-                          `供应商 ${session.supplierName} 已锁定；仅展示该供应商的待核销单据。可同时勾选采购单与结算单，不可跨供应商核销。`,
-                          session.existingDocumentNo
-                              ? `继续核销 ${session.existingDocumentNo}。`
-                              : null,
-                          draftHint ? `${draftHint}（不形成业务记录）` : null,
-                      ]
-                          .filter(Boolean)
-                          .join(" ")
-                    : sessionQuery.isError
-                      ? "本次核销未能加载。"
-                      : "正在加载本次核销…"
-            }
-            metadata={
+            primaryStatus={{ label: trackLabel, tone: "info" }}
+            meta={
                 session ? (
-                    <DataFreshness
-                        updatedAt={
-                            sessionQuery.isError
-                                ? "查询失败"
-                                : session.queriedAt.slice(11, 16)
-                        }
-                        dateTime={session.queriedAt}
-                        state={
-                            sessionQuery.isError
-                                ? "failed"
-                                : sessionQuery.isFetching
-                                  ? "syncing"
-                                  : "fresh"
-                        }
-                    />
-                ) : null
+                    <span className="inline-flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                        <span className="inline-flex items-center gap-1.5 text-foreground">
+                            <span className="text-muted-foreground">
+                                供应商
+                            </span>
+                            <LockKeyholeIcon
+                                className="size-3.5 shrink-0 text-muted-foreground"
+                                aria-hidden="true"
+                            />
+                            <span className="font-medium">
+                                {session.supplierName}
+                            </span>
+                        </span>
+                        {session.existingDocumentNo ? (
+                            <span className="num text-muted-foreground">
+                                · 继续核销 {session.existingDocumentNo}
+                            </span>
+                        ) : null}
+                        {draftHint ? (
+                            <span className="text-muted-foreground">
+                                · {draftHint}
+                            </span>
+                        ) : null}
+                        <DataFreshness
+                            updatedAt={
+                                sessionQuery.isError
+                                    ? "查询失败"
+                                    : session.queriedAt.slice(11, 16)
+                            }
+                            dateTime={session.queriedAt}
+                            state={
+                                sessionQuery.isError
+                                    ? "failed"
+                                    : sessionQuery.isFetching
+                                      ? "syncing"
+                                      : "fresh"
+                            }
+                        />
+                    </span>
+                ) : sessionQuery.isError ? (
+                    "本次核销未能加载。"
+                ) : (
+                    "正在加载本次核销…"
+                )
             }
-            actions={
+            secondaryActions={
                 <PageActions
+                    size="sm"
                     actions={[
                         {
                             actionKey: "back",
                             id: "supplier-payables-session-page-back",
                             label: "返回列表",
                             icon: ArrowLeftIcon,
-                            variant: "outline",
+                            variant: "ghost",
                             onClick: onClose,
                         },
                         {
@@ -160,77 +174,83 @@ export function SupplierAllocationSessionPage({
 
     if (sessionQuery.isPending) {
         return (
-            <PageScaffold density="compact">
+            <DetailWorkspacePage>
                 {header}
-                <div className="grid gap-4 lg:grid-cols-2">
+                <div className="grid gap-6 px-(--scaffold-px) py-6 lg:grid-cols-[380px_minmax(0,1fr)]">
                     <div className="h-72 animate-pulse rounded-lg bg-muted" />
                     <div className="h-72 animate-pulse rounded-lg bg-muted" />
                 </div>
-            </PageScaffold>
+            </DetailWorkspacePage>
         )
     }
 
     if (sessionQuery.isError) {
         return (
-            <PageScaffold density="compact">
+            <DetailWorkspacePage>
                 {header}
-                <BusinessFailureState
-                    title="无法开始本次核销"
-                    error={sessionQuery.error}
-                    action={
-                        <div className="flex flex-wrap gap-2">
+                <div className="mx-auto w-full max-w-3xl px-(--scaffold-px) py-8">
+                    <BusinessFailureState
+                        title="无法开始本次核销"
+                        error={sessionQuery.error}
+                        action={
+                            <div className="flex flex-wrap gap-2">
+                                <Button
+                                    id="supplier-payables-session-page-retry"
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => void sessionQuery.refetch()}
+                                >
+                                    重试
+                                </Button>
+                                <Button
+                                    id="supplier-payables-session-page-error-back"
+                                    type="button"
+                                    variant="outline"
+                                    onClick={onClose}
+                                >
+                                    返回列表
+                                </Button>
+                            </div>
+                        }
+                    />
+                </div>
+            </DetailWorkspacePage>
+        )
+    }
+
+    if (!session) {
+        return (
+            <DetailWorkspacePage>
+                {header}
+                <div className="mx-auto w-full max-w-3xl px-(--scaffold-px) py-8">
+                    <BusinessEmptyState
+                        kind="no-data"
+                        title="没有可核销内容"
+                        description="请返回列表重新选择供应商往来。"
+                        action={
                             <Button
-                                id="supplier-payables-session-page-retry"
-                                type="button"
-                                variant="outline"
-                                onClick={() => void sessionQuery.refetch()}
-                            >
-                                重试
-                            </Button>
-                            <Button
-                                id="supplier-payables-session-page-back"
+                                id="supplier-payables-session-page-empty-back"
                                 type="button"
                                 variant="outline"
                                 onClick={onClose}
                             >
                                 返回列表
                             </Button>
-                        </div>
-                    }
-                />
-            </PageScaffold>
-        )
-    }
-
-    if (!session) {
-        return (
-            <PageScaffold density="compact">
-                {header}
-                <BusinessEmptyState
-                    kind="no-data"
-                    title="没有可核销内容"
-                    description="请返回列表重新选择供应商往来。"
-                    action={
-                        <Button
-                            id="supplier-payables-session-page-empty-back"
-                            type="button"
-                            variant="outline"
-                            onClick={onClose}
-                        >
-                            返回列表
-                        </Button>
-                    }
-                />
-            </PageScaffold>
+                        }
+                    />
+                </div>
+            </DetailWorkspacePage>
         )
     }
 
     if (track === "payment" && paymentTaskPending) {
         return (
-            <PageScaffold density="compact">
+            <DetailWorkspacePage>
                 {header}
-                <div className="h-72 animate-pulse rounded-lg bg-muted" />
-            </PageScaffold>
+                <div className="px-(--scaffold-px) py-6">
+                    <div className="h-72 animate-pulse rounded-lg bg-muted" />
+                </div>
+            </DetailWorkspacePage>
         )
     }
 
@@ -242,61 +262,65 @@ export function SupplierAllocationSessionPage({
             !paymentRecipient)
     ) {
         return (
-            <PageScaffold density="compact">
+            <DetailWorkspacePage>
                 {header}
-                <BusinessEmptyState
-                    kind="no-scope"
-                    title={
-                        paymentWorkItemId && !paymentRecipient
-                            ? "供应商未配置可用收款账户"
-                            : "请从付款任务进入"
-                    }
-                    description={
-                        paymentWorkItemId && !paymentRecipient
-                            ? "当前付款任务不能执行。请先在供应商主数据中维护唯一的当前默认收款账户，再刷新任务。"
-                            : "付款执行已按负责人分派。请回到工作台打开分配给你的供应商付款任务；普通列表入口只能查看，不能提交付款。"
-                    }
-                    action={
-                        <Button
-                            id="supplier-payables-session-page-scope-back"
-                            type="button"
-                            variant="outline"
-                            onClick={onClose}
-                        >
-                            返回列表
-                        </Button>
-                    }
-                />
-            </PageScaffold>
+                <div className="mx-auto w-full max-w-3xl px-(--scaffold-px) py-8">
+                    <BusinessEmptyState
+                        kind="no-scope"
+                        title={
+                            paymentWorkItemId && !paymentRecipient
+                                ? "供应商未配置可用收款账户"
+                                : "请从付款任务进入"
+                        }
+                        description={
+                            paymentWorkItemId && !paymentRecipient
+                                ? "当前付款任务不能执行。请先在供应商主数据中维护唯一的当前默认收款账户，再刷新任务。"
+                                : "付款执行已按负责人分派。请回到工作台打开分配给你的供应商付款任务；普通列表入口只能查看，不能提交付款。"
+                        }
+                        action={
+                            <Button
+                                id="supplier-payables-session-page-scope-back"
+                                type="button"
+                                variant="outline"
+                                onClick={onClose}
+                            >
+                                返回列表
+                            </Button>
+                        }
+                    />
+                </div>
+            </DetailWorkspacePage>
         )
     }
 
     return (
-        <PageScaffold density="compact">
+        <DetailWorkspacePage>
             {header}
-            {track === "payment" &&
-            paymentRecipient &&
-            paymentWorkItemId &&
-            expectedPaymentTaskVersion &&
-            paymentPayableAccountId ? (
-                <PaymentRecipientCard
-                    key={`${paymentWorkItemId}:${paymentRecipient.bankAccountId}:${paymentRecipient.version}`}
-                    payableAccountId={paymentPayableAccountId}
-                    workItemId={paymentWorkItemId}
-                    expectedTaskVersion={expectedPaymentTaskVersion}
-                    recipient={paymentRecipient}
+            <div className="flex min-w-0 flex-1 flex-col gap-6 px-(--scaffold-px) py-6">
+                {track === "payment" &&
+                paymentRecipient &&
+                paymentWorkItemId &&
+                expectedPaymentTaskVersion &&
+                paymentPayableAccountId ? (
+                    <PaymentRecipientCard
+                        key={`${paymentWorkItemId}:${paymentRecipient.bankAccountId}:${paymentRecipient.version}`}
+                        payableAccountId={paymentPayableAccountId}
+                        workItemId={paymentWorkItemId}
+                        expectedTaskVersion={expectedPaymentTaskVersion}
+                        recipient={paymentRecipient}
+                    />
+                ) : null}
+                <SupplierAllocationWorkspace
+                    state={sessionState}
+                    track={track}
+                    fromWorkspace={fromWorkspace}
+                    purchaseOrderId={purchaseOrderId}
+                    returnTo={returnTo}
+                    paymentRecipient={paymentRecipient}
+                    onClose={onClose}
+                    onGoToInvoiceView={onGoToInvoiceView}
                 />
-            ) : null}
-            <SupplierAllocationWorkspace
-                state={sessionState}
-                track={track}
-                fromWorkspace={fromWorkspace}
-                purchaseOrderId={purchaseOrderId}
-                returnTo={returnTo}
-                paymentRecipient={paymentRecipient}
-                onClose={onClose}
-                onGoToInvoiceView={onGoToInvoiceView}
-            />
-        </PageScaffold>
+            </div>
+        </DetailWorkspacePage>
     )
 }

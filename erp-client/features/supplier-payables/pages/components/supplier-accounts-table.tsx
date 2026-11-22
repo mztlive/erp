@@ -13,8 +13,10 @@ import {
     VIEW_LABEL,
     type AllocationTrack,
     type PayableRow,
+    type PurchaseInvoiceRow,
     type SupplierAccountsListView,
     type SupplierAccountsView,
+    type UnallocatedRow,
 } from "@/features/supplier-payables/types"
 
 interface SupplierAccountsTableProps {
@@ -33,11 +35,16 @@ interface SupplierAccountsTableProps {
     hasActiveFilters: boolean
     onClearFilters: () => void
     previewRowId: string | null
+    canRegisterInvoice: boolean
+    canPostAllocation: boolean
     openPreview: (payableAccountId: string) => void
     openPaymentPreview: (paymentId: string) => void
     openInvoicePreview: (invoiceId: string) => void
     openUnallocatedPreview: (id: string) => void
     openReversalPreview: (reversalId: string, paymentId: string) => void
+    onRegisterInvoiceForPayable: (row: PayableRow) => void
+    onContinueAllocateInvoice: (row: PurchaseInvoiceRow) => void
+    onContinueAllocateUnallocatedInvoice: (row: UnallocatedRow) => void
     toolbar: ReactNode
 }
 
@@ -63,11 +70,16 @@ export function SupplierAccountsTable({
     hasActiveFilters,
     onClearFilters,
     previewRowId,
+    canRegisterInvoice,
+    canPostAllocation,
     openPreview,
     openPaymentPreview,
     openInvoicePreview,
     openUnallocatedPreview,
     openReversalPreview,
+    onRegisterInvoiceForPayable,
+    onContinueAllocateInvoice,
+    onContinueAllocateUnallocatedInvoice,
     toolbar,
 }: SupplierAccountsTableProps) {
     const {
@@ -75,7 +87,18 @@ export function SupplierAccountsTable({
         paymentColumns,
         invoiceColumns,
         unallocatedColumns,
-    } = useSupplierAccountsColumns({ openReversalPreview })
+    } = useSupplierAccountsColumns({
+        canRegisterInvoice,
+        canPostAllocation,
+        openPreview,
+        openPaymentPreview,
+        openInvoicePreview,
+        openUnallocatedPreview,
+        openReversalPreview,
+        onRegisterInvoiceForPayable,
+        onContinueAllocateInvoice,
+        onContinueAllocateUnallocatedInvoice,
+    })
     const start = pagination.pageIndex * pagination.pageSize
     const end = start + pagination.pageSize
     const commonProps = {
@@ -112,8 +135,12 @@ export function SupplierAccountsTable({
                     "invoicedTotal",
                     "due",
                     "status",
+                    "actions",
                 ]}
-                defaultColumnPinning={{ left: ["supplier"] }}
+                defaultColumnPinning={{
+                    left: ["supplier"],
+                    right: ["actions"],
+                }}
                 data={sortedPayables.slice(start, end)}
                 rowCount={sortedPayables.length}
                 getRowId={(row) => row.payableAccountId}
@@ -140,9 +167,10 @@ export function SupplierAccountsTable({
                     "reversal",
                     "status",
                     "time",
+                    "actions",
                 ]}
                 defaultColumnVisibility={{ bank: false, reversal: false }}
-                defaultColumnPinning={{ left: ["doc"], right: ["reversal"] }}
+                defaultColumnPinning={{ left: ["doc"], right: ["actions"] }}
                 data={rows.slice(start, end)}
                 rowCount={rows.length}
                 getRowId={(row) => row.paymentId}
@@ -158,8 +186,14 @@ export function SupplierAccountsTable({
                 key={view}
                 id="supplier-payables-table-invoice"
                 columns={invoiceColumns}
-                defaultColumnOrder={["doc", "amount", "alloc", "status"]}
-                defaultColumnPinning={{ left: ["doc"] }}
+                defaultColumnOrder={[
+                    "doc",
+                    "amount",
+                    "alloc",
+                    "status",
+                    "actions",
+                ]}
+                defaultColumnPinning={{ left: ["doc"], right: ["actions"] }}
                 data={rows.slice(start, end)}
                 rowCount={rows.length}
                 getRowId={(row) => row.invoiceId}
@@ -177,8 +211,8 @@ export function SupplierAccountsTable({
                 key={view}
                 id="supplier-payables-table-unallocated"
                 columns={unallocatedColumns}
-                defaultColumnOrder={["doc", "track", "amount"]}
-                defaultColumnPinning={{ left: ["doc"] }}
+                defaultColumnOrder={["doc", "track", "amount", "actions"]}
+                defaultColumnPinning={{ left: ["doc"], right: ["actions"] }}
                 data={rows.slice(start, end)}
                 rowCount={rows.length}
                 getRowId={(row) => row.id}

@@ -1,3 +1,15 @@
+export type DepositAccountStatusFilter =
+    | "available"
+    | "reconciliation_required"
+    | "disabled"
+
+export type DepositAccountListFilters = {
+    page: number
+    supplierId?: string
+    payerPartyId?: string
+    status?: DepositAccountStatusFilter
+}
+
 export type DepositAccount = {
     id: string
     version: number
@@ -63,6 +75,8 @@ export type DepositReservation = {
     consumed_amount: string
     released_amount: string
     exposure: "not_sent" | "possibly_sent" | "cleared"
+    purchase_order_no?: string | null
+    payment_request_no?: string | null
     basis: {
         purchase_order_id: string
         payment_request_id: string

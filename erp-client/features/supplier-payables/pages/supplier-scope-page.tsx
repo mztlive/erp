@@ -1,13 +1,14 @@
 "use client"
 
 import * as React from "react"
-import { DownloadIcon } from "lucide-react"
+import Link from "next/link"
+import { ArrowLeftIcon, DownloadIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
     FundsScopeBanner,
+    FundsScopeSummaryBar,
     MoneyValue,
-    PageScaffold,
     QuickPreviewSheet,
 } from "@/components/business"
 import {
@@ -21,14 +22,14 @@ import {
     ListSearchField,
     ListWorkSurface,
     ListWorkspaceFilterBar,
-    ListWorkspaceHeader,
+    ListWorkspacePage,
     listWorkspaceStyles,
     type ListDataTableProps,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { personDirectoryLabel } from "@/features/entity-selectors/api/person-directory"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
@@ -84,6 +85,7 @@ type PreviewRecord = {
     kind: keyof typeof DETAIL_PERMISSIONS
     id: string
     number: string
+    supplierName?: string
 }
 
 type ShareWithOptionalName = {
@@ -115,7 +117,7 @@ function resolveGroupedOwnerName(
     return rawId
 }
 
-/** 供应商往来范围页：应付、付款、进项分配的人员筛选都走采购目录。 */
+/** 供应商往来范围页：统一 ListWorkspacePage、紧凑口径条、无边框金额指标带与 768px 详情抽屉。 */
 export function SupplierScopePage() {
     const urlState = useSupplierScopeUrlState()
     useSearchHotkey(urlState.searchInputRef)
@@ -167,13 +169,13 @@ export function SupplierScopePage() {
         listQuery.data?.view === urlState.view
             ? listQuery.data
             : undefined
-    const topShares = React.useMemo(
-        () => data?.summary?.grouped.slice(0, 5) ?? [],
+    const allShares = React.useMemo(
+        () => data?.summary?.grouped ?? [],
         [data?.summary?.grouped],
     )
     const missingNameIds = React.useMemo(
         () =>
-            topShares
+            allShares
                 .filter((share) => {
                     const item = share as ShareWithOptionalName
                     return (
@@ -183,7 +185,7 @@ export function SupplierScopePage() {
                 })
                 .map((share) => share.owner_user_id)
                 .filter(Boolean),
-        [topShares],
+        [allShares],
     )
     const selectedPeople = usePersonDirectorySelected(
         "procurement",
@@ -203,8 +205,6 @@ export function SupplierScopePage() {
     const initialLoading =
         account.isPending || (canReadList && listQuery.isPending)
     const viewLabel = VIEW_LABEL[urlState.view]
-    const viewId = `supplier-payables-scope-view-${urlState.view}`
-    const panelId = `supplier-payables-scope-panel-${urlState.view}`
     const hasAppliedChips = urlState.appliedChips.some(({ key }) =>
         APPLIED_CHIP_KEYS.some((chipKey) => chipKey === key),
     )
@@ -215,7 +215,6 @@ export function SupplierScopePage() {
         getRowId: (row: { id: string }) => row.id,
         rowCount: data?.total ?? 0,
         pagination: urlState.pagination,
-        // 此查询保留固定每页条数，翻页按当前响应的范围继续读取。
         pageSizeOptions: [urlState.pagination.pageSize],
         onPaginationChange: (next) => {
             if (
@@ -272,6 +271,8 @@ export function SupplierScopePage() {
                                   kind: "payable",
                                   id: row.id,
                                   number: payableSourceNumber(row),
+                                  supplierName:
+                                      row.supplier_name?.trim() || undefined,
                               })
                         : undefined
                 }
@@ -293,6 +294,8 @@ export function SupplierScopePage() {
                                   kind: "payment",
                                   id: row.id,
                                   number: row.payment_no,
+                                  supplierName:
+                                      row.supplier_name?.trim() || undefined,
                               })
                         : undefined
                 }
@@ -317,53 +320,90 @@ export function SupplierScopePage() {
         detail?.kind === "payable"
             ? payableSourceNumber(detail.payable)
             : (detail?.payment.payment_no ?? activePreview?.number)
+    const previewSupplierName =
+        detail?.kind === "payable"
+            ? detail.payable.supplier_name?.trim()
+            : detail?.kind === "payment"
+              ? detail.payment.supplier_name?.trim()
+              : activePreview?.supplierName
     const limited =
         detail?.kind === "payable"
             ? detail.payable.permission_limited
             : detail?.kind === "payment"
               ? detail.payment.permission_limited
               : false
+    const showViews =
+        account.isSuccess &&
+        (allowedViews.length > 1 || (allowedViews.length === 1 && !canReadList))
+    const listLimited =
+        data?.summary?.permission_limited ||
+        data?.payables.some((row) => row.permission_limited) ||
+        data?.payments.some((row) => row.permission_limited) ||
+        data?.allocations.some((row) => row.permission_limited) ||
+        false
 
-    const tabs =
-        allowedViews.length > 1 ||
-        (allowedViews.length === 1 && !canReadList) ? (
-            <TabsList
-                variant="line"
-                aria-label="供应商往来视图"
-                className="max-w-full gap-5 overflow-x-auto md:-mb-px"
-            >
-                {allowedViews.map((view) => (
-                    <TabsTrigger
-                        key={view}
-                        value={view}
-                        id={`supplier-payables-scope-view-${view}`}
-                        aria-controls={
-                            view === urlState.view ? panelId : undefined
-                        }
-                        className="font-normal group-data-[variant=line]/tabs-list:after:rounded-full group-data-[variant=line]/tabs-list:md:h-12 data-active:font-medium focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
-                    >
-                        {VIEW_LABEL[view]}
-                    </TabsTrigger>
-                ))}
-            </TabsList>
-        ) : null
+    const ownerGroups = allShares.map((share) => ({
+        id: share.owner_user_id,
+        name: resolveGroupedOwnerName(share, resolvedOwnerNames),
+        amount: share.visible_share,
+    }))
 
     return (
-        <Tabs
-            className="contents"
-            value={urlState.view}
-            onValueChange={(nextView) => {
-                const view = allowedViews.find((item) => item === nextView)
-                if (!view) return
-                setPreview(null)
-                urlState.changeView(view)
-            }}
-        >
-            <PageScaffold
-                density="compact"
-                className={listWorkspaceStyles.page}
-            >
-                <ListWorkspaceHeader title="供应商往来汇总" views={tabs}>
+        <ListWorkspacePage
+            title="供应商往来汇总"
+            loading={account.isPending}
+            views={
+                showViews ? (
+                    <Tabs
+                        value={canReadList ? urlState.view : null}
+                        onValueChange={(nextView) => {
+                            const view = allowedViews.find(
+                                (item) => item === nextView,
+                            )
+                            if (!view || view === urlState.view) return
+                            setPreview(null)
+                            urlState.changeView(view)
+                        }}
+                    >
+                        <TabsList
+                            variant="line"
+                            aria-label="供应商往来视图"
+                            className="w-full gap-5 overflow-x-auto"
+                        >
+                            {allowedViews.map((view) => (
+                                <TabsTrigger
+                                    key={view}
+                                    value={view}
+                                    id={`supplier-payables-scope-view-${view}`}
+                                    className="min-h-workspace-view font-normal data-active:font-medium md:min-h-12"
+                                >
+                                    {VIEW_LABEL[view]}
+                                </TabsTrigger>
+                            ))}
+                        </TabsList>
+                    </Tabs>
+                ) : undefined
+            }
+            headerActions={
+                <div className="flex items-center gap-1">
+                    <Button
+                        id="supplier-payables-scope-back"
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={listWorkspaceStyles.quietButton}
+                        render={
+                            <Link
+                                href={`/finance/supplier-accounts?view=${urlState.view}`}
+                            />
+                        }
+                    >
+                        <ArrowLeftIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        返回台账
+                    </Button>
                     {canReadList ? (
                         <LoadingButton
                             id="supplier-payables-scope-export"
@@ -379,257 +419,183 @@ export function SupplierScopePage() {
                             }
                             onClick={() => void handleExport()}
                         >
-                            <DownloadIcon data-icon="inline-start" />
+                            <DownloadIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
                             {exporting ? "导出中…" : "导出当前范围"}
                         </LoadingButton>
                     ) : null}
-                </ListWorkspaceHeader>
-
+                </div>
+            }
+        >
+            <div className="flex min-w-0 flex-col">
                 <FundsScopeBanner
                     scopeSummary={data?.scopeSummary}
                     asOf={data?.asOf}
-                    permissionLimited={
-                        data?.summary?.permission_limited ||
-                        data?.payables.some((row) => row.permission_limited) ||
-                        data?.payments.some((row) => row.permission_limited) ||
-                        data?.allocations.some(
-                            (row) => row.permission_limited,
-                        ) ||
-                        false
-                    }
+                    permissionLimited={listLimited}
                     unassigned={data?.summary?.unassigned}
                 />
-
                 {data?.summary ? (
-                    <dl className="grid min-w-0 gap-x-5 gap-y-3 border-t border-border/60 pt-3 text-body-compact sm:grid-cols-[auto_auto_minmax(0,1fr)]">
-                        <div className="min-w-0">
-                            <dt className="text-xs text-muted-foreground">
-                                整单合计
-                            </dt>
-                            <dd>
-                                <MoneyValue
-                                    value={data.summary.whole_total}
-                                    unavailableReason={
-                                        data.summary.whole_total == null
-                                            ? scopeText.wholeRestricted
-                                            : undefined
-                                    }
-                                />
-                            </dd>
-                        </div>
-                        <div className="min-w-0">
-                            <dt className="text-xs text-muted-foreground">
-                                {scopeText.unassignedShare}
-                            </dt>
-                            <dd>
-                                <MoneyValue value={data.summary.unassigned} />
-                            </dd>
-                        </div>
-                        <div className="min-w-0">
-                            <dt className="text-xs text-muted-foreground">
-                                匹配分组（
-                                <span className="num">
-                                    {data.summary.grouped.length}
-                                </span>
-                                ）
-                            </dt>
-                            <dd>
-                                {topShares.length > 0 ? (
-                                    <ul className="flex min-w-0 flex-wrap gap-x-4 gap-y-1">
-                                        {topShares.map((share) => (
-                                            <li
-                                                key={share.owner_user_id}
-                                                className="flex min-w-0 flex-wrap items-baseline gap-x-2 text-xs"
-                                            >
-                                                <span className="min-w-0 wrap-break-word">
-                                                    {resolveGroupedOwnerName(
-                                                        share,
-                                                        resolvedOwnerNames,
-                                                    )}
-                                                </span>
-                                                <MoneyValue
-                                                    value={share.visible_share}
-                                                />
-                                            </li>
-                                        ))}
-                                    </ul>
-                                ) : (
-                                    <span className="text-xs text-muted-foreground">
-                                        暂无匹配份额
-                                    </span>
-                                )}
-                            </dd>
-                        </div>
-                    </dl>
+                    <FundsScopeSummaryBar
+                        wholeTotal={data.summary.whole_total}
+                        unassigned={data.summary.unassigned}
+                        groups={ownerGroups}
+                        popoverIdPrefix="supplier-payables-scope-summary"
+                    />
                 ) : null}
+            </div>
 
-                <ListWorkSurface
-                    ariaLabel={`${viewLabel} · 供应商往来范围`}
-                    toolbar={
-                        initialLoading ? (
-                            <Skeleton
-                                className="h-control w-full sm:w-60 lg:w-64 xl:w-72"
-                                aria-busy
-                            />
-                        ) : canReadList ? (
-                            <ListWorkspaceFilterBar
-                                morePresentation="popover"
-                                idPrefix={toolbarPrefix}
-                                formAriaLabel="供应商往来范围查询"
-                                onSubmit={urlState.applyFilters}
-                                queryButtonId={`${toolbarPrefix}-apply`}
-                                moreButtonId={`${toolbarPrefix}-more-filters`}
-                                clearButtonId={`${toolbarPrefix}-clear-all`}
-                                search={
-                                    <ListSearchField
-                                        id={`${toolbarPrefix}-search`}
-                                        searchInputRef={urlState.searchInputRef}
-                                        value={urlState.searchDraft}
-                                        onChange={urlState.setSearchDraft}
-                                        placeholder="供应商、采购单、付款单"
-                                        aria-label="搜索供应商往来范围"
-                                    />
-                                }
-                                moreCount={
-                                    urlState.appliedChips.filter(({ key }) =>
-                                        TRAY_FILTER_KEYS.some(
-                                            (trayKey) => trayKey === key,
-                                        ),
-                                    ).length
-                                }
-                                moreOpen={urlState.panelOpen}
-                                onToggleMore={() =>
-                                    urlState.panelOpen
-                                        ? urlState.cancelMoreFilters()
-                                        : urlState.setPanelOpen(true)
-                                }
-                                morePanelId={`${toolbarPrefix}-more-panel`}
-                                morePanelAriaLabel="供应商往来范围更多筛选条件"
-                                onResetMore={urlState.resetMoreFilters}
-                                primaryFilters={
-                                    urlState.canUseOwner ? (
-                                        <div className="w-44 max-w-full min-w-0 empty:hidden">
-                                            <PersonDirectoryFilter
-                                                id={`${toolbarPrefix}-procurement-owner`}
-                                                category="procurement"
-                                                label="采购负责人"
-                                                hideLabel
-                                                value={
-                                                    urlState.procurementOwnerDraft
-                                                }
-                                                onChange={
-                                                    urlState.setProcurementOwnerDraft
-                                                }
-                                                orgUnitIds={directoryOrgUnitIds}
-                                                includeDescendants={
-                                                    urlState.descendantsDraft
-                                                }
-                                            />
-                                        </div>
-                                    ) : null
-                                }
-                                extraPrimary={
-                                    urlState.hasActiveFilters &&
-                                    !hasAppliedChips ? (
-                                        <Button
-                                            id={`${toolbarPrefix}-clear-all`}
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            aria-label="清空筛选条件"
-                                            className={
-                                                listWorkspaceStyles.quietButton
+            <ListWorkSurface
+                ariaLabel={`${viewLabel} · 供应商往来范围`}
+                toolbar={
+                    initialLoading ? (
+                        <Skeleton
+                            className="h-control w-full sm:w-60 lg:w-64 xl:w-72"
+                            aria-busy
+                        />
+                    ) : canReadList ? (
+                        <ListWorkspaceFilterBar
+                            morePresentation="popover"
+                            idPrefix={toolbarPrefix}
+                            formAriaLabel="供应商往来范围查询"
+                            onSubmit={urlState.applyFilters}
+                            queryButtonId={`${toolbarPrefix}-apply`}
+                            moreButtonId={`${toolbarPrefix}-more-filters`}
+                            clearButtonId={`${toolbarPrefix}-clear-all`}
+                            search={
+                                <ListSearchField
+                                    id={`${toolbarPrefix}-search`}
+                                    searchInputRef={urlState.searchInputRef}
+                                    value={urlState.searchDraft}
+                                    onChange={urlState.setSearchDraft}
+                                    placeholder="供应商、采购单、付款单"
+                                    aria-label="搜索供应商往来范围"
+                                />
+                            }
+                            moreCount={
+                                urlState.appliedChips.filter(({ key }) =>
+                                    TRAY_FILTER_KEYS.some(
+                                        (trayKey) => trayKey === key,
+                                    ),
+                                ).length
+                            }
+                            moreOpen={urlState.panelOpen}
+                            onToggleMore={() =>
+                                urlState.panelOpen
+                                    ? urlState.cancelMoreFilters()
+                                    : urlState.setPanelOpen(true)
+                            }
+                            morePanelId={`${toolbarPrefix}-more-panel`}
+                            morePanelAriaLabel="供应商往来范围更多筛选条件"
+                            onResetMore={urlState.resetMoreFilters}
+                            primaryFilters={
+                                urlState.canUseOwner ? (
+                                    <div className="w-44 max-w-full min-w-0 empty:hidden">
+                                        <PersonDirectoryFilter
+                                            id={`${toolbarPrefix}-procurement-owner`}
+                                            category="procurement"
+                                            label="采购负责人"
+                                            hideLabel
+                                            value={
+                                                urlState.procurementOwnerDraft
                                             }
-                                            onClick={urlState.clearFilters}
-                                        >
-                                            {listFilterText.clear}
-                                        </Button>
-                                    ) : undefined
-                                }
-                                morePanel={
-                                    urlState.canUseBusiness ||
-                                    urlState.canUseOrg ? (
-                                        <ListFilterSections>
-                                            <ListFilterSection legend="归属">
-                                                {urlState.canUseBusiness ? (
-                                                    <PersonDirectoryFilter
-                                                        id={`${toolbarPrefix}-operator`}
-                                                        category="business"
-                                                        label={
-                                                            urlState.operatorLabel
-                                                        }
-                                                        value={
-                                                            urlState.operatorDraft
-                                                        }
-                                                        onChange={
-                                                            urlState.setOperatorDraft
-                                                        }
-                                                        orgUnitIds={
-                                                            directoryOrgUnitIds
-                                                        }
-                                                        includeDescendants={
-                                                            urlState.descendantsDraft
-                                                        }
-                                                    />
-                                                ) : null}
-                                                {urlState.canUseOrg ? (
-                                                    <OrganizationUnitFilter
-                                                        compact
-                                                        id={`${toolbarPrefix}-org`}
-                                                        label="业务组织"
-                                                        value={
-                                                            urlState.orgDraft
-                                                        }
-                                                        onChange={
-                                                            urlState.setOrgDraft
-                                                        }
-                                                        includeDescendants={
-                                                            urlState.descendantsDraft
-                                                        }
-                                                        onDescendantsChange={
-                                                            urlState.setDescendantsDraft
-                                                        }
-                                                    />
-                                                ) : null}
-                                            </ListFilterSection>
-                                        </ListFilterSections>
-                                    ) : null
-                                }
-                                resultStatus={
-                                    listQuery.isError
-                                        ? "查询未完成"
-                                        : listQuery.isFetching
-                                          ? "查询中…"
-                                          : null
-                                }
-                                chips={urlState.appliedChips.map((chip) => ({
-                                    ...chip,
-                                    onClear: () =>
-                                        urlState.removeFilter(chip.key),
-                                }))}
-                                foldedChipKeys={APPLIED_CHIP_KEYS}
-                                onClearAll={urlState.clearFilters}
-                                hasPendingChanges={urlState.hasPendingChanges}
-                                pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
-                            />
-                        ) : undefined
-                    }
-                    table={
-                        tabs && canReadList ? (
-                            <TabsContent
-                                id={panelId}
-                                aria-labelledby={viewId}
-                                value={urlState.view}
-                                className="flex min-h-0 flex-col text-inherit focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
-                            >
-                                {table}
-                            </TabsContent>
-                        ) : (
-                            table
-                        )
-                    }
-                />
-            </PageScaffold>
+                                            onChange={
+                                                urlState.setProcurementOwnerDraft
+                                            }
+                                            orgUnitIds={directoryOrgUnitIds}
+                                            includeDescendants={
+                                                urlState.descendantsDraft
+                                            }
+                                        />
+                                    </div>
+                                ) : null
+                            }
+                            extraPrimary={
+                                urlState.hasActiveFilters &&
+                                !hasAppliedChips ? (
+                                    <Button
+                                        id={`${toolbarPrefix}-clear-all`}
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        aria-label="清空筛选条件"
+                                        className={
+                                            listWorkspaceStyles.quietButton
+                                        }
+                                        onClick={urlState.clearFilters}
+                                    >
+                                        {listFilterText.clear}
+                                    </Button>
+                                ) : undefined
+                            }
+                            morePanel={
+                                urlState.canUseBusiness ||
+                                urlState.canUseOrg ? (
+                                    <ListFilterSections>
+                                        <ListFilterSection legend="归属">
+                                            {urlState.canUseBusiness ? (
+                                                <PersonDirectoryFilter
+                                                    id={`${toolbarPrefix}-operator`}
+                                                    category="business"
+                                                    label={
+                                                        urlState.operatorLabel
+                                                    }
+                                                    value={
+                                                        urlState.operatorDraft
+                                                    }
+                                                    onChange={
+                                                        urlState.setOperatorDraft
+                                                    }
+                                                    orgUnitIds={
+                                                        directoryOrgUnitIds
+                                                    }
+                                                    includeDescendants={
+                                                        urlState.descendantsDraft
+                                                    }
+                                                />
+                                            ) : null}
+                                            {urlState.canUseOrg ? (
+                                                <OrganizationUnitFilter
+                                                    compact
+                                                    id={`${toolbarPrefix}-org`}
+                                                    label="业务组织"
+                                                    value={urlState.orgDraft}
+                                                    onChange={
+                                                        urlState.setOrgDraft
+                                                    }
+                                                    includeDescendants={
+                                                        urlState.descendantsDraft
+                                                    }
+                                                    onDescendantsChange={
+                                                        urlState.setDescendantsDraft
+                                                    }
+                                                />
+                                            ) : null}
+                                        </ListFilterSection>
+                                    </ListFilterSections>
+                                ) : null
+                            }
+                            resultStatus={
+                                listQuery.isError
+                                    ? "查询未完成"
+                                    : listQuery.isFetching
+                                      ? "查询中…"
+                                      : null
+                            }
+                            chips={urlState.appliedChips.map((chip) => ({
+                                ...chip,
+                                onClear: () => urlState.removeFilter(chip.key),
+                            }))}
+                            foldedChipKeys={APPLIED_CHIP_KEYS}
+                            onClearAll={urlState.clearFilters}
+                            hasPendingChanges={urlState.hasPendingChanges}
+                            pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
+                        />
+                    ) : undefined
+                }
+                table={table}
+            />
 
             <QuickPreviewSheet
                 id="supplier-payables-scope-preview-sheet"
@@ -649,7 +615,7 @@ export function SupplierScopePage() {
                         urlState.searchInputRef.current
                     )
                 }}
-                size="preview"
+                size="detail"
                 identity={
                     activePreview && previewNumber ? (
                         <span className="num">
@@ -661,11 +627,12 @@ export function SupplierScopePage() {
                     ) : undefined
                 }
                 title={
-                    activePreview?.kind === "payable"
+                    previewSupplierName ||
+                    (activePreview?.kind === "payable"
                         ? "应付记录"
                         : activePreview?.kind === "payment"
                           ? "供应商付款"
-                          : "往来记录"
+                          : "往来记录")
                 }
                 footer={
                     <Button
@@ -679,9 +646,11 @@ export function SupplierScopePage() {
                 }
             >
                 {detailQuery.isPending ? (
-                    <Skeleton className="h-24" aria-busy />
+                    <div className="px-7 py-6">
+                        <Skeleton className="h-24" aria-busy />
+                    </div>
                 ) : detailQuery.isError ? (
-                    <div className="flex flex-col items-start gap-3">
+                    <div className="flex flex-col items-start gap-3 px-7 py-6">
                         <p className="text-xs text-muted-foreground">
                             {getErrorMessage(
                                 detailQuery.error,
@@ -699,7 +668,7 @@ export function SupplierScopePage() {
                         </Button>
                     </div>
                 ) : detail?.kind === "payable" ? (
-                    <div className="flex flex-col gap-6 text-body-compact">
+                    <div className="flex flex-col gap-6 px-7 py-6 text-body-compact">
                         <PreviewAmount
                             label="权限内已核销"
                             value={detail.payable.visible_settled_share}
@@ -734,7 +703,7 @@ export function SupplierScopePage() {
                         ) : null}
                     </div>
                 ) : detail?.kind === "payment" ? (
-                    <div className="flex flex-col gap-6 text-body-compact">
+                    <div className="flex flex-col gap-6 px-7 py-6 text-body-compact">
                         <PreviewAmount
                             label="权限内已分配"
                             value={detail.payment.visible_allocated_share}
@@ -769,11 +738,11 @@ export function SupplierScopePage() {
                         ) : null}
                     </div>
                 ) : (
-                    <div className="text-body-compact text-muted-foreground">
+                    <div className="px-7 py-6 text-body-compact text-muted-foreground">
                         未找到该笔记录，可能已超出当前数据范围。
                     </div>
                 )}
             </QuickPreviewSheet>
-        </Tabs>
+        </ListWorkspacePage>
     )
 }

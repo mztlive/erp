@@ -15,9 +15,10 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { PaymentRow } from "@/features/supplier-payables/types"
 
 export function buildPaymentColumns(input: {
+    openPaymentPreview: (paymentId: string) => void
     openReversalPreview: (reversalId: string, paymentId: string) => void
 }): ColumnDef<PaymentRow>[] {
-    const { openReversalPreview } = input
+    const { openPaymentPreview, openReversalPreview } = input
     return [
         {
             id: "doc",
@@ -136,11 +137,6 @@ export function buildPaymentColumns(input: {
                     appearance={
                         row.original.status === "POSTED" ? "quiet" : "badge"
                     }
-                    description={
-                        row.original.status === "POSTED"
-                            ? "已过账不可编辑；纠错请冲正"
-                            : undefined
-                    }
                 />
             ),
         },
@@ -162,6 +158,48 @@ export function buildPaymentColumns(input: {
                     numeric
                 />
             ),
+        },
+        {
+            id: "actions",
+            header: () => <span className="sr-only">操作</span>,
+            meta: {
+                label: "操作",
+                width: "status",
+                align: "end",
+            },
+            cell: ({ row }) => {
+                const payment = row.original
+                const latestReversal = payment.relatedReversals?.[0]
+                const prefix = `supplier-payables-table-payment-row-${toAutomationIdSegment(payment.paymentId)}`
+                return (
+                    <TableRowActions
+                        moreId={`${prefix}-more`}
+                        moreLabel={`${payment.paymentNo} 更多操作`}
+                        actions={[
+                            {
+                                id: `${prefix}-detail`,
+                                label: "详情",
+                                onClick: () =>
+                                    openPaymentPreview(payment.paymentId),
+                            },
+                            {
+                                id: `${prefix}-reversal`,
+                                label: "查看冲正",
+                                hidden: !latestReversal,
+                                placement: "menu",
+                                onClick: () => {
+                                    if (latestReversal) {
+                                        openReversalPreview(
+                                            latestReversal.reversalId,
+                                            payment.paymentId,
+                                        )
+                                    }
+                                },
+                            },
+                        ]}
+                    />
+                )
+            },
         },
     ]
 }

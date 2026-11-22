@@ -3,7 +3,10 @@
 import type * as React from "react"
 import { getErrorMessage } from "@/lib/api/errors"
 
-import { BusinessFailureState, PageScaffold } from "@/components/business"
+import {
+    BusinessFailureState,
+    DetailWorkspacePage,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { AllocationSessionPanel } from "@/features/customer-receivables/components/allocation-session-panel"
 import type {
@@ -56,14 +59,12 @@ export function AllocationSessionScreen({
         embedded ? (
             content
         ) : (
-            <PageScaffold density="compact" className="gap-6">
-                {content}
-            </PageScaffold>
+            <DetailWorkspacePage>{content}</DetailWorkspacePage>
         )
 
     if (isPending) {
         return wrap(
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 px-(--scaffold-px) py-6">
                 <div className="h-10 w-64 animate-pulse rounded-lg bg-muted" />
                 <div className="h-96 animate-pulse rounded-lg bg-muted" />
             </div>,
@@ -71,36 +72,38 @@ export function AllocationSessionScreen({
     }
     if (error) {
         return wrap(
-            <BusinessFailureState
-                kind="business"
-                title="回款登记未能加载"
-                description={getErrorMessage(
-                    error,
-                    "请重试加载，已暂存内容仍保留。",
-                )}
-                action={
-                    <div className="flex gap-2">
-                        <Button
-                            id="customer-receivables-session-retry"
-                            onClick={onRetry}
-                        >
-                            重试加载
-                        </Button>
-                        <Button
-                            id="customer-receivables-session-error-back"
-                            variant="outline"
-                            onClick={onBackToList}
-                        >
-                            返回列表
-                        </Button>
-                    </div>
-                }
-            />,
+            <div className="mx-auto w-full max-w-3xl px-(--scaffold-px) py-8">
+                <BusinessFailureState
+                    kind="business"
+                    title="回款登记未能加载"
+                    description={getErrorMessage(
+                        error,
+                        "请重试加载，已暂存内容仍保留。",
+                    )}
+                    action={
+                        <div className="flex gap-2">
+                            <Button
+                                id="customer-receivables-session-retry"
+                                onClick={onRetry}
+                            >
+                                重试加载
+                            </Button>
+                            <Button
+                                id="customer-receivables-session-error-back"
+                                variant="outline"
+                                onClick={onBackToList}
+                            >
+                                返回列表
+                            </Button>
+                        </div>
+                    }
+                />
+            </div>,
         )
     }
     if (session?.mode === "receipt" && session.status === "posted") {
         return wrap(
-            <div className="space-y-4">
+            <div className="mx-auto w-full max-w-3xl space-y-4 px-(--scaffold-px) py-8">
                 <h2 className="text-section-title font-semibold tracking-tight">
                     回款已登记
                 </h2>
@@ -123,20 +126,22 @@ export function AllocationSessionScreen({
     }
     if (!session) {
         return wrap(
-            <BusinessFailureState
-                kind="business"
-                title="本次核销无效"
-                description="本页未找到暂存内容。已保存的回款可从列表重新打开；未保存的登记请重新开始。"
-                action={
-                    <Button
-                        id="customer-receivables-session-invalid-back"
-                        type="button"
-                        onClick={onBackToList}
-                    >
-                        {hideSessionClose ? "重试" : "返回列表"}
-                    </Button>
-                }
-            />,
+            <div className="mx-auto w-full max-w-3xl px-(--scaffold-px) py-8">
+                <BusinessFailureState
+                    kind="business"
+                    title="本次核销无效"
+                    description="本页未找到暂存内容。已保存的回款可从列表重新打开；未保存的登记请重新开始。"
+                    action={
+                        <Button
+                            id="customer-receivables-session-invalid-back"
+                            type="button"
+                            onClick={onBackToList}
+                        >
+                            {hideSessionClose ? "重试" : "返回列表"}
+                        </Button>
+                    }
+                />
+            </div>,
         )
     }
     return wrap(

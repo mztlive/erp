@@ -4,9 +4,9 @@ import { useEffect, useRef, useState } from "react"
 import { useIsMutating } from "@tanstack/react-query"
 import {
     BusinessFailureState,
+    DetailWorkspaceChrome,
+    DetailWorkspacePage,
     FormalActionResult,
-    PageHeader,
-    PageScaffold,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { AllocationSessionScreen } from "./components/allocation-session-screen"
@@ -92,48 +92,72 @@ function ReceiptRegistrationSession({
     }, [query.data, result, pendingOperations, returnTo, router])
     if (result)
         return (
-            <PageScaffold density="compact" className="gap-6">
-                <PageHeader title="登记回款" />
-                <FormalActionResult
-                    status="succeeded"
-                    title="回款已提交审批"
-                    description="审批通过后计入已收并完成核销。"
-                    reference={result.factNo}
-                    actions={
-                        <Button
-                            id="receipt-registration-result-return"
-                            onClick={close}
-                        >
-                            {returnTo.startsWith("/sales/orders/")
-                                ? "返回销售单"
-                                : "返回列表"}
-                        </Button>
-                    }
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome
+                    back={{
+                        id: "receipt-registration-result-back",
+                        href: returnTo,
+                        label: returnTo.startsWith("/sales/orders/")
+                            ? "返回销售单"
+                            : "返回客户往来",
+                    }}
+                    title="登记回款"
+                    primaryStatus={{ label: "已提交审批", tone: "success" }}
                 />
-            </PageScaffold>
+                <div className="mx-auto w-full max-w-3xl px-(--scaffold-px) py-8">
+                    <FormalActionResult
+                        status="succeeded"
+                        title="回款已提交审批"
+                        description="审批通过后计入已收并完成核销。"
+                        reference={result.factNo}
+                        actions={
+                            <Button
+                                id="receipt-registration-result-return"
+                                onClick={close}
+                            >
+                                {returnTo.startsWith("/sales/orders/")
+                                    ? "返回销售单"
+                                    : "返回列表"}
+                            </Button>
+                        }
+                    />
+                </div>
+            </DetailWorkspacePage>
         )
     if (!sessionId || (query.data && query.data.mode !== "receipt"))
         return (
-            <PageScaffold density="compact">
-                <PageHeader title="登记回款" />
-                <BusinessFailureState
-                    title="请重新打开回款登记"
-                    description="从客户往来或销售单选择结算主体后登记回款。"
-                    action={
-                        <Button
-                            id="receipt-registration-invalid-return"
-                            onClick={close}
-                        >
-                            返回列表
-                        </Button>
-                    }
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome
+                    back={{
+                        id: "receipt-registration-invalid-back",
+                        href: returnTo,
+                        label: "返回客户往来",
+                    }}
+                    title="登记回款"
                 />
-            </PageScaffold>
+                <div className="mx-auto w-full max-w-3xl px-(--scaffold-px) py-8">
+                    <BusinessFailureState
+                        title="请重新打开回款登记"
+                        description="从客户往来或销售单选择结算主体后登记回款。"
+                        action={
+                            <Button
+                                id="receipt-registration-invalid-return"
+                                onClick={close}
+                            >
+                                返回列表
+                            </Button>
+                        }
+                    />
+                </div>
+            </DetailWorkspacePage>
         )
     return (
-        <PageScaffold density="compact" className="gap-6">
+        <DetailWorkspacePage>
             {migrationError ? (
-                <p role="alert" className="text-body-compact text-destructive">
+                <p
+                    role="alert"
+                    className="border-b border-destructive/20 bg-destructive-soft px-(--scaffold-px) py-2 text-body-compact text-destructive"
+                >
                     {migrationError}
                 </p>
             ) : null}
@@ -149,6 +173,6 @@ function ReceiptRegistrationSession({
                 canOperate={permissions.canRegisterReceipt}
                 permissionReason={permissions.reason}
             />
-        </PageScaffold>
+        </DetailWorkspacePage>
     )
 }

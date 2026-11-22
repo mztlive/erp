@@ -1,11 +1,23 @@
 import { apiGet, apiPost } from "@/lib/api"
 import { downloadFileAsset } from "@/features/file-assets/api"
-import type { AccountDetail, AccountRow, DepositCommand } from "./types"
+import type {
+    AccountDetail,
+    AccountRow,
+    DepositAccountListFilters,
+    DepositCommand,
+} from "./types"
 
 const ROOT = "/admin/supplier-deposits/accounts"
-export function fetchDepositAccounts(page: number) {
+export function fetchDepositAccounts(filters: DepositAccountListFilters) {
+    const params = new URLSearchParams({
+        page: String(filters.page),
+        page_size: "20",
+    })
+    if (filters.supplierId) params.set("supplier_id", filters.supplierId)
+    if (filters.payerPartyId) params.set("payer_party_id", filters.payerPartyId)
+    if (filters.status) params.set("status", filters.status)
     return apiGet<{ items: AccountRow[]; has_more: boolean }>(
-        `${ROOT}?page=${page}&page_size=20`,
+        `${ROOT}?${params}`,
     )
 }
 export function fetchDepositAccount(id: string) {

@@ -8,15 +8,21 @@ import {
     fetchDepositAccounts,
 } from "../api"
 
+import type { DepositAccountListFilters } from "../types"
+
 export const depositKeys = {
     all: ["supplier-deposits"] as const,
-    list: (page: number) => [...depositKeys.all, "list", page] as const,
+    list: (filters: DepositAccountListFilters) =>
+        [...depositKeys.all, "list", filters] as const,
     detail: (id: string) => [...depositKeys.all, "detail", id] as const,
 }
-export function useDepositAccounts(page: number, enabled: boolean) {
+export function useDepositAccounts(
+    filters: DepositAccountListFilters,
+    enabled: boolean,
+) {
     return useQuery({
-        queryKey: depositKeys.list(page),
-        queryFn: () => fetchDepositAccounts(page),
+        queryKey: depositKeys.list(filters),
+        queryFn: () => fetchDepositAccounts(filters),
         enabled,
     })
 }

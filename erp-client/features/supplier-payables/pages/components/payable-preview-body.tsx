@@ -67,25 +67,30 @@ export function PayablePreviewBody({
                 </span>
             </PreviewAmount>
             <PreviewSection title="结算进度">
-                <ProgressTrackRow
-                    label="付款进度"
-                    percent={paymentPercent}
-                    allocated={payable.settledTotal}
-                    total={payable.grossTotal}
-                    allocatedCaption="已付"
-                    totalCaption="应付"
-                />
-                <ProgressTrackRow
-                    label="收票进度"
-                    percent={invoicePercent}
-                    allocated={payable.invoicedTotal}
-                    total={payable.grossTotal}
-                    allocatedCaption="已收"
-                    totalCaption="可收"
-                />
-                <dl className="space-y-3 pt-1">
+                <div className="grid gap-4 sm:grid-cols-2">
+                    <ProgressTrackRow
+                        label="付款进度"
+                        percent={paymentPercent}
+                        allocated={payable.settledTotal}
+                        total={payable.grossTotal}
+                        allocatedCaption="已付"
+                        totalCaption="应付"
+                    />
+                    <ProgressTrackRow
+                        label="收票进度"
+                        percent={invoicePercent}
+                        allocated={payable.invoicedTotal}
+                        total={payable.grossTotal}
+                        allocatedCaption="已收"
+                        totalCaption="可收"
+                    />
+                </div>
+                <dl className="grid gap-x-8 gap-y-3 pt-1 sm:grid-cols-2">
                     <PreviewFact label="待收票（含税）">
                         <MoneyValue value={payable.openInvoiceableTotal} />
+                    </PreviewFact>
+                    <PreviewFact label="净已收票（含税）">
+                        <MoneyValue value={payable.invoicedTotal} />
                     </PreviewFact>
                 </dl>
                 <PreviewNote>
@@ -93,7 +98,7 @@ export function PayablePreviewBody({
                 </PreviewNote>
             </PreviewSection>
             <PreviewSection title="付款安排">
-                <dl className="space-y-3">
+                <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
                     <PreviewFact label="到期日">
                         <span className="num">{payable.dueDate}</span>
                         <span className="ml-2 text-xs text-muted-foreground">

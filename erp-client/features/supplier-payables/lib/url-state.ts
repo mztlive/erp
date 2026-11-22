@@ -63,7 +63,7 @@ export function parseView(raw: string | null): SupplierAccountsView {
  *
  * 应付专用条件：`sourceType` / `status` / `due` / `paymentGate`。
  * 待核销专用条件：`track`。
- * 关键词、采购单来源锁定保留；非应付视图的供应商改用关键词搜索。
+ * 关键词、供应商与采购单来源锁定跨视图保留。
  *
  * @param nextView 目标工作视图。
  */
@@ -75,7 +75,6 @@ export function patchForViewChange(
         page: null,
     }
     if (nextView !== "payable") {
-        patch.supplierId = null
         patch.sourceType = null
         patch.status = null
         patch.due = null

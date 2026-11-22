@@ -1,12 +1,14 @@
 "use client"
 
 import * as React from "react"
-import { DownloadIcon } from "lucide-react"
+import Link from "next/link"
+import { ArrowLeftIcon, DownloadIcon } from "lucide-react"
 
 import {
     ListWorkspacePage,
     listWorkspaceStyles,
 } from "@/components/business/list-workspace"
+import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { ReceivableScopeDetail } from "@/features/customer-receivables/api/scoped"
@@ -103,25 +105,45 @@ export function ReceivableScopePage() {
                 ) : undefined
             }
             headerActions={
-                canReadList ? (
-                    <LoadingButton
-                        id="customer-receivables-scope-export"
+                <div className="flex items-center gap-1">
+                    <Button
+                        id="customer-receivables-scope-back"
                         type="button"
-                        loading={exporting}
                         variant="ghost"
                         size="sm"
                         className={listWorkspaceStyles.quietButton}
-                        disabled={exportDisabledReason !== undefined}
-                        title={exportDisabledReason}
-                        onClick={() => void handleExport()}
+                        render={
+                            <Link
+                                href={`/finance/customer-accounts?view=${view}`}
+                            />
+                        }
                     >
-                        <DownloadIcon
+                        <ArrowLeftIcon
                             data-icon="inline-start"
                             aria-hidden="true"
                         />
-                        {exporting ? "导出中…" : "导出当前范围"}
-                    </LoadingButton>
-                ) : undefined
+                        返回台账
+                    </Button>
+                    {canReadList ? (
+                        <LoadingButton
+                            id="customer-receivables-scope-export"
+                            type="button"
+                            loading={exporting}
+                            variant="ghost"
+                            size="sm"
+                            className={listWorkspaceStyles.quietButton}
+                            disabled={exportDisabledReason !== undefined}
+                            title={exportDisabledReason}
+                            onClick={() => void handleExport()}
+                        >
+                            <DownloadIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            {exporting ? "导出中…" : "导出当前范围"}
+                        </LoadingButton>
+                    ) : null}
+                </div>
             }
         >
             <ReceivableScopeListPane

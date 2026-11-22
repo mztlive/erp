@@ -58,7 +58,7 @@ export function ReceivableDetailBody({
                 </span>
             </PreviewAmount>
             <PreviewSection title="收款安排">
-                <dl className="space-y-3">
+                <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
                     <PreviewFact label="到期日">
                         <span className="num">{row.dueDate}</span>
                         <span className="ml-2 text-xs text-muted-foreground">
@@ -76,7 +76,7 @@ export function ReceivableDetailBody({
                 </dl>
             </PreviewSection>
             <PreviewSection title="开票进度">
-                <dl className="space-y-3">
+                <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
                     <PreviewFact label="待开票（含税）">
                         <MoneyValue value={row.openInvoiceableTotal} />
                     </PreviewFact>
@@ -158,7 +158,7 @@ export function ReceiptDetailBody({
                 </span>
             </PreviewAmount>
             <PreviewSection title="到账信息">
-                <dl className="space-y-3">
+                <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
                     <PreviewFact label="到账时间">
                         <span className="num">
                             {formatDateTime(
@@ -373,7 +373,7 @@ export function InvoiceDetailBody({
                 </span>
             </PreviewAmount>
             <PreviewSection title="发票资料">
-                <dl className="space-y-3">
+                <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
                     <PreviewFact label="开票日期">
                         <span className="num">{row.invoiceDate}</span>
                     </PreviewFact>

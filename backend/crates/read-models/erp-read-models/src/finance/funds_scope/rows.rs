@@ -168,6 +168,9 @@ pub struct ScopedSupplierPaymentRow {
     pub status: erp_finance::entity::payable::SupplierPaymentStatus,
     /// 收款供应商。
     pub supplier_id: String,
+    /// 收款供应商当前法定名称；能解析时返回，供范围汇总列表展示。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supplier_name: Option<String>,
     /// 实际付款时间（秒级时间戳）。
     pub paid_at: u64,
     /// 创建时间（秒级时间戳）。
@@ -862,6 +865,7 @@ mod tests {
                     id: "inv-1".into(),
                     version: Some(4),
                     party_id: Some("party-1".into()),
+                    party_name: Some("测试主体".into()),
                     invoice_code: Some("CODE-1".into()),
                     invoice_no: Some("FP-1".into()),
                     invoice_direction: direction,

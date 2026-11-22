@@ -159,10 +159,12 @@ export function SupplierAllocationWorkspace({
                             "grid items-start",
                             embedded
                                 ? "grid-cols-1 gap-0"
-                                : "gap-4 lg:grid-cols-2",
+                                : "gap-6 lg:grid-cols-[380px_minmax(0,1fr)] xl:grid-cols-[400px_minmax(0,1fr)]",
                         )}
                     >
-                        <div className="space-y-4">
+                        <div
+                            className={cn(!embedded && "lg:order-2 space-y-5")}
+                        >
                             {embedded && track === "payment" ? null : (
                                 <AllocationPoolCard
                                     supplierId={session.supplierId}
@@ -187,45 +189,55 @@ export function SupplierAllocationWorkspace({
                                 />
                             )}
                         </div>
-                        <AllocationFactFormCard
-                            track={track}
-                            paymentBasis={
-                                track === "payment" ? (
-                                    <PaymentBasis
-                                        pool={pool}
-                                        selected={selected}
-                                        amounts={amounts}
-                                        disabled={isSubmitting}
-                                        onAmountChange={setAmountFor}
-                                    />
-                                ) : undefined
-                            }
-                            existingInvoiceId={session.existingInvoiceId}
-                            existingDocumentNo={session.existingDocumentNo}
-                            existingUnallocated={session.existingUnallocated}
-                            paymentForm={paymentForm}
-                            invoiceForm={invoiceForm}
-                            mixedSources={mixedSources}
-                            policyBlocksAuto={policyBlocksAuto}
-                            issues={issues}
-                            canSubmit={canSubmit}
-                            isSubmitting={isSubmitting}
-                            hideHeading={embedded && track === "payment"}
-                            draftHint={embedded ? draftHint : undefined}
-                            isSavingDraft={isSavingDraft}
-                            onSaveDraft={
-                                embedded
-                                    ? () => void handleSaveDraft()
-                                    : undefined
-                            }
-                            onSubmitClick={requestSubmit}
-                            paymentRecipient={
-                                embedded ? paymentRecipient : undefined
-                            }
-                            paymentRecipientReveal={
-                                embedded ? paymentRecipientReveal : undefined
-                            }
-                        />
+                        <div
+                            className={cn(
+                                !embedded && "lg:order-1 lg:sticky lg:top-20",
+                            )}
+                        >
+                            <AllocationFactFormCard
+                                track={track}
+                                paymentBasis={
+                                    track === "payment" ? (
+                                        <PaymentBasis
+                                            pool={pool}
+                                            selected={selected}
+                                            amounts={amounts}
+                                            disabled={isSubmitting}
+                                            onAmountChange={setAmountFor}
+                                        />
+                                    ) : undefined
+                                }
+                                existingInvoiceId={session.existingInvoiceId}
+                                existingDocumentNo={session.existingDocumentNo}
+                                existingUnallocated={
+                                    session.existingUnallocated
+                                }
+                                paymentForm={paymentForm}
+                                invoiceForm={invoiceForm}
+                                mixedSources={mixedSources}
+                                policyBlocksAuto={policyBlocksAuto}
+                                issues={issues}
+                                canSubmit={canSubmit}
+                                isSubmitting={isSubmitting}
+                                hideHeading={embedded && track === "payment"}
+                                draftHint={embedded ? draftHint : undefined}
+                                isSavingDraft={isSavingDraft}
+                                onSaveDraft={
+                                    embedded
+                                        ? () => void handleSaveDraft()
+                                        : undefined
+                                }
+                                onSubmitClick={requestSubmit}
+                                paymentRecipient={
+                                    embedded ? paymentRecipient : undefined
+                                }
+                                paymentRecipientReveal={
+                                    embedded
+                                        ? paymentRecipientReveal
+                                        : undefined
+                                }
+                            />
+                        </div>
                     </div>
                 </>
             )}

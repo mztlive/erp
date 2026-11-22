@@ -12,6 +12,7 @@ export type ScopedPayableAccountWire = Readonly<{
     source_document_no?: string | null
     source_type: string
     supplier_id: string
+    supplier_name?: string | null
     status: string
     created_at: number
     visible_settled_share: string
@@ -44,6 +45,7 @@ export type ScopedSupplierPaymentWire = Readonly<{
     payment_no: string
     status: string
     supplier_id: string
+    supplier_name?: string | null
     paid_at: number
     created_at: number
     visible_allocated_share: string

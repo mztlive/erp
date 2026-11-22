@@ -124,7 +124,7 @@ export function CustomerAccountDetailPreview({
             onOpenChangeComplete={(nextOpen) => {
                 if (!nextOpen) onClosed?.()
             }}
-            size="preview"
+            size="detail"
             title={
                 data?.receivable?.counterpartyPartyName ??
                 data?.receipt?.counterpartyPartyName ??
@@ -441,7 +441,7 @@ export function CustomerAccountDetailPreview({
                         <Button
                             id="customer-receivables-preview-close"
                             type="button"
-                            variant={data.receipt ? "default" : "outline"}
+                            variant="outline"
                             onClick={onClose}
                         >
                             关闭
@@ -451,12 +451,12 @@ export function CustomerAccountDetailPreview({
             }
         >
             {isPending ? (
-                <div className="space-y-3">
+                <div className="space-y-4 px-7 py-6">
                     <div className="h-24 animate-pulse rounded-xl bg-muted" />
                     <div className="h-40 animate-pulse rounded-xl bg-muted" />
                 </div>
             ) : isError ? (
-                <div className="space-y-3">
+                <div className="space-y-3 px-7 py-6">
                     <p className="text-xs text-muted-foreground">
                         {getErrorMessage(error, "详情加载失败，请重试。")}
                     </p>
@@ -471,14 +471,10 @@ export function CustomerAccountDetailPreview({
                     </Button>
                 </div>
             ) : data?.receivable ? (
-                <ReceivableDetailBody
-                    row={data.receivable}
-                    className="space-y-6 text-body-compact"
-                />
+                <ReceivableDetailBody row={data.receivable} />
             ) : data?.receipt ? (
                 <ReceiptDetailBody
                     approvalActionsInFooter
-                    className="space-y-6 text-body-compact"
                     row={data.receipt}
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
@@ -487,7 +483,6 @@ export function CustomerAccountDetailPreview({
                 />
             ) : data?.refund ? (
                 <CustomerRefundDetailBody
-                    className="space-y-6 text-body-compact"
                     row={data.refund}
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
@@ -496,7 +491,6 @@ export function CustomerAccountDetailPreview({
                 />
             ) : data?.reversal ? (
                 <ReceiptReversalDetailBody
-                    className="space-y-6 text-body-compact"
                     row={data.reversal}
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
@@ -504,12 +498,9 @@ export function CustomerAccountDetailPreview({
                     onDecisionApplied={onDecisionApplied}
                 />
             ) : data?.invoice ? (
-                <InvoiceDetailBody
-                    row={data.invoice}
-                    className="space-y-6 text-body-compact"
-                />
+                <InvoiceDetailBody row={data.invoice} />
             ) : (
-                <div className="text-body-compact text-muted-foreground">
+                <div className="px-7 py-6 text-body-compact text-muted-foreground">
                     未找到该笔记录，可能已超出当前数据范围。
                 </div>
             )}

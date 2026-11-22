@@ -1,12 +1,15 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "@/lib/navigation"
 
 import { Alert, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 
 import { getErrorMessage, getErrorPresentation } from "@/lib/api/errors"
+import { hasPermission } from "@/lib/permissions"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { FinancialDraftEditDialog } from "@/features/financial-draft-edit/components/financial-draft-edit-dialog"
 import {
     BusinessEmptyState,
@@ -39,6 +42,7 @@ import { useSupplierAccountsPage } from "./hooks/use-supplier-accounts-page"
 import { SupplierAllocationSessionPage } from "./supplier-allocation-session-page"
 import { SupplierAccountsResultBanner } from "./components/supplier-accounts-alerts"
 import { SupplierAccountsHeader } from "./components/supplier-accounts-header"
+import { SupplierAccountsMetrics } from "./components/supplier-accounts-metrics"
 import { SupplierAccountsPreview } from "./components/supplier-accounts-preview"
 import { SupplierAccountsTable } from "./components/supplier-accounts-table"
 import { SupplierAccountsToolbar } from "./components/supplier-accounts-toolbar"
@@ -48,6 +52,8 @@ import { usePaymentReversalFlow } from "./hooks/use-payment-reversal-flow"
 import { useSupplierRefundFlow } from "./hooks/use-supplier-refund-flow"
 
 export function SupplierAccountsPage() {
+    const router = useRouter()
+    const profileQuery = useAccountProfileQuery()
     const {
         view,
         supplierId,
@@ -55,6 +61,7 @@ export function SupplierAccountsPage() {
         fromWorkspace,
         returnTo,
         trackFilter,
+        hasDueDates,
         dueFilterUnavailable,
         searchInput,
         setSearchInput,
@@ -234,7 +241,15 @@ export function SupplierAccountsPage() {
     const showControls = !noScope && !accessDenied
     const canRegisterInvoice = showControls && Boolean(data?.canRegisterInvoice)
     const canRegisterPayment = showControls && Boolean(data?.canRegisterPayment)
+    const canPostAllocation = hasPermission(
+        profileQuery.data?.permissions,
+        "purchase_invoice_allocation:post",
+    )
     const onRefresh = () => void listQuery.refetch()
+    const onOpenScope = () => {
+        const scopeView = view === "unallocated" ? "payable" : view
+        router.push(`/finance/supplier-accounts/scope?view=${scopeView}`)
+    }
 
     const filterToolbar = showControls ? (
         <SupplierAccountsToolbar
@@ -262,6 +277,7 @@ export function SupplierAccountsPage() {
             setPaymentGateDraft={setPaymentGateDraft}
             trackDraft={trackDraft}
             setTrackDraft={setTrackDraft}
+            hasDueDates={hasDueDates}
             hasPendingChanges={hasPendingChanges}
             loading={listQuery.isFetching}
             failed={failed}
@@ -276,10 +292,8 @@ export function SupplierAccountsPage() {
                 showViews={!initialLoading && showControls}
                 prioritizeQuery={showControls && panelOpen}
                 canRegisterInvoice={canRegisterInvoice}
-                queriedAt={
-                    !failed && showControls ? data?.queriedAt : undefined
-                }
                 onViewChange={switchView}
+                onOpenScope={onOpenScope}
                 onRefresh={onRefresh}
                 onRegisterInvoice={() => {
                     setPickSupplierId(
@@ -288,6 +302,13 @@ export function SupplierAccountsPage() {
                     setPickSupplierOpen("purchase_invoice")
                 }}
             />
+
+            {!initialLoading && !failed && showControls && data ? (
+                <SupplierAccountsMetrics
+                    metrics={data.metrics}
+                    queriedAt={data.queriedAt}
+                />
+            ) : null}
 
             {!failed && !noScope && dueFilterUnavailable ? (
                 <Alert variant="warning">
@@ -596,11 +617,34 @@ export function SupplierAccountsPage() {
                             ? (reversalQuery.data?.originalPaymentId ?? null)
                             : previewRowId
                     }
+                    canRegisterInvoice={canRegisterInvoice}
+                    canPostAllocation={canPostAllocation}
                     openPreview={openPreview}
                     openPaymentPreview={openPaymentPreview}
                     openInvoicePreview={openInvoicePreview}
                     openUnallocatedPreview={openUnallocatedPreview}
                     openReversalPreview={openReversalPreview}
+                    onRegisterInvoiceForPayable={(payable) =>
+                        openSession({
+                            track: "purchase_invoice",
+                            supplierId: payable.supplierId,
+                            preselectPayableAccountId: payable.payableAccountId,
+                        })
+                    }
+                    onContinueAllocateInvoice={(invoice) =>
+                        openSession({
+                            track: "purchase_invoice",
+                            supplierId: invoice.supplierId,
+                            existingInvoiceId: invoice.invoiceId,
+                        })
+                    }
+                    onContinueAllocateUnallocatedInvoice={(item) =>
+                        openSession({
+                            track: "purchase_invoice",
+                            supplierId: item.supplierId,
+                            existingInvoiceId: item.id,
+                        })
+                    }
                     toolbar={filterToolbar}
                 />
             )}

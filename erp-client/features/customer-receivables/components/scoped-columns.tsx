@@ -1,6 +1,5 @@
 "use client"
 
-import type { ReactNode } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import {
@@ -79,30 +78,33 @@ function invoiceStatus(status: string) {
     }
 }
 
-function restrictedReason(limited: boolean): ReactNode {
-    return limited ? (
-        <span className="text-xs text-muted-foreground">
-            {scopeText.limitedOnlyVisibleShare}
-        </span>
-    ) : null
-}
-
 /** 范围应收子账列：获授权份额常显，整单金额受限时为空并注明。 */
 export function createScopedReceivableColumns(): ColumnDef<ScopedReceivableAccountWire>[] {
     return [
         {
             id: "order",
-            header: "销售单 / 应收款项",
-            meta: { label: "销售单", width: "flex" },
+            header: "结算主体 / 销售单",
+            meta: { label: "结算主体 / 销售单", width: "flex" },
             cell: ({ row }) => {
                 const orderNo = scopedReceivableOrderNo(row.original)
-                const account = `应收款项 #${row.original.account_seq}`
+                const partyName =
+                    row.original.counterparty_party_name?.trim() ||
+                    row.original.customer_name?.trim()
+                const secondary = partyName
+                    ? `${orderNo} · 应收 #${row.original.account_seq}`
+                    : `应收款项 #${row.original.account_seq}`
                 return (
                     <TableIdentityCell
-                        primary={<span className="num">{orderNo}</span>}
-                        primaryTitle={orderNo}
-                        secondary={account}
-                        secondaryTitle={account}
+                        primary={
+                            partyName ? (
+                                partyName
+                            ) : (
+                                <span className="num">{orderNo}</span>
+                            )
+                        }
+                        primaryTitle={partyName || orderNo}
+                        secondary={secondary}
+                        secondaryTitle={secondary}
                         numericSecondary
                     />
                 )
@@ -122,6 +124,7 @@ export function createScopedReceivableColumns(): ColumnDef<ScopedReceivableAccou
                     <MoneyValue
                         value={row.original.visible_settled_share}
                         display="exact"
+                        className="font-semibold"
                     />
                     {row.original.permission_limited ? (
                         <LimitedBadge
@@ -151,7 +154,6 @@ export function createScopedReceivableColumns(): ColumnDef<ScopedReceivableAccou
                                 : undefined
                         }
                     />
-                    {restrictedReason(row.original.permission_limited)}
                 </div>
             ),
         },
@@ -174,18 +176,24 @@ export function createScopedReceiptColumns(): ColumnDef<ScopedCustomerReceiptWir
     return [
         {
             id: "doc",
-            header: "回款单号",
+            header: "回款单号 / 结算主体",
             meta: { label: "回款单号", width: "flex" },
             cell: ({ row }) => {
                 const { receipt_no, received_at } = row.original
                 const receivedAt = formatDateTime(instantToIso(received_at))
+                const partyName =
+                    row.original.counterparty_party_name?.trim() ||
+                    row.original.customer_name?.trim()
+                const secondary = partyName
+                    ? `${partyName} · ${receivedAt}`
+                    : receivedAt
                 return (
                     <TableIdentityCell
                         primary={<span className="num">{receipt_no}</span>}
                         primaryTitle={receipt_no}
-                        secondary={receivedAt}
-                        secondaryTitle={receivedAt}
-                        numericSecondary
+                        secondary={secondary}
+                        secondaryTitle={secondary}
+                        numericSecondary={!partyName}
                     />
                 )
             },
@@ -204,6 +212,7 @@ export function createScopedReceiptColumns(): ColumnDef<ScopedCustomerReceiptWir
                     <MoneyValue
                         value={row.original.visible_allocated_share}
                         display="exact"
+                        className="font-semibold"
                     />
                     {row.original.permission_limited ? (
                         <LimitedBadge
@@ -254,18 +263,22 @@ export function createScopedInvoiceColumns(): ColumnDef<ScopedInvoiceWire>[] {
     return [
         {
             id: "doc",
-            header: "发票",
+            header: "发票 / 往来主体",
             meta: { label: "发票", width: "flex" },
             cell: ({ row }) => {
-                const { invoice_no, invoice_date } = row.original
+                const { invoice_no, invoice_date, party_name } = row.original
                 const title = invoice_no ?? "附件登记"
+                const party = party_name?.trim()
+                const secondary = [party, invoice_date]
+                    .filter(Boolean)
+                    .join(" · ")
                 return (
                     <TableIdentityCell
                         primary={<span className="num">{title}</span>}
                         primaryTitle={title}
-                        secondary={invoice_date}
-                        secondaryTitle={invoice_date ?? undefined}
-                        numericSecondary
+                        secondary={secondary || undefined}
+                        secondaryTitle={secondary || undefined}
+                        numericSecondary={!party}
                     />
                 )
             },
@@ -284,6 +297,7 @@ export function createScopedInvoiceColumns(): ColumnDef<ScopedInvoiceWire>[] {
                     <MoneyValue
                         value={row.original.visible_allocated_share}
                         display="exact"
+                        className="font-semibold"
                     />
                     {row.original.permission_limited ? (
                         <LimitedBadge

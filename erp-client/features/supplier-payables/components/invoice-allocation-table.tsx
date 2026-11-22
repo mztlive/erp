@@ -1,9 +1,14 @@
 "use client"
 
+import * as React from "react"
+import { useStore } from "@tanstack/react-form"
+import { SearchIcon } from "lucide-react"
+
 import { MoneyValue } from "@/components/business"
 import { MoneyInput } from "@/components/form/money-input"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
 import {
     Table,
     TableBody,
@@ -20,17 +25,20 @@ import {
 } from "@/features/supplier-payables/lib/allocation-model"
 import { SOURCE_TYPE_LABEL } from "@/features/supplier-payables/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { cn } from "@/lib/utils"
 
-/** 同供应商应付按行选择和录入金额；多单税额随对应行填写。 */
+/** 同供应商应付按行选择和录入金额；支持快速检索、单行填满与多单分配税额实时合计。 */
 export function InvoiceAllocationTable({
     state,
 }: {
     state: AllocationSessionState
 }) {
+    const [search, setSearch] = React.useState("")
     const {
         pool,
         selected,
         amounts,
+        factAmount,
         invoiceForm,
         policyBlocksAuto,
         isSubmitting,
@@ -38,6 +46,23 @@ export function InvoiceAllocationTable({
         toggleSelectAll,
         setAmountFor,
     } = state
+    const taxValues = useStore(invoiceForm.store, (s) => ({
+        faceTax: s.values.taxAmount,
+        allocationTaxes: s.values.allocationTaxes,
+    }))
+    const trimmedSearch = search.trim().toLowerCase()
+    const visiblePool = React.useMemo(() => {
+        if (!trimmedSearch) return pool
+        return pool.filter((row) => {
+            const docNo = row.sourceDocumentNo.toLowerCase()
+            const typeLabel = SOURCE_TYPE_LABEL[row.sourceType].toLowerCase()
+            return (
+                docNo.includes(trimmedSearch) ||
+                typeLabel.includes(trimmedSearch)
+            )
+        })
+    }, [pool, trimmedSearch])
+
     const allSelected =
         pool.length > 0 &&
         pool.every((row) => selected.has(row.payableAccountId))
@@ -48,6 +73,40 @@ export function InvoiceAllocationTable({
             BigInt(0),
         ),
     )
+
+    let allocatedTaxCents = BigInt(0)
+    if (splitTax) {
+        for (const id of selected) {
+            allocatedTaxCents += cents(taxValues.allocationTaxes[id] || "0")
+        }
+    }
+    const faceTaxCents = cents(taxValues.faceTax || "0")
+    const taxMismatch =
+        splitTax &&
+        faceTaxCents > BigInt(0) &&
+        allocatedTaxCents !== faceTaxCents
+
+    function fillRowAmount(payableAccountId: string, openInvoiceable: string) {
+        const openCents = cents(openInvoiceable)
+        const factCents = cents(factAmount || "0")
+        if (factCents <= BigInt(0)) {
+            setAmountFor(payableAccountId, fromCents(openCents))
+            return
+        }
+        let othersAllocated = BigInt(0)
+        for (const id of selected) {
+            if (id !== payableAccountId) {
+                othersAllocated += cents(amounts[id] || "0")
+            }
+        }
+        const remaining = factCents - othersAllocated
+        const nextCents =
+            remaining > BigInt(0) && remaining < openCents
+                ? remaining
+                : openCents
+        setAmountFor(payableAccountId, fromCents(nextCents))
+    }
+
     return (
         <section
             id="alloc-pool"
@@ -75,25 +134,50 @@ export function InvoiceAllocationTable({
                             : null}
                     </p>
                     {splitTax ? (
-                        <p className="text-xs text-warning">
+                        <p
+                            className={cn(
+                                "text-xs",
+                                taxMismatch
+                                    ? "text-destructive"
+                                    : "text-warning",
+                            )}
+                        >
                             请按发票实际内容填写各笔分配税额，合计须与票面税额一致。
                         </p>
                     ) : null}
                 </div>
-                {selected.size > 0 ? (
-                    <Button
-                        id="invoice-allocation-clear-selection"
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={isSubmitting}
-                        onClick={state.clearSelection}
-                    >
-                        清空选择
-                    </Button>
-                ) : null}
+                <div className="flex flex-wrap items-center gap-2">
+                    {pool.length > 0 ? (
+                        <div className="relative w-52">
+                            <SearchIcon
+                                className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+                                aria-hidden="true"
+                            />
+                            <Input
+                                id="supplier-payables-allocation-pool-search"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                placeholder="筛选单据编号"
+                                aria-label="筛选可核销单据编号"
+                                className="h-8 pl-8 text-body-compact"
+                            />
+                        </div>
+                    ) : null}
+                    {selected.size > 0 ? (
+                        <Button
+                            id="invoice-allocation-clear-selection"
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={isSubmitting}
+                            onClick={state.clearSelection}
+                        >
+                            清空选择
+                        </Button>
+                    ) : null}
+                </div>
             </div>
-            <div className="overflow-x-auto border-y border-border">
+            <div className="overflow-x-auto border-y border-border/70">
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -135,8 +219,17 @@ export function InvoiceAllocationTable({
                                     当前供应商没有可核销的应付单据
                                 </TableCell>
                             </TableRow>
+                        ) : !visiblePool.length ? (
+                            <TableRow>
+                                <TableCell
+                                    colSpan={splitTax ? 7 : 6}
+                                    className="h-20 text-center text-muted-foreground"
+                                >
+                                    未找到匹配「{search.trim()}」的单据
+                                </TableCell>
+                            </TableRow>
                         ) : (
-                            pool.map((row) => {
+                            visiblePool.map((row) => {
                                 const checked = selected.has(
                                     row.payableAccountId,
                                 )
@@ -168,7 +261,7 @@ export function InvoiceAllocationTable({
                                         <TableCell>
                                             {SOURCE_TYPE_LABEL[row.sourceType]}
                                         </TableCell>
-                                        <TableCell className="max-w-64 whitespace-normal break-all num">
+                                        <TableCell className="num max-w-64 whitespace-normal break-all">
                                             {row.sourceDocumentNo}
                                         </TableCell>
                                         <TableCell className="num text-muted-foreground">
@@ -180,29 +273,49 @@ export function InvoiceAllocationTable({
                                             />
                                         </TableCell>
                                         <TableCell>
-                                            <MoneyInput
-                                                id={`supplier-payables-allocation-pool-row-${rowId}-amount`}
-                                                aria-label={`${row.sourceDocumentNo} 本次核销金额`}
-                                                className="ml-auto w-40 text-right num"
-                                                placeholder="0.00"
-                                                value={
-                                                    checked
-                                                        ? (amounts[
-                                                              row
-                                                                  .payableAccountId
-                                                          ] ?? "")
-                                                        : ""
-                                                }
-                                                disabled={
-                                                    !checked || isSubmitting
-                                                }
-                                                onChange={(event) =>
-                                                    setAmountFor(
-                                                        row.payableAccountId,
-                                                        event.target.value,
-                                                    )
-                                                }
-                                            />
+                                            <div className="flex items-center justify-end gap-1">
+                                                <MoneyInput
+                                                    id={`supplier-payables-allocation-pool-row-${rowId}-amount`}
+                                                    aria-label={`${row.sourceDocumentNo} 本次核销金额`}
+                                                    className="num w-36 text-right"
+                                                    placeholder="0.00"
+                                                    value={
+                                                        checked
+                                                            ? (amounts[
+                                                                  row
+                                                                      .payableAccountId
+                                                              ] ?? "")
+                                                            : ""
+                                                    }
+                                                    disabled={
+                                                        !checked || isSubmitting
+                                                    }
+                                                    onChange={(event) =>
+                                                        setAmountFor(
+                                                            row.payableAccountId,
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                />
+                                                {checked ? (
+                                                    <Button
+                                                        id={`supplier-payables-allocation-pool-row-${rowId}-fill`}
+                                                        type="button"
+                                                        size="xs"
+                                                        variant="ghost"
+                                                        disabled={isSubmitting}
+                                                        title="按本单可收票金额与发票剩余可核销金额中的较小值填入"
+                                                        onClick={() =>
+                                                            fillRowAmount(
+                                                                row.payableAccountId,
+                                                                row.openInvoiceableTotal,
+                                                            )
+                                                        }
+                                                    >
+                                                        填满
+                                                    </Button>
+                                                ) : null}
+                                            </div>
                                         </TableCell>
                                         {splitTax ? (
                                             <TableCell>
@@ -211,7 +324,7 @@ export function InvoiceAllocationTable({
                                                         <MoneyInput
                                                             id={`supplier-invoice-tax-${rowId}`}
                                                             aria-label={`${row.sourceDocumentNo} 分配税额`}
-                                                            className="ml-auto w-32 text-right num"
+                                                            className="num ml-auto w-32 text-right"
                                                             placeholder="0.00"
                                                             value={
                                                                 checked
@@ -263,7 +376,40 @@ export function InvoiceAllocationTable({
                                 <TableCell className="text-right">
                                     <MoneyValue value={state.allocatedHint} />
                                 </TableCell>
-                                {splitTax ? <TableCell /> : null}
+                                {splitTax ? (
+                                    <TableCell className="text-right">
+                                        <div className="flex flex-col items-end">
+                                            <MoneyValue
+                                                value={fromCents(
+                                                    allocatedTaxCents,
+                                                )}
+                                                className={
+                                                    taxMismatch
+                                                        ? "font-semibold text-destructive"
+                                                        : "font-semibold"
+                                                }
+                                            />
+                                            {faceTaxCents > BigInt(0) ? (
+                                                <span
+                                                    className={cn(
+                                                        "num text-xs",
+                                                        taxMismatch
+                                                            ? "text-destructive"
+                                                            : "text-muted-foreground",
+                                                    )}
+                                                >
+                                                    票面{" "}
+                                                    <MoneyValue
+                                                        value={fromCents(
+                                                            faceTaxCents,
+                                                        )}
+                                                        className="text-xs"
+                                                    />
+                                                </span>
+                                            ) : null}
+                                        </div>
+                                    </TableCell>
+                                ) : null}
                             </TableRow>
                         </TableFooter>
                     ) : null}

@@ -45,10 +45,7 @@ export function useSupplierAccountsFilters() {
 
     const view = parseView(searchParams.get("view"))
     const qParam = searchParams.get("q") ?? ""
-    const supplierId =
-        view === "payable"
-            ? (searchParams.get("supplierId") ?? undefined)
-            : undefined
+    const supplierId = searchParams.get("supplierId") ?? undefined
     const sourceTypeParam = searchParams.get("sourceType")
     const statusParam = searchParams.get("status")
     const dueParam = searchParams.get("due")
@@ -222,7 +219,7 @@ export function useSupplierAccountsFilters() {
         patchUrl(
             {
                 q: searchInput.trim() || null,
-                supplierId: view === "payable" ? supplierDraft || null : null,
+                supplierId: supplierDraft || null,
                 sourceType: sourceTypeDraft === "all" ? null : sourceTypeDraft,
                 status: statusDraft === "all" ? null : statusDraft,
                 due: dueDraft === "all" ? null : dueDraft,
@@ -243,28 +240,25 @@ export function useSupplierAccountsFilters() {
         statusDraft,
         supplierDraft,
         trackDraft,
-        view,
     ])
-    /** 只清当前视图的低频草稿；应付保留状态与到期，待核销只清轨道。 */
+    /** 只清当前视图的低频草稿；保留搜索、供应商与常驻筛选。 */
     const resetMoreFilters = React.useCallback(() => {
         if (view === "payable") {
-            setSupplierDraft(null)
             setSourceTypeDraft("all")
+            setDueDraft("all")
             setPaymentGateDraft("all")
         }
-        if (view === "unallocated") setTrackDraft("all")
     }, [view])
 
-    /** 关闭托盘只恢复低频草稿，保留搜索与常驻筛选。 */
+    /** 关闭托盘只恢复低频草稿，保留搜索、供应商与常驻筛选。 */
     const cancelMoreFilters = React.useCallback(() => {
         if (view === "payable") {
-            setSupplierDraft(supplierId ?? null)
             setSourceTypeDraft(sourceType ?? "all")
+            setDueDraft(due ?? "all")
             setPaymentGateDraft(paymentGate ?? "all")
         }
-        if (view === "unallocated") setTrackDraft(track ?? "all")
         setPanelOpen(false)
-    }, [paymentGate, sourceType, supplierId, track, view])
+    }, [due, paymentGate, sourceType, view])
 
     const switchView = React.useCallback(
         (nextView: SupplierAccountsView) => {
@@ -279,7 +273,7 @@ export function useSupplierAccountsFilters() {
 
     const hasPendingChanges =
         searchInput.trim() !== qParam.trim() ||
-        (view === "payable" && supplierDraft !== (supplierId ?? null)) ||
+        supplierDraft !== (supplierId ?? null) ||
         sourceTypeDraft !== (sourceType ?? "all") ||
         statusDraft !== (status ?? "all") ||
         dueDraft !== (due ?? "all") ||
@@ -437,11 +431,12 @@ export function useSupplierAccountsFilters() {
         paymentGate,
         purchaseOrderId,
         trackFilter,
+        hasDueDates,
         dueFilterUnavailable,
         searchInput,
         setSearchInput,
         searchInputRef,
-        panelOpen: (view === "payable" || view === "unallocated") && panelOpen,
+        panelOpen: view === "payable" && panelOpen,
         setPanelOpen,
         appliedChips,
         applyFilters,

@@ -1,4 +1,5 @@
 import { nullIfNotFound } from "@/lib/api/errors"
+import { compareDecimal, sumFixed } from "@/lib/fixed-decimal"
 import { payableDue } from "@/features/supplier-payables/lib/payable-due"
 /**
  * W12 供应商往来 · 应付台账相关请求（列表、详情、核销会话）。
@@ -199,6 +200,72 @@ export async function fetchSupplierAccounts(
             })
         }
     }
+    for (const payment of payments) {
+        if (payment.supplierId && !supplierMap.has(payment.supplierId)) {
+            supplierMap.set(payment.supplierId, {
+                supplierId: payment.supplierId,
+                supplierName: payment.supplierName,
+                openPayableTotal: "0.00",
+                unallocatedPaymentTotal: "0.00",
+                unallocatedInvoiceTotal: "0.00",
+            })
+        }
+    }
+    for (const invoice of invoices) {
+        if (invoice.supplierId && !supplierMap.has(invoice.supplierId)) {
+            supplierMap.set(invoice.supplierId, {
+                supplierId: invoice.supplierId,
+                supplierName: invoice.supplierName,
+                openPayableTotal: "0.00",
+                unallocatedPaymentTotal: "0.00",
+                unallocatedInvoiceTotal: "0.00",
+            })
+        }
+    }
+
+    const openPayableAmounts: string[] = []
+    const overduePayableAmounts: string[] = []
+    let prepayGateBlockedCount = 0
+    for (const payable of payables) {
+        openPayableAmounts.push(payable.openTotal)
+        if (payable.dueState === "overdue") {
+            overduePayableAmounts.push(payable.openTotal)
+        }
+        const gateBlocked =
+            payable.paymentGateSummary?.state === "BLOCKED" ||
+            (Boolean(payable.paymentGuidance?.prepayGate) &&
+                payable.paymentGuidance?.prepaymentGap != null &&
+                compareDecimal(payable.paymentGuidance.prepaymentGap, "0", 2) >
+                    0)
+        if (gateBlocked) prepayGateBlockedCount += 1
+    }
+
+    const unallocatedPaymentAmounts: string[] = []
+    for (const payment of payments) {
+        if (payment.status === "POSTED" && payment.unallocatedAmount != null) {
+            unallocatedPaymentAmounts.push(payment.unallocatedAmount)
+        }
+    }
+
+    const unallocatedInvoiceAmounts: string[] = []
+    for (const invoice of invoices) {
+        if (invoice.invoiceKind === "BLUE" && invoice.unallocatedAmount) {
+            unallocatedInvoiceAmounts.push(invoice.unallocatedAmount)
+        }
+    }
+
+    const sumMoney = (values: readonly string[]) =>
+        values.length > 0
+            ? sumFixed(values, {
+                  maxScale: 2,
+                  outputScale: 2,
+                  allowNegative: true,
+              })
+            : "0.00"
+    const openPayableTotal = sumMoney(openPayableAmounts)
+    const overduePayableTotal = sumMoney(overduePayableAmounts)
+    const unallocatedPaymentTotal = sumMoney(unallocatedPaymentAmounts)
+    const unallocatedInvoiceTotal = sumMoney(unallocatedInvoiceAmounts)
 
     const hasFilters = Boolean(
         query.q?.trim() ||
@@ -211,13 +278,12 @@ export async function fetchSupplierAccounts(
 
     return {
         view: query.view,
-        // metrics 后端无汇总端点 — 占位 0
         metrics: {
-            openPayableTotal: "0.00",
-            overduePayableTotal: "0.00",
-            unallocatedPaymentTotal: "0.00",
-            unallocatedInvoiceTotal: "0.00",
-            prepayGateBlockedCount: 0,
+            openPayableTotal,
+            overduePayableTotal,
+            unallocatedPaymentTotal,
+            unallocatedInvoiceTotal,
+            prepayGateBlockedCount,
         },
         payables,
         payments,

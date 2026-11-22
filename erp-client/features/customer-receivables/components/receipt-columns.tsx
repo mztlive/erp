@@ -4,17 +4,27 @@ import {
     BusinessStatusBadge,
     MoneyValue,
     TableIdentityCell,
+    TableRowActions,
     TableTextCell,
 } from "@/components/business"
 import type { ReceiptRow } from "@/features/customer-receivables/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 import { allocationSummaryCell } from "./allocation-summary"
 
-export function createReceiptColumns(): ColumnDef<ReceiptRow>[] {
+export type ReceiptColumnActions = {
+    onPreview?: (row: ReceiptRow) => void
+    onContinueAllocate?: (row: ReceiptRow) => void
+    canRegisterReceipt?: boolean
+}
+
+export function createReceiptColumns(
+    actions: ReceiptColumnActions = {},
+): ColumnDef<ReceiptRow>[] {
     return [
         {
             id: "doc",
-            header: "回款单号",
+            header: "回款单号 / 往来主体",
             meta: { label: "回款单号", width: "flex" },
             cell: ({ row }) => (
                 <TableIdentityCell
@@ -30,7 +40,7 @@ export function createReceiptColumns(): ColumnDef<ReceiptRow>[] {
         {
             id: "receivedAt",
             header: "到账时间",
-            meta: { width: "default" },
+            meta: { label: "到账时间", width: "default" },
             cell: ({ row }) => (
                 <TableTextCell
                     value={
@@ -50,7 +60,7 @@ export function createReceiptColumns(): ColumnDef<ReceiptRow>[] {
             id: "amount",
             header: "到账金额",
             meta: {
-                label: "金额",
+                label: "到账金额",
                 width: "amount",
                 align: "end",
                 numeric: true,
@@ -59,15 +69,15 @@ export function createReceiptColumns(): ColumnDef<ReceiptRow>[] {
                 <MoneyValue
                     display="exact"
                     value={row.original.amount}
-                    taxBasis="gross"
+                    className="font-semibold"
                 />
             ),
         },
         {
             id: "alloc",
-            header: "净已分配 / 未分配",
+            header: "未分配 / 净已分配",
             meta: {
-                label: "分配",
+                label: "分配情况",
                 width: "amount",
                 align: "end",
                 numeric: true,
@@ -77,7 +87,7 @@ export function createReceiptColumns(): ColumnDef<ReceiptRow>[] {
         {
             id: "status",
             header: "状态",
-            meta: { width: "status" },
+            meta: { label: "状态", width: "status" },
             cell: ({ row }) => (
                 <BusinessStatusBadge
                     context="list"
@@ -88,6 +98,50 @@ export function createReceiptColumns(): ColumnDef<ReceiptRow>[] {
                     }
                 />
             ),
+        },
+        {
+            id: "actions",
+            header: "操作",
+            enableHiding: false,
+            meta: { label: "操作", width: "status", align: "end" },
+            cell: ({ row: { original } }) => {
+                const seg = toAutomationIdSegment(original.receiptId)
+                const canContinue =
+                    Boolean(actions.canRegisterReceipt) &&
+                    Boolean(actions.onContinueAllocate) &&
+                    original.allowedActions.includes("CONTINUE_ALLOCATE")
+                return (
+                    <TableRowActions
+                        maxInline={2}
+                        moreId={`customer-receivables-receipt-${seg}-more`}
+                        moreLabel={`${original.receiptNo} 更多操作`}
+                        actions={[
+                            ...(canContinue
+                                ? [
+                                      {
+                                          id: `customer-receivables-receipt-${seg}-allocate`,
+                                          label: "继续核销",
+                                          onClick: () =>
+                                              actions.onContinueAllocate?.(
+                                                  original,
+                                              ),
+                                      },
+                                  ]
+                                : []),
+                            ...(actions.onPreview
+                                ? [
+                                      {
+                                          id: `customer-receivables-receipt-${seg}-view`,
+                                          label: "详情",
+                                          onClick: () =>
+                                              actions.onPreview?.(original),
+                                      },
+                                  ]
+                                : []),
+                        ]}
+                    />
+                )
+            },
         },
     ]
 }

@@ -4,11 +4,21 @@ import {
     BusinessStatusBadge,
     MoneyValue,
     TableIdentityCell,
+    TableRowActions,
     TableTextCell,
 } from "@/components/business"
 import type { ReceivableAccountRow } from "@/features/customer-receivables/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
-export function createReceivableColumns(): ColumnDef<ReceivableAccountRow>[] {
+export type ReceivableColumnActions = {
+    onPreview?: (row: ReceivableAccountRow) => void
+    onRegisterReceipt?: (row: ReceivableAccountRow) => void
+    canRegisterReceipt?: boolean
+}
+
+export function createReceivableColumns(
+    actions: ReceivableColumnActions = {},
+): ColumnDef<ReceivableAccountRow>[] {
     return [
         {
             id: "party",
@@ -47,22 +57,39 @@ export function createReceivableColumns(): ColumnDef<ReceivableAccountRow>[] {
         },
         {
             id: "open",
-            header: "待收金额（含税）",
+            header: "待收金额",
             meta: {
-                label: "待收金额",
+                label: "待收金额（含税）",
                 width: "amount",
                 align: "end",
                 numeric: true,
             },
             cell: ({ row }) => (
-                <MoneyValue display="exact" value={row.original.openTotal} />
+                <MoneyValue
+                    display="exact"
+                    value={row.original.openTotal}
+                    className="font-semibold"
+                />
+            ),
+        },
+        {
+            id: "gross",
+            header: "应收总额",
+            meta: {
+                label: "应收总额（含税）",
+                width: "amount",
+                align: "end",
+                numeric: true,
+            },
+            cell: ({ row }) => (
+                <MoneyValue display="exact" value={row.original.grossTotal} />
             ),
         },
         {
             id: "settled",
-            header: "已核销回款（含税）",
+            header: "已核销回款",
             meta: {
-                label: "已核销",
+                label: "已核销回款",
                 width: "amount",
                 align: "end",
                 numeric: true,
@@ -72,35 +99,35 @@ export function createReceivableColumns(): ColumnDef<ReceivableAccountRow>[] {
             ),
         },
         {
-            id: "invoice",
-            header: "净已开票 / 可开票（含税）",
+            id: "openInvoiceable",
+            header: "待开票",
             meta: {
-                label: "开票",
+                label: "待开票（含税）",
                 width: "amount",
                 align: "end",
                 numeric: true,
             },
             cell: ({ row }) => (
-                <div className="flex flex-col items-end gap-1 text-right">
-                    <div>
-                        <span className="mr-2 text-xs text-muted-foreground">
-                            可开
-                        </span>
-                        <MoneyValue
-                            display="exact"
-                            value={row.original.openInvoiceableTotal}
-                        />
-                    </div>
-                    <div>
-                        <span className="mr-2 text-xs text-muted-foreground">
-                            净已开票
-                        </span>
-                        <MoneyValue
-                            display="exact"
-                            value={row.original.invoicedTotal}
-                        />
-                    </div>
-                </div>
+                <MoneyValue
+                    display="exact"
+                    value={row.original.openInvoiceableTotal}
+                />
+            ),
+        },
+        {
+            id: "invoiced",
+            header: "净已开票",
+            meta: {
+                label: "净已开票（含税）",
+                width: "amount",
+                align: "end",
+                numeric: true,
+            },
+            cell: ({ row }) => (
+                <MoneyValue
+                    display="exact"
+                    value={row.original.invoicedTotal}
+                />
             ),
         },
         {
@@ -108,7 +135,7 @@ export function createReceivableColumns(): ColumnDef<ReceivableAccountRow>[] {
             header: "到期",
             meta: { label: "到期", width: "default" },
             cell: ({ row }) => (
-                <div className="flex flex-col items-start gap-1">
+                <div className="flex flex-col items-start gap-0.5">
                     <TableTextCell value={row.original.dueDate} numeric />
                     <BusinessStatusBadge
                         context="list"
@@ -144,6 +171,50 @@ export function createReceivableColumns(): ColumnDef<ReceivableAccountRow>[] {
                     }
                 />
             ),
+        },
+        {
+            id: "actions",
+            header: "操作",
+            enableHiding: false,
+            meta: { label: "操作", width: "status", align: "end" },
+            cell: ({ row: { original } }) => {
+                const seg = toAutomationIdSegment(original.accountId)
+                const canReceipt =
+                    Boolean(actions.canRegisterReceipt) &&
+                    Boolean(actions.onRegisterReceipt) &&
+                    original.allowedActions.includes("REGISTER_RECEIPT")
+                return (
+                    <TableRowActions
+                        maxInline={2}
+                        moreId={`customer-receivables-row-${seg}-more`}
+                        moreLabel={`${original.salesOrderNo} 更多操作`}
+                        actions={[
+                            ...(canReceipt
+                                ? [
+                                      {
+                                          id: `customer-receivables-row-${seg}-receipt`,
+                                          label: "登记回款",
+                                          onClick: () =>
+                                              actions.onRegisterReceipt?.(
+                                                  original,
+                                              ),
+                                      },
+                                  ]
+                                : []),
+                            ...(actions.onPreview
+                                ? [
+                                      {
+                                          id: `customer-receivables-row-${seg}-view`,
+                                          label: "详情",
+                                          onClick: () =>
+                                              actions.onPreview?.(original),
+                                      },
+                                  ]
+                                : []),
+                        ]}
+                    />
+                )
+            },
         },
     ]
 }

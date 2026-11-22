@@ -2,6 +2,8 @@
 
 mod records;
 
+use std::collections::HashMap;
+
 use erp_core::common::time::BusinessDate;
 use erp_core::money::Amount;
 use erp_finance::entity::supplier_deposit::{
@@ -9,15 +11,17 @@ use erp_finance::entity::supplier_deposit::{
     SupplierDepositRechargeRequest, SupplierDepositReconciliation, SupplierDepositReservation,
     SupplierDepositUsage,
 };
-use erp_finance::repository::SupplierDepositExt;
 use erp_finance::repository::supplier_deposit_query::latest_account_records as latest;
 use erp_finance::repository::supplier_deposit_resolution::{
     outstanding_reservations, unresolved_reconciliations,
 };
+use erp_finance::repository::{PurchasePaymentRequestExt, SupplierDepositExt};
 use erp_party::PartyExt;
 use erp_party::repository::prelude::PartyBankAccountRepositoryExt;
+use erp_procurement::repository::PurchaseOrderExt;
 use erp_supplier::SupplierExt;
 use mongodb::Database;
+use mongodb::bson::doc;
 use persistence_core::Executor;
 use serde::Serialize;
 
@@ -40,13 +44,24 @@ pub struct DepositPayeeBankAccount {
     pub account_number_masked: String,
 }
 
+/// 占用明细补充人类可读采购单号与付款申请单号，保留原有全部字段。
+#[derive(Debug, Clone, Serialize)]
+pub struct DepositReservationView {
+    #[serde(flatten)]
+    pub reservation: SupplierDepositReservation,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub purchase_order_no: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payment_request_no: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct DepositAccountDetail {
     #[serde(flatten)]
     pub row: DepositAccountRow,
     pub available_amount: Amount,
     pub batches: Vec<SupplierDepositBatch>,
-    pub reservations: Vec<SupplierDepositReservation>,
+    pub reservations: Vec<DepositReservationView>,
     pub usages: Vec<SupplierDepositUsage>,
     pub ledger: Vec<SupplierDepositLedgerEntry>,
     pub authorizations: Vec<SupplierDepositAuthorization>,
@@ -108,6 +123,7 @@ pub async fn account_detail(
         latest(db.supplier_deposit_reservations(), &id, executor).await?,
         outstanding_reservations(db, &id, executor).await?,
     )?;
+    let reservations = hydrate_reservations(db, reservations, executor).await?;
     let reconciliations = merge_recent(
         latest(db.supplier_deposit_reconciliations(), &id, executor).await?,
         unresolved_reconciliations(db, &id, executor).await?,
@@ -125,6 +141,51 @@ pub async fn account_detail(
         recharge_requests: latest(db.supplier_deposit_recharge_requests(), &id, executor).await?,
         payee_bank_accounts,
     })
+}
+
+async fn hydrate_reservations(
+    db: &Database,
+    reservations: Vec<SupplierDepositReservation>,
+    executor: &mut dyn Executor,
+) -> Result<Vec<DepositReservationView>> {
+    if reservations.is_empty() {
+        return Ok(Vec::new());
+    }
+    let purchase_ids: Vec<String> = reservations
+        .iter()
+        .map(|item| item.basis.purchase_order_id.clone())
+        .filter(|id| !id.trim().is_empty())
+        .collect();
+    let purchase_nos = db.purchase_order().purchase_nos_by_ids(&purchase_ids, executor).await?;
+
+    let request_ids = crate::support::dedup_sorted(
+        reservations
+            .iter()
+            .map(|item| item.basis.payment_request_id.clone())
+            .filter(|id| !id.trim().is_empty()),
+    );
+    let mut request_nos = HashMap::new();
+    if !request_ids.is_empty() {
+        let requests = db
+            .purchase_payment_requests()
+            .find_many(doc! {"id": {"$in": &request_ids}}, executor)
+            .await?;
+        for request in requests {
+            let no = request.request_no.trim();
+            if !no.is_empty() {
+                request_nos.insert(request.base.id, no.to_string());
+            }
+        }
+    }
+
+    Ok(reservations
+        .into_iter()
+        .map(|reservation| {
+            let purchase_order_no = purchase_nos.get(&reservation.basis.purchase_order_id).cloned();
+            let payment_request_no = request_nos.get(&reservation.basis.payment_request_id).cloned();
+            DepositReservationView { reservation, purchase_order_no, payment_request_no }
+        })
+        .collect())
 }
 
 async fn payee_bank_accounts(

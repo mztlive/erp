@@ -41,7 +41,7 @@ export function RechargePaymentDialog({
     const form = useAppForm({
         defaultValues: {
             bank: "",
-            paid_at: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+            paid_at: format(new Date(), "yyyy-MM-dd'T'HH:mm:ss"),
             bank_reference: "",
             receipt: null as File | null,
         },
@@ -113,10 +113,19 @@ export function RechargePaymentDialog({
                         仅登记已经实际支付的充值。银行已付后仍须核对供应商到账，才增加可用余额。
                     </DialogDescription>
                 </DialogHeader>
-                <p className="text-body-compact">
-                    {account.supplier_name} · {account.payer_party_name} ·{" "}
-                    <MoneyValue value={request.amount} display="exact" />
-                </p>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">
+                        {account.supplier_name}
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <span>{account.payer_party_name}</span>
+                    <span aria-hidden="true">·</span>
+                    <MoneyValue
+                        value={request.amount}
+                        display="exact"
+                        className="font-semibold text-foreground"
+                    />
+                </div>
                 {!banks.length && (
                     <Alert>
                         <AlertDescription>
@@ -154,9 +163,8 @@ export function RechargePaymentDialog({
                     </form.AppField>
                     <form.AppField name="paid_at">
                         {(field) => (
-                            <field.TextField
+                            <field.DateTimeField
                                 id="supplier-deposits-payment-time"
-                                type="datetime-local"
                                 label="实际银行付款时间"
                                 required
                                 disabled={busy || unknown}

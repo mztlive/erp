@@ -96,10 +96,7 @@ export function useCustomerReceivablesUrlState(
             ? (options.defaultView ?? "receivable")
             : parseView(viewParam)
     const qParam = searchParams.get("q") ?? ""
-    const counterpartyPartyId =
-        view === "receivable"
-            ? (searchParams.get("counterpartyId") ?? undefined)
-            : undefined
+    const counterpartyPartyId = searchParams.get("counterpartyId") ?? undefined
     const customerId = searchParams.get("customerId") ?? undefined
     const due = parseDue(searchParams.get("due"))
     const legacyStatus = parseReceivableStatus(searchParams.get("status"))
@@ -158,7 +155,7 @@ export function useCustomerReceivablesUrlState(
             ),
         [searchParams],
     )
-    const pageSize = 20
+    const [pageSize, setPageSize] = React.useState(20)
 
     const query: CustomerAccountsQuery = React.useMemo(
         () => ({
@@ -177,6 +174,7 @@ export function useCustomerReceivablesUrlState(
         [
             view,
             pageFromUrl,
+            pageSize,
             qParam,
             counterpartyPartyId,
             customerId,
@@ -190,7 +188,7 @@ export function useCustomerReceivablesUrlState(
 
     const pagination = React.useMemo<PaginationState>(
         () => ({ pageIndex: Math.max(0, pageFromUrl - 1), pageSize }),
-        [pageFromUrl],
+        [pageFromUrl, pageSize],
     )
 
     function patchUrl(
@@ -232,10 +230,7 @@ export function useCustomerReceivablesUrlState(
         patchUrl(
             {
                 q: searchDraft.trim() || null,
-                counterpartyId:
-                    view === "receivable"
-                        ? counterpartyPartyIdDraft || null
-                        : null,
+                counterpartyId: counterpartyPartyIdDraft || null,
                 ...(view === "receivable"
                     ? { status: statusDraft === "all" ? null : statusDraft }
                     : {}),
@@ -292,8 +287,7 @@ export function useCustomerReceivablesUrlState(
 
     const hasPendingChanges =
         searchDraft.trim() !== qParam.trim() ||
-        (view === "receivable" &&
-            counterpartyPartyIdDraft !== (counterpartyPartyId ?? null)) ||
+        counterpartyPartyIdDraft !== (counterpartyPartyId ?? null) ||
         (view === "receivable" && statusDraft !== statusDraftFromUrl)
 
     /** 清全部筛选参数 + 分页回 1；保留 view 与导航上下文。 */
@@ -323,6 +317,11 @@ export function useCustomerReceivablesUrlState(
 
     const handlePaginationChange = React.useCallback(
         (next: PaginationState) => {
+            if (next.pageSize !== pageSize) {
+                setPageSize(next.pageSize)
+                patchUrl({ page: null }, { replace: true })
+                return
+            }
             patchUrl(
                 {
                     page:
@@ -334,7 +333,7 @@ export function useCustomerReceivablesUrlState(
             )
         },
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [searchParams, pathname, view],
+        [pageSize, searchParams, pathname, view],
     )
 
     // URL 回填：只同步 Draft，不重置面板展开态（§5.4 / §5.5）。

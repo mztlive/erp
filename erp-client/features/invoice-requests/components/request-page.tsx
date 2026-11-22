@@ -2,24 +2,25 @@
 
 import * as React from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import type { ColumnDef } from "@tanstack/react-table"
-import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from "lucide-react"
+import type { ColumnDef, PaginationState } from "@tanstack/react-table"
+import { BarChart3Icon, PlusIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
     BusinessStatusBadge,
+    DetailWorkspaceBody,
+    DetailWorkspaceChrome,
+    DetailWorkspacePage,
+    DetailWorkspaceSection,
     ListDataTable,
     ListFilterSection,
     ListFilterSections,
     ListSearchField,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
-    ListWorkspaceHeader,
     ListWorkspacePage,
-    ListWorkspaceViews,
     MoneyValue,
     OptionCombobox,
-    PageScaffold,
     TableEmptyCell,
     TableIdentityCell,
     TableRowActions,
@@ -34,6 +35,7 @@ import { CustomerSearchCombobox } from "@/features/entity-selectors/components/c
 import { SalesOrderSearchCombobox } from "@/features/entity-selectors/components/sales-order-search-combobox"
 import { getErrorCode } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { subtractFixed } from "@/lib/fixed-decimal"
 import { restoreListRowFocus } from "@/lib/list-row-focus"
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 import { listFilterText } from "@/lib/ui-text"
@@ -58,10 +60,9 @@ import {
 import { InvoiceRequestDetail } from "./request-detail"
 import { InvoiceRequestForm } from "./request-form"
 
-const PAGE_SIZE = 10
+const DEFAULT_PAGE_SIZE = 20
 const CREATE_LABEL = "新建开票申请"
 const EMPTY_ROWS: InvoiceRequest[] = []
-const FIRST_PAGE = { number: 1 }
 const STATUS_TONES: Record<RequestStatus, StatusTone> = {
     draft: "neutral",
     rejected: "destructive",
@@ -78,7 +79,16 @@ function isRequestStatus(value: string): value is RequestStatus {
     return Object.hasOwn(requestStatusLabels, value)
 }
 
-/** 客户往来开票申请页；草稿不请求，查询后写入 URL 并回到第一页。 */
+function safeRemaining(amount?: string, invoiced?: string): string {
+    const a = amount || "0.00"
+    const b = invoiced || "0.00"
+    if (!/^-?\d+(?:\.\d{1,2})?$/.test(a) || !/^-?\d+(?:\.\d{1,2})?$/.test(b)) {
+        return a
+    }
+    return subtractFixed(a, b, { maxScale: 2, outputScale: 2 })
+}
+
+/** 客户往来开票申请页；与客户往来 5 视图统一对齐，详情与表单进入独立 DetailWorkspacePage。 */
 export function InvoiceRequestsPage() {
     const params = useSearchParams()
     const router = useRouter()
@@ -93,6 +103,10 @@ export function InvoiceRequestsPage() {
     const [customerDraft, setCustomerDraft] = React.useState(customerId)
     const [orderDraft, setOrderDraft] = React.useState(salesOrderId)
     const [statusDraft, setStatusDraft] = React.useState(appliedStatus)
+    const [selectedNames, setSelectedNames] = React.useState<{
+        customer?: string
+        order?: string
+    }>({})
     const [panelOpen, setPanelOpen] = React.useState(false)
     const query: RequestQuery = {
         q: q.trim() || undefined,
@@ -185,6 +199,7 @@ export function InvoiceRequestsPage() {
         setCustomerDraft("")
         setOrderDraft("")
         setStatusDraft("")
+        setSelectedNames({})
         replaceFilters({
             q: "",
             customerId: "",
@@ -195,37 +210,7 @@ export function InvoiceRequestsPage() {
 
     const searchChanged = searchDraft.trim() !== q.trim()
     const customerChanged = customerDraft !== customerId
-    const chips: ListWorkspaceFilterChip[] = []
     const moreCount = (salesOrderId ? 1 : 0) + (appliedStatus ? 1 : 0)
-    // 主筛选草稿与生效值不同时，保留生效条件的移除入口。
-    if (q.trim() && searchChanged) {
-        chips.push({
-            key: "q",
-            label: `搜索：${q.trim()}`,
-            onClear: () => removeFilter("q"),
-        })
-    }
-    if (customerId && customerChanged) {
-        chips.push({
-            key: "customerId",
-            label: "已选客户",
-            onClear: () => removeFilter("customerId"),
-        })
-    }
-    if (salesOrderId) {
-        chips.push({
-            key: "salesOrderId",
-            label: "已选销售单",
-            onClear: () => removeFilter("salesOrderId"),
-        })
-    }
-    if (appliedStatus) {
-        chips.push({
-            key: "status",
-            label: `状态：${requestStatusLabels[appliedStatus]}`,
-            onClear: () => removeFilter("status"),
-        })
-    }
     const hasActiveFilters = Boolean(
         q.trim() || customerId || salesOrderId || appliedStatus,
     )
@@ -234,25 +219,39 @@ export function InvoiceRequestsPage() {
         customerChanged ||
         orderDraft !== salesOrderId ||
         statusDraft !== appliedStatus
+
     const views: ListWorkspaceViewsConfig = {
         ariaLabel: "客户往来工作视图",
         items: [
-            ...[
-                ["receivable", "应收"],
-                ["receipt", "回款"],
-                ["sales_invoice", "销项发票"],
-                ["unallocated", "待分配"],
-            ].map(([view, label]) => ({
-                id: `invoice-request-nav-${view}`,
-                label,
-                href: `/finance/customer-accounts?view=${view}`,
+            {
+                id: "invoice-request-nav-receivable",
+                label: "应收",
+                href: "/finance/customer-accounts?view=receivable",
                 active: false,
-            })),
+            },
+            {
+                id: "invoice-request-nav-receipt",
+                label: "回款",
+                href: "/finance/customer-accounts?view=receipt",
+                active: false,
+            },
+            {
+                id: "invoice-request-nav-sales_invoice",
+                label: "销项发票",
+                href: "/finance/customer-accounts?view=sales_invoice",
+                active: false,
+            },
             {
                 id: "invoice-request-nav-requests",
                 label: "开票申请",
                 href: appliedQuery ? `${pathname}?${appliedQuery}` : pathname,
                 active: true,
+            },
+            {
+                id: "invoice-request-nav-unallocated",
+                label: "待分配",
+                href: "/finance/customer-accounts?view=unallocated",
+                active: false,
             },
         ],
     }
@@ -266,100 +265,162 @@ export function InvoiceRequestsPage() {
             initialCreate={params.get("create") === "1"}
             hasActiveFilters={hasActiveFilters}
             onClearFilters={clearFilters}
-            renderToolbar={(resultStatus) => (
-                <ListWorkspaceFilterBar
-                    morePresentation="popover"
-                    idPrefix="invoice-request-filter"
-                    formAriaLabel="开票申请查询"
-                    onSubmit={applyFilters}
-                    queryButtonId="invoice-request-filter-apply"
-                    resetMoreButtonId="invoice-request-filter-reset"
-                    search={
-                        <InvoiceRequestSearch
-                            value={searchDraft}
-                            onChange={setSearchDraft}
-                        />
-                    }
-                    moreCount={moreCount}
-                    moreOpen={panelOpen}
-                    onToggleMore={() =>
-                        panelOpen ? cancelMoreFilters() : setPanelOpen(true)
-                    }
-                    morePanelId="invoice-request-filter-more-panel"
-                    morePanelAriaLabel="开票申请更多筛选条件"
-                    onResetMore={resetMoreFilters}
-                    primaryFilters={
-                        <CustomerSearchCombobox
-                            id="invoice-request-filter-customer"
-                            className="w-56 max-w-full min-w-0"
-                            filterLabel="客户"
-                            purpose="filter"
-                            scope="all_authorized"
-                            value={customerDraft || undefined}
-                            onValueChange={(id) => setCustomerDraft(id ?? "")}
-                            placeholder="全部"
-                        />
-                    }
-                    morePanel={
-                        <ListFilterSections>
-                            <ListFilterSection legend="申请条件">
-                                <ListWorkspaceFilterField
-                                    htmlFor="invoice-request-filter-order"
-                                    label="销售单"
+            onOpenScope={() =>
+                router.push("/finance/customer-accounts/invoice-requests/scope")
+            }
+            renderToolbar={(resultStatus, items) => {
+                const resolvedOrderNo =
+                    selectedNames.order ??
+                    items?.find((item) => item.sales_order_id === salesOrderId)
+                        ?.sales_order_no
+                const resolvedCustomer =
+                    selectedNames.customer ??
+                    items?.find((item) => item.customer_id === customerId)?.data
+                        ?.invoice_title
+                const chips: ListWorkspaceFilterChip[] = []
+                if (q.trim() && searchChanged) {
+                    chips.push({
+                        key: "q",
+                        label: `搜索：${q.trim()}`,
+                        onClear: () => removeFilter("q"),
+                    })
+                }
+                if (customerId && customerChanged) {
+                    chips.push({
+                        key: "customerId",
+                        label: resolvedCustomer
+                            ? `客户：${resolvedCustomer}`
+                            : "已选客户",
+                        onClear: () => removeFilter("customerId"),
+                    })
+                }
+                if (salesOrderId) {
+                    chips.push({
+                        key: "salesOrderId",
+                        label: resolvedOrderNo
+                            ? `销售单：${resolvedOrderNo}`
+                            : "已选销售单",
+                        onClear: () => removeFilter("salesOrderId"),
+                    })
+                }
+                if (appliedStatus) {
+                    chips.push({
+                        key: "status",
+                        label: `状态：${requestStatusLabels[appliedStatus]}`,
+                        onClear: () => removeFilter("status"),
+                    })
+                }
+                return (
+                    <ListWorkspaceFilterBar
+                        morePresentation="popover"
+                        idPrefix="invoice-request-filter"
+                        formAriaLabel="开票申请查询"
+                        onSubmit={applyFilters}
+                        queryButtonId="invoice-request-filter-apply"
+                        resetMoreButtonId="invoice-request-filter-reset"
+                        search={
+                            <InvoiceRequestSearch
+                                value={searchDraft}
+                                onChange={setSearchDraft}
+                            />
+                        }
+                        moreCount={moreCount}
+                        moreOpen={panelOpen}
+                        onToggleMore={() =>
+                            panelOpen ? cancelMoreFilters() : setPanelOpen(true)
+                        }
+                        morePanelId="invoice-request-filter-more-panel"
+                        morePanelAriaLabel="开票申请更多筛选条件"
+                        onResetMore={resetMoreFilters}
+                        primaryFilters={
+                            <CustomerSearchCombobox
+                                id="invoice-request-filter-customer"
+                                className="w-56 max-w-full min-w-0"
+                                filterLabel="客户"
+                                purpose="filter"
+                                scope="all_authorized"
+                                value={customerDraft || undefined}
+                                onValueChange={(id) =>
+                                    setCustomerDraft(id ?? "")
+                                }
+                                onItemChange={(item) =>
+                                    setSelectedNames((prev) => ({
+                                        ...prev,
+                                        customer:
+                                            item?.shortName || item?.legalName,
+                                    }))
+                                }
+                                placeholder="全部"
+                            />
+                        }
+                        morePanel={
+                            <ListFilterSections>
+                                <ListFilterSection legend="申请条件">
+                                    <ListWorkspaceFilterField
+                                        htmlFor="invoice-request-filter-order"
+                                        label="销售单"
+                                    >
+                                        <SalesOrderSearchCombobox
+                                            id="invoice-request-filter-order"
+                                            className="w-full min-w-0"
+                                            value={orderDraft || undefined}
+                                            onValueChange={(id) =>
+                                                setOrderDraft(id ?? "")
+                                            }
+                                            onItemChange={(item) =>
+                                                setSelectedNames((prev) => ({
+                                                    ...prev,
+                                                    order: item?.documentNumber,
+                                                }))
+                                            }
+                                            placeholder="全部销售单"
+                                        />
+                                    </ListWorkspaceFilterField>
+                                    <ListWorkspaceFilterField
+                                        htmlFor="invoice-request-filter-status"
+                                        label="状态"
+                                    >
+                                        <OptionCombobox
+                                            id="invoice-request-filter-status"
+                                            className="w-full min-w-0"
+                                            aria-label="状态"
+                                            value={statusDraft || null}
+                                            onValueChange={(value) =>
+                                                setStatusDraft(
+                                                    value &&
+                                                        isRequestStatus(value)
+                                                        ? value
+                                                        : "",
+                                                )
+                                            }
+                                            options={STATUS_OPTIONS}
+                                            placeholder="全部状态"
+                                        />
+                                    </ListWorkspaceFilterField>
+                                </ListFilterSection>
+                            </ListFilterSections>
+                        }
+                        resultStatus={resultStatus}
+                        chips={chips}
+                        onClearAll={clearFilters}
+                        extraPrimary={
+                            hasActiveFilters && chips.length === 0 ? (
+                                <Button
+                                    id="invoice-request-filter-clear"
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className={listWorkspaceStyles.quietButton}
+                                    onClick={clearFilters}
                                 >
-                                    <SalesOrderSearchCombobox
-                                        id="invoice-request-filter-order"
-                                        className="w-full min-w-0"
-                                        value={orderDraft || undefined}
-                                        onValueChange={(id) =>
-                                            setOrderDraft(id ?? "")
-                                        }
-                                        placeholder="全部销售单"
-                                    />
-                                </ListWorkspaceFilterField>
-                                <ListWorkspaceFilterField
-                                    htmlFor="invoice-request-filter-status"
-                                    label="状态"
-                                >
-                                    <OptionCombobox
-                                        id="invoice-request-filter-status"
-                                        className="w-full min-w-0"
-                                        aria-label="状态"
-                                        value={statusDraft || null}
-                                        onValueChange={(value) =>
-                                            setStatusDraft(
-                                                value && isRequestStatus(value)
-                                                    ? value
-                                                    : "",
-                                            )
-                                        }
-                                        options={STATUS_OPTIONS}
-                                        placeholder="全部状态"
-                                    />
-                                </ListWorkspaceFilterField>
-                            </ListFilterSection>
-                        </ListFilterSections>
-                    }
-                    resultStatus={resultStatus}
-                    chips={chips}
-                    onClearAll={clearFilters}
-                    extraPrimary={
-                        hasActiveFilters && chips.length === 0 ? (
-                            <Button
-                                id="invoice-request-filter-clear"
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className={listWorkspaceStyles.quietButton}
-                                onClick={clearFilters}
-                            >
-                                {listFilterText.clear}
-                            </Button>
-                        ) : undefined
-                    }
-                    hasPendingChanges={hasPendingChanges}
-                />
-            )}
+                                    {listFilterText.clear}
+                                </Button>
+                            ) : undefined
+                        }
+                        hasPendingChanges={hasPendingChanges}
+                    />
+                )
+            }}
         />
     )
 }
@@ -429,7 +490,8 @@ function invoiceRequestColumns(
             cell: ({ row }) => (
                 <MoneyValue
                     value={row.original.data?.amount || "0.00"}
-                    display="compact"
+                    display="exact"
+                    className="font-semibold"
                 />
             ),
         },
@@ -440,7 +502,21 @@ function invoiceRequestColumns(
             cell: ({ row }) => (
                 <MoneyValue
                     value={row.original.invoiced_amount || "0.00"}
-                    display="compact"
+                    display="exact"
+                />
+            ),
+        },
+        {
+            id: "remaining",
+            header: "尚未开票",
+            meta: { width: "amount", align: "end", numeric: true },
+            cell: ({ row }) => (
+                <MoneyValue
+                    value={safeRemaining(
+                        row.original.data?.amount,
+                        row.original.invoiced_amount,
+                    )}
+                    display="exact"
                 />
             ),
         },
@@ -478,12 +554,13 @@ function invoiceRequestColumns(
                     value={new Date(
                         row.original.created_at * 1000,
                     ).toLocaleDateString("zh-CN")}
+                    numeric
                 />
             ),
         },
         {
             id: "actions",
-            header: "操作",
+            header: () => <span className="sr-only">操作</span>,
             meta: { width: "status", align: "end" },
             cell: ({ row: { original } }) => {
                 const suffix = toAutomationIdSegment(original.id)
@@ -494,7 +571,7 @@ function invoiceRequestColumns(
                         actions={[
                             {
                                 id: `invoice-request-view-${suffix}`,
-                                label: "查看",
+                                label: "详情",
                                 onClick: () => onOpen(original),
                             },
                         ]}
@@ -512,6 +589,7 @@ function InvoiceRequestListWorkspace({
     initialCreate,
     hasActiveFilters,
     onClearFilters,
+    onOpenScope,
     renderToolbar,
 }: {
     query: RequestQuery
@@ -520,14 +598,19 @@ function InvoiceRequestListWorkspace({
     initialCreate: boolean
     hasActiveFilters: boolean
     onClearFilters: () => void
-    renderToolbar: (status: string | null) => React.ReactNode
+    onOpenScope: () => void
+    renderToolbar: (
+        status: string | null,
+        items?: readonly InvoiceRequest[],
+    ) => React.ReactNode
 }) {
     const permissions = useInvoiceRequestPermissions()
     const queryClient = useQueryClient()
-    const [page, setPage] = React.useState<{
+    const [pageState, setPageState] = React.useState<{
         number: number
+        size: number
         scopeVersion?: string
-    }>(FIRST_PAGE)
+    }>({ number: 1, size: DEFAULT_PAGE_SIZE })
     const [detailId, setDetailId] = React.useState(
         () => initialRequestId || pendingInvoiceRequestDetailId(),
     )
@@ -538,9 +621,9 @@ function InvoiceRequestListWorkspace({
     const lastFocusedRowId = React.useRef<string | undefined>(undefined)
     const listQuery: RequestQuery & { scope_version?: string } = {
         ...filters,
-        page: page.number,
-        page_size: PAGE_SIZE,
-        scope_version: page.scopeVersion,
+        page: pageState.number,
+        page_size: pageState.size,
+        scope_version: pageState.scopeVersion,
     }
     const list = useInvoiceRequests(listQuery, permissions.canRead)
     const data = list.data
@@ -583,83 +666,137 @@ function InvoiceRequestListWorkspace({
     const columns = React.useMemo(() => invoiceRequestColumns(onOpen), [onOpen])
 
     if (!showList) {
-        return (
-            <PageScaffold density="compact" className="gap-6">
-                <ListWorkspaceHeader
-                    eyebrow="财务"
-                    title="客户往来"
-                    description="管理客户开票申请，跟踪审批与财务开票进度。"
-                />
-                <ListWorkspaceViews {...views} />
-                {!permissions.canRead ? (
-                    <BusinessFailureState
-                        kind="permission"
-                        title="当前账号没有查看开票申请的权限。"
-                    />
-                ) : showForm ? (
-                    <section className="flex flex-col gap-4">
-                        <h2 className="text-section-title font-semibold tracking-tight">
-                            {editing ? "修改开票申请" : "申请开票"}
-                        </h2>
-                        <InvoiceRequestForm
-                            key={editing?.id ?? "new"}
-                            existing={editing}
-                            onCancel={() => {
-                                setCreating(false)
-                                setEditing(undefined)
-                            }}
-                            onDone={(request) => {
-                                const id =
-                                    request.id ||
-                                    pendingInvoiceRequestDetailId()
-                                setCreating(false)
-                                setEditing(undefined)
-                                if (id) setDetailId(id)
-                            }}
-                        />
-                    </section>
-                ) : detailId ? (
-                    <InvoiceRequestDetail
-                        key={detailId}
-                        id={detailId}
-                        onBack={() => {
-                            dismissPendingInvoiceRequestDetail()
-                            setDetailId(undefined)
+        if (!permissions.canRead) {
+            return (
+                <DetailWorkspacePage>
+                    <DetailWorkspaceChrome
+                        back={{
+                            id: "invoice-request-no-read-back",
+                            href: "/finance/customer-accounts",
+                            label: "返回客户往来",
                         }}
-                        onEdit={setEditing}
+                        title="开票申请"
                     />
-                ) : null}
-            </PageScaffold>
-        )
+                    <div className="mx-auto w-full max-w-3xl px-(--scaffold-px) py-8">
+                        <BusinessFailureState
+                            kind="permission"
+                            title="当前账号没有查看开票申请的权限。"
+                        />
+                    </div>
+                </DetailWorkspacePage>
+            )
+        }
+        if (showForm) {
+            const closeForm = () => {
+                setCreating(false)
+                setEditing(undefined)
+            }
+            return (
+                <DetailWorkspacePage>
+                    <DetailWorkspaceChrome
+                        title={editing ? "修改开票申请" : "新建开票申请"}
+                        primaryStatus={{
+                            label: editing ? "修改中" : "新建",
+                            tone: "neutral",
+                        }}
+                        meta={
+                            editing?.request_no
+                                ? `申请单号 ${editing.request_no}`
+                                : "填写销方与购方开票明细，审批通过后由财务开票"
+                        }
+                        secondaryActions={
+                            <Button
+                                id="invoice-request-form-back"
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={closeForm}
+                            >
+                                返回申请列表
+                            </Button>
+                        }
+                    />
+                    <DetailWorkspaceBody>
+                        <DetailWorkspaceSection width="form">
+                            <InvoiceRequestForm
+                                key={editing?.id ?? "new"}
+                                existing={editing}
+                                onCancel={closeForm}
+                                onDone={(request) => {
+                                    const id =
+                                        request.id ||
+                                        pendingInvoiceRequestDetailId()
+                                    setCreating(false)
+                                    setEditing(undefined)
+                                    if (id) setDetailId(id)
+                                }}
+                            />
+                        </DetailWorkspaceSection>
+                    </DetailWorkspaceBody>
+                </DetailWorkspacePage>
+            )
+        }
+        if (detailId) {
+            return (
+                <InvoiceRequestDetail
+                    key={detailId}
+                    id={detailId}
+                    onBack={() => {
+                        dismissPendingInvoiceRequestDetail()
+                        setDetailId(undefined)
+                    }}
+                    onEdit={setEditing}
+                />
+            )
+        }
+        return null
     }
 
     const total = data?.total ?? 0
     const listFailed = list.isError || (!list.isPending && !data)
-    const changePage = (number: number) => {
-        if (number === 1) setPage(FIRST_PAGE)
-        else setPage({ number, scopeVersion })
+    const handlePaginationChange = (next: PaginationState) => {
+        if (next.pageSize !== pageState.size) {
+            setPageState({ number: 1, size: next.pageSize })
+            return
+        }
+        const nextNumber = next.pageIndex + 1
+        if (nextNumber === 1) setPageState({ number: 1, size: pageState.size })
+        else
+            setPageState({
+                number: nextNumber,
+                size: pageState.size,
+                scopeVersion,
+            })
     }
 
     return (
         <ListWorkspacePage
-            title="开票申请"
+            title="客户往来"
             className="min-h-0"
             views={views}
-            actions={
-                permissions.canSubmit
+            actions={[
+                {
+                    id: "invoice-request-header-scope",
+                    actionKey: "open-scope",
+                    label: "按范围汇总",
+                    icon: BarChart3Icon,
+                    tier: "quiet",
+                    onClick: onOpenScope,
+                },
+                ...(permissions.canSubmit
                     ? [
                           {
                               id: "invoice-request-create",
                               actionKey: "create",
                               label: CREATE_LABEL,
                               icon: PlusIcon,
-                              tier: "primary",
+                              tier: "primary" as const,
                               onClick: onCreate,
                           },
                       ]
-                    : undefined
-            }
-            loading={page.number === 1 && list.isPending}
+                    : []),
+            ]}
+            loading={pageState.number === 1 && list.isPending}
             surface={{
                 ariaLabel: "开票申请",
                 toolbar: renderToolbar(
@@ -668,141 +805,82 @@ function InvoiceRequestListWorkspace({
                         : list.isFetching
                           ? "查询中…"
                           : null,
+                    data?.items,
                 ),
                 className: "@container/invoice-requests min-h-64",
                 tableClassName:
                     "flex flex-col @max-lg/invoice-requests:[&_[data-column-pinned]]:inset-x-auto! @max-lg/invoice-requests:[&_[data-pinned-edge]]:shadow-none!",
                 table: (
-                    <>
-                        <ListDataTable
-                            id="invoice-request-table"
-                            entityName="开票申请"
-                            caption="开票申请"
-                            data={data?.items ?? EMPTY_ROWS}
-                            columns={columns}
-                            defaultColumnPinning={{
-                                left: ["request"],
-                                right: ["actions"],
-                            }}
-                            getRowId={(request) => request.id}
-                            rowLabel={(request) => request.request_no}
-                            rowCount={total}
-                            pagination={{
-                                pageIndex: page.number - 1,
-                                pageSize: PAGE_SIZE,
-                            }}
-                            onPaginationChange={({ pageIndex }) =>
-                                changePage(pageIndex + 1)
+                    <ListDataTable
+                        id="invoice-request-table"
+                        entityName="开票申请"
+                        caption="开票申请"
+                        data={data?.items ?? EMPTY_ROWS}
+                        columns={columns}
+                        defaultColumnPinning={{
+                            left: ["request"],
+                            right: ["actions"],
+                        }}
+                        getRowId={(request) => request.id}
+                        rowLabel={(request) => request.request_no}
+                        rowCount={total}
+                        pagination={{
+                            pageIndex: pageState.number - 1,
+                            pageSize: pageState.size,
+                        }}
+                        onPaginationChange={handlePaginationChange}
+                        pageSizeOptions={[20, 50, 100]}
+                        showPagination={
+                            !listFailed && (!list.isPending || Boolean(data))
+                        }
+                        loading={list.isFetching}
+                        isError={listFailed}
+                        error={list.error}
+                        retryButtonId="invoice-request-list-retry"
+                        onRetry={() => {
+                            if (
+                                pageState.number > 1 &&
+                                getErrorCode(list.error) ===
+                                    "DATA_SCOPE_CHANGED"
+                            ) {
+                                void queryClient.invalidateQueries({
+                                    queryKey: [
+                                        ...requestKeys.all,
+                                        "list",
+                                        {
+                                            ...filters,
+                                            page: 1,
+                                            page_size: pageState.size,
+                                        },
+                                    ],
+                                    exact: true,
+                                    refetchType: "none",
+                                })
+                                setPageState({
+                                    number: 1,
+                                    size: pageState.size,
+                                })
+                            } else {
+                                void list.refetch()
                             }
-                            showPagination={false}
-                            loading={list.isFetching}
-                            isError={listFailed}
-                            error={list.error}
-                            retryButtonId="invoice-request-list-retry"
-                            onRetry={() => {
-                                if (
-                                    page.number > 1 &&
-                                    getErrorCode(list.error) ===
-                                        "DATA_SCOPE_CHANGED"
-                                ) {
-                                    void queryClient.invalidateQueries({
-                                        queryKey: [
-                                            ...requestKeys.all,
-                                            "list",
-                                            {
-                                                ...filters,
-                                                page: 1,
-                                                page_size: PAGE_SIZE,
-                                            },
-                                        ],
-                                        exact: true,
-                                        refetchType: "none",
-                                    })
-                                    setPage(FIRST_PAGE)
-                                } else {
-                                    void list.refetch()
-                                }
-                            }}
-                            noScope={noScope}
-                            hasActiveFilters={hasActiveFilters}
-                            onClearFilters={onClearFilters}
-                            canCreate={permissions.canSubmit}
-                            onCreate={onCreate}
-                            createLabel={CREATE_LABEL}
-                            emptyCopy={{
-                                emptyTitle: "暂无开票申请",
-                                emptyDescription: permissions.canSubmit
-                                    ? "有开票需求时，可在此发起申请。"
-                                    : undefined,
-                            }}
-                            onRowOpen={onOpen}
-                            scrollable
-                        />
-                        {data && !listFailed && (
-                            <InvoiceRequestPagination
-                                page={page.number}
-                                total={total}
-                                onPageChange={changePage}
-                            />
-                        )}
-                    </>
+                        }}
+                        noScope={noScope}
+                        hasActiveFilters={hasActiveFilters}
+                        onClearFilters={onClearFilters}
+                        canCreate={permissions.canSubmit}
+                        onCreate={onCreate}
+                        createLabel={CREATE_LABEL}
+                        emptyCopy={{
+                            emptyTitle: "暂无开票申请",
+                            emptyDescription: permissions.canSubmit
+                                ? "有开票需求时，可在此发起申请。"
+                                : undefined,
+                        }}
+                        onRowOpen={onOpen}
+                        scrollable
+                    />
                 ),
             }}
         />
-    )
-}
-
-// 保留固定页大小与原有翻页按钮 ID。
-function InvoiceRequestPagination({
-    page,
-    total,
-    onPageChange,
-}: {
-    page: number
-    total: number
-    onPageChange: (page: number) => void
-}) {
-    const pageCount = Math.ceil(total / PAGE_SIZE)
-
-    return (
-        <div
-            data-slot="data-table-pagination"
-            className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-muted-foreground"
-        >
-            <span className="num">共 {total.toLocaleString("zh-CN")} 条</span>
-            {pageCount > 1 && (
-                <div
-                    className="flex items-center gap-1.5"
-                    role="group"
-                    aria-label="翻页"
-                >
-                    <span className="num">
-                        第 {page} / {pageCount} 页
-                    </span>
-                    <Button
-                        id="invoice-request-page-prev"
-                        type="button"
-                        variant="outline"
-                        size="icon-sm"
-                        aria-label="上一页"
-                        disabled={page <= 1}
-                        onClick={() => onPageChange(page - 1)}
-                    >
-                        <ChevronLeftIcon aria-hidden="true" />
-                    </Button>
-                    <Button
-                        id="invoice-request-page-next"
-                        type="button"
-                        variant="outline"
-                        size="icon-sm"
-                        aria-label="下一页"
-                        disabled={page >= pageCount}
-                        onClick={() => onPageChange(page + 1)}
-                    >
-                        <ChevronRightIcon aria-hidden="true" />
-                    </Button>
-                </div>
-            )}
-        </div>
     )
 }

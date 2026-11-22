@@ -278,7 +278,13 @@ impl FundsAccess {
         if decided.len() != expected {
             return Err(Error::Internal("付款来源聚合与正式裁剪规则不一致".into()));
         }
-        Ok(payment_page_items(&decided, &links, whole_ids))
+        let mut items = payment_page_items(&decided, &links, whole_ids);
+        let supplier_ids = items.iter().map(|item| item.supplier_id.clone()).collect::<Vec<_>>();
+        let names = self.supplier_legal_names(&supplier_ids, executor).await?;
+        for item in &mut items {
+            item.supplier_name = names.get(&item.supplier_id).cloned();
+        }
+        Ok(items)
     }
 
     // 应用供应商付款筛选时，付款关联筛选条件：采购负责人、付款经办人与组织分别精确匹配。
@@ -364,6 +370,7 @@ impl FundsAccess {
         }
 
         let mut data = cut_payment_row(&row, row_links, &matched, whole);
+        data.supplier_name = self.supplier_name_of(&data.supplier_id, executor).await?;
         if whole && include_effective_amount {
             let payment = self
                 .db
@@ -492,6 +499,7 @@ pub(super) fn cut_payment_row(
         payment_no: row.payment_no.clone(),
         status: row.status,
         supplier_id: row.supplier_id.clone(),
+        supplier_name: None,
         paid_at: row.paid_at,
         created_at: row.created_at,
         visible_allocated_share: payment_sum_signed(links, matched),

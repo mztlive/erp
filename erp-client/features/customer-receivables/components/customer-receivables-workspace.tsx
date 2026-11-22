@@ -431,9 +431,59 @@ export function CustomerReceivablesWorkspace({
         setPartyPickerOpen(true)
     }
 
-    const receivableColumns = React.useMemo(createReceivableColumns, [])
-    const receiptColumns = React.useMemo(createReceiptColumns, [])
-    const invoiceColumns = React.useMemo(createInvoiceColumns, [])
+    const receivableColumns = React.useMemo(
+        () =>
+            createReceivableColumns({
+                canRegisterReceipt: permissions.canRegisterReceipt,
+                onRegisterReceipt: (row) => {
+                    void startSession(
+                        "receipt",
+                        row.counterpartyPartyId,
+                        undefined,
+                        {
+                            salesOrderId: row.salesOrderId,
+                            receivableAccountId: row.accountId,
+                        },
+                    )
+                },
+                onPreview: canPreview("receivable")
+                    ? (row) =>
+                          openPreview({ kind: "receivable", id: row.accountId })
+                    : undefined,
+            }),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [permissions.canRegisterReceipt, granted],
+    )
+    const receiptColumns = React.useMemo(
+        () =>
+            createReceiptColumns({
+                canRegisterReceipt: permissions.canRegisterReceipt,
+                onContinueAllocate: (row) => {
+                    void startSession(
+                        "receipt",
+                        row.counterpartyPartyId,
+                        row.receiptId,
+                    )
+                },
+                onPreview: canPreview("receipt")
+                    ? (row) =>
+                          openPreview({ kind: "receipt", id: row.receiptId })
+                    : undefined,
+            }),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [permissions.canRegisterReceipt, granted],
+    )
+    const invoiceColumns = React.useMemo(
+        () =>
+            createInvoiceColumns({
+                onPreview: canPreview("invoice")
+                    ? (row) =>
+                          openPreview({ kind: "invoice", id: row.invoiceId })
+                    : undefined,
+            }),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [granted],
+    )
 
     // 核销会话全屏
     if (urlState.sessionId && sessionQuery.data?.mode === "receipt") {
@@ -479,7 +529,7 @@ export function CustomerReceivablesWorkspace({
         )
     }
 
-    const views = readableViews.map((view) => ({
+    const baseViews = readableViews.map((view) => ({
         id: `customer-receivables-view-${view}`,
         view,
         label: VIEW_LABEL[view],
@@ -490,24 +540,39 @@ export function CustomerReceivablesWorkspace({
         active: view === urlState.view,
         onClick: () => urlState.changeView(view),
     }))
+    const standaloneViewItems = [
+        ...baseViews.filter((item) => item.view !== "unallocated"),
+        ...(!embedded && canReadInvoiceRequests
+            ? [
+                  {
+                      id: "customer-receivables-view-invoice-requests",
+                      label: "开票申请",
+                      href: INVOICE_REQUESTS_HREF,
+                      active: false,
+                  },
+              ]
+            : []),
+        ...baseViews.filter((item) => item.view === "unallocated"),
+    ]
+    const useBarViews = !embedded && standaloneViewItems.length >= 5
     const viewSwitcher =
-        views.length === 1 && !canReadCurrentView ? (
+        baseViews.length === 1 && !canReadCurrentView ? (
             <Button
-                id={views[0].id}
+                id={baseViews[0].id}
                 type="button"
                 variant="ghost"
                 className={listWorkspaceStyles.quietButton}
-                aria-pressed={views[0].active}
-                onClick={views[0].onClick}
+                aria-pressed={baseViews[0].active}
+                onClick={baseViews[0].onClick}
             >
-                {views[0].label}
+                {baseViews[0].label}
             </Button>
-        ) : views.length >= 2 ? (
+        ) : standaloneViewItems.length >= 2 ? (
             embedded ? (
                 <Tabs
                     value={urlState.view}
                     onValueChange={(value) =>
-                        views.find((item) => item.view === value)?.onClick()
+                        baseViews.find((item) => item.view === value)?.onClick()
                     }
                 >
                     <TabsList
@@ -515,7 +580,7 @@ export function CustomerReceivablesWorkspace({
                         aria-label="本单客户往来工作视图"
                         className="w-full min-w-0 justify-start overflow-x-auto border-b border-border/60"
                     >
-                        {views.map((item) => (
+                        {baseViews.map((item) => (
                             <TabsTrigger
                                 key={item.id}
                                 id={item.id}
@@ -529,8 +594,8 @@ export function CustomerReceivablesWorkspace({
             ) : (
                 <ListWorkspaceViews
                     ariaLabel="客户往来工作视图"
-                    items={views}
-                    variant="inline"
+                    items={standaloneViewItems}
+                    variant={useBarViews ? "bar" : "inline"}
                 />
             )
         ) : null
@@ -543,10 +608,13 @@ export function CustomerReceivablesWorkspace({
                     listQuery.isPlaceholderData ||
                     (listQuery.isPending && listEnabled)
                 }
-                views={embedded ? undefined : viewSwitcher}
-                onOpenInvoiceRequests={
-                    !embedded && canReadInvoiceRequests
-                        ? () => router.push(INVOICE_REQUESTS_HREF)
+                views={embedded || useBarViews ? undefined : viewSwitcher}
+                onOpenScope={
+                    !embedded && readableViews.length > 0
+                        ? () =>
+                              router.push(
+                                  `/finance/customer-accounts/scope?view=${urlState.view === "unallocated" ? "receivable" : urlState.view}`,
+                              )
                         : undefined
                 }
                 embedded={embedded}
@@ -840,7 +908,7 @@ export function CustomerReceivablesWorkspace({
 
     const ledger = (
         <>
-            {embedded ? viewSwitcher : null}
+            {embedded || useBarViews ? viewSwitcher : null}
             {listData?.moduleAllowed && listData.hasDataScope ? (
                 <CustomerReceivablesMetrics
                     metrics={listData.metrics}
@@ -870,6 +938,14 @@ export function CustomerReceivablesWorkspace({
                 invoiceColumns={invoiceColumns}
                 preview={preview}
                 onPreview={openPreview}
+                canRegisterReceipt={permissions.canRegisterReceipt}
+                onContinueAllocateReceipt={(row) => {
+                    void startSession(
+                        "receipt",
+                        row.counterpartyPartyId,
+                        row.receiptId,
+                    )
+                }}
             />
         </>
     )

@@ -1,6 +1,6 @@
 "use client"
 
-import { FilePlus2Icon, RefreshCwIcon } from "lucide-react"
+import { BarChart3Icon, FilePlus2Icon, RefreshCwIcon } from "lucide-react"
 
 import { PageActions } from "@/components/business"
 import {
@@ -20,8 +20,8 @@ interface SupplierAccountsHeaderProps {
     showViews: boolean
     canRegisterInvoice: boolean
     prioritizeQuery: boolean
-    queriedAt?: string
     onViewChange: (view: SupplierAccountsView) => void
+    onOpenScope: () => void
     onRefresh: () => void
     onRegisterInvoice: () => void
 }
@@ -31,8 +31,8 @@ export function SupplierAccountsHeader({
     showViews,
     canRegisterInvoice,
     prioritizeQuery,
-    queriedAt,
     onViewChange,
+    onOpenScope,
     onRefresh,
     onRegisterInvoice,
 }: SupplierAccountsHeaderProps) {
@@ -56,17 +56,19 @@ export function SupplierAccountsHeader({
                 ) : undefined
             }
         >
-            {queriedAt ? (
-                <time
-                    dateTime={queriedAt}
-                    className="text-xs text-muted-foreground"
-                >
-                    更新于 {queriedAt.slice(11, 16)}
-                </time>
-            ) : null}
             <PageActions
                 size="sm"
                 actions={[
+                    {
+                        hidden: !showViews,
+                        actionKey: "open-scope",
+                        id: "supplier-payables-header-scope",
+                        label: "按范围汇总",
+                        icon: BarChart3Icon,
+                        variant: "ghost",
+                        className: listWorkspaceStyles.quietButton,
+                        onClick: onOpenScope,
+                    },
                     {
                         actionKey: "refresh",
                         id: "supplier-payables-header-refresh",

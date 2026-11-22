@@ -18,6 +18,9 @@ pub struct ScopedInvoiceRow {
     pub version: Option<u64>,
     /// 客户或供应商主体；部分授权为 null。
     pub party_id: Option<String>,
+    /// 主体当前法定名称；仅整单读取资格且能解析时返回。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub party_name: Option<String>,
     /// 原票面发票代码；未采集或部分授权为 null。
     pub invoice_code: Option<String>,
     /// 发票号码。

@@ -4,18 +4,26 @@ import {
     BusinessStatusBadge,
     MoneyValue,
     TableIdentityCell,
+    TableRowActions,
     TableTextCell,
     taxAmountToneClass,
 } from "@/components/business"
 import type { SalesInvoiceRow } from "@/features/customer-receivables/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { allocationSummaryCell } from "./allocation-summary"
 
-/** 销项发票列表只展示事实，操作由行预览 Sheet 承载。 */
-export function createInvoiceColumns(): ColumnDef<SalesInvoiceRow>[] {
+export type InvoiceColumnActions = {
+    onPreview?: (row: SalesInvoiceRow) => void
+}
+
+/** 销项发票列表展示核心票面与分配事实，并保留详情快捷出口。 */
+export function createInvoiceColumns(
+    actions: InvoiceColumnActions = {},
+): ColumnDef<SalesInvoiceRow>[] {
     return [
         {
             id: "doc",
-            header: "发票",
+            header: "发票号码 / 往来主体",
             meta: { label: "发票", width: "flex" },
             cell: ({ row }) => {
                 const {
@@ -67,7 +75,7 @@ export function createInvoiceColumns(): ColumnDef<SalesInvoiceRow>[] {
         {
             id: "date",
             header: "开票日期",
-            meta: { width: "default" },
+            meta: { label: "开票日期", width: "default" },
             cell: ({ row }) => (
                 <TableTextCell value={row.original.invoiceDate} numeric />
             ),
@@ -76,7 +84,7 @@ export function createInvoiceColumns(): ColumnDef<SalesInvoiceRow>[] {
             id: "gross",
             header: "含税金额",
             meta: {
-                label: "含税",
+                label: "含税金额",
                 width: "amount",
                 align: "end",
                 numeric: true,
@@ -85,16 +93,15 @@ export function createInvoiceColumns(): ColumnDef<SalesInvoiceRow>[] {
                 <MoneyValue
                     value={row.original.grossAmount}
                     display="exact"
-                    taxBasis="gross"
                     className={taxAmountToneClass("含税金额")}
                 />
             ),
         },
         {
             id: "alloc",
-            header: "净已分配 / 未分配",
+            header: "未分配 / 净已分配",
             meta: {
-                label: "分配",
+                label: "分配情况",
                 width: "amount",
                 align: "end",
                 numeric: true,
@@ -104,7 +111,7 @@ export function createInvoiceColumns(): ColumnDef<SalesInvoiceRow>[] {
         {
             id: "status",
             header: "状态",
-            meta: { width: "status" },
+            meta: { label: "状态", width: "status" },
             cell: ({ row }) => (
                 <BusinessStatusBadge
                     context="list"
@@ -115,6 +122,34 @@ export function createInvoiceColumns(): ColumnDef<SalesInvoiceRow>[] {
                     }
                 />
             ),
+        },
+        {
+            id: "actions",
+            header: "操作",
+            enableHiding: false,
+            meta: { label: "操作", width: "status", align: "end" },
+            cell: ({ row: { original } }) => {
+                const seg = toAutomationIdSegment(original.invoiceId)
+                return (
+                    <TableRowActions
+                        maxInline={1}
+                        moreId={`customer-receivables-invoice-${seg}-more`}
+                        moreLabel={`${original.invoiceNo} 更多操作`}
+                        actions={
+                            actions.onPreview
+                                ? [
+                                      {
+                                          id: `customer-receivables-invoice-${seg}-view`,
+                                          label: "详情",
+                                          onClick: () =>
+                                              actions.onPreview?.(original),
+                                      },
+                                  ]
+                                : []
+                        }
+                    />
+                )
+            },
         },
     ]
 }

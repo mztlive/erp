@@ -26,13 +26,15 @@ export function SessionFactFields({
     locked: boolean
 }) {
     return (
-        <section className="erp-raised-surface space-y-3 rounded-2xl border bg-card p-4">
-            <h3 className="font-semibold">
-                {isReceipt ? "回款记录" : "销项发票记录"}
-            </h3>
-            <p className="text-xs text-muted-foreground">
-                已确认记录不可编辑删除；此处仅用于新登记或继续核销。
-            </p>
+        <section className="space-y-4">
+            <div className="space-y-1">
+                <h2 className="text-section-title font-semibold tracking-tight text-foreground">
+                    {isReceipt ? "到账信息" : "发票信息"}
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                    已确认记录不可编辑删除；此处仅用于新登记或继续核销。
+                </p>
+            </div>
             {isReceipt ? (
                 <div className="space-y-3">
                     <form.AppField

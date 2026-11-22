@@ -39,25 +39,39 @@ pub async fn latest_account_records<T: Serialize + DeserializeOwned + Send + Syn
     .await?)
 }
 
+/// 预存款账户列表业务状态筛选。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DepositAccountStatusFilter {
+    /// 启用且无待核对差异。
+    Available,
+    /// 启用但因对账差异暂停新增使用。
+    ReconciliationRequired,
+    /// 已停用。
+    Disabled,
+}
+
 /// 先执行 identity 编译的完整授权条件，再装载一页资金账户。
 /// 结果：最多size加一条账户，额外一条用于继续分页。
 /// 查询模型错配、凭证跨边界、分页非法或读取失败时拒绝。
 ///
 /// 输入约定：
 /// - `db` / `executor`：财务数据源和执行器。
-/// - `supplier` / `payer`：仅收窄账户候选的筛选。
+/// - `supplier` / `payer` / `status`：仅收窄账户候选的筛选。
 /// - `skip` / `size`：已规范化分页位置与上限。
 /// - `access`：当前读取阶段由 identity 编译并复验的授权聚合阶段。
+#[allow(clippy::too_many_arguments)]
 pub async fn account_page(
     db: &Database,
     supplier: Option<&str>,
     payer: Option<&str>,
+    status: Option<DepositAccountStatusFilter>,
     skip: u64,
     size: u32,
     access: &CompiledAccess,
     executor: &mut dyn Executor,
 ) -> Result<Vec<SupplierDepositAccount>> {
-    let pipeline = account_pipeline(supplier, payer, skip, size, access, executor)?;
+    let pipeline = account_pipeline(supplier, payer, status, skip, size, access, executor)?;
     let rows = account_rows(db, pipeline, executor).await?;
     access.ensure_current(executor)?;
     Ok(rows)
@@ -67,6 +81,7 @@ pub async fn account_page(
 fn account_pipeline(
     supplier: Option<&str>,
     payer: Option<&str>,
+    status: Option<DepositAccountStatusFilter>,
     skip: u64,
     size: u32,
     access: &CompiledAccess,
@@ -84,6 +99,21 @@ fn account_pipeline(
     }
     if let Some(payer) = payer {
         filter.insert("identity.payer_party_id", payer);
+    }
+    if let Some(status) = status {
+        match status {
+            DepositAccountStatusFilter::Available => {
+                filter.insert("enabled", true);
+                filter.insert("reconciliation_required", false);
+            },
+            DepositAccountStatusFilter::ReconciliationRequired => {
+                filter.insert("enabled", true);
+                filter.insert("reconciliation_required", true);
+            },
+            DepositAccountStatusFilter::Disabled => {
+                filter.insert("enabled", false);
+            },
+        }
     }
 
     let mut pipeline = access.stages().to_vec();
@@ -406,14 +436,26 @@ mod tests {
     async fn account_filters_preserve_all_authorization_stages_before_pagination() {
         let mut executor = ReadExecutor::default();
         let access = access(model(), &mut executor).await;
-        let pipeline =
-            account_pipeline(Some("supplier"), Some("payer"), 3, 7, &access, &mut executor).unwrap();
+        let pipeline = account_pipeline(
+            Some("supplier"),
+            Some("payer"),
+            Some(DepositAccountStatusFilter::ReconciliationRequired),
+            3,
+            7,
+            &access,
+            &mut executor,
+        )
+        .unwrap();
         let prefix = access.stages().len();
         assert_eq!(&pipeline[..prefix], access.stages());
         assert_eq!(
             pipeline[prefix],
             doc! {"$match": {
-                "deleted_at": 0_i64, "identity.supplier_id": "supplier", "identity.payer_party_id": "payer"
+                "deleted_at": 0_i64,
+                "identity.supplier_id": "supplier",
+                "identity.payer_party_id": "payer",
+                "enabled": true,
+                "reconciliation_required": true
             }}
         );
         assert_eq!(pipeline[prefix + 2], doc! {"$skip": 3_i64});
@@ -433,19 +475,19 @@ mod tests {
         ] {
             let access = access(invalid, &mut executor).await;
             assert!(matches!(
-                account_page(&db, None, None, 0, 10, &access, &mut executor).await,
+                account_page(&db, None, None, None, 0, 10, &access, &mut executor).await,
                 Err(Error::ValidationError(_))
             ));
         }
 
         let access = access(model(), &mut executor).await;
         assert!(matches!(
-            account_page(&db, None, None, 0, 10, &access, &mut ReadExecutor::default()).await,
+            account_page(&db, None, None, None, 0, 10, &access, &mut ReadExecutor::default()).await,
             Err(Error::ValidationError(_))
         ));
         executor.next_read();
         assert!(matches!(
-            account_page(&db, None, None, 0, 10, &access, &mut executor).await,
+            account_page(&db, None, None, None, 0, 10, &access, &mut executor).await,
             Err(Error::ValidationError(_))
         ));
     }

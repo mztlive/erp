@@ -6,11 +6,18 @@ import {
     BusinessStatusBadge,
     MoneyValue,
     TableIdentityCell,
+    TableRowActions,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import type { PurchaseInvoiceRow } from "@/features/supplier-payables/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
-export function buildInvoiceColumns(): ColumnDef<PurchaseInvoiceRow>[] {
+export function buildInvoiceColumns(input: {
+    canPostAllocation: boolean
+    onOpenInvoicePreview: (invoiceId: string) => void
+    onContinueAllocate: (row: PurchaseInvoiceRow) => void
+}): ColumnDef<PurchaseInvoiceRow>[] {
+    const { canPostAllocation, onOpenInvoicePreview, onContinueAllocate } =
+        input
     return [
         {
             id: "doc",
@@ -20,6 +27,7 @@ export function buildInvoiceColumns(): ColumnDef<PurchaseInvoiceRow>[] {
                 const {
                     invoiceCode,
                     invoiceNo,
+                    invoiceKind,
                     invoiceKindLabel,
                     supplierName,
                 } = row.original
@@ -34,7 +42,14 @@ export function buildInvoiceColumns(): ColumnDef<PurchaseInvoiceRow>[] {
                             secondary={supplierName}
                             secondaryTitle={supplierName}
                         />
-                        <Badge variant="neutral">{invoiceKindLabel}</Badge>
+                        <BusinessStatusBadge
+                            context="list"
+                            label={invoiceKindLabel}
+                            tone={invoiceKind === "RED" ? "warning" : "neutral"}
+                            appearance={
+                                invoiceKind === "RED" ? "badge" : "quiet"
+                            }
+                        />
                     </div>
                 )
             },
@@ -95,9 +110,44 @@ export function buildInvoiceColumns(): ColumnDef<PurchaseInvoiceRow>[] {
                             ? "quiet"
                             : "badge"
                     }
-                    description="与付款进度独立"
                 />
             ),
+        },
+        {
+            id: "actions",
+            header: () => <span className="sr-only">操作</span>,
+            meta: {
+                label: "操作",
+                width: "status",
+                align: "end",
+            },
+            cell: ({ row }) => {
+                const invoice = row.original
+                const canAllocate =
+                    canPostAllocation &&
+                    invoice.allowedActions.includes("CONTINUE_ALLOCATE")
+                const prefix = `supplier-payables-table-invoice-row-${toAutomationIdSegment(invoice.invoiceId)}`
+                return (
+                    <TableRowActions
+                        moreId={`${prefix}-more`}
+                        moreLabel={`${invoice.invoiceNo} 更多操作`}
+                        actions={[
+                            {
+                                id: `${prefix}-allocate`,
+                                label: "继续核销",
+                                hidden: !canAllocate,
+                                onClick: () => onContinueAllocate(invoice),
+                            },
+                            {
+                                id: `${prefix}-detail`,
+                                label: "详情",
+                                onClick: () =>
+                                    onOpenInvoicePreview(invoice.invoiceId),
+                            },
+                        ]}
+                    />
+                )
+            },
         },
     ]
 }

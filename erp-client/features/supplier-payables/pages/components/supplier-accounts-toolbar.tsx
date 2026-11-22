@@ -36,10 +36,9 @@ export type SupplierAppliedChip = Readonly<{
 const prefix = "supplier-payables-toolbar"
 const panelId = `${prefix}-more-panel`
 const PAYABLE_FOLDED_CHIPS = [
-    "supplierId",
     "sourceType",
+    "due",
     "paymentGate",
-    "track",
     "purchaseOrderId",
 ] as const satisfies readonly SupplierFilterKey[]
 const OTHER_FOLDED_CHIPS = [
@@ -47,7 +46,6 @@ const OTHER_FOLDED_CHIPS = [
     "status",
     "due",
     "paymentGate",
-    "track",
     "purchaseOrderId",
 ] as const satisfies readonly SupplierFilterKey[]
 
@@ -123,6 +121,7 @@ export interface SupplierAccountsToolbarProps {
     setPaymentGateDraft: (value: "satisfied" | "unsatisfied" | "all") => void
     trackDraft: AllocationTrack | "all"
     setTrackDraft: (value: AllocationTrack | "all") => void
+    hasDueDates: boolean
     hasPendingChanges: boolean
     loading: boolean
     failed: boolean
@@ -153,20 +152,19 @@ export function SupplierAccountsToolbar({
     setPaymentGateDraft,
     trackDraft,
     setTrackDraft,
+    hasDueDates,
     hasPendingChanges,
     loading,
     failed,
 }: SupplierAccountsToolbarProps) {
     const showPayableMore = view === "payable"
-    const showTrackMore = view === "unallocated"
-    const showMore = showPayableMore || showTrackMore
+    const showTrackPrimary = view === "unallocated"
+    const showDueFilter = hasDueDates || dueDraft !== "all"
+    const showMore = showPayableMore
     const moreCount = appliedChips.filter(
         ({ key }) =>
-            (showTrackMore && key === "track") ||
-            (showPayableMore &&
-                (key === "supplierId" ||
-                    key === "sourceType" ||
-                    key === "paymentGate")),
+            showPayableMore &&
+            (key === "sourceType" || key === "paymentGate" || key === "due"),
     ).length
 
     return (
@@ -201,8 +199,18 @@ export function SupplierAccountsToolbar({
             morePanelAriaLabel="供应商往来更多筛选条件"
             onResetMore={showMore ? resetMoreFilters : undefined}
             primaryFilters={
-                showPayableMore ? (
-                    <>
+                <>
+                    <SupplierSearchCombobox
+                        id={`${prefix}-supplier-filter`}
+                        className="w-48 max-w-full min-w-0"
+                        filterLabel="供应商"
+                        value={supplierDraft ?? undefined}
+                        onValueChange={(id) => setSupplierDraft(id ?? null)}
+                        purpose="filter"
+                        aria-label="供应商"
+                        placeholder="全部"
+                    />
+                    {showPayableMore ? (
                         <OptionCombobox
                             id={`${prefix}-filter-status`}
                             className="w-32 max-w-full min-w-0"
@@ -221,138 +229,115 @@ export function SupplierAccountsToolbar({
                             )}
                             placeholder="全部"
                         />
+                    ) : null}
+                    {showTrackPrimary ? (
                         <OptionCombobox
-                            id={`${prefix}-filter-due`}
-                            className="w-32 max-w-full min-w-0"
-                            filterLabel="到期"
-                            aria-label="到期"
-                            value={dueDraft === "all" ? null : dueDraft}
+                            id={`${prefix}-filter-track`}
+                            className="w-36 max-w-full min-w-0"
+                            filterLabel="单据类型"
+                            aria-label="单据类型"
+                            value={trackDraft === "all" ? null : trackDraft}
                             onValueChange={(value) =>
-                                setDueDraft(
-                                    DUE_OPTIONS.find(
+                                setTrackDraft(
+                                    TRACK_OPTIONS.find(
                                         (option) => option.value === value,
                                     )?.value ?? "all",
                                 )
                             }
-                            options={DUE_OPTIONS.filter(
+                            options={TRACK_OPTIONS.filter(
                                 (option) => option.value !== "all",
                             )}
                             placeholder="全部"
                         />
-                    </>
-                ) : null
+                    ) : null}
+                </>
             }
             morePanel={
                 showMore ? (
                     <ListFilterSections>
-                        <ListFilterSection
-                            legend={showTrackMore ? "单据" : "进度"}
-                        >
-                            {showTrackMore ? (
+                        <ListFilterSection legend="来源与条件">
+                            <ListWorkspaceFilterField
+                                htmlFor={`${prefix}-filter-source-type`}
+                                label="来源类型"
+                            >
+                                <OptionCombobox
+                                    id={`${prefix}-filter-source-type`}
+                                    className="w-full min-w-0"
+                                    aria-label="来源类型"
+                                    value={
+                                        sourceTypeDraft === "all"
+                                            ? null
+                                            : sourceTypeDraft
+                                    }
+                                    onValueChange={(value) =>
+                                        setSourceTypeDraft(
+                                            SOURCE_TYPE_OPTIONS.find(
+                                                (option) =>
+                                                    option.value === value,
+                                            )?.value ?? "all",
+                                        )
+                                    }
+                                    options={SOURCE_TYPE_OPTIONS.filter(
+                                        (option) => option.value !== "all",
+                                    )}
+                                    placeholder="全部"
+                                />
+                            </ListWorkspaceFilterField>
+                            <ListWorkspaceFilterField
+                                htmlFor={`${prefix}-filter-payment-gate`}
+                                label="先款条件"
+                            >
+                                <OptionCombobox
+                                    id={`${prefix}-filter-payment-gate`}
+                                    className="w-full min-w-0"
+                                    aria-label="先款条件"
+                                    value={
+                                        paymentGateDraft === "all"
+                                            ? null
+                                            : paymentGateDraft
+                                    }
+                                    onValueChange={(value) =>
+                                        setPaymentGateDraft(
+                                            PAYMENT_GATE_OPTIONS.find(
+                                                (option) =>
+                                                    option.value === value,
+                                            )?.value ?? "all",
+                                        )
+                                    }
+                                    options={PAYMENT_GATE_OPTIONS.filter(
+                                        (option) => option.value !== "all",
+                                    )}
+                                    placeholder="全部"
+                                />
+                            </ListWorkspaceFilterField>
+                            {showDueFilter ? (
                                 <ListWorkspaceFilterField
-                                    htmlFor={`${prefix}-filter-track`}
-                                    label="单据类型"
+                                    htmlFor={`${prefix}-filter-due`}
+                                    label="到期情况"
                                 >
                                     <OptionCombobox
-                                        id={`${prefix}-filter-track`}
+                                        id={`${prefix}-filter-due`}
                                         className="w-full min-w-0"
-                                        aria-label="单据类型"
+                                        aria-label="到期情况"
                                         value={
-                                            trackDraft === "all"
-                                                ? null
-                                                : trackDraft
+                                            dueDraft === "all" ? null : dueDraft
                                         }
                                         onValueChange={(value) =>
-                                            setTrackDraft(
-                                                TRACK_OPTIONS.find(
+                                            setDueDraft(
+                                                DUE_OPTIONS.find(
                                                     (option) =>
                                                         option.value === value,
                                                 )?.value ?? "all",
                                             )
                                         }
-                                        options={TRACK_OPTIONS.filter(
+                                        options={DUE_OPTIONS.filter(
                                             (option) => option.value !== "all",
                                         )}
                                         placeholder="全部"
                                     />
                                 </ListWorkspaceFilterField>
-                            ) : (
-                                <ListWorkspaceFilterField
-                                    htmlFor={`${prefix}-filter-payment-gate`}
-                                    label="先款条件"
-                                >
-                                    <OptionCombobox
-                                        id={`${prefix}-filter-payment-gate`}
-                                        className="w-full min-w-0"
-                                        aria-label="先款条件"
-                                        value={
-                                            paymentGateDraft === "all"
-                                                ? null
-                                                : paymentGateDraft
-                                        }
-                                        onValueChange={(value) =>
-                                            setPaymentGateDraft(
-                                                PAYMENT_GATE_OPTIONS.find(
-                                                    (option) =>
-                                                        option.value === value,
-                                                )?.value ?? "all",
-                                            )
-                                        }
-                                        options={PAYMENT_GATE_OPTIONS.filter(
-                                            (option) => option.value !== "all",
-                                        )}
-                                        placeholder="全部"
-                                    />
-                                </ListWorkspaceFilterField>
-                            )}
+                            ) : null}
                         </ListFilterSection>
-                        {showPayableMore ? (
-                            <ListFilterSection legend="对象">
-                                <ListWorkspaceFilterField
-                                    htmlFor={`${prefix}-supplier-filter`}
-                                    label="供应商"
-                                >
-                                    <SupplierSearchCombobox
-                                        id={`${prefix}-supplier-filter`}
-                                        className="w-full min-w-0"
-                                        value={supplierDraft ?? undefined}
-                                        onValueChange={(id) =>
-                                            setSupplierDraft(id ?? null)
-                                        }
-                                        purpose="filter"
-                                        aria-label="供应商"
-                                        placeholder="全部供应商"
-                                    />
-                                </ListWorkspaceFilterField>
-                                <ListWorkspaceFilterField
-                                    htmlFor={`${prefix}-filter-source-type`}
-                                    label="来源类型"
-                                >
-                                    <OptionCombobox
-                                        id={`${prefix}-filter-source-type`}
-                                        className="w-full min-w-0"
-                                        aria-label="来源类型"
-                                        value={
-                                            sourceTypeDraft === "all"
-                                                ? null
-                                                : sourceTypeDraft
-                                        }
-                                        onValueChange={(value) =>
-                                            setSourceTypeDraft(
-                                                SOURCE_TYPE_OPTIONS.find(
-                                                    (option) =>
-                                                        option.value === value,
-                                                )?.value ?? "all",
-                                            )
-                                        }
-                                        options={SOURCE_TYPE_OPTIONS.filter(
-                                            (option) => option.value !== "all",
-                                        )}
-                                        placeholder="全部"
-                                    />
-                                </ListWorkspaceFilterField>
-                            </ListFilterSection>
-                        ) : null}
                     </ListFilterSections>
                 ) : undefined
             }

@@ -39,6 +39,7 @@ type FieldSpec = {
     kind?: "amount" | "time" | "supplier" | "party" | "multiline"
     optional?: boolean
     description?: string
+    fullWidth?: boolean
 }
 type ActionSpec = {
     title: string
@@ -103,7 +104,11 @@ const specs: Record<DepositAction, ActionSpec> = {
             "仅覆盖本账户下已逐单批准的采购付款。授权限额、有效期及资金占用仍须逐项满足。",
         submit: "保存财务授权",
         fields: [
-            { name: "approval_reference", label: "财务授权依据" },
+            {
+                name: "approval_reference",
+                label: "财务授权依据",
+                fullWidth: true,
+            },
             { name: "valid_from", label: "生效时间", kind: "time" },
             { name: "valid_until", label: "到期时间", kind: "time" },
             {
@@ -133,7 +138,12 @@ const specs: Record<DepositAction, ActionSpec> = {
         fields: [
             { name: "covered_from", label: "对账起始时间", kind: "time" },
             { name: "covered_until", label: "对账截止时间", kind: "time" },
-            { name: "observed_at", label: "供应商余额查询时间", kind: "time" },
+            {
+                name: "observed_at",
+                label: "供应商余额查询时间",
+                kind: "time",
+                fullWidth: true,
+            },
             {
                 name: "remote_balance",
                 label: "供应商余额（元）",
@@ -145,13 +155,18 @@ const specs: Record<DepositAction, ActionSpec> = {
                 kind: "amount",
             },
             {
+                name: "evidence_reference",
+                label: "对账依据",
+                fullWidth: true,
+            },
+            {
                 name: "unresolved_transaction_ids",
                 label: "未核实交易号",
                 kind: "multiline",
                 optional: true,
+                fullWidth: true,
                 description: "每行一个供应商资金交易号。",
             },
-            { name: "evidence_reference", label: "对账依据" },
         ],
     },
 }
@@ -302,7 +317,7 @@ export function DepositCommandDialog({
             field.name,
             field.kind === "time" &&
             !["valid_until", "covered_from"].includes(field.name)
-                ? format(new Date(), "yyyy-MM-dd'T'HH:mm")
+                ? format(new Date(), "yyyy-MM-dd'T'HH:mm:ss")
                 : "",
         ]),
     )
@@ -393,6 +408,7 @@ export function DepositCommandDialog({
                 }}
             />
         )
+    const twoColumn = action === "authorize" || action === "reconcile"
     return (
         <Dialog
             open={open}
@@ -402,22 +418,31 @@ export function DepositCommandDialog({
         >
             <DialogContent
                 closeButtonId={`supplier-deposits-${action}-close`}
-                className="sm:max-w-xl"
+                className={twoColumn ? "sm:max-w-2xl" : "sm:max-w-xl"}
             >
                 <DialogHeader>
                     <DialogTitle>{spec.title}</DialogTitle>
                     <DialogDescription>{spec.description}</DialogDescription>
                 </DialogHeader>
                 {account && (
-                    <p className="text-body-compact">
-                        {account.supplier_name} · {account.payer_party_name}
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">
+                            {account.supplier_name}
+                        </span>
+                        <span aria-hidden="true">·</span>
+                        <span>{account.payer_party_name}</span>
                         {request ? (
                             <>
-                                {" "}
-                                · 申请金额 <strong>{request.amount} 元</strong>
+                                <span aria-hidden="true">·</span>
+                                <span>
+                                    申请金额{" "}
+                                    <strong className="num text-foreground">
+                                        {request.amount} 元
+                                    </strong>
+                                </span>
                             </>
                         ) : null}
-                    </p>
+                    </div>
                 )}
                 {unknown && (
                     <Alert>
@@ -433,107 +458,154 @@ export function DepositCommandDialog({
                         void form.handleSubmit()
                     }}
                 >
-                    {spec.fields.map((specField) => (
-                        <form.AppField
-                            key={specField.name}
-                            name={specField.name}
-                        >
-                            {(field) => {
-                                const id = `supplier-deposits-${action}-${specField.name.replaceAll("_", "-")}`
-                                if (
-                                    specField.kind === "party" ||
-                                    specField.kind === "supplier"
-                                )
-                                    return (
-                                        <Field>
-                                            <FieldLabel htmlFor={id}>
-                                                {specField.label}
-                                            </FieldLabel>
-                                            {specField.kind === "party" ? (
-                                                <SettlementPartySearchCombobox
-                                                    id={id}
-                                                    value={
-                                                        field.state.value ||
-                                                        undefined
-                                                    }
-                                                    onValueChange={(value) =>
-                                                        field.handleChange(
-                                                            value ?? "",
-                                                        )
-                                                    }
-                                                    disabled={
-                                                        unknown ||
-                                                        mutation.isPending
-                                                    }
-                                                />
-                                            ) : (
-                                                <SupplierSearchCombobox
-                                                    id={id}
-                                                    value={
-                                                        field.state.value ||
-                                                        undefined
-                                                    }
-                                                    onValueChange={(value) =>
-                                                        field.handleChange(
-                                                            value ?? "",
-                                                        )
-                                                    }
-                                                    disabled={
-                                                        unknown ||
-                                                        mutation.isPending
-                                                    }
-                                                />
-                                            )}
-                                            {field.state.meta.errors.length ? (
-                                                <FieldError
-                                                    errors={field.state.meta.errors.map(
-                                                        (error) => ({
-                                                            message:
-                                                                typeof error ===
-                                                                "string"
-                                                                    ? error
-                                                                    : error?.message,
-                                                        }),
+                    <div
+                        className={
+                            twoColumn
+                                ? "grid gap-4 sm:grid-cols-2"
+                                : "flex flex-col gap-4"
+                        }
+                    >
+                        {spec.fields.map((specField) => (
+                            <div
+                                key={specField.name}
+                                className={
+                                    twoColumn && specField.fullWidth
+                                        ? "sm:col-span-2"
+                                        : undefined
+                                }
+                            >
+                                <form.AppField name={specField.name}>
+                                    {(field) => {
+                                        const id = `supplier-deposits-${action}-${specField.name.replaceAll("_", "-")}`
+                                        if (
+                                            specField.kind === "party" ||
+                                            specField.kind === "supplier"
+                                        )
+                                            return (
+                                                <Field>
+                                                    <FieldLabel htmlFor={id}>
+                                                        {specField.label}
+                                                    </FieldLabel>
+                                                    {specField.kind ===
+                                                    "party" ? (
+                                                        <SettlementPartySearchCombobox
+                                                            id={id}
+                                                            value={
+                                                                field.state
+                                                                    .value ||
+                                                                undefined
+                                                            }
+                                                            onValueChange={(
+                                                                value,
+                                                            ) =>
+                                                                field.handleChange(
+                                                                    value ?? "",
+                                                                )
+                                                            }
+                                                            disabled={
+                                                                unknown ||
+                                                                mutation.isPending
+                                                            }
+                                                        />
+                                                    ) : (
+                                                        <SupplierSearchCombobox
+                                                            id={id}
+                                                            value={
+                                                                field.state
+                                                                    .value ||
+                                                                undefined
+                                                            }
+                                                            onValueChange={(
+                                                                value,
+                                                            ) =>
+                                                                field.handleChange(
+                                                                    value ?? "",
+                                                                )
+                                                            }
+                                                            disabled={
+                                                                unknown ||
+                                                                mutation.isPending
+                                                            }
+                                                        />
                                                     )}
+                                                    {field.state.meta.errors
+                                                        .length ? (
+                                                        <FieldError
+                                                            errors={field.state.meta.errors.map(
+                                                                (error) => ({
+                                                                    message:
+                                                                        typeof error ===
+                                                                        "string"
+                                                                            ? error
+                                                                            : error?.message,
+                                                                }),
+                                                            )}
+                                                        />
+                                                    ) : null}
+                                                </Field>
+                                            )
+                                        if (specField.kind === "multiline")
+                                            return (
+                                                <field.TextareaField
+                                                    id={id}
+                                                    label={specField.label}
+                                                    description={
+                                                        specField.description
+                                                    }
+                                                    disabled={
+                                                        unknown ||
+                                                        mutation.isPending
+                                                    }
+                                                    required={
+                                                        !specField.optional
+                                                    }
                                                 />
-                                            ) : null}
-                                        </Field>
-                                    )
-                                if (specField.kind === "multiline")
-                                    return (
-                                        <field.TextareaField
-                                            id={id}
-                                            label={specField.label}
-                                            description={specField.description}
-                                            disabled={
-                                                unknown || mutation.isPending
-                                            }
-                                            required={!specField.optional}
-                                        />
-                                    )
-                                return (
-                                    <field.TextField
-                                        id={id}
-                                        label={specField.label}
-                                        type={
-                                            specField.kind === "time"
-                                                ? "datetime-local"
-                                                : "text"
-                                        }
-                                        money={specField.kind === "amount"}
-                                        inputMode={
-                                            specField.kind === "amount"
-                                                ? "decimal"
-                                                : undefined
-                                        }
-                                        description={specField.description}
-                                        disabled={unknown || mutation.isPending}
-                                        required={!specField.optional}
-                                    />
-                                )
-                            }}
-                        </form.AppField>
-                    ))}
+                                            )
+                                        if (specField.kind === "time")
+                                            return (
+                                                <field.DateTimeField
+                                                    id={id}
+                                                    label={specField.label}
+                                                    description={
+                                                        specField.description
+                                                    }
+                                                    disabled={
+                                                        unknown ||
+                                                        mutation.isPending
+                                                    }
+                                                    required={
+                                                        !specField.optional
+                                                    }
+                                                />
+                                            )
+                                        return (
+                                            <field.TextField
+                                                id={id}
+                                                label={specField.label}
+                                                type="text"
+                                                money={
+                                                    specField.kind === "amount"
+                                                }
+                                                inputMode={
+                                                    specField.kind === "amount"
+                                                        ? "decimal"
+                                                        : undefined
+                                                }
+                                                description={
+                                                    specField.description
+                                                }
+                                                disabled={
+                                                    unknown ||
+                                                    mutation.isPending
+                                                }
+                                                required={!specField.optional}
+                                            />
+                                        )
+                                    }}
+                                </form.AppField>
+                            </div>
+                        ))}
+                    </div>
                     <DialogFooter>
                         <Button
                             id={`supplier-deposits-${action}-cancel`}

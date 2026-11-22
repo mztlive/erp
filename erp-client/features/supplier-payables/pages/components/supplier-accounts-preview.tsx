@@ -128,7 +128,7 @@ export function SupplierAccountsPreview({
                 onOpenChangeComplete={(open) => {
                     if (!open) onClosed?.()
                 }}
-                size="preview"
+                size="detail"
                 title="付款冲正"
                 identity={
                     reversalQuery.data
@@ -167,17 +167,21 @@ export function SupplierAccountsPreview({
                 }
             >
                 {reversalQuery.isPending ? (
-                    <div className="h-40 animate-pulse rounded-xl bg-muted" />
+                    <div className="px-7 py-6">
+                        <div className="h-40 animate-pulse rounded-xl bg-muted" />
+                    </div>
                 ) : reversalQuery.data ? (
-                    <PaymentReversalDetailBody
-                        row={reversalQuery.data}
-                        workItemId={workItemId}
-                        expectedTaskVersion={expectedTaskVersion}
-                        workItemAllowedActions={workItemAllowedActions}
-                        onDecisionApplied={onDecisionApplied}
-                    />
+                    <div className="px-7 py-6">
+                        <PaymentReversalDetailBody
+                            row={reversalQuery.data}
+                            workItemId={workItemId}
+                            expectedTaskVersion={expectedTaskVersion}
+                            workItemAllowedActions={workItemAllowedActions}
+                            onDecisionApplied={onDecisionApplied}
+                        />
+                    </div>
                 ) : reversalQuery.isError ? (
-                    <div className="space-y-3">
+                    <div className="space-y-3 px-7 py-6">
                         <p className="text-xs text-muted-foreground">
                             {getErrorMessage(
                                 reversalQuery.error,
@@ -195,7 +199,7 @@ export function SupplierAccountsPreview({
                         </Button>
                     </div>
                 ) : (
-                    <p className="text-xs text-muted-foreground">
+                    <p className="px-7 py-6 text-xs text-muted-foreground">
                         未找到冲正详情
                     </p>
                 )}
@@ -221,7 +225,7 @@ export function SupplierAccountsPreview({
                 onOpenChangeComplete={(open) => {
                     if (!open) onClosed?.()
                 }}
-                size="preview"
+                size="detail"
                 title="供应商退款"
                 identity={
                     refundQuery.data
@@ -260,17 +264,21 @@ export function SupplierAccountsPreview({
                 }
             >
                 {refundQuery.isPending ? (
-                    <div className="h-40 animate-pulse rounded-xl bg-muted" />
+                    <div className="px-7 py-6">
+                        <div className="h-40 animate-pulse rounded-xl bg-muted" />
+                    </div>
                 ) : refundQuery.data ? (
-                    <SupplierRefundDetailBody
-                        row={refundQuery.data}
-                        workItemId={workItemId}
-                        expectedTaskVersion={expectedTaskVersion}
-                        workItemAllowedActions={workItemAllowedActions}
-                        onDecisionApplied={onDecisionApplied}
-                    />
+                    <div className="px-7 py-6">
+                        <SupplierRefundDetailBody
+                            row={refundQuery.data}
+                            workItemId={workItemId}
+                            expectedTaskVersion={expectedTaskVersion}
+                            workItemAllowedActions={workItemAllowedActions}
+                            onDecisionApplied={onDecisionApplied}
+                        />
+                    </div>
                 ) : refundQuery.isError ? (
-                    <div className="space-y-3">
+                    <div className="space-y-3 px-7 py-6">
                         <p className="text-xs text-muted-foreground">
                             {getErrorMessage(
                                 refundQuery.error,
@@ -288,7 +296,7 @@ export function SupplierAccountsPreview({
                         </Button>
                     </div>
                 ) : (
-                    <p className="text-xs text-muted-foreground">
+                    <p className="px-7 py-6 text-xs text-muted-foreground">
                         未找到退款详情
                     </p>
                 )}
@@ -395,7 +403,7 @@ export function SupplierAccountsPreview({
             onOpenChangeComplete={(open) => {
                 if (!open) onClosed?.()
             }}
-            size="preview"
+            size="detail"
             title={payable?.supplierName ?? "应付详情"}
             identity={
                 payable
@@ -468,20 +476,24 @@ export function SupplierAccountsPreview({
             }
         >
             {detailQuery.isPending ? (
-                <PayablePreviewSkeleton />
+                <div className="px-7 py-6">
+                    <PayablePreviewSkeleton />
+                </div>
             ) : detailQuery.data ? (
-                <PayablePreviewBody
-                    payable={detailQuery.data.payable}
-                    entries={detailQuery.data.entries}
-                    activity={buildPayableActivity(detailQuery.data)}
-                    paymentBlockedReason={
-                        canRegisterPayment
-                            ? undefined
-                            : "付款需从工作台的供应商付款任务进入。"
-                    }
-                />
+                <div className="px-7 py-6">
+                    <PayablePreviewBody
+                        payable={detailQuery.data.payable}
+                        entries={detailQuery.data.entries}
+                        activity={buildPayableActivity(detailQuery.data)}
+                        paymentBlockedReason={
+                            canRegisterPayment
+                                ? undefined
+                                : "付款需从工作台的供应商付款任务进入。"
+                        }
+                    />
+                </div>
             ) : detailQuery.isError ? (
-                <div className="flex flex-col gap-3 p-6">
+                <div className="flex flex-col gap-3 px-7 py-6">
                     <p className="text-xs text-muted-foreground">
                         {getErrorMessage(
                             detailQuery.error,
@@ -499,7 +511,9 @@ export function SupplierAccountsPreview({
                     </Button>
                 </div>
             ) : (
-                <p className="text-xs text-muted-foreground">未找到应付详情</p>
+                <p className="px-7 py-6 text-xs text-muted-foreground">
+                    未找到应付详情
+                </p>
             )}
         </QuickPreviewSheet>
     )

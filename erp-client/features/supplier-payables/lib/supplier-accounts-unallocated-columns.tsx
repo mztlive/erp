@@ -2,24 +2,36 @@
 
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { MoneyValue, TableIdentityCell } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import {
+    BusinessStatusBadge,
+    MoneyValue,
+    TableIdentityCell,
+    TableRowActions,
+} from "@/components/business"
 import type { UnallocatedRow } from "@/features/supplier-payables/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
-export function buildUnallocatedColumns(): ColumnDef<UnallocatedRow>[] {
+export function buildUnallocatedColumns(input: {
+    canPostAllocation: boolean
+    onOpenUnallocatedPreview: (id: string) => void
+    onContinueAllocateInvoice: (row: UnallocatedRow) => void
+}): ColumnDef<UnallocatedRow>[] {
+    const {
+        canPostAllocation,
+        onOpenUnallocatedPreview,
+        onContinueAllocateInvoice,
+    } = input
     return [
         {
             id: "track",
             header: "单据类型",
             meta: { label: "单据类型", width: "default" },
             cell: ({ row }) => (
-                <Badge
-                    variant={
-                        row.original.track === "payment" ? "warning" : "info"
-                    }
-                >
-                    {row.original.trackLabel}
-                </Badge>
+                <BusinessStatusBadge
+                    context="list"
+                    label={row.original.trackLabel}
+                    tone={row.original.track === "payment" ? "warning" : "info"}
+                />
             ),
         },
         {
@@ -52,6 +64,7 @@ export function buildUnallocatedColumns(): ColumnDef<UnallocatedRow>[] {
                         value={row.original.unallocatedAmount}
                         taxBasis="gross"
                         display="exact"
+                        className="font-semibold"
                     />
                     <div className="text-xs text-muted-foreground">
                         记录{" "}
@@ -62,6 +75,41 @@ export function buildUnallocatedColumns(): ColumnDef<UnallocatedRow>[] {
                     </div>
                 </div>
             ),
+        },
+        {
+            id: "actions",
+            header: () => <span className="sr-only">操作</span>,
+            meta: {
+                label: "操作",
+                width: "status",
+                align: "end",
+            },
+            cell: ({ row }) => {
+                const item = row.original
+                const canAllocateInvoice =
+                    canPostAllocation && item.track === "purchase_invoice"
+                const prefix = `supplier-payables-table-unallocated-row-${toAutomationIdSegment(item.id)}`
+                return (
+                    <TableRowActions
+                        moreId={`${prefix}-more`}
+                        moreLabel={`${item.documentNo} 更多操作`}
+                        actions={[
+                            {
+                                id: `${prefix}-allocate`,
+                                label: "继续核销",
+                                hidden: !canAllocateInvoice,
+                                onClick: () => onContinueAllocateInvoice(item),
+                            },
+                            {
+                                id: `${prefix}-detail`,
+                                label: "详情",
+                                onClick: () =>
+                                    onOpenUnallocatedPreview(item.id),
+                            },
+                        ]}
+                    />
+                )
+            },
         },
     ]
 }

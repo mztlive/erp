@@ -7,7 +7,7 @@ import {
     fromCents,
 } from "@/features/supplier-payables/lib/allocation-model"
 
-/** 进项发票登记左右分栏工作区底部金额核对栏。 */
+/** 进项发票登记左右分栏工作区底部紧凑金额核对栏。 */
 export function InvoiceSessionFooter({
     factAmount,
     allocatedHint,
@@ -15,6 +15,7 @@ export function InvoiceSessionFooter({
     isExistingInvoice,
     selectedCount,
     draftHint,
+    taxMismatchHint,
     submitHint,
     isSubmitting,
     onSaveDraft,
@@ -25,6 +26,7 @@ export function InvoiceSessionFooter({
     isExistingInvoice: boolean
     selectedCount: number
     draftHint?: string | null
+    taxMismatchHint?: string
     submitHint?: string
     isSubmitting: boolean
     onSaveDraft: () => void
@@ -35,36 +37,46 @@ export function InvoiceSessionFooter({
     const overAmount = overAllocated
         ? fromCents(allocatedCents - factCents)
         : "0"
+    const isErrorHint = Boolean(submitHint || overAllocated || taxMismatchHint)
+    const hintText =
+        submitHint ??
+        (overAllocated
+            ? "本次核销金额已超出发票金额"
+            : (taxMismatchHint ??
+              draftHint ??
+              (selectedCount > 0
+                  ? `已选 ${selectedCount} 笔单据`
+                  : "请选择需核销的应付单据")))
 
     return (
         <aside
             aria-label="本次进项发票登记"
-            className="sticky bottom-0 z-20 mt-auto border-t border-border bg-card/95 py-4 backdrop-blur-xs"
+            className="sticky bottom-0 z-20 mt-auto border-t border-border/70 bg-card/95 px-(--scaffold-px) py-3 backdrop-blur-xs"
         >
-            <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-4">
-                <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
-                    <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">
-                            {isExistingInvoice ? "本次可核销金额" : "发票金额"}
-                        </p>
+            <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5">
+                    <div className="flex items-baseline gap-2">
+                        <span className="text-xs text-muted-foreground">
+                            {isExistingInvoice ? "可核销" : "发票金额"}
+                        </span>
                         <MoneyValue
                             value={factAmount || "0"}
-                            className="text-value-section font-semibold tracking-tight"
+                            className="text-value-compact font-semibold tracking-tight"
                         />
                     </div>
-                    <div className="space-y-1 border-l pl-8">
-                        <p className="text-xs text-muted-foreground">
+                    <div className="flex items-baseline gap-2 border-l border-border/70 pl-6">
+                        <span className="text-xs text-muted-foreground">
                             本次核销
-                        </p>
+                        </span>
                         <MoneyValue
                             value={allocatedHint}
-                            className="text-value-section font-semibold tracking-tight"
+                            className="text-value-compact font-semibold tracking-tight"
                         />
                     </div>
-                    <div className="space-y-1 border-l pl-8">
-                        <p className="text-xs text-muted-foreground">
-                            {overAllocated ? "超出发票金额" : "未核销金额"}
-                        </p>
+                    <div className="flex items-baseline gap-2 border-l border-border/70 pl-6">
+                        <span className="text-xs text-muted-foreground">
+                            {overAllocated ? "超出金额" : "未核销"}
+                        </span>
                         <MoneyValue
                             className={
                                 overAllocated
@@ -74,8 +86,18 @@ export function InvoiceSessionFooter({
                             value={overAllocated ? overAmount : unallocatedHint}
                         />
                     </div>
+                    <span
+                        role={isErrorHint ? "status" : undefined}
+                        className={
+                            isErrorHint
+                                ? "border-l border-border/70 pl-6 text-xs text-destructive"
+                                : "border-l border-border/70 pl-6 text-xs text-muted-foreground"
+                        }
+                    >
+                        {hintText}
+                    </span>
                 </div>
-                <div className="flex flex-wrap items-center justify-end gap-3">
+                <div className="flex flex-wrap items-center justify-end gap-2.5">
                     <LoadingButton
                         id="supplier-payables-session-page-save-draft"
                         type="button"
@@ -95,22 +117,6 @@ export function InvoiceSessionFooter({
                     </LoadingButton>
                 </div>
             </div>
-            <p
-                role={submitHint || overAllocated ? "status" : undefined}
-                className={
-                    submitHint || overAllocated
-                        ? "mt-3 text-xs text-destructive"
-                        : "mt-3 text-xs text-muted-foreground"
-                }
-            >
-                {submitHint ??
-                    (overAllocated
-                        ? "本次核销金额已超出发票金额，请调整后再登记核销。"
-                        : (draftHint ??
-                          (selectedCount > 0
-                              ? `本次已选 ${selectedCount} 笔单据 · 登记后更新收票核销金额。`
-                              : "请选择需核销的应付单据。")))}
-            </p>
         </aside>
     )
 }

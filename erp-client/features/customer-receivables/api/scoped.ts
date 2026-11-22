@@ -10,6 +10,8 @@ export type ScopedReceivableAccountWire = Readonly<{
     id: string
     sales_order_id: string
     sales_order_no?: string | null
+    customer_name?: string | null
+    counterparty_party_name?: string | null
     account_seq: number
     status: string
     created_at: number
@@ -42,6 +44,8 @@ export type ScopedCustomerReceiptWire = Readonly<{
     status: string
     received_at: number
     created_at: number
+    counterparty_party_name?: string | null
+    customer_name?: string | null
     visible_allocated_share: string
     amount: string | null
     allocated_total: string | null
@@ -58,6 +62,7 @@ export type ScopedCustomerReceiptWire = Readonly<{
 export type ScopedInvoiceWire = Readonly<{
     id: string
     invoice_no: string | null
+    party_name?: string | null
     invoice_direction: string
     invoice_kind: string
     status: string

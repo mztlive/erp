@@ -10,11 +10,13 @@ import {
     wholeUnallocatedCell,
     type BusinessStatusBadgeProps,
 } from "@/components/business"
+import { instantToIso } from "@/features/supplier-payables/api/mappers"
 import type {
     ScopedPayableAccountWire,
     ScopedPurchaseInvoiceAllocationWire,
     ScopedSupplierPaymentWire,
 } from "@/features/supplier-payables/api/scoped"
+import { formatDateTime } from "@/lib/datetime"
 import { scopeText } from "@/lib/ui-text"
 import {
     businessLabelOrPlaceholder,
@@ -61,7 +63,11 @@ function ScopeShareCell({
 }) {
     return (
         <div className="flex flex-col items-end gap-1">
-            <MoneyValue value={value} display="exact" />
+            <MoneyValue
+                value={value}
+                display="exact"
+                className="font-semibold"
+            />
             {limitedId ? <LimitedBadge id={limitedId} /> : null}
         </div>
     )
@@ -98,19 +104,30 @@ export function createSupplierScopedPayableColumns(): ColumnDef<ScopedPayableAcc
     return [
         {
             id: "source",
-            header: "来源单据",
-            meta: { label: "来源单据", width: "flex" },
+            header: "供应商 / 来源单据",
+            meta: { label: "供应商 / 来源单据", width: "flex" },
             cell: ({ row }) => {
                 const number = payableSourceNumber(row.original)
+                const supplier = row.original.supplier_name?.trim()
+                const sourceKind =
+                    sourceLabel[row.original.source_type.toUpperCase()] ??
+                    "来源单据"
+                const secondary = supplier
+                    ? `${sourceKind} · ${number}`
+                    : sourceKind
                 return (
                     <TableIdentityCell
-                        primary={<span className="num">{number}</span>}
-                        primaryTitle={number}
-                        secondary={
-                            sourceLabel[
-                                row.original.source_type.toUpperCase()
-                            ] ?? "来源单据"
+                        primary={
+                            supplier ? (
+                                supplier
+                            ) : (
+                                <span className="num">{number}</span>
+                            )
                         }
+                        primaryTitle={supplier || number}
+                        secondary={secondary}
+                        secondaryTitle={secondary}
+                        numericSecondary={Boolean(supplier)}
                     />
                 )
             },
@@ -165,16 +182,28 @@ export function createSupplierScopedPaymentColumns(): ColumnDef<ScopedSupplierPa
     return [
         {
             id: "doc",
-            header: "付款单号",
+            header: "付款单号 / 供应商",
             meta: { label: "付款单号", width: "flex" },
-            cell: ({ row }) => (
-                <TableIdentityCell
-                    primary={
-                        <span className="num">{row.original.payment_no}</span>
-                    }
-                    primaryTitle={row.original.payment_no}
-                />
-            ),
+            cell: ({ row }) => {
+                const supplier = row.original.supplier_name?.trim()
+                const paidAt = row.original.paid_at
+                    ? formatDateTime(instantToIso(row.original.paid_at))
+                    : ""
+                const secondary = [supplier, paidAt].filter(Boolean).join(" · ")
+                return (
+                    <TableIdentityCell
+                        primary={
+                            <span className="num">
+                                {row.original.payment_no}
+                            </span>
+                        }
+                        primaryTitle={row.original.payment_no}
+                        secondary={secondary || undefined}
+                        secondaryTitle={secondary || undefined}
+                        numericSecondary={!supplier}
+                    />
+                )
+            },
         },
         {
             id: "visible",

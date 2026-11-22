@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef } from "react"
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    PageHeader,
-    PageScaffold,
+    DetailWorkspaceChrome,
+    DetailWorkspacePage,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -40,26 +40,30 @@ export function SupplierInvoiceRegistrationPage() {
     }, [draftSessionId, params, router, supplierId])
     if (profile.isError && !profile.data)
         return (
-            <PageScaffold>
-                <BusinessFailureState
-                    title="账号信息加载失败"
-                    error={profile.error}
-                    action={
-                        <Button
-                            id="invoice-registration-profile-retry"
-                            onClick={() => void profile.refetch()}
-                        >
-                            重试
-                        </Button>
-                    }
-                />
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <div className="mx-auto w-full max-w-3xl px-(--scaffold-px) py-8">
+                    <BusinessFailureState
+                        title="账号信息加载失败"
+                        error={profile.error}
+                        action={
+                            <Button
+                                id="invoice-registration-profile-retry"
+                                onClick={() => void profile.refetch()}
+                            >
+                                重试
+                            </Button>
+                        }
+                    />
+                </div>
+            </DetailWorkspacePage>
         )
     if (!profile.data)
         return (
-            <PageScaffold>
-                <div className="h-72 animate-pulse rounded-lg bg-muted" />
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <div className="px-(--scaffold-px) py-6">
+                    <div className="h-72 animate-pulse rounded-lg bg-muted" />
+                </div>
+            </DetailWorkspacePage>
         )
     if (
         !hasPermission(
@@ -68,41 +72,61 @@ export function SupplierInvoiceRegistrationPage() {
         )
     )
         return (
-            <PageScaffold>
-                <PageHeader title="登记进项发票" />
-                <BusinessEmptyState
-                    kind="no-scope"
-                    title="无进项发票登记权限"
-                    description="请联系管理员确认当前账号的财务权限。"
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome
+                    back={{
+                        id: "invoice-registration-no-scope-back",
+                        href: "/finance/supplier-accounts",
+                        label: "返回供应商往来",
+                    }}
+                    title="登记进项发票"
                 />
-            </PageScaffold>
+                <div className="mx-auto w-full max-w-3xl px-(--scaffold-px) py-8">
+                    <BusinessEmptyState
+                        kind="no-scope"
+                        title="无进项发票登记权限"
+                        description="请联系管理员确认当前账号的财务权限。"
+                    />
+                </div>
+            </DetailWorkspacePage>
         )
     if (!supplierId)
         return (
-            <PageScaffold>
-                <PageHeader title="登记进项发票" />
-                <BusinessEmptyState
-                    kind="no-data"
-                    title="请先选择供应商"
-                    description="从供应商往来列表选择供应商后登记发票。"
-                    action={
-                        <Button
-                            id="invoice-registration-pick-supplier"
-                            onClick={() =>
-                                router.push("/finance/supplier-accounts")
-                            }
-                        >
-                            返回供应商往来
-                        </Button>
-                    }
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome
+                    back={{
+                        id: "invoice-registration-no-supplier-back",
+                        href: "/finance/supplier-accounts",
+                        label: "返回供应商往来",
+                    }}
+                    title="登记进项发票"
                 />
-            </PageScaffold>
+                <div className="mx-auto w-full max-w-3xl px-(--scaffold-px) py-8">
+                    <BusinessEmptyState
+                        kind="no-data"
+                        title="请先选择供应商"
+                        description="从供应商往来列表选择供应商后登记发票。"
+                        action={
+                            <Button
+                                id="invoice-registration-pick-supplier"
+                                onClick={() =>
+                                    router.push("/finance/supplier-accounts")
+                                }
+                            >
+                                返回供应商往来
+                            </Button>
+                        }
+                    />
+                </div>
+            </DetailWorkspacePage>
         )
     if (!draftSessionId)
         return (
-            <PageScaffold>
-                <div className="h-72 animate-pulse rounded-lg bg-muted" />
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <div className="px-(--scaffold-px) py-6">
+                    <div className="h-72 animate-pulse rounded-lg bg-muted" />
+                </div>
+            </DetailWorkspacePage>
         )
     return (
         <InvoiceRegistrationSession
@@ -153,30 +177,34 @@ function InvoiceRegistrationSession({
     }
 
     return (
-        <PageScaffold density="compact" className="gap-6">
+        <DetailWorkspacePage>
             {state.sessionQuery.isPending ? (
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-4 px-(--scaffold-px) py-6">
                     <div className="h-10 w-64 animate-pulse rounded-lg bg-muted" />
                     <div className="h-96 animate-pulse rounded-lg bg-muted" />
                 </div>
             ) : state.sessionQuery.isError ||
               state.session?.supplierLoadError ? (
-                <BusinessFailureState
-                    title="登记信息加载失败"
-                    error={
-                        state.sessionQuery.error ??
-                        state.session?.supplierLoadError
-                    }
-                    action={
-                        <Button
-                            id="invoice-registration-session-retry"
-                            variant="outline"
-                            onClick={() => void state.sessionQuery.refetch()}
-                        >
-                            重试
-                        </Button>
-                    }
-                />
+                <div className="mx-auto w-full max-w-3xl px-(--scaffold-px) py-8">
+                    <BusinessFailureState
+                        title="登记信息加载失败"
+                        error={
+                            state.sessionQuery.error ??
+                            state.session?.supplierLoadError
+                        }
+                        action={
+                            <Button
+                                id="invoice-registration-session-retry"
+                                variant="outline"
+                                onClick={() =>
+                                    void state.sessionQuery.refetch()
+                                }
+                            >
+                                重试
+                            </Button>
+                        }
+                    />
+                </div>
             ) : (
                 <InvoiceRegistrationEditor
                     state={state}
@@ -190,6 +218,6 @@ function InvoiceRegistrationSession({
                     }}
                 />
             )}
-        </PageScaffold>
+        </DetailWorkspacePage>
     )
 }

@@ -6,12 +6,20 @@ import {
     BusinessStatusBadge,
     MoneyValue,
     TableIdentityCell,
+    TableRowActions,
     TableTextCell,
+    type TableRowAction,
 } from "@/components/business"
 import type { PayableRow } from "@/features/supplier-payables/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
-export function buildPayableColumns(): ColumnDef<PayableRow>[] {
+export function buildPayableColumns(input: {
+    canRegisterInvoice: boolean
+    onOpenPreview: (payableAccountId: string) => void
+    onRegisterInvoice: (row: PayableRow) => void
+}): ColumnDef<PayableRow>[] {
+    const { canRegisterInvoice, onOpenPreview, onRegisterInvoice } = input
     return [
         {
             id: "supplier",
@@ -131,8 +139,16 @@ export function buildPayableColumns(): ColumnDef<PayableRow>[] {
                     {row.original.paymentGateSummary &&
                     row.original.paymentGateSummary.state !==
                         "NOT_APPLICABLE" ? (
-                        <span className="text-xs text-muted-foreground">
-                            先款条件{" "}
+                        <span
+                            className={cn(
+                                "text-xs",
+                                row.original.paymentGateSummary.state ===
+                                    "BLOCKED"
+                                    ? "text-destructive"
+                                    : "text-muted-foreground",
+                            )}
+                        >
+                            先款条件
                             {row.original.paymentGateSummary.state ===
                             "SATISFIED"
                                 ? "已满足"
@@ -141,6 +157,52 @@ export function buildPayableColumns(): ColumnDef<PayableRow>[] {
                     ) : null}
                 </div>
             ),
+        },
+        {
+            id: "actions",
+            header: () => <span className="sr-only">操作</span>,
+            meta: {
+                label: "操作",
+                width: "status",
+                align: "end",
+            },
+            cell: ({ row }) => {
+                const payable = row.original
+                const prefix = `supplier-payables-table-payable-row-${toAutomationIdSegment(payable.payableAccountId)}`
+                const canInvoice =
+                    canRegisterInvoice &&
+                    payable.allowedActions.includes("REGISTER_INVOICE")
+                const actions: TableRowAction[] = [
+                    {
+                        id: `${prefix}-request-payment`,
+                        label: "申请付款",
+                        hidden: payable.sourceType !== "PURCHASE_ORDER",
+                        href: `/procurement/payment-requests?${new URLSearchParams({ purchaseOrderId: payable.sourceDocumentId, create: "1" })}`,
+                    },
+                    {
+                        id: `${prefix}-register-invoice`,
+                        label: "登记进项票",
+                        hidden: !canInvoice,
+                        placement:
+                            payable.sourceType === "PURCHASE_ORDER"
+                                ? "menu"
+                                : "inline",
+                        onClick: () => onRegisterInvoice(payable),
+                    },
+                    {
+                        id: `${prefix}-detail`,
+                        label: "详情",
+                        onClick: () => onOpenPreview(payable.payableAccountId),
+                    },
+                ]
+                return (
+                    <TableRowActions
+                        moreId={`${prefix}-more`}
+                        moreLabel={`${payable.supplierName} ${payable.sourceDocumentNo} 更多操作`}
+                        actions={actions}
+                    />
+                )
+            },
         },
     ]
 }

@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { DownloadIcon } from "lucide-react"
+import Link from "next/link"
+import { ArrowLeftIcon, DownloadIcon } from "lucide-react"
 
 import {
     BusinessStatusBadge,
@@ -13,22 +14,23 @@ import {
     ListWorkspaceFilterBar,
     ListWorkspacePage,
     MoneyValue,
+    QuickPreviewSheet,
     TableEmptyCell,
     TableIdentityCell,
     TableTextCell,
+    listWorkspaceStyles,
 } from "@/components/business"
+import {
+    PreviewAmount,
+    PreviewFact,
+    PreviewNote,
+    PreviewSection,
+} from "@/components/business/financial-preview"
 import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 import { selectedOrgUnitIds } from "@/features/organization/lib/organization-ids"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import type { StatusTone } from "@/components/ui/status-badge"
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { personDirectoryLabel } from "@/features/entity-selectors/api/person-directory"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
@@ -126,19 +128,27 @@ function scopeColumns(
     return [
         {
             id: "doc",
-            header: "申请单号",
-            meta: { label: "申请单号", width: "flex" },
-            cell: ({ row }) => (
-                <TableIdentityCell
-                    primary={
-                        <span className="num">{row.original.request_no}</span>
-                    }
-                    primaryTitle={row.original.request_no}
-                    secondary={row.original.sales_order_no}
-                    secondaryTitle={row.original.sales_order_no}
-                    numericSecondary
-                />
-            ),
+            header: "申请单号 / 开票抬头",
+            meta: { label: "申请单号 / 开票抬头", width: "flex" },
+            cell: ({ row }) => {
+                const title = row.original.data?.invoice_title?.trim()
+                const secondary = [title, row.original.sales_order_no]
+                    .filter(Boolean)
+                    .join(" · ")
+                return (
+                    <TableIdentityCell
+                        primary={
+                            <span className="num">
+                                {row.original.request_no}
+                            </span>
+                        }
+                        primaryTitle={row.original.request_no}
+                        secondary={secondary || undefined}
+                        secondaryTitle={secondary || undefined}
+                        numericSecondary={!title}
+                    />
+                )
+            },
         },
         {
             id: "amount",
@@ -150,7 +160,11 @@ function scopeColumns(
                 numeric: true,
             },
             cell: ({ row }) => (
-                <MoneyValue value={row.original.amount} display="compact" />
+                <MoneyValue
+                    value={row.original.amount}
+                    display="exact"
+                    className="font-semibold"
+                />
             ),
         },
         {
@@ -170,13 +184,10 @@ function scopeColumns(
                 )
                 return (
                     <div className="flex min-w-0 flex-col">
-                        <TableTextCell
-                            value={`申请人 ${applicantLabel}`}
-                            clamp={1}
-                        />
+                        <TableTextCell value={applicantLabel} clamp={1} />
                         {row.original.handler_user_id ? (
                             <TableTextCell
-                                value={`当前处理人 ${handlerLabel}`}
+                                value={`处理人 ${handlerLabel}`}
                                 clamp={1}
                                 className="text-xs text-muted-foreground"
                             />
@@ -209,7 +220,7 @@ function scopeColumns(
     ]
 }
 
-/** 开票申请范围页：负责销售、申请人与当前开票处理人分别查询，人员候选走销售目录。 */
+/** 开票申请范围页：紧凑口径条 + 标准列表 + 768px 详情抽屉。 */
 export function InvoiceRequestScopePage() {
     const urlState = useInvoiceRequestScopeUrlState()
     useSearchHotkey(urlState.searchInputRef)
@@ -303,32 +314,62 @@ export function InvoiceRequestScopePage() {
         foldedChipKeys.includes(key),
     )
 
+    const detail = detailQuery.data
+    const detailStatus = detail ? requestStatus(detail.status) : undefined
+    const closeDetail = () => {
+        const id = detailId
+        setDetailId(null)
+        if (id) restoreListRowFocus(id)
+    }
+
     return (
         <ListWorkspacePage
             title="开票申请汇总"
-            actions={
-                canExport
-                    ? [
-                          {
-                              id: "invoice-request-scope-export",
-                              actionKey: "export",
-                              type: "button",
-                              tier: "quiet",
-                              icon: DownloadIcon,
-                              label: exportExcel.isPending
-                                  ? excelExportText.pending
-                                  : excelExportText.action,
-                              loading: exportExcel.isPending,
-                              disabled:
-                                  listQuery.isFetching ||
-                                  listQuery.isError ||
-                                  !data?.hasScope ||
-                                  !data.total,
-                              onClick: () => exportExcel.mutate(urlState.query),
-                              title: "导出当前筛选下的全部开票申请",
-                          },
-                      ]
-                    : undefined
+            headerActions={
+                <div className="flex items-center gap-1">
+                    <Button
+                        id="invoice-request-scope-back"
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={listWorkspaceStyles.quietButton}
+                        render={
+                            <Link href="/finance/customer-accounts/invoice-requests" />
+                        }
+                    >
+                        <ArrowLeftIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        返回台账
+                    </Button>
+                    {canExport ? (
+                        <Button
+                            id="invoice-request-scope-export"
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className={listWorkspaceStyles.quietButton}
+                            disabled={
+                                exportExcel.isPending ||
+                                listQuery.isFetching ||
+                                listQuery.isError ||
+                                !data?.hasScope ||
+                                !data.total
+                            }
+                            title="导出当前筛选下的全部开票申请"
+                            onClick={() => exportExcel.mutate(urlState.query)}
+                        >
+                            <DownloadIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            {exportExcel.isPending
+                                ? excelExportText.pending
+                                : excelExportText.action}
+                        </Button>
+                    ) : null}
+                </div>
             }
             loading={listQuery.isPending && !data}
             notices={
@@ -379,7 +420,7 @@ export function InvoiceRequestScopePage() {
                         onResetMore={urlState.resetMoreFilters}
                         primaryFilters={
                             urlState.canUseOwner ? (
-                                <div className="empty:hidden w-56 max-w-full min-w-0">
+                                <div className="w-56 max-w-full min-w-0 empty:hidden">
                                     <PersonDirectoryFilter
                                         id={`${toolbarPrefix}-sales-owner`}
                                         category="sales"
@@ -529,126 +570,111 @@ export function InvoiceRequestScopePage() {
                 ),
             }}
         >
-            {detailId ? (
-                <section
-                    aria-label="开票申请范围详情"
-                    className="min-w-0 rounded-xl border p-4"
-                >
-                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-                        <h2 className="min-w-0 break-words text-section-title font-semibold tracking-tight">
-                            申请详情
-                        </h2>
+            <QuickPreviewSheet
+                id="invoice-request-scope-detail-sheet"
+                open={Boolean(detailId)}
+                onOpenChange={(nextOpen) => {
+                    if (!nextOpen) closeDetail()
+                }}
+                size="detail"
+                title={detail?.data?.invoice_title?.trim() || "开票申请详情"}
+                identity={
+                    detail
+                        ? `申请单号：${detail.request_no} · 销售单：${detail.sales_order_no}`
+                        : undefined
+                }
+                summary={
+                    detail ? (
+                        <BusinessStatusBadge
+                            context="preview"
+                            label={requestStatusLabel(detailStatus)}
+                            tone={
+                                detailStatus
+                                    ? requestStatusTones[detailStatus]
+                                    : "neutral"
+                            }
+                        />
+                    ) : undefined
+                }
+                footer={
+                    <Button
+                        id="invoice-request-scope-detail-close"
+                        type="button"
+                        variant="outline"
+                        onClick={closeDetail}
+                    >
+                        关闭
+                    </Button>
+                }
+            >
+                {detailQuery.isPending ? (
+                    <div className="space-y-4 px-7 py-6">
+                        <Skeleton className="h-24" aria-busy />
+                        <Skeleton className="h-44" aria-busy />
+                    </div>
+                ) : detailQuery.isError ? (
+                    <div role="alert" className="space-y-3 px-7 py-6">
+                        <p className="text-xs text-muted-foreground">
+                            {getErrorMessage(
+                                detailQuery.error,
+                                "申请详情读取失败",
+                            )}
+                        </p>
                         <Button
-                            id="invoice-request-scope-detail-close"
+                            id="invoice-request-scope-detail-retry"
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() => {
-                                setDetailId(null)
-                                restoreListRowFocus(detailId)
-                            }}
+                            onClick={() => void detailQuery.refetch()}
                         >
-                            关闭
+                            重试
                         </Button>
                     </div>
-                    {detailQuery.isPending ? (
-                        <p className="mt-2 text-xs text-muted-foreground">
-                            正在读取申请详情…
-                        </p>
-                    ) : detailQuery.isError ? (
-                        <div role="alert" className="mt-2 space-y-2">
-                            <p className="text-xs text-muted-foreground">
-                                {getErrorMessage(
-                                    detailQuery.error,
-                                    "申请详情读取失败",
-                                )}
-                            </p>
-                            <Button
-                                id="invoice-request-scope-detail-retry"
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => void detailQuery.refetch()}
-                            >
-                                重试
-                            </Button>
-                        </div>
-                    ) : detailQuery.data ? (
-                        <div className="mt-2 overflow-x-auto">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        {[
-                                            "申请单号",
-                                            "销售单",
-                                            "申请金额",
-                                            "申请人",
-                                            "当前处理人",
-                                            "状态",
-                                        ].map((label) => (
-                                            <TableHead key={label}>
-                                                {label}
-                                            </TableHead>
-                                        ))}
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    <TableRow>
-                                        <TableCell>
-                                            {detailQuery.data.request_no}
-                                        </TableCell>
-                                        <TableCell>
-                                            {detailQuery.data.sales_order_no}
-                                        </TableCell>
-                                        <TableCell>
-                                            <MoneyValue
-                                                value={detailQuery.data.amount}
-                                            />
-                                        </TableCell>
-                                        <TableCell>
-                                            {resolveScopedPersonName(
-                                                detailQuery.data,
-                                                "applicant",
-                                                resolvedNames,
-                                            )}
-                                        </TableCell>
-                                        <TableCell>
-                                            {detailQuery.data.handler_user_id
-                                                ? resolveScopedPersonName(
-                                                      detailQuery.data,
-                                                      "handler",
-                                                      resolvedNames,
-                                                  )
-                                                : "—"}
-                                        </TableCell>
-                                        <TableCell>
-                                            {requestStatusLabel(
-                                                requestStatus(
-                                                    detailQuery.data.status,
-                                                ),
-                                            )}
-                                        </TableCell>
-                                    </TableRow>
-                                </TableBody>
-                            </Table>
-                            <div className="mt-4">
-                                <InvoiceRequestDetails
-                                    data={detailQuery.data.data}
-                                />
-                            </div>
-                            {detailQuery.data.permission_limited ? (
-                                <p className="mt-2 text-xs text-muted-foreground">
-                                    部分金额受限时仅显示本人权限内金额
-                                </p>
-                            ) : null}
-                        </div>
-                    ) : (
-                        <p className="mt-2 text-xs text-muted-foreground">
-                            未找到该申请，可能已超出当前数据范围。
-                        </p>
-                    )}
-                </section>
-            ) : null}
+                ) : detail ? (
+                    <div className="space-y-6 px-7 py-6 text-body-compact">
+                        <PreviewAmount label="申请金额" value={detail.amount}>
+                            <span>
+                                销售单{" "}
+                                <span className="num">
+                                    {detail.sales_order_no || "—"}
+                                </span>
+                            </span>
+                        </PreviewAmount>
+                        <PreviewSection title="经办信息">
+                            <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+                                <PreviewFact label="申请人">
+                                    {resolveScopedPersonName(
+                                        detail,
+                                        "applicant",
+                                        resolvedNames,
+                                    )}
+                                </PreviewFact>
+                                <PreviewFact label="当前处理人">
+                                    {detail.handler_user_id
+                                        ? resolveScopedPersonName(
+                                              detail,
+                                              "handler",
+                                              resolvedNames,
+                                          )
+                                        : "—"}
+                                </PreviewFact>
+                            </dl>
+                        </PreviewSection>
+                        <PreviewSection title="开票资料与明细">
+                            <InvoiceRequestDetails data={detail.data} />
+                        </PreviewSection>
+                        {detail.permission_limited ? (
+                            <PreviewNote>
+                                部分金额受限时仅显示本人权限内金额
+                            </PreviewNote>
+                        ) : null}
+                    </div>
+                ) : (
+                    <p className="px-7 py-6 text-xs text-muted-foreground">
+                        未找到该申请，可能已超出当前数据范围。
+                    </p>
+                )}
+            </QuickPreviewSheet>
         </ListWorkspacePage>
     )
 }

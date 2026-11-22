@@ -125,7 +125,7 @@ export function ReceiptAllocationTable({
                                         可核销金额
                                     </TableHead>
                                     <TableHead
-                                        className="w-72 bg-muted/40"
+                                        className="w-72"
                                         data-align="end"
                                     >
                                         本次核销金额
@@ -200,15 +200,12 @@ export function ReceiptAllocationTable({
                                                     value={line.openAmount}
                                                 />
                                             </TableCell>
-                                            <TableCell
-                                                data-align="end"
-                                                className="bg-muted/30"
-                                            >
+                                            <TableCell data-align="end">
                                                 <div className="ml-auto w-60 whitespace-normal">
                                                     <div className="flex items-center justify-end gap-2">
                                                         <MoneyInput
                                                             id={amountId}
-                                                            className="num h-control-lg min-w-0 bg-background text-right font-semibold"
+                                                            className="num h-control min-w-0 bg-background text-right font-semibold"
                                                             placeholder="填写金额"
                                                             inputMode="decimal"
                                                             aria-label={`${line.label} 本次核销金额`}

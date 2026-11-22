@@ -1,20 +1,26 @@
 "use client"
 
 import { useState } from "react"
-import { LockKeyholeIcon } from "lucide-react"
+import { useStore } from "@tanstack/react-form"
+import { ArrowLeftIcon, LockKeyholeIcon } from "lucide-react"
 import {
+    DetailWorkspaceChrome,
     FormalActionConfirmDialog,
     MoneyValue,
-    PageHeader,
     ValidationSummary,
     type ValidationIssue,
 } from "@/components/business"
+import { Button } from "@/components/ui/button"
 import { InvoiceAllocationTable } from "./invoice-allocation-table"
 import { InvoiceRegistrationFields } from "./invoice-registration-fields"
 import { InvoiceSessionFooter } from "./invoice-session-footer"
 import { AllocationResultView } from "./allocation-result-view"
 import type { AllocationSessionState } from "@/features/supplier-payables/hooks/use-allocation-session"
-import { invoiceSchema } from "@/features/supplier-payables/lib/allocation-model"
+import {
+    cents,
+    fromCents,
+    invoiceSchema,
+} from "@/features/supplier-payables/lib/allocation-model"
 
 const fieldTargets: Record<string, string> = {
     invoiceFiles: "supplier-payables-invoice-files-select",
@@ -51,7 +57,27 @@ export function InvoiceRegistrationEditor({
         selected,
     } = state
 
+    const taxValues = useStore(invoiceForm.store, (s) => ({
+        faceTax: s.values.taxAmount,
+        allocationTaxes: s.values.allocationTaxes,
+    }))
+
     if (!session) return null
+
+    const splitTax = selected.size > 1
+    const faceTaxCents = cents(taxValues.faceTax || "0")
+    let allocatedTaxCents = BigInt(0)
+    if (splitTax) {
+        for (const id of selected) {
+            allocatedTaxCents += cents(taxValues.allocationTaxes[id] || "0")
+        }
+    }
+    const taxMismatchHint =
+        splitTax &&
+        faceTaxCents > BigInt(0) &&
+        allocatedTaxCents !== faceTaxCents
+            ? `已分配税额 ¥${fromCents(allocatedTaxCents)} 与票面税额 ¥${fromCents(faceTaxCents)} 不一致`
+            : undefined
 
     const parsed = invoiceSchema.safeParse(invoiceForm.state.values)
     const formIssues: ValidationIssue[] =
@@ -93,14 +119,16 @@ export function InvoiceRegistrationEditor({
 
     if (result)
         return (
-            <AllocationResultView
-                result={result}
-                hasSubmitKey={state.hasSubmitKey}
-                pending={isSubmitting}
-                onClose={onClose}
-                onGoToInvoiceView={onGoToInvoiceView}
-                onResolveUnknown={state.handleResolveUnknown}
-            />
+            <div className="mx-auto w-full max-w-3xl px-(--scaffold-px) py-8">
+                <AllocationResultView
+                    result={result}
+                    hasSubmitKey={state.hasSubmitKey}
+                    pending={isSubmitting}
+                    onClose={onClose}
+                    onGoToInvoiceView={onGoToInvoiceView}
+                    onResolveUnknown={state.handleResolveUnknown}
+                />
+            </div>
         )
 
     const title = session.existingInvoiceId
@@ -110,40 +138,59 @@ export function InvoiceRegistrationEditor({
     return (
         <form
             id="invoice-registration-form"
-            className="@container flex min-w-0 flex-1 flex-col gap-6"
+            className="@container flex min-w-0 flex-1 flex-col"
             onSubmit={(event) => {
                 event.preventDefault()
                 submit()
             }}
         >
-            {/* 顶栏：标题与状态（扁平无卡片，无右上角返回按钮） */}
-            <div className="space-y-3 border-b border-border pb-4">
-                <PageHeader
-                    title={title}
-                    status={{ label: "草稿", tone: "neutral" }}
-                />
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-body-compact">
-                    <span className="text-muted-foreground">供应商</span>
-                    <LockKeyholeIcon
-                        className="size-4 shrink-0 text-muted-foreground"
-                        aria-hidden="true"
-                    />
-                    <span className="min-w-0 break-words font-medium">
-                        {session.supplierName}
-                    </span>
-                    {draftHint ? (
-                        <span className="text-xs text-muted-foreground">
-                            {draftHint}
+            <DetailWorkspaceChrome
+                title={title}
+                primaryStatus={{ label: "草稿", tone: "neutral" }}
+                meta={
+                    <span className="inline-flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                        <span className="inline-flex items-center gap-1.5 text-foreground">
+                            <span className="text-muted-foreground">
+                                供应商
+                            </span>
+                            <LockKeyholeIcon
+                                className="size-3.5 shrink-0 text-muted-foreground"
+                                aria-hidden="true"
+                            />
+                            <span className="font-medium">
+                                {session.supplierName}
+                            </span>
                         </span>
-                    ) : null}
-                </div>
-            </div>
+                        {draftHint ? (
+                            <span className="text-muted-foreground">
+                                · {draftHint}
+                            </span>
+                        ) : null}
+                    </span>
+                }
+                secondaryActions={
+                    <Button
+                        id="invoice-registration-back"
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={isSubmitting}
+                        onClick={onClose}
+                    >
+                        <ArrowLeftIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        返回供应商往来
+                    </Button>
+                }
+            />
 
             {/* 左右分栏工作区 */}
-            <div className="grid min-w-0 flex-1 grid-cols-1 items-start lg:grid-cols-[380px_minmax(0,1fr)] xl:grid-cols-[400px_minmax(0,1fr)]">
+            <div className="grid min-w-0 flex-1 grid-cols-1 items-start px-(--scaffold-px) py-6 lg:grid-cols-[380px_minmax(0,1fr)] xl:grid-cols-[400px_minmax(0,1fr)]">
                 {/* 左侧：发票信息（扁平无卡片，右分割线，宽屏吸顶） */}
-                <div className="border-b border-border pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-8">
-                    <div className="space-y-5 lg:sticky lg:top-4">
+                <div className="border-b border-border/60 pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-8">
+                    <div className="space-y-5 lg:sticky lg:top-20">
                         <div className="space-y-1">
                             <h2 className="text-section-title font-semibold text-foreground tracking-tight">
                                 发票信息
@@ -167,7 +214,7 @@ export function InvoiceRegistrationEditor({
                 </div>
 
                 {/* 右侧：核销明细（扁平无卡片，左内边距与左侧隔开） */}
-                <div className="min-w-0 pt-6 lg:pt-0 lg:pl-8 space-y-6">
+                <div className="min-w-0 space-y-6 pt-6 lg:pt-0 lg:pl-8">
                     <InvoiceAllocationTable state={state} />
 
                     {attempted && state.issues.length > 0 ? (
@@ -189,6 +236,7 @@ export function InvoiceRegistrationEditor({
                 isExistingInvoice={Boolean(session.existingInvoiceId)}
                 selectedCount={selected.size}
                 draftHint={draftHint}
+                taxMismatchHint={taxMismatchHint}
                 submitHint={
                     attempted && issues.length > 0
                         ? (issues[0]?.message ?? "请检查填写内容。")

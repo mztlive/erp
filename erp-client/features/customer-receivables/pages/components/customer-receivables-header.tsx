@@ -1,6 +1,11 @@
 "use client"
 
-import { DownloadIcon, FileTextIcon, WalletIcon } from "lucide-react"
+import {
+    BarChart3Icon,
+    DownloadIcon,
+    FileTextIcon,
+    WalletIcon,
+} from "lucide-react"
 
 import {
     DataFreshness,
@@ -12,9 +17,9 @@ import {
     listWorkspaceQuietAction,
     listWorkspaceStyles,
 } from "@/components/business/list-workspace"
-import { cn } from "@/lib/utils"
 import type { CustomerAccountsListView } from "@/features/customer-receivables/types"
 import { freshnessText } from "@/lib/ui-text"
+import { cn } from "@/lib/utils"
 
 type CustomerReceivablesHeaderProps = {
     data: CustomerAccountsListView | undefined
@@ -26,7 +31,7 @@ type CustomerReceivablesHeaderProps = {
     startSessionPending?: boolean
     canExport: boolean
     exportPending: boolean
-    onOpenInvoiceRequests?: () => void
+    onOpenScope?: () => void
     views?: React.ReactNode
     embedded?: boolean
     salesOrderNo?: string
@@ -42,7 +47,7 @@ export function CustomerReceivablesHeader({
     startSessionPending = false,
     canExport,
     exportPending,
-    onOpenInvoiceRequests,
+    onOpenScope,
     views,
     embedded = false,
     salesOrderNo,
@@ -57,13 +62,14 @@ export function CustomerReceivablesHeader({
             size="sm"
             className="gap-1.5"
             actions={[
-                ...(onOpenInvoiceRequests
+                ...(onOpenScope
                     ? [
                           listWorkspaceQuietAction({
-                              actionKey: "invoice-requests",
-                              id: "customer-receivables-view-invoice-requests",
-                              label: "开票申请",
-                              onClick: onOpenInvoiceRequests,
+                              actionKey: "scope",
+                              id: "customer-receivables-open-scope",
+                              label: "按范围汇总",
+                              icon: BarChart3Icon,
+                              onClick: onOpenScope,
                           }),
                       ]
                     : []),

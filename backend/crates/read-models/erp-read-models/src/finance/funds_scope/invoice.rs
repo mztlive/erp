@@ -163,7 +163,7 @@ impl FundsAccess {
         ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
 
         let summary = snapshot.summary(&version)?.with_balance_access(authorization.ledger_read);
-        let items = snapshot
+        let mut items: Vec<ScopedInvoiceRow> = snapshot
             .items
             .iter()
             .map(|projected| {
@@ -178,6 +178,13 @@ impl FundsAccess {
                 )
             })
             .collect();
+        let party_ids = items.iter().filter_map(|item| item.party_id.clone()).collect::<Vec<_>>();
+        let party_names = self.party_legal_names(&party_ids, executor).await?;
+        for item in &mut items {
+            if let Some(party_id) = item.party_id.as_ref() {
+                item.party_name = party_names.get(party_id).cloned();
+            }
+        }
 
         authorization.deliver(executor).await?;
         Ok(FundsScopedPage {
@@ -354,6 +361,7 @@ impl FundsAccess {
             id: row.id.clone(),
             version: whole.then_some(row.version),
             party_id: whole.then(|| row.party_id.clone()),
+            party_name: None,
             invoice_code: row.invoice_code.clone().filter(|_| whole),
             invoice_no: row.invoice_no.clone(),
             invoice_direction: row.invoice_direction,
@@ -450,7 +458,12 @@ impl FundsAccess {
             return Err(Error::NotFound("发票不存在".into()));
         }
 
-        let data = Self::cut_invoice_row(&row, sales, purchase, &sales_matched, &purchase_matched, whole);
+        let mut data =
+            Self::cut_invoice_row(&row, sales, purchase, &sales_matched, &purchase_matched, whole);
+        if let Some(party_id) = data.party_id.as_ref() {
+            let names = self.party_legal_names(std::slice::from_ref(party_id), executor).await?;
+            data.party_name = names.get(party_id).cloned();
+        }
         let parts =
             invoice_detail_parts(&row, &sales_matched, &purchase_matched, &sales_facts, &purchase_facts);
         let view = invoice_detail_result(&authorization, data, &parts);

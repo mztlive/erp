@@ -6,6 +6,7 @@ use erp_finance::entity::payable::PendingPaymentAllocation;
 use erp_finance::entity::supplier_deposit::{
     DepositAccountIdentity, DepositReleaseReason, DepositTransactionEvidence,
 };
+use erp_finance::repository::supplier_deposit_query::DepositAccountStatusFilter;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -19,6 +20,7 @@ pub struct OpenDepositAccount {
 pub struct DepositAccountQuery {
     pub supplier_id: Option<String>,
     pub payer_party_id: Option<String>,
+    pub status: Option<DepositAccountStatusFilter>,
     pub page: Option<u64>,
     pub page_size: Option<u32>,
 }

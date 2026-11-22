@@ -122,6 +122,7 @@ async fn list_accounts(
         db,
         query.supplier_id.as_deref(),
         query.payer_party_id.as_deref(),
+        query.status,
         skip,
         u32::try_from(size).map_err(|_| Error::ValidationError("分页范围无效".into()))?,
         &compiled,

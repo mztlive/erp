@@ -42,6 +42,8 @@ type Props = {
     invoiceColumns: ColumnDef<SalesInvoiceRow>[]
     preview: CustomerAccountPreviewTarget | null
     onPreview: (target: CustomerAccountPreviewTarget) => void
+    onContinueAllocateReceipt?: (row: ReceiptRow) => void
+    canRegisterReceipt?: boolean
 }
 
 /** 客户往来列表分区：权限、范围状态、筛选和表格。 */
@@ -66,6 +68,8 @@ export function CustomerReceivablesListPane({
     invoiceColumns,
     preview,
     onPreview,
+    onContinueAllocateReceipt,
+    canRegisterReceipt,
 }: Props) {
     if (profileError) {
         return (
@@ -129,6 +133,8 @@ export function CustomerReceivablesListPane({
             invoiceColumns={invoiceColumns}
             preview={preview}
             onPreview={onPreview}
+            onContinueAllocateReceipt={onContinueAllocateReceipt}
+            canRegisterReceipt={canRegisterReceipt}
             toolbar={
                 !noScope || isError ? (
                     <CustomerReceivablesToolbar
@@ -144,14 +150,11 @@ export function CustomerReceivablesListPane({
                         }
                         statusDraft={urlState.statusDraft}
                         setStatusDraft={urlState.setStatusDraft}
-                        panelOpen={urlState.panelOpen}
-                        setPanelOpen={urlState.setPanelOpen}
                         appliedChips={appliedChips}
                         removeFilter={urlState.removeFilter}
                         applyFilters={urlState.applyFilters}
-                        resetMoreFilters={urlState.resetMoreFilters}
-                        cancelMoreFilters={urlState.cancelMoreFilters}
                         clearFilters={urlState.clearFilters}
+                        hasActiveFilters={urlState.hasActiveFilters}
                         hasPendingChanges={urlState.hasPendingChanges}
                         loading={isFetching}
                         failed={isError}
