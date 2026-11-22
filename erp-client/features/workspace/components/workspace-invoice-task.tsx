@@ -360,7 +360,7 @@ function AppliedInvoiceDetails({
                     canOpenRequest ? (
                         <Link
                             id={`workspace-invoice-linked-request-${toAutomationIdSegment(request.id)}`}
-                            href={`/finance/customer-accounts/invoice-requests?requestId=${encodeURIComponent(request.id)}`}
+                            href={`/finance/customer-accounts/invoice-requests/${encodeURIComponent(request.id)}`}
                             className="text-body-compact underline-offset-4 hover:underline"
                         >
                             开票申请 {request.request_no}

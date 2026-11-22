@@ -29,10 +29,15 @@ export const requestKeys = { all: queryKeyRoots.invoiceRequests }
 export function useInvoiceRequestPermissions() {
     const profile = useAccountProfileQuery()
     return {
+        isPending: profile.isPending,
         userId: profile.data?.userid,
         canRead: hasPermission(
             profile.data?.permissions,
             "sales_invoice_request:list",
+        ),
+        canReadDetail: hasPermission(
+            profile.data?.permissions,
+            "sales_invoice_request:detail",
         ),
         canSubmit: hasPermission(
             profile.data?.permissions,

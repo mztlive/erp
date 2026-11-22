@@ -341,7 +341,7 @@ export function InvoiceRequestScopePage() {
                             data-icon="inline-start"
                             aria-hidden="true"
                         />
-                        返回台账
+                        返回开票申请
                     </Button>
                     {canExport ? (
                         <Button

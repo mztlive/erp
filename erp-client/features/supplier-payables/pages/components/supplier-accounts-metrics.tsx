@@ -33,6 +33,7 @@ export function SupplierAccountsMetrics({
 
     return (
         <section
+            data-slot="list-workspace-metrics"
             aria-label="供应商往来指标"
             className="-mx-(--scaffold-px) border-b border-border/60 bg-card px-(--scaffold-px)"
         >

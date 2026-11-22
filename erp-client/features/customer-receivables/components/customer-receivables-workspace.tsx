@@ -126,10 +126,6 @@ export function CustomerReceivablesWorkspace({
     const readableViews = VIEWS.filter(canReadView)
     const canPreview = (kind: keyof typeof PREVIEW_PERMISSIONS) =>
         hasPermission(granted, PREVIEW_PERMISSIONS[kind])
-    const canReadInvoiceRequests = hasPermission(
-        granted,
-        "sales_invoice_request:list",
-    )
 
     const urlState = useCustomerReceivablesUrlState({
         fixedSalesOrderId: salesOrderId,
@@ -529,7 +525,7 @@ export function CustomerReceivablesWorkspace({
         )
     }
 
-    const baseViews = readableViews.map((view) => ({
+    const views = readableViews.map((view) => ({
         id: `customer-receivables-view-${view}`,
         view,
         label: VIEW_LABEL[view],
@@ -540,39 +536,24 @@ export function CustomerReceivablesWorkspace({
         active: view === urlState.view,
         onClick: () => urlState.changeView(view),
     }))
-    const standaloneViewItems = [
-        ...baseViews.filter((item) => item.view !== "unallocated"),
-        ...(!embedded && canReadInvoiceRequests
-            ? [
-                  {
-                      id: "customer-receivables-view-invoice-requests",
-                      label: "开票申请",
-                      href: INVOICE_REQUESTS_HREF,
-                      active: false,
-                  },
-              ]
-            : []),
-        ...baseViews.filter((item) => item.view === "unallocated"),
-    ]
-    const useBarViews = !embedded && standaloneViewItems.length >= 5
     const viewSwitcher =
-        baseViews.length === 1 && !canReadCurrentView ? (
+        views.length === 1 && !canReadCurrentView ? (
             <Button
-                id={baseViews[0].id}
+                id={views[0].id}
                 type="button"
                 variant="ghost"
                 className={listWorkspaceStyles.quietButton}
-                aria-pressed={baseViews[0].active}
-                onClick={baseViews[0].onClick}
+                aria-pressed={views[0].active}
+                onClick={views[0].onClick}
             >
-                {baseViews[0].label}
+                {views[0].label}
             </Button>
-        ) : standaloneViewItems.length >= 2 ? (
+        ) : views.length >= 2 ? (
             embedded ? (
                 <Tabs
                     value={urlState.view}
                     onValueChange={(value) =>
-                        baseViews.find((item) => item.view === value)?.onClick()
+                        views.find((item) => item.view === value)?.onClick()
                     }
                 >
                     <TabsList
@@ -580,7 +561,7 @@ export function CustomerReceivablesWorkspace({
                         aria-label="本单客户往来工作视图"
                         className="w-full min-w-0 justify-start overflow-x-auto border-b border-border/60"
                     >
-                        {baseViews.map((item) => (
+                        {views.map((item) => (
                             <TabsTrigger
                                 key={item.id}
                                 id={item.id}
@@ -594,8 +575,8 @@ export function CustomerReceivablesWorkspace({
             ) : (
                 <ListWorkspaceViews
                     ariaLabel="客户往来工作视图"
-                    items={standaloneViewItems}
-                    variant={useBarViews ? "bar" : "inline"}
+                    items={views}
+                    variant="inline"
                 />
             )
         ) : null
@@ -608,7 +589,7 @@ export function CustomerReceivablesWorkspace({
                     listQuery.isPlaceholderData ||
                     (listQuery.isPending && listEnabled)
                 }
-                views={embedded || useBarViews ? undefined : viewSwitcher}
+                views={embedded ? undefined : viewSwitcher}
                 onOpenScope={
                     !embedded && readableViews.length > 0
                         ? () =>
@@ -908,7 +889,7 @@ export function CustomerReceivablesWorkspace({
 
     const ledger = (
         <>
-            {embedded || useBarViews ? viewSwitcher : null}
+            {embedded ? viewSwitcher : null}
             {listData?.moduleAllowed && listData.hasDataScope ? (
                 <CustomerReceivablesMetrics
                     metrics={listData.metrics}

@@ -637,6 +637,13 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     icon: ReceiptIcon,
                 },
                 {
+                    routeId: "W11",
+                    href: "/finance/customer-accounts/invoice-requests",
+                    label: "开票申请",
+                    icon: FileTextIcon,
+                    requiredPermissions: ["sales_invoice_request:list"],
+                },
+                {
                     routeId: "W12",
                     icon: BanknoteIcon,
                 },

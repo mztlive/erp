@@ -86,6 +86,7 @@ export function CustomerReceivablesMetrics({
 
     return (
         <section
+            data-slot={embedded ? undefined : "list-workspace-metrics"}
             aria-label="客户往来指标"
             className={cn(
                 embedded

@@ -173,6 +173,23 @@ export function workspaceTabTitle(url: URL): string {
         return "批量选品入库"
     if (url.pathname === "/finance/customer-accounts/receipts/new")
         return "登记回款"
+    if (url.pathname === "/finance/customer-accounts/scope")
+        return "客户往来汇总"
+    if (url.pathname === "/finance/customer-accounts/invoice-requests/scope")
+        return "开票申请汇总"
+    if (
+        url.pathname === "/finance/customer-accounts/invoice-requests" &&
+        url.searchParams.get("create") === "1"
+    )
+        return "新建开票申请"
+    if (
+        /^\/finance\/customer-accounts\/invoice-requests\/[^/]+$/.test(
+            url.pathname,
+        )
+    )
+        return "开票申请详情"
+    if (url.pathname === "/finance/supplier-accounts/scope")
+        return "供应商往来汇总"
     if (url.pathname === "/finance/supplier-accounts/invoices/new")
         return url.searchParams.has("invoiceId")
             ? "继续核销进项发票"

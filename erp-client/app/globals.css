@@ -804,8 +804,8 @@
 }
 [data-slot="page-scaffold"].erp-list-workspace-page
     > :not([data-slot="list-workspace-header"]):not(
-        [data-slot="list-work-surface"]
-    ):not(.sr-only) {
+        [data-slot="list-workspace-metrics"]
+    ):not([data-slot="list-work-surface"]):not(.sr-only) {
     margin-block: 0.75rem;
 }
 [data-slot="page-scaffold"].erp-list-workspace-page
