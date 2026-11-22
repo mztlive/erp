@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState } from "react"
 import Link from "next/link"
-import { usePathname, useSearchParams } from "next/navigation"
+import { usePathname, useSearchParams } from "@/lib/navigation"
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
 import {
     DetailWorkspaceSection,
@@ -11,7 +11,7 @@ import {
 } from "@/components/business"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import {
     Table,
     TableBody,
@@ -34,11 +34,20 @@ const progressLabel: Record<string, string> = {
     COMPLETE: "已完成履约",
 }
 
+const progressTone: Record<string, StatusTone> = {
+    NONE: "neutral",
+    PARTIAL: "info",
+    COMPLETED: "success",
+    PENDING: "neutral",
+    NOT_STARTED: "neutral",
+    COMPLETE: "success",
+}
+
 function BasisAmount({ title, value }: { title: string; value?: string }) {
     return (
         <div className="min-w-0 space-y-1">
             <dt className="text-xs text-muted-foreground">{title}</dt>
-            <dd>
+            <dd className="num text-body-compact">
                 <MoneyValue value={value} />
                 {value == null && (
                     <span className="ml-1 text-xs text-muted-foreground">
@@ -51,13 +60,14 @@ function BasisAmount({ title, value }: { title: string; value?: string }) {
 }
 
 function OrderBasis({ line, draft }: { line: RequestLine; draft: boolean }) {
+    const fulfillmentKey = line.current_fulfillment ?? ""
     return (
-        <div className="grid gap-3 xl:grid-cols-[1.2fr_1fr]">
+        <div className="grid gap-6 border-l-2 border-border/60 py-2 pl-4 xl:grid-cols-[1.2fr_1fr] xl:divide-x xl:divide-border/60">
             <section
-                className="space-y-3 rounded-md bg-info-soft/35 p-4"
+                className="space-y-3"
                 aria-label={draft ? "保存时依据" : "提交时依据"}
             >
-                <h4 className="text-body-compact font-semibold">
+                <h4 className="text-xs font-medium text-muted-foreground">
                     {draft ? "保存时依据" : "提交时依据"}
                 </h4>
                 <dl className="grid grid-cols-2 gap-x-5 gap-y-3 2xl:grid-cols-4">
@@ -73,11 +83,10 @@ function OrderBasis({ line, draft }: { line: RequestLine; draft: boolean }) {
                     />
                 </dl>
             </section>
-            <section
-                className="space-y-3 rounded-md bg-success-soft/35 p-4"
-                aria-label="当前进度"
-            >
-                <h4 className="text-body-compact font-semibold">当前进度</h4>
+            <section className="space-y-3 xl:pl-6" aria-label="当前进度">
+                <h4 className="text-xs font-medium text-muted-foreground">
+                    当前进度
+                </h4>
                 <dl className="grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-3">
                     <BasisAmount
                         title="采购剩余应付"
@@ -92,11 +101,12 @@ function OrderBasis({ line, draft }: { line: RequestLine; draft: boolean }) {
                             履约进度
                         </dt>
                         <dd>
-                            <Badge variant="secondary">
-                                {progressLabel[
-                                    line.current_fulfillment ?? ""
-                                ] ?? "待核对"}
-                            </Badge>
+                            <StatusBadge
+                                tone={progressTone[fulfillmentKey] ?? "neutral"}
+                                label={
+                                    progressLabel[fulfillmentKey] ?? "待核对"
+                                }
+                            />
                         </dd>
                     </div>
                 </dl>
@@ -254,12 +264,11 @@ export function RequestOrderDetails({
                                                         {line.purchase_order_no}
                                                     </span>
                                                 )}
-                                                <Badge
-                                                    variant="secondary"
-                                                    className="shrink-0"
-                                                >
-                                                    V{line.purchase_version}
-                                                </Badge>
+                                                <StatusBadge
+                                                    tone="neutral"
+                                                    label={`V${line.purchase_version}`}
+                                                    className="num shrink-0"
+                                                />
                                             </div>
                                         </TableCell>
                                         <TableCell className="max-w-40 whitespace-normal">
@@ -285,21 +294,22 @@ export function RequestOrderDetails({
                                             </TableCell>
                                         )}
                                     </TableRow>
-                                    <TableRow
-                                        id={`ppr-order-${key}-basis`}
-                                        hidden={!expanded}
-                                        className="hover:bg-transparent"
-                                    >
-                                        <TableCell
-                                            colSpan={columnCount}
-                                            className="p-2 whitespace-normal"
+                                    {expanded ? (
+                                        <TableRow
+                                            id={`ppr-order-${key}-basis`}
+                                            className="hover:bg-transparent"
                                         >
-                                            <OrderBasis
-                                                line={line}
-                                                draft={draft}
-                                            />
-                                        </TableCell>
-                                    </TableRow>
+                                            <TableCell
+                                                colSpan={columnCount}
+                                                className="py-3 whitespace-normal"
+                                            >
+                                                <OrderBasis
+                                                    line={line}
+                                                    draft={draft}
+                                                />
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : null}
                                     {line.source_changed && (
                                         <TableRow className="hover:bg-transparent">
                                             <TableCell

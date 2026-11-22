@@ -14,15 +14,9 @@ import { PurchaseOrderDetailSection as DetailRecordSection } from "./purchase-or
 /** 在途变更置顶无双标题套娃，历史变更去除在途重复并补充发起时间；采购退货只读展示执行状态。 */
 export function PurchaseOrderDetailChangesSection({
     order,
-    workItemId,
-    expectedTaskVersion,
-    workItemAllowedActions,
     onApprovalResult,
 }: {
     order: PurchaseOrderCenterView
-    workItemId?: string
-    expectedTaskVersion?: string
-    workItemAllowedActions?: readonly string[]
     onApprovalResult?: (result: PurchaseOrderDetailResult) => void
 }) {
     const activeId = order.activeChangeOrder?.id
@@ -40,9 +34,6 @@ export function PurchaseOrderDetailChangesSection({
                         changeOrder={order.activeChangeOrder}
                         baseRevisionNo={order.identity.revisionNo}
                         paidAmount={order.payableSummary?.paidAllocatedAmount}
-                        workItemId={workItemId}
-                        expectedTaskVersion={expectedTaskVersion}
-                        workItemAllowedActions={workItemAllowedActions}
                         onResult={onApprovalResult}
                     />
                 </DetailWorkspaceSection>

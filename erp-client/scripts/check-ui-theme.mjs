@@ -325,7 +325,56 @@ for (const file of scanDirectories.flatMap((directory) =>
         inspectCss(file, source, path, content, isFeature)
         continue
     }
+    const hasDetailWorkspaceShell =
+        isFeature && content.includes("DetailWorkspacePage")
+    const isDetailRoutePage =
+        path.startsWith("app/(workspace)/") &&
+        /\/\[[^/]+\]\/page\.tsx$/.test(path)
     function visit(node) {
+        if (
+            hasDetailWorkspaceShell &&
+            ts.isIdentifier(node) &&
+            node.text === "surfacePanelClassName"
+        ) {
+            report(
+                file,
+                source,
+                node,
+                "详情工作面禁止套用 surfacePanelClassName 外框卡片",
+                node.text,
+            )
+        }
+        if (
+            hasDetailWorkspaceShell &&
+            (ts.isJsxOpeningElement(node) ||
+                ts.isJsxSelfClosingElement(node)) &&
+            ["ObjectSectionTabs", "ListWorkSurface"].includes(
+                node.tagName.getText(source),
+            )
+        ) {
+            report(
+                file,
+                source,
+                node,
+                "详情工作面改用 DetailWorkspaceTabs / 纯白通栏表格，禁止混用列表壳或旧分页标签",
+                node.tagName.getText(source),
+            )
+        }
+        if (
+            isDetailRoutePage &&
+            ts.isJsxAttribute(node) &&
+            node.name.getText(source) === "key" &&
+            node.initializer &&
+            /\bsection\b/.test(node.initializer.getText(source))
+        ) {
+            report(
+                file,
+                source,
+                node,
+                "详情路由 key 不得绑定 section，避免切 Tab 触发整页卸载重建",
+                node.getText(source),
+            )
+        }
         if (isFeature && ts.isPropertyAssignment(node)) {
             const name =
                 ts.isStringLiteral(node.name) || ts.isIdentifier(node.name)

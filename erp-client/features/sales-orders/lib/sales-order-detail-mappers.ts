@@ -456,8 +456,8 @@ export function mapListItemFromBackend(
 
     const commercialReadOnly =
         originSystem === "mall" ||
-        primaryStatus.label === "已关闭" ||
-        primaryStatus.label === "已作废" ||
+        primaryStatus.code === "closed" ||
+        primaryStatus.code === "voided" ||
         hasRunningVoucherApproval ||
         row.commercial_status === "EFFECTIVE"
 

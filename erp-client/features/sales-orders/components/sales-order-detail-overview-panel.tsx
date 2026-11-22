@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 
 import {
     DetailWorkspaceSection,
@@ -166,14 +167,40 @@ export function OverviewPanel({
             >
                 <dl className="@container/terms grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
                     <OverviewField
+                        label="客户"
+                        value={
+                            order.customerId ? (
+                                <Link
+                                    id="sales-orders-detail-overview-customer-link"
+                                    href={`/sales/customers/${encodeURIComponent(order.customerId)}`}
+                                    className="font-medium text-primary underline-offset-4 hover:underline"
+                                >
+                                    {order.customerName}
+                                </Link>
+                            ) : (
+                                order.customerName || "—"
+                            )
+                        }
+                    />
+                    <OverviewField
                         label="结算主体"
                         value={order.settlementEntity || "—"}
                     />
                     <OverviewField
                         label="关联合同"
                         value={
-                            order.contractRevisionLabel ||
-                            (order.contractId ? "合同资料暂不可查看" : "无合同")
+                            order.contractId ? (
+                                <Link
+                                    id="sales-orders-detail-overview-contract-link"
+                                    href={`/sales/contracts/${encodeURIComponent(order.contractId)}`}
+                                    className="num font-medium text-primary underline-offset-4 hover:underline"
+                                >
+                                    {order.contractRevisionLabel ||
+                                        "查看关联合同"}
+                                </Link>
+                            ) : (
+                                order.contractRevisionLabel || "无合同"
+                            )
                         }
                     />
                     <OverviewField
@@ -256,7 +283,8 @@ export function OverviewPanel({
 
             {order.currentRevisionNo &&
             !isCard &&
-            !["已关闭", "已作废"].includes(order.primaryStatus.label) ? (
+            order.primaryStatus.code !== "closed" &&
+            order.primaryStatus.code !== "voided" ? (
                 <ArrangementSummary salesOrderId={order.id} />
             ) : null}
 

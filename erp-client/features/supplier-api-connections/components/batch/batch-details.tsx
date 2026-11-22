@@ -1,6 +1,5 @@
 "use client"
 
-import { DetailWorkspaceSection } from "@/components/business/detail-workspace"
 import type * as React from "react"
 import { DatePicker } from "@/components/ui/date-picker"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
@@ -50,11 +49,16 @@ export function BatchDetailsPanel({
                 listRef={categoryListRef}
                 disabled={disabled}
             />
-            <DetailWorkspaceSection
-                className="xl:border-l xl:border-border/60 xl:pl-5"
-                headingId="supplier-catalog-batch-terms-title"
-                title="供给条件"
+            <section
+                aria-labelledby="supplier-catalog-batch-terms-title"
+                className="min-w-0 space-y-4 xl:border-l xl:border-border/60 xl:pl-5"
             >
+                <h2
+                    id="supplier-catalog-batch-terms-title"
+                    className="text-section-title font-semibold tracking-tight"
+                >
+                    供给条件
+                </h2>
                 <div
                     data-slot="detail-form-grid"
                     className="grid min-w-0 gap-5 md:grid-cols-2 xl:grid-cols-1"
@@ -75,6 +79,7 @@ export function BatchDetailsPanel({
                                     </div>
                                     <Input
                                         id="supplier-catalog-batch-input-tax"
+                                        className="num"
                                         inputMode="decimal"
                                         disabled={disabled}
                                         placeholder="请输入"
@@ -188,7 +193,7 @@ export function BatchDetailsPanel({
                         )}
                     </form.AppField>
                 </div>
-            </DetailWorkspaceSection>
+            </section>
         </div>
     )
 }

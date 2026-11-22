@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { RouteLoading } from "@/components/layout/route-loading"
+import { DetailWorkspaceSkeleton } from "@/components/business"
 import { ProductDetailPage } from "@/features/master-data/pages/product-detail-page"
 
 export const metadata: Metadata = {
@@ -15,7 +15,7 @@ export default async function Page({
 }) {
     const { stableId } = await params
     return (
-        <Suspense fallback={<RouteLoading label="正在加载商品资料…" />}>
+        <Suspense fallback={<DetailWorkspaceSkeleton title="商品详情" />}>
             <ProductDetailPage key={stableId} stableId={stableId} />
         </Suspense>
     )

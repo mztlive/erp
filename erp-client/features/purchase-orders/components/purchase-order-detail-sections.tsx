@@ -61,18 +61,14 @@ export function PurchaseOrderDetailSectionContent({
     activeSection,
     editor,
     costMasked,
-    changeWorkItemId,
-    changeExpectedTaskVersion,
-    changeWorkItemAllowedActions,
+    hasHeaderPrimaryAction = false,
     onChangeApprovalResult,
 }: {
     order: PurchaseOrderCenterView
     activeSection: PurchaseOrderDetailSectionId
     editor?: React.ReactNode
     costMasked: boolean
-    changeWorkItemId?: string
-    changeExpectedTaskVersion?: string
-    changeWorkItemAllowedActions?: readonly string[]
+    hasHeaderPrimaryAction?: boolean
     onChangeApprovalResult?: (result: PurchaseOrderDetailResult) => void
 }) {
     if (editor) return editor
@@ -104,15 +100,13 @@ export function PurchaseOrderDetailSectionContent({
                 <PurchaseOrderDetailPayableSection
                     order={order}
                     costMasked={costMasked}
+                    hasHeaderPrimaryAction={hasHeaderPrimaryAction}
                 />
             )
         case "changes":
             return (
                 <PurchaseOrderDetailChangesSection
                     order={order}
-                    workItemId={changeWorkItemId}
-                    expectedTaskVersion={changeExpectedTaskVersion}
-                    workItemAllowedActions={changeWorkItemAllowedActions}
                     onApprovalResult={onChangeApprovalResult}
                 />
             )

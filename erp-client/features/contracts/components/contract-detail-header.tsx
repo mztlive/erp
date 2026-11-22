@@ -2,19 +2,18 @@
 
 import type { ReactNode } from "react"
 import Link from "next/link"
-import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { PrinterIcon } from "lucide-react"
 
 import {
-    BusinessStatusBadge,
     DetailWorkspaceChrome,
     DetailWorkspaceMeta,
+    GuardedBusinessAction,
     detailWorkspaceStyles,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { contractOwnerLabel } from "@/features/contracts/types"
 import type { ContractCenterView } from "@/features/contracts/types"
-import { isExpiringWithin30Days } from "@/features/contracts/lib/contract-detail-helpers"
 
 type ContractDetailHeaderProps = {
     contract: ContractCenterView
@@ -39,13 +38,9 @@ export function ContractDetailHeader({
     const soBlocker = contract.actionBlockers.find(
         (b) => b.action === "CREATE_SALES_ORDER",
     )
-    const expiring = isExpiringWithin30Days(contract)
-    const archived = contract.attachments.length > 0
-    const allAttachmentsSafe =
-        archived &&
-        contract.attachments.every((file) => file.securityState === "done")
 
     const rev = contract.currentRevision
+    const customerHref = `/sales/customers/${encodeURIComponent(contract.customer.id)}`
 
     return (
         <DetailWorkspaceChrome
@@ -55,7 +50,7 @@ export function ContractDetailHeader({
                 href: "/sales/contracts",
             }}
             numberLabel="合同编号"
-            title={contract.contractNo}
+            title={`${contract.customer.displayName} 销售合同`}
             documentNumber={contract.contractNo}
             version={`v${rev.revisionNo}`}
             primaryStatus={{
@@ -68,14 +63,24 @@ export function ContractDetailHeader({
                     items={[
                         <span key="customer">
                             客户{" "}
-                            <span className="font-medium text-foreground">
+                            <Link
+                                id="card-contracts-detail-header-customer-link"
+                                href={customerHref}
+                                className="font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
+                            >
                                 {contract.customer.displayName}
-                            </span>
+                            </Link>
                         </span>,
                         <span key="owner">
                             负责人{" "}
                             <span className="font-medium text-foreground">
                                 {contractOwnerLabel(contract.ownerLabel)}
+                            </span>
+                        </span>,
+                        <span key="validity">
+                            有效期{" "}
+                            <span className="num text-foreground">
+                                {rev.validFrom} 至 {rev.validTo}
                             </span>
                         </span>,
                     ]}
@@ -100,16 +105,19 @@ export function ContractDetailHeader({
                             新建销售单
                         </Button>
                     ) : (
-                        <Button
+                        <GuardedBusinessAction
                             id="card-contracts-detail-header-create-sales-order-disabled"
                             type="button"
                             size="sm"
                             variant="outline"
                             disabled
-                            title={soBlocker?.message}
+                            reason={
+                                soBlocker?.message ??
+                                "当前合同状态不允许新建销售单"
+                            }
                         >
                             新建销售单
-                        </Button>
+                        </GuardedBusinessAction>
                     )}
                 </PermissionGuard>
             }
@@ -156,28 +164,6 @@ export function ContractDetailHeader({
                     </Button>
                 </>
             }
-        >
-            <div className="flex flex-wrap items-center gap-2 text-body-compact text-muted-foreground">
-                <span>
-                    有效期{" "}
-                    <span className="num text-foreground">
-                        {rev.validFrom} 至 {rev.validTo}
-                    </span>
-                </span>
-                {expiring ? (
-                    <BusinessStatusBadge label="30 日内将到期" tone="warning" />
-                ) : null}
-                {allAttachmentsSafe ? (
-                    <BusinessStatusBadge label="PDF 电子档已归档" tone="info" />
-                ) : null}
-            </div>
-            <PermissionGuard permission="sales_order:create">
-                {!canCreateSo && soBlocker ? (
-                    <p className="text-xs text-muted-foreground">
-                        新建销售单不可用：{soBlocker.message}
-                    </p>
-                ) : null}
-            </PermissionGuard>
-        </DetailWorkspaceChrome>
+        />
     )
 }

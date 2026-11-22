@@ -1,8 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { DetailWorkspaceSection } from "@/components/business/detail-workspace"
-import { Badge } from "@/components/ui/badge"
+import {
+    BusinessStatusBadge,
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -40,23 +43,35 @@ export function JdVopAuthorizationSection({
     const waiting =
         status &&
         ["authorizing", "refreshing", "unknown"].includes(status.state)
-    const pollExpired =
-        Date.now() >= query.pollUntil && (waiting || query.unconfirmed)
+    const pollExpired = query.pollExpired && (waiting || query.unconfirmed)
     const refresh = () => {
         query.restartPolling()
         void query.refetch()
     }
+
+    const statusTone =
+        status &&
+        ["authorized", "configured"].includes(status.state) &&
+        !query.unconfirmed
+            ? ("success" as const)
+            : status?.state === "missing"
+              ? ("neutral" as const)
+              : ("warning" as const)
+
     return (
         <DetailWorkspaceSection
             ariaLabel="京东账号授权"
             title="京东账号授权"
+            width="form"
             actions={
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5">
                     {canRead && (
                         <LoadingButton
                             id={`${prefix}-refresh`}
                             type="button"
-                            variant="outline"
+                            variant="ghost"
+                            size="sm"
+                            className={detailWorkspaceStyles.subtleButton}
                             loading={query.isFetching}
                             disabled={!canRead || disabled || query.isFetching}
                             onClick={refresh}
@@ -68,7 +83,9 @@ export function JdVopAuthorizationSection({
                         <Button
                             id={`${prefix}-configure-tokens`}
                             type="button"
-                            variant="outline"
+                            variant="ghost"
+                            size="sm"
+                            className={detailWorkspaceStyles.subtleButton}
                             disabled={
                                 !canAuthorize ||
                                 !status?.can_configure_tokens ||
@@ -86,6 +103,7 @@ export function JdVopAuthorizationSection({
                         <Button
                             id={`${prefix}-authorize`}
                             type="button"
+                            size="sm"
                             disabled={
                                 !canAuthorize ||
                                 !status?.can_authorize ||
@@ -122,27 +140,21 @@ export function JdVopAuthorizationSection({
             ) : status ? (
                 <div className="space-y-3 text-body-compact" aria-live="polite">
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                        <Badge
-                            variant={
-                                ["authorized", "configured"].includes(
-                                    status.state,
-                                ) && !query.unconfirmed
-                                    ? "success"
-                                    : status.state === "missing"
-                                      ? "secondary"
-                                      : "warning"
-                            }
-                        >
-                            {
+                        <BusinessStatusBadge
+                            context="detail"
+                            tone={statusTone}
+                            label={
                                 JD_VOP_AUTHORIZATION_LABEL[
                                     query.unconfirmed ? "unknown" : status.state
                                 ]
                             }
-                        </Badge>
+                        />
                         {status.expires_at !== null && !query.unconfirmed ? (
                             <span className="text-muted-foreground">
                                 到期时间：
-                                {jdVopAuthorizationTime(status.expires_at)}
+                                <span className="num">
+                                    {jdVopAuthorizationTime(status.expires_at)}
+                                </span>
                             </span>
                         ) : null}
                     </div>
@@ -160,7 +172,9 @@ export function JdVopAuthorizationSection({
                     {status.recovery_after !== null && !status.can_authorize ? (
                         <p className="text-muted-foreground">
                             请先查询原授权结果，
-                            {jdVopAuthorizationTime(status.recovery_after)}{" "}
+                            <span className="num">
+                                {jdVopAuthorizationTime(status.recovery_after)}
+                            </span>{" "}
                             后再刷新状态查看可处理方式。
                         </p>
                     ) : null}

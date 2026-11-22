@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { MoneyValue } from "@/components/business"
+import { MoneyValue, detailWorkspaceStyles } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -17,8 +17,10 @@ import { RequestMaterials } from "./request-materials"
 
 export function RequestSubmissionHistory({
     request,
+    detailWorkspace = false,
 }: {
     request: PaymentRequest
+    detailWorkspace?: boolean
 }) {
     const [selected, setSelected] = useState<number | null>(null)
     const query = usePaymentSubmissionQuery(request.id, selected)
@@ -28,7 +30,10 @@ export function RequestSubmissionHistory({
         (_, index) => index + 1,
     )
     return (
-        <section className="space-y-3 border-t pt-5" aria-label="历次提交材料">
+        <section
+            className="space-y-3 border-t border-border/60 pt-5"
+            aria-label="历次提交材料"
+        >
             <div>
                 <h3 className="font-medium">历次提交材料</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -40,8 +45,13 @@ export function RequestSubmissionHistory({
                     <Button
                         id={`ppr-submission-${version}-open`}
                         key={version}
-                        variant="outline"
+                        variant={detailWorkspace ? "ghost" : "outline"}
                         size="sm"
+                        className={
+                            detailWorkspace
+                                ? `${detailWorkspaceStyles.subtleButton} num`
+                                : "num"
+                        }
                         onClick={() => setSelected(version)}
                     >
                         第 {version} 次提交

@@ -5,23 +5,31 @@ import Link from "next/link"
 import { FilePlus2Icon, ShoppingCartIcon } from "lucide-react"
 
 import {
+    BusinessEmptyState,
     BusinessFailureState,
-    DiscardConfirmDialog,
     DetailWorkspaceBody,
     DetailWorkspaceChrome,
     DetailWorkspaceDirtyBadge,
     DetailWorkspacePage,
+    DetailWorkspaceSection,
     DetailWorkspaceSkeleton,
-    detailWorkspaceStyles,
+    DetailWorkspaceTabs,
+    DiscardConfirmDialog,
     GuardedBusinessAction,
+    detailWorkspaceStyles,
 } from "@/components/business"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CustomerAssignmentDialog } from "@/features/customers/components/customer-assignment-dialog"
-import type { CustomerSectionId } from "@/features/customers/types"
 import { useCustomerDetailState } from "@/features/customers/hooks/use-customer-detail-state"
+import {
+    CustomerDetailRelatedTab,
+    CustomerDetailSettlementTab,
+} from "@/features/customers/pages/customer-detail-business-tabs"
+import {
+    CustomerDetailAuditTab,
+    CustomerDetailQualityTab,
+} from "@/features/customers/pages/customer-detail-governance-tabs"
 import {
     SECTION_NAV,
     blocker,
@@ -32,14 +40,13 @@ import {
     CustomerDetailMetrics,
     CustomerDetailOverviewTab,
 } from "@/features/customers/pages/customer-detail-overview"
-import {
-    CustomerDetailRelatedTab,
-    CustomerDetailSettlementTab,
-} from "@/features/customers/pages/customer-detail-business-tabs"
-import {
-    CustomerDetailAuditTab,
-    CustomerDetailQualityTab,
-} from "@/features/customers/pages/customer-detail-governance-tabs"
+import type { CustomerSectionId } from "@/features/customers/types"
+
+const backToCustomers = {
+    id: "customers-detail-back",
+    label: "客户列表",
+    href: "/sales/customers",
+} as const
 
 export function CustomerDetailPage({
     customerId,
@@ -49,32 +56,30 @@ export function CustomerDetailPage({
     section?: string
 }) {
     const state = useCustomerDetailState(customerId, section)
-    const { query, customer, activeSection, editing, handleSectionChange } =
-        state
+    const { query, customer, activeSection, handleSectionChange } = state
     const [assignmentOpen, setAssignmentOpen] = React.useState(false)
 
     if (query.isPending && !customer) {
         return (
-            <div
-                className="flex min-w-0 flex-1 flex-col"
-                aria-busy="true"
-                aria-label="加载中"
-            >
-                <DetailWorkspaceSkeleton
-                    title="客户详情"
-                    description="正在加载客户…"
-                />
-            </div>
+            <DetailWorkspaceSkeleton
+                title="客户详情"
+                description="正在加载客户…"
+                summary
+            />
         )
     }
 
     if (query.isError && !customer) {
         return (
             <DetailWorkspacePage>
-                <DetailWorkspaceChrome title="客户详情" />
+                <DetailWorkspaceChrome
+                    title="客户详情"
+                    back={backToCustomers}
+                />
                 <DetailWorkspaceBody>
-                    <div className="pt-4">
+                    <DetailWorkspaceSection width="form">
                         <BusinessFailureState
+                            title="客户资料加载失败"
                             error={query.error}
                             action={
                                 <Button
@@ -86,7 +91,7 @@ export function CustomerDetailPage({
                                 </Button>
                             }
                         />
-                    </div>
+                    </DetailWorkspaceSection>
                 </DetailWorkspaceBody>
             </DetailWorkspacePage>
         )
@@ -97,16 +102,26 @@ export function CustomerDetailPage({
             <DetailWorkspacePage>
                 <DetailWorkspaceChrome
                     title="客户不存在或无权访问"
-                    meta="未找到该客户。可能编号有误，或当前账号无权查看该客户。"
-                    secondaryActions={
-                        <Button
-                            id="customers-detail-not-found-back"
-                            render={<Link href="/sales/customers" />}
-                        >
-                            返回客户选择
-                        </Button>
-                    }
+                    back={backToCustomers}
                 />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <BusinessEmptyState
+                            kind="no-data"
+                            title="未找到该客户"
+                            description="可能编号有误，或当前账号无权查看该客户。"
+                            action={
+                                <Button
+                                    id="customers-detail-not-found-back"
+                                    size="sm"
+                                    render={<Link href="/sales/customers" />}
+                                >
+                                    返回客户列表
+                                </Button>
+                            }
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
             </DetailWorkspacePage>
         )
     }
@@ -118,205 +133,215 @@ export function CustomerDetailPage({
     const contractBlocked = !can(customer, "UPLOAD_CONTRACT_PDF")
     const salesBlocked = !can(customer, "CREATE_SALES_ORDER")
 
+    const pendingDescription = (() => {
+        if (!state.pendingNavigation) return ""
+        if (state.pendingNavigation.kind === "back") {
+            return "编辑内容尚未保存，返回客户列表后将丢失。"
+        }
+        if (state.pendingNavigation.kind === "href") {
+            return `编辑内容尚未保存，离开前往「${state.pendingNavigation.label}」后将丢失。`
+        }
+        return "编辑内容尚未保存，切换标签页后将丢失。可先保存修改再切换。"
+    })()
+
+    const pendingConfirmLabel = (() => {
+        if (!state.pendingNavigation) return "放弃修改"
+        if (state.pendingNavigation.kind === "back") return "放弃并返回"
+        if (state.pendingNavigation.kind === "href") return "放弃并前往"
+        return "放弃并切换"
+    })()
+
     return (
         <DetailWorkspacePage>
-            <Tabs
-                value={activeSection}
-                onValueChange={(next) =>
-                    handleSectionChange(
-                        (next as CustomerSectionId) ?? "overview",
-                    )
+            <DetailWorkspaceChrome
+                back={{
+                    id: "customers-detail-back",
+                    label: "客户列表",
+                    onClick: state.handleBack,
+                }}
+                numberLabel="客户编号"
+                title={customer.currentRevision.legalName}
+                documentNumber={customer.customerNo}
+                version={`v${customer.currentRevision.revisionNo}`}
+                primaryStatus={customer.statusLabel}
+                meta={<CustomerDetailIdentityMeta customer={customer} />}
+                titleExtra={
+                    state.formDirty ? <DetailWorkspaceDirtyBadge /> : null
                 }
-                className="min-w-0 flex-1 gap-0"
-            >
-                <DetailWorkspaceChrome
-                    back={{
-                        id: "customers-detail-back",
-                        label: "客户列表",
-                        onClick: state.handleBack,
-                    }}
-                    numberLabel="客户编号"
-                    title={customer.currentRevision.legalName}
-                    documentNumber={customer.customerNo}
-                    version={`v${customer.currentRevision.revisionNo}`}
-                    primaryStatus={customer.statusLabel}
-                    meta={<CustomerDetailIdentityMeta customer={customer} />}
-                    titleExtra={
-                        editing && state.formDirty ? (
-                            <DetailWorkspaceDirtyBadge />
-                        ) : null
-                    }
-                    secondaryActions={
-                        <GuardedBusinessAction
-                            id="customers-detail-create-sales-order"
-                            size="sm"
-                            variant="ghost"
-                            className={detailWorkspaceStyles.quietButton}
-                            disabled={salesBlocked}
-                            reason={blocker(customer, "CREATE_SALES_ORDER")}
-                            render={
-                                salesBlocked ? undefined : (
-                                    <Link href={createSalesOrderHref} />
-                                )
-                            }
-                        >
-                            <ShoppingCartIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            新建销售单
-                        </GuardedBusinessAction>
-                    }
-                    primaryAction={
-                        <GuardedBusinessAction
-                            id="customers-detail-upload-contract"
-                            size="sm"
-                            variant={editing ? "ghost" : "default"}
-                            className={
-                                editing
-                                    ? detailWorkspaceStyles.quietButton
-                                    : undefined
-                            }
-                            disabled={contractBlocked}
-                            reason={blocker(customer, "UPLOAD_CONTRACT_PDF")}
-                            render={
-                                contractBlocked ? undefined : (
-                                    <Link href={uploadContractHref} />
-                                )
-                            }
-                        >
-                            <FilePlus2Icon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            上传合同 PDF
-                        </GuardedBusinessAction>
-                    }
-                    tabs={
-                        <TabsList
-                            variant="line"
-                            aria-label="客户详情分区"
-                            className={detailWorkspaceStyles.tabsList}
-                        >
-                            {SECTION_NAV.map((item) => (
-                                <TabsTrigger
-                                    id={`customers-detail-tab-${toAutomationIdSegment(item.id)}`}
-                                    key={item.id}
-                                    value={item.id}
-                                    className={detailWorkspaceStyles.tab}
-                                >
-                                    {item.label}
-                                </TabsTrigger>
-                            ))}
-                        </TabsList>
-                    }
-                />
+                secondaryActions={
+                    <GuardedBusinessAction
+                        id="customers-detail-create-sales-order"
+                        size="sm"
+                        variant="ghost"
+                        className={detailWorkspaceStyles.quietButton}
+                        disabled={salesBlocked}
+                        reason={blocker(customer, "CREATE_SALES_ORDER")}
+                        render={
+                            salesBlocked ? undefined : (
+                                <Link
+                                    href={createSalesOrderHref}
+                                    onClick={(event) => {
+                                        if (!state.formDirty) return
+                                        event.preventDefault()
+                                        state.handleNavigateHref(
+                                            createSalesOrderHref,
+                                            "新建销售单",
+                                        )
+                                    }}
+                                />
+                            )
+                        }
+                    >
+                        <ShoppingCartIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        新建销售单
+                    </GuardedBusinessAction>
+                }
+                primaryAction={
+                    <GuardedBusinessAction
+                        id="customers-detail-upload-contract"
+                        size="sm"
+                        variant={state.formDirty ? "ghost" : "default"}
+                        className={
+                            state.formDirty
+                                ? detailWorkspaceStyles.quietButton
+                                : undefined
+                        }
+                        disabled={contractBlocked}
+                        reason={blocker(customer, "UPLOAD_CONTRACT_PDF")}
+                        render={
+                            contractBlocked ? undefined : (
+                                <Link
+                                    href={uploadContractHref}
+                                    onClick={(event) => {
+                                        if (!state.formDirty) return
+                                        event.preventDefault()
+                                        state.handleNavigateHref(
+                                            uploadContractHref,
+                                            "上传合同 PDF",
+                                        )
+                                    }}
+                                />
+                            )
+                        }
+                    >
+                        <FilePlus2Icon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        上传合同 PDF
+                    </GuardedBusinessAction>
+                }
+                tabs={
+                    <DetailWorkspaceTabs
+                        value={activeSection}
+                        onValueChange={(next) =>
+                            handleSectionChange(next as CustomerSectionId)
+                        }
+                        items={SECTION_NAV}
+                        ariaLabel="客户详情分区"
+                        tabIdPrefix="customers-detail-tab"
+                    />
+                }
+            />
 
-                <DetailWorkspaceBody
-                    summary={<CustomerDetailMetrics customer={customer} />}
-                    alerts={
-                        <>
-                            {editing && (query.isError || !query.data) ? (
-                                <Alert variant="warning">
-                                    <AlertTitle>
-                                        最新客户资料暂时不可用
-                                    </AlertTitle>
-                                    <AlertDescription>
+            <DetailWorkspaceBody
+                summary={<CustomerDetailMetrics customer={customer} />}
+                alerts={
+                    <>
+                        {state.formDirty && query.isError ? (
+                            <Alert variant="warning">
+                                <AlertTitle>最新客户资料暂时不可用</AlertTitle>
+                                <AlertDescription className="flex flex-wrap items-center gap-2">
+                                    <span>
                                         当前填写内容已保留。客户资料可能已被其他人更新，保存前建议刷新核对最新资料。
-                                        <Button
-                                            id="customers-detail-edit-retry"
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => void query.refetch()}
-                                        >
-                                            重试读取
-                                        </Button>
-                                    </AlertDescription>
-                                </Alert>
-                            ) : null}
+                                    </span>
+                                    <Button
+                                        id="customers-detail-edit-retry"
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => void query.refetch()}
+                                    >
+                                        重试读取
+                                    </Button>
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
 
-                            {isDisabled ? (
-                                <Alert variant="warning">
-                                    <AlertTitle>客户已停用</AlertTitle>
-                                    <AlertDescription>
-                                        该客户已停用，不可新签合同或新建销售单；历史业务单据及往来账款仍可正常查看。
-                                        {blocker(
-                                            customer,
-                                            "UPLOAD_CONTRACT_PDF",
-                                        ) ||
-                                        blocker(customer, "CREATE_SALES_ORDER")
-                                            ? `（${[
-                                                  blocker(
-                                                      customer,
-                                                      "UPLOAD_CONTRACT_PDF",
-                                                  ),
-                                                  blocker(
-                                                      customer,
-                                                      "CREATE_SALES_ORDER",
-                                                  ),
-                                              ]
-                                                  .filter(Boolean)
-                                                  .join("；")}）`
-                                            : ""}
-                                    </AlertDescription>
-                                </Alert>
-                            ) : null}
-                        </>
-                    }
-                    saveDockOpen={
-                        activeSection === "overview" &&
-                        editing &&
-                        state.formDirty
-                    }
+                        {isDisabled ? (
+                            <Alert variant="warning">
+                                <AlertTitle>客户已停用</AlertTitle>
+                                <AlertDescription>
+                                    该客户已停用，不可新签合同或新建销售单；历史业务单据及往来账款仍可正常查看。
+                                    {blocker(customer, "UPLOAD_CONTRACT_PDF") ||
+                                    blocker(customer, "CREATE_SALES_ORDER")
+                                        ? `（${[
+                                              blocker(
+                                                  customer,
+                                                  "UPLOAD_CONTRACT_PDF",
+                                              ),
+                                              blocker(
+                                                  customer,
+                                                  "CREATE_SALES_ORDER",
+                                              ),
+                                          ]
+                                              .filter(Boolean)
+                                              .join("；")}）`
+                                        : ""}
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
+                    </>
+                }
+                saveDockOpen={activeSection === "overview" && state.formDirty}
+            >
+                <div
+                    role="tabpanel"
+                    aria-labelledby={`customers-detail-tab-${activeSection}`}
+                    className="min-w-0"
                 >
-                    <TabsContent value="overview" className="min-w-0">
+                    {activeSection === "overview" ? (
                         <CustomerDetailOverviewTab
                             customer={customer}
                             refetch={() => void query.refetch()}
-                            editing={editing}
-                            onEditClick={state.startEditing}
+                            formResetEpoch={state.formResetEpoch}
                             onFormDirtyChange={state.setFormDirty}
                             shortcutBlocked={
-                                state.pendingSection != null || assignmentOpen
+                                state.pendingNavigation != null ||
+                                assignmentOpen
                             }
-                            onFormCancel={state.cancelEditing}
+                            onFormReset={state.handleFormReset}
                             onFormSucceeded={(_customerId, revisionNo) =>
                                 state.completeEditing(revisionNo)
                             }
                         />
-                    </TabsContent>
-
-                    <TabsContent value="related" className="min-w-0">
+                    ) : activeSection === "related" ? (
                         <CustomerDetailRelatedTab
                             customer={customer}
                             refetch={() => void query.refetch()}
                         />
-                    </TabsContent>
-
-                    <TabsContent value="settlement" className="min-w-0">
+                    ) : activeSection === "settlement" ? (
                         <CustomerDetailSettlementTab
                             customer={customer}
                             refetch={() => void query.refetch()}
                         />
-                    </TabsContent>
-
-                    <TabsContent value="quality" className="min-w-0">
+                    ) : activeSection === "quality" ? (
                         <CustomerDetailQualityTab
                             customer={customer}
                             refetch={() => void query.refetch()}
                         />
-                    </TabsContent>
-
-                    <TabsContent value="audit" className="min-w-0">
+                    ) : (
                         <CustomerDetailAuditTab
                             customer={customer}
                             refetch={() => void query.refetch()}
                             onManageAssignments={() => setAssignmentOpen(true)}
                         />
-                    </TabsContent>
-                </DetailWorkspaceBody>
-            </Tabs>
+                    )}
+                </div>
+            </DetailWorkspaceBody>
 
             <CustomerAssignmentDialog
                 customerId={customer.customerId}
@@ -327,23 +352,15 @@ export function CustomerDetailPage({
 
             <DiscardConfirmDialog
                 id="customers-detail-pending-section-discard"
-                open={state.pendingSection != null}
+                open={state.pendingNavigation != null}
                 onOpenChange={(open) => {
-                    if (!open) state.dismissPendingSection()
+                    if (!open) state.dismissPendingNavigation()
                 }}
                 title="放弃未保存的修改？"
-                description={
-                    state.pendingSection === "back"
-                        ? "编辑内容尚未保存，返回列表后将丢失。"
-                        : "编辑内容尚未保存，切换标签页后将丢失。可先保存修改再切换。"
-                }
-                confirmLabel={
-                    state.pendingSection === "back"
-                        ? "放弃并返回"
-                        : "放弃并切换"
-                }
+                description={pendingDescription}
+                confirmLabel={pendingConfirmLabel}
                 cancelLabel="继续编辑"
-                onConfirm={state.discardPendingAndSwitch}
+                onConfirm={state.discardPendingAndNavigate}
             />
         </DetailWorkspacePage>
     )

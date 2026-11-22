@@ -7,9 +7,9 @@ import {
     TableToolbar,
     TableToolbarScope,
 } from "@/components/business/table-toolbar"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Table,
     TableBody,
@@ -235,13 +235,15 @@ export function InquiryDeliveryAddressList({
                                                             "未填写电话"}
                                                     </span>
                                                     {occupied ? (
-                                                        <Badge variant="secondary">
-                                                            已占用
-                                                        </Badge>
+                                                        <StatusBadge
+                                                            tone="neutral"
+                                                            label="已占用"
+                                                        />
                                                     ) : incomplete ? (
-                                                        <Badge variant="warning">
-                                                            待补全
-                                                        </Badge>
+                                                        <StatusBadge
+                                                            tone="warning"
+                                                            label="待补全"
+                                                        />
                                                     ) : null}
                                                 </div>
                                                 <p className="mt-1 text-xs text-muted-foreground wrap-anywhere">

@@ -7,8 +7,8 @@ import {
     BusinessEmptyState,
     DataTable,
     DetailWorkspaceSection,
+    detailWorkspaceStyles,
 } from "@/components/business"
-import { ListWorkSurface } from "@/components/business/list-workspace"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
@@ -114,6 +114,12 @@ export function SupplierAccountsSection({
             headingId="supplier-portal-accounts-title"
             title="门户账号"
             width="full"
+            divider={false}
+            badge={
+                <span className="num rounded-sm bg-muted/80 px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+                    共 {query.data?.total ?? 0} 个账号
+                </span>
+            }
             subtitle="为供应商人员开通登录账号，按岗位分配维护或查看权限。"
             actions={
                 canCreate ? (
@@ -148,40 +154,31 @@ export function SupplierAccountsSection({
                     className="py-12"
                 />
             ) : (
-                <div data-slot="detail-inline-table">
-                    <ListWorkSurface
-                        ariaLabel="门户账号列表"
-                        className="rounded-none border-x-0"
-                        selectionBar={
-                            <span className="text-xs text-muted-foreground">
-                                共 {query.data?.total ?? 0} 个账号
-                            </span>
+                <div
+                    data-slot="detail-inline-table"
+                    className={detailWorkspaceStyles.dataTableWrapper}
+                >
+                    <DataTable
+                        id="supplier-portal-admin-accounts-table"
+                        data={query.data?.items ?? []}
+                        columns={columns}
+                        getRowId={(row) => row.account_id}
+                        pagination={pagination}
+                        onPaginationChange={setPagination}
+                        rowCount={query.data?.total ?? 0}
+                        showPagination={
+                            (query.data?.total ?? 0) > pagination.pageSize ||
+                            pagination.pageIndex > 0
                         }
-                        table={
-                            <DataTable
-                                id="supplier-portal-admin-accounts-table"
-                                data={query.data?.items ?? []}
-                                columns={columns}
-                                getRowId={(row) => row.account_id}
-                                pagination={pagination}
-                                onPaginationChange={setPagination}
-                                rowCount={query.data?.total ?? 0}
-                                showPagination={
-                                    (query.data?.total ?? 0) >
-                                        pagination.pageSize ||
-                                    pagination.pageIndex > 0
-                                }
-                                loading={query.isFetching}
-                                errorState={
-                                    query.isError ? (
-                                        <PortalError
-                                            error={query.error}
-                                            retry={() => void query.refetch()}
-                                            id="supplier-portal-admin-accounts-retry"
-                                        />
-                                    ) : undefined
-                                }
-                            />
+                        loading={query.isFetching}
+                        errorState={
+                            query.isError ? (
+                                <PortalError
+                                    error={query.error}
+                                    retry={() => void query.refetch()}
+                                    id="supplier-portal-admin-accounts-retry"
+                                />
+                            ) : undefined
                         }
                     />
                 </div>

@@ -1,3 +1,4 @@
+import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { parseSupplierTaxRates } from "@/lib/supplier-tax-rates"
 import { currentResourceFieldValues } from "@/features/master-data/lib/resource-fields"
 import { settlementCode } from "@/features/master-data/api/presentation"
@@ -206,6 +207,111 @@ function labeledValue(
         facts?.find((item) => item.label === label)?.value?.trim() ?? ""
     if (!value || value === "—" || value === "****") return ""
     return value
+}
+
+export type SupplierSensitiveFieldKey =
+    | "contactPhone"
+    | "address"
+    | "bankAccount"
+
+export type SupplierProfileSectionKey =
+    | "basic"
+    | "commercial"
+    | "contract"
+    | "invoice"
+
+export function supplierSectionForValidationError(
+    message: string,
+): SupplierProfileSectionKey {
+    if (
+        message.includes("签约主体") ||
+        message.includes("付款主体") ||
+        message.includes("结算") ||
+        message.includes("对账") ||
+        message.includes("付款条件") ||
+        message.includes("评分") ||
+        message.includes("供给能力")
+    ) {
+        return "commercial"
+    }
+    if (message.includes("合同") || message.includes("授权书")) {
+        return "contract"
+    }
+    if (
+        message.includes("联行号") ||
+        message.includes("开户银行") ||
+        message.includes("银行账号") ||
+        message.includes("税率")
+    ) {
+        return "invoice"
+    }
+    return "basic"
+}
+
+const SUPPLIER_CHANGE_FIELD_LABELS: ReadonlyArray<
+    readonly [SupplierFieldKey, string]
+> = [
+    ["name", "名称"],
+    ["company", masterDataCopy.fCompany],
+    ["creditCode", masterDataCopy.fCreditCode],
+    ["contactName", masterDataCopy.fContactName],
+    ["contactPhone", masterDataCopy.fContactPhone],
+    ["address", masterDataCopy.fAddress],
+    ["capability", masterDataCopy.fCapability],
+    ["settlement", masterDataCopy.fSettlement],
+    ["reconciliationCycle", masterDataCopy.fReconciliationCycle],
+    ["paymentTerm", masterDataCopy.fPaymentTerm],
+    ["businessCategory", masterDataCopy.fBusinessCategory],
+    ["signingEntity", masterDataCopy.fSigningEntity],
+    ["paymentEntity", masterDataCopy.fPaymentEntity],
+    ["initialScore", masterDataCopy.fInitialScore],
+    ["supplierRating", masterDataCopy.fSupplierRating],
+    ["currentScore", masterDataCopy.fCurrentScore],
+    ["contractNo", masterDataCopy.fContractNo],
+    ["contractValidFrom", masterDataCopy.fContractValidFrom],
+    ["contractValidTo", masterDataCopy.fContractValidTo],
+    ["contractFile", masterDataCopy.fContractFile],
+    ["authorizationValidFrom", masterDataCopy.fAuthorizationValidFrom],
+    ["authorizationValidTo", masterDataCopy.fAuthorizationValidTo],
+    ["authorizationFile", masterDataCopy.fAuthorizationFile],
+    ["qualification", masterDataCopy.fQualification],
+    ["foodLicense", masterDataCopy.fFoodLicense],
+    ["legalPersonIdCard", masterDataCopy.fLegalPersonIdCard],
+    ["taxNo", masterDataCopy.fTaxNo],
+    ["bankName", masterDataCopy.fBankName],
+    ["bankRoutingNumber", "联行号"],
+    ["bankAccount", masterDataCopy.fBankAccount],
+    ["invoiceType", masterDataCopy.fInvoiceType],
+    ["invoiceTaxRate", masterDataCopy.fInvoiceTaxRate],
+]
+
+/** 仅比较可维护的业务字段（含敏感字段清空/修改），供保存浮条与保存确认弹窗复用。 */
+export function supplierChangeSummary(
+    previous: SupplierEditorFormValues,
+    next: SupplierEditorFormValues,
+    context?: {
+        editedSensitive?: ReadonlySet<SupplierSensitiveFieldKey>
+        hasStoredSensitive?: Partial<Record<SupplierSensitiveFieldKey, boolean>>
+    },
+): string[] {
+    const changes: string[] = []
+    for (const [key, label] of SUPPLIER_CHANGE_FIELD_LABELS) {
+        if (next[key] !== previous[key]) {
+            changes.push(label)
+            continue
+        }
+        if (
+            (key === "contactPhone" ||
+                key === "address" ||
+                key === "bankAccount") &&
+            Boolean(context?.hasStoredSensitive?.[key]) &&
+            context?.editedSensitive?.has(key) &&
+            !next[key].trim()
+        ) {
+            changes.push(label)
+        }
+    }
+    return changes
 }
 
 export function createSupplierEditorDefaults(

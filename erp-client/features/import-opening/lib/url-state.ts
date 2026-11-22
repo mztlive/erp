@@ -65,6 +65,8 @@ export type ImportOpeningUrlState = {
     workItemId?: string
     confirmationScope?: ConfirmationScope
     queueContextId?: string
+    from?: string
+    returnTo?: string
     section: BatchSection
     issueCode?: ImportIssueCode
     issueObjectType?: ImportObjectCode
@@ -72,7 +74,7 @@ export type ImportOpeningUrlState = {
     page: number
 }
 
-const codec = createUrlStateCodec<ImportOpeningUrlState>([
+const listCodec = createUrlStateCodec<ImportOpeningUrlState>([
     {
         key: "environment",
         type: "custom",
@@ -95,6 +97,8 @@ const codec = createUrlStateCodec<ImportOpeningUrlState>([
         values: CONFIRMATION_SCOPE_VALUES,
     },
     { key: "queueContextId", type: "string" },
+    { key: "from", type: "string" },
+    { key: "returnTo", type: "string" },
     {
         key: "section",
         type: "enum",
@@ -114,5 +118,54 @@ const codec = createUrlStateCodec<ImportOpeningUrlState>([
     { key: "page", type: "number", defaultValue: 1 },
 ])
 
-export const parseImportOpeningSearchParams = codec.parse
-export const buildImportOpeningSearchParams = codec.build
+/** 独立批次详情路由 `/governance/imports/[batchId]` 专用 codec：隔离列表筛选与分页，不写入冗余 batchId。 */
+const detailCodec = createUrlStateCodec<ImportOpeningUrlState>([
+    {
+        key: "environment",
+        type: "custom",
+        parse: (get) => {
+            const raw = get("environment")
+            return raw === "PRODUCTION" || raw === "production"
+                ? "PRODUCTION"
+                : "VALIDATION"
+        },
+        build: (value) => (value === "VALIDATION" ? undefined : String(value)),
+    },
+    { key: "workItemId", type: "string" },
+    {
+        key: "confirmationScope",
+        type: "enum",
+        values: CONFIRMATION_SCOPE_VALUES,
+    },
+    { key: "queueContextId", type: "string" },
+    { key: "from", type: "string" },
+    { key: "returnTo", type: "string" },
+    {
+        key: "section",
+        type: "enum",
+        values: SECTION_VALUES,
+        defaultValue: "overview",
+        buildWhen: (value) => value !== "overview",
+    },
+    { key: "issueCode", type: "enum", values: ISSUE_CODE_VALUES },
+    {
+        key: "issueObject",
+        name: "issueObjectType",
+        type: "enum",
+        values: OBJECT_CODE_VALUES,
+    },
+    { key: "rowStatus", type: "enum", values: ROW_STATUS_VALUES },
+    { key: "page", type: "number", defaultValue: 1 },
+])
+
+export const parseImportOpeningSearchParams = listCodec.parse
+export const buildImportOpeningSearchParams = listCodec.build
+export const parseImportBatchDetailSearchParams = detailCodec.parse
+
+export function buildImportBatchDetailSearchParams(
+    state: ImportOpeningUrlState,
+): string {
+    return detailCodec.build(
+        state.section === "trial" ? state : { ...state, page: 1 },
+    )
+}

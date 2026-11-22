@@ -32,7 +32,11 @@ import { useAccountProfileQuery } from "@/features/auth/queries"
 import { PurchaseOrderCancelApprovalButton } from "@/features/purchase-orders/components/purchase-order-cancel-approval-button"
 import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
 import { isPurchaseOrderApprovalInProgress } from "@/features/purchase-orders/lib/purchase-order-approval"
-import type { PurchaseOrderDetailMode } from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
+import {
+    purchaseOrderDetailHref,
+    resolvePurchaseOrderBackContext,
+    type PurchaseOrderDetailMode,
+} from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
 import {
     PURCHASE_TYPE_LABEL,
     type PurchaseOrderCenterView,
@@ -55,7 +59,6 @@ export function PurchaseOrderDetailHeader({
     modeLabel,
     titleRef,
     router,
-    baseHref,
     canEdit,
     canSubmit,
     canVoid,
@@ -80,7 +83,6 @@ export function PurchaseOrderDetailHeader({
     modeLabel: string
     titleRef: React.RefObject<HTMLHeadingElement | null>
     router: ReturnType<typeof useRouter>
-    baseHref: string
     canEdit: boolean
     canSubmit: boolean
     canVoid: boolean
@@ -101,26 +103,14 @@ export function PurchaseOrderDetailHeader({
     tabs?: React.ReactNode
 }) {
     const [expenseOpen, setExpenseOpen] = React.useState(false)
+    const [moreOpen, setMoreOpen] = React.useState(false)
     const searchParams = useSearchParams()
-    const returnTo = searchParams.get("returnTo")
-    const internalReturn =
-        returnTo?.startsWith("/") && !returnTo.startsWith("//")
-            ? returnTo
-            : null
-    const returnPath = internalReturn?.split("?")[0]
-    const workspaceReturn =
-        searchParams.get("from") === "workspace" &&
-        (returnPath === "/workspace" ||
-            returnPath === "/workspace/tasks" ||
-            /^\/workspace\/tasks\/[^/]+$/.test(returnPath ?? ""))
-            ? internalReturn
-            : null
-    const paymentRequestReturn = internalReturn?.startsWith(
-        "/procurement/payment-requests/",
+    const backContext = resolvePurchaseOrderBackContext(searchParams)
+    const editHref = purchaseOrderDetailHref(
+        order.identity.purchaseOrderId,
+        searchParams,
+        { mode: "edit" },
     )
-        ? internalReturn
-        : null
-    const backTarget = workspaceReturn ?? paymentRequestReturn
     const profile = useAccountProfileQuery()
     const canCreateExpense =
         !profile.isError &&
@@ -138,6 +128,10 @@ export function PurchaseOrderDetailHeader({
 
     const isEditing = mode === "edit"
     const changeIsPrimary = !isEditing && continueChange && !canSubmit
+    const navigationMetaParts = [
+        backContext.sourceHint,
+        isEditing ? modeLabel : null,
+    ].filter(Boolean)
 
     return (
         <>
@@ -155,17 +149,18 @@ export function PurchaseOrderDetailHeader({
             <DetailWorkspaceChrome
                 back={{
                     id: "procurement-orders-detail-back",
-                    label: workspaceReturn
-                        ? "返回工作台"
-                        : paymentRequestReturn
-                          ? "返回付款申请"
-                          : "采购单列表",
+                    label: backContext.label,
+                    visibility: backContext.hasReturnTo
+                        ? "always"
+                        : "standalone-only",
                     onClick: () =>
-                        requestLeave(() =>
-                            router.push(backTarget ?? "/procurement/orders"),
-                        ),
+                        requestLeave(() => router.push(backContext.href)),
                 }}
-                navigationMeta={isEditing ? modeLabel : undefined}
+                navigationMeta={
+                    navigationMetaParts.length > 0
+                        ? navigationMetaParts.join(" · ")
+                        : undefined
+                }
                 headingProps={{
                     id: "procurement-orders-detail-heading",
                     ref: titleRef,
@@ -267,7 +262,7 @@ export function PurchaseOrderDetailHeader({
                         </>
                     ) : (
                         <>
-                            <Popover>
+                            <Popover open={moreOpen} onOpenChange={setMoreOpen}>
                                 <PopoverTrigger
                                     id="procurement-orders-detail-more-actions"
                                     render={
@@ -299,6 +294,9 @@ export function PurchaseOrderDetailHeader({
                                         <PurchaseOrderCorrespondence
                                             order={order}
                                             menuItem
+                                            onActionSelect={() =>
+                                                setMoreOpen(false)
+                                            }
                                         />
                                         {canCreateExpense ? (
                                             <Button
@@ -307,9 +305,10 @@ export function PurchaseOrderDetailHeader({
                                                 size="sm"
                                                 variant="ghost"
                                                 className={MENU_ITEM_CLASS}
-                                                onClick={() =>
+                                                onClick={() => {
+                                                    setMoreOpen(false)
                                                     setExpenseOpen(true)
-                                                }
+                                                }}
                                             >
                                                 <PlusIcon
                                                     data-icon="inline-start"
@@ -324,6 +323,9 @@ export function PurchaseOrderDetailHeader({
                                         <PurchaseOrderCancelApprovalButton
                                             order={order}
                                             onResult={onCancelResult}
+                                            onTriggerClick={() =>
+                                                setMoreOpen(false)
+                                            }
                                             triggerVariant="ghost"
                                             triggerClassName={
                                                 MENU_DANGER_ITEM_CLASS
@@ -338,7 +340,10 @@ export function PurchaseOrderDetailHeader({
                                                 className={
                                                     MENU_DANGER_ITEM_CLASS
                                                 }
-                                                onClick={onRequestVoid}
+                                                onClick={() => {
+                                                    setMoreOpen(false)
+                                                    onRequestVoid()
+                                                }}
                                             >
                                                 <Trash2Icon
                                                     data-icon="inline-start"
@@ -359,9 +364,7 @@ export function PurchaseOrderDetailHeader({
                                     className={
                                         detailWorkspaceStyles.subtleButton
                                     }
-                                    onClick={() =>
-                                        router.push(`${baseHref}?mode=edit`)
-                                    }
+                                    onClick={() => router.push(editHref)}
                                 >
                                     <FilePenLineIcon
                                         data-icon="inline-start"

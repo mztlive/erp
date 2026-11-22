@@ -34,13 +34,15 @@ function invoiceProgressBadge(raw: string): {
     return { label: "未收票", tone: "neutral" }
 }
 
-/** 票款聚焦关联付款申请与财务付款核销记录；口径说明收口为紧凑一行，不与顶部金额带重复堆大号 KPI。 */
+/** 票款聚焦关联付款申请与财务付款核销记录；顶部金额摘要已展示 3 项 KPI，此处仅保留收票进度与口径说明。 */
 export function PurchaseOrderDetailPayableSection({
     order,
     costMasked,
+    hasHeaderPrimaryAction = false,
 }: {
     order: PurchaseOrderCenterView
     costMasked: boolean
+    hasHeaderPrimaryAction?: boolean
 }) {
     const [requestOpen, setRequestOpen] = useState(false)
     const profile = useAccountProfileQuery()
@@ -80,48 +82,11 @@ export function PurchaseOrderDetailPayableSection({
     return (
         <>
             <section
-                aria-label="采购票款摘要"
+                aria-label="采购票款口径与收票进度"
                 className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-5 pb-1 text-xs text-muted-foreground"
             >
                 <span className="inline-flex items-center gap-1.5">
-                    <span>
-                        已付并核销{" "}
-                        <span className="num text-body-compact font-medium text-foreground">
-                            {amount(summary.paidAllocatedAmount)}
-                        </span>
-                    </span>
-                    <DetailHint
-                        id="purchase-order-payment-hint"
-                        label="付款核销"
-                    >
-                        仅统计已核销到本单的付款金额，审批中的付款不计入。
-                    </DetailHint>
-                </span>
-                <span
-                    aria-hidden="true"
-                    className="select-none text-muted-foreground/40"
-                >
-                    ·
-                </span>
-                <span>
-                    待付余额{" "}
-                    <span className="num text-body-compact font-medium text-foreground">
-                        {amount(summary.payableOpenAmount)}
-                    </span>
-                </span>
-                <span
-                    aria-hidden="true"
-                    className="select-none text-muted-foreground/40"
-                >
-                    ·
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                    <span>
-                        已收票并核销{" "}
-                        <span className="num text-body-compact font-medium text-foreground">
-                            {amount(summary.purchaseInvoiceAllocatedAmount)}
-                        </span>
-                    </span>
+                    <span>进项票进度</span>
                     <StatusBadge
                         tone={invoiceStatus.tone}
                         label={invoiceStatus.label}
@@ -132,6 +97,21 @@ export function PurchaseOrderDetailPayableSection({
                         label="收票核销"
                     >
                         仅统计已核销到本单的采购发票金额。
+                    </DetailHint>
+                </span>
+                <span
+                    aria-hidden="true"
+                    className="select-none text-muted-foreground/40"
+                >
+                    ·
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                    <span>付款核销口径</span>
+                    <DetailHint
+                        id="purchase-order-payment-hint"
+                        label="付款核销"
+                    >
+                        仅统计已核销到本单的付款金额，审批中的付款不计入。
                     </DetailHint>
                 </span>
             </section>
@@ -164,8 +144,15 @@ export function PurchaseOrderDetailPayableSection({
                         ) ? (
                             <Button
                                 id="purchase-order-payment-request-create"
+                                variant={
+                                    hasHeaderPrimaryAction ? "ghost" : "default"
+                                }
                                 size="sm"
-                                className="px-3.5"
+                                className={
+                                    hasHeaderPrimaryAction
+                                        ? detailWorkspaceStyles.subtleButton
+                                        : "px-3.5"
+                                }
                                 onClick={() => setRequestOpen(true)}
                             >
                                 申请采购付款

@@ -1,7 +1,5 @@
 "use client"
 
-import { PermissionGuard } from "@/features/auth/components/permission-guard"
-
 import * as React from "react"
 import { FilePenLineIcon, UserRoundCogIcon } from "lucide-react"
 import { useStore } from "@tanstack/react-form"
@@ -9,31 +7,37 @@ import {
     detailWorkspaceStyles,
     FormalActionConfirmDialog,
 } from "@/components/business"
-import { useAppForm } from "@/components/form"
 import { MultiOptionCombobox } from "@/components/business/multi-option-combobox"
-import { Button } from "@/components/ui/button"
+import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
-    DialogHeader,
-    DialogTitle,
     DialogDescription,
     DialogFooter,
+    DialogHeader,
+    DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { toast } from "@/components/ui/toast"
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
-import { hasPermission } from "@/lib/permissions"
 import { getErrorMessage } from "@/lib/api/errors"
 import { classifyFormalCommandError } from "@/lib/formal-command"
+import { hasPermission } from "@/lib/permissions"
 import { inquiryPath } from "../api"
 import { useInquiryCommand } from "../hooks/use-inquiry-command"
-import type { ProcurementInquiry, SalesInquiry } from "../types"
+import {
+    INQUIRY_STATUS_LABEL,
+    INQUIRY_STATUS_TONE,
+    type ProcurementInquiry,
+    type SalesInquiry,
+} from "../types"
 import type {
     InquiryPublishContext,
     InquiryTask,
 } from "./inquiry-feedback-editor"
-import { INQUIRY_STATUS_LABEL } from "../types"
 
 type InquiryAction =
     | "submit"
@@ -44,6 +48,7 @@ type InquiryAction =
     | "publish"
     | "renew"
     | "reassign"
+
 const ACTION_LABEL: Record<InquiryAction, string> = {
     submit: "提交采购",
     accept: "接受本轮结果",
@@ -53,6 +58,13 @@ const ACTION_LABEL: Record<InquiryAction, string> = {
     publish: "发布本轮反馈",
     renew: "发起新一轮报价",
     reassign: "改派责任采购",
+}
+
+export type InquiryActionsRenderSlots = {
+    primaryAction: React.ReactNode
+    secondaryActions: React.ReactNode
+    assignmentActions: React.ReactNode
+    alerts: React.ReactNode
 }
 
 export function InquiryActions({
@@ -84,12 +96,7 @@ export function InquiryActions({
     beforePublish?: () => Promise<InquiryPublishContext | null>
     onPublishingChange?: (publishing: boolean) => void
     workspace?: boolean
-    renderActions?: (
-        primaryActions: React.ReactNode,
-        secondaryActions: React.ReactNode,
-        assignmentActions: React.ReactNode,
-        alerts: React.ReactNode,
-    ) => React.ReactNode
+    renderActions?: (slots: InquiryActionsRenderSlots) => React.ReactNode
 }) {
     const [action, setAction] = React.useState<InquiryAction | null>(null)
     const [error, setError] = React.useState<string | null>(null)
@@ -198,6 +205,7 @@ export function InquiryActions({
                     `${inquiryPath(procurement, inquiry.id)}/${action}`,
                     data,
                 )
+                const completedAction = action
                 setAction(null)
                 form.reset({
                     ...value,
@@ -207,6 +215,10 @@ export function InquiryActions({
                     fee_ids: [],
                 })
                 localStorage.removeItem(storageKey)
+                toast.add({
+                    title: `${ACTION_LABEL[completedAction]}已完成`,
+                    type: "success",
+                })
                 onSaved()
             } catch (failure) {
                 const reason = getErrorMessage(
@@ -274,14 +286,39 @@ export function InquiryActions({
         permissionForAction(item).every((code) =>
             hasPermission(permissions, code),
         )
+    const isPrimaryWorkflowAction = (item: InquiryAction) =>
+        item === "submit" ||
+        item === "accept" ||
+        item === "publish" ||
+        item === "renew"
+
     const renderButton = (item: InquiryAction) => {
+        const isPrimary = isPrimaryWorkflowAction(item)
         const quiet =
-            workspace && ["close", "reassign", "supplement"].includes(item)
+            workspace &&
+            ["close", "reassign", "supplement", "reinquire"].includes(item)
+        const actionDisabled =
+            disabled ||
+            (feedbackDirty && item !== "publish") ||
+            (item === "publish" && !beforePublish) ||
+            isSubmitting ||
+            ((item === "accept" || item === "reinquire") &&
+                feedbackRound != null &&
+                feedbackRound !== inquiry.feedback_round) ||
+            command.isPending ||
+            command.unresolved ||
+            !command.ready ||
+            (procurement && !task)
+
+        // 当需求存在未保存修改时，底部 SaveDock 的「保存需求」为实心主蓝，
+        // 顶栏「提交采购」退让为 outline，杜绝“保存降级而蓝色主按钮灰掉不可点”的主次倒置。
+        const demoteSubmitWhileDirty = item === "submit" && disabled
         const variant = quiet
             ? "ghost"
-            : ["close", "reassign", "supplement", "reinquire"].includes(item)
-              ? "outline"
-              : "default"
+            : isPrimary && !demoteSubmitWhileDirty
+              ? "default"
+              : "outline"
+
         return (
             <PermissionGuard key={item} permission={permissionForAction(item)}>
                 <Button
@@ -294,21 +331,11 @@ export function InquiryActions({
                             ? item === "close"
                                 ? detailWorkspaceStyles.quietDangerButton
                                 : detailWorkspaceStyles.quietButton
-                            : undefined
+                            : isPrimary && !demoteSubmitWhileDirty && workspace
+                              ? "px-3.5"
+                              : undefined
                     }
-                    disabled={
-                        disabled ||
-                        (feedbackDirty && item !== "publish") ||
-                        (item === "publish" && !beforePublish) ||
-                        isSubmitting ||
-                        ((item === "accept" || item === "reinquire") &&
-                            feedbackRound != null &&
-                            feedbackRound !== inquiry.feedback_round) ||
-                        command.isPending ||
-                        command.unresolved ||
-                        !command.ready ||
-                        (procurement && !task)
-                    }
+                    disabled={actionDisabled}
                     title={
                         disabled || (feedbackDirty && item !== "publish")
                             ? (disabledReason ?? "请先保存当前修改后再操作")
@@ -340,6 +367,20 @@ export function InquiryActions({
             </PermissionGuard>
         )
     }
+
+    const primaryItems = actions.filter(
+        (item) => isPrimaryWorkflowAction(item) && canRunAction(item),
+    )
+    const secondaryItems = actions.filter(
+        (item) =>
+            (item === "reinquire" || item === "close") && canRunAction(item),
+    )
+    const assignmentItems = actions.filter(
+        (item) =>
+            (item === "reassign" || item === "supplement") &&
+            canRunAction(item),
+    )
+
     const alerts = (
         <>
             {command.unresolved && (
@@ -372,11 +413,12 @@ export function InquiryActions({
             )}
         </>
     )
+
     return (
         <div
             className={
                 workspace
-                    ? "flex min-h-0 min-w-0 flex-1 flex-col"
+                    ? "min-w-0"
                     : renderActions
                       ? "flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden"
                       : "space-y-3"
@@ -384,26 +426,21 @@ export function InquiryActions({
         >
             {!workspace && alerts}
             {renderActions ? (
-                renderActions(
-                    actions
-                        .filter(
-                            (item) =>
-                                item !== "close" &&
-                                item !== "reassign" &&
-                                item !== "supplement",
-                        )
-                        .map(renderButton),
-                    actions
-                        .filter((item) => item === "close")
-                        .map(renderButton),
-                    actions
-                        .filter(
-                            (item) =>
-                                item === "reassign" || item === "supplement",
-                        )
-                        .map(renderButton),
-                    workspace ? alerts : null,
-                )
+                renderActions({
+                    primaryAction:
+                        primaryItems.length > 0 ? (
+                            <>{primaryItems.map(renderButton)}</>
+                        ) : undefined,
+                    secondaryActions:
+                        secondaryItems.length > 0 ? (
+                            <>{secondaryItems.map(renderButton)}</>
+                        ) : undefined,
+                    assignmentActions:
+                        assignmentItems.length > 0 ? (
+                            <>{assignmentItems.map(renderButton)}</>
+                        ) : undefined,
+                    alerts: workspace ? alerts : null,
+                })
             ) : (
                 <div className="flex flex-wrap gap-2">
                     {actions.map(renderButton)}
@@ -422,7 +459,7 @@ export function InquiryActions({
                 layout="compact"
                 fromStatus={{
                     label: INQUIRY_STATUS_LABEL[inquiry.status],
-                    tone: "neutral",
+                    tone: INQUIRY_STATUS_TONE[inquiry.status],
                 }}
                 toStatus={{ label: "已关闭", tone: "neutral" }}
                 summary={[inquiry.inquiry_no, inquiry.customer_name]}

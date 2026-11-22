@@ -1,12 +1,14 @@
 "use client"
 
 import Link from "next/link"
-import { Badge } from "@/components/ui/badge"
+import { ArrowUpRightIcon } from "lucide-react"
+
 import { DescriptionList } from "@/components/ui/description-list"
 import {
     Table,
     TableBody,
     TableCell,
+    TableFooter,
     TableHead,
     TableHeader,
     TableRow,
@@ -16,8 +18,10 @@ import {
     detailWorkspaceStyles,
     MoneyValue,
 } from "@/components/business"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import type { SupplierOrderDetailView } from "@/features/supplier-orders/types"
 import { codeVersion } from "@/features/supplier-orders/types"
+import { hasPermission } from "@/lib/permissions"
 import { Item } from "@/features/supplier-orders/components/supplier-order-preview-center-section-parts"
 
 export function OverviewSection({
@@ -29,6 +33,12 @@ export function OverviewSection({
     purchaseOrderId?: string
     purchaseOrderNo?: string
 }) {
+    const profile = useAccountProfileQuery()
+    const canReadPurchaseOrder = hasPermission(
+        profile.data?.permissions,
+        "purchase_order:detail",
+    )
+
     return (
         <DetailWorkspaceSection
             title="概览"
@@ -38,7 +48,10 @@ export function OverviewSection({
             <DescriptionList className="gap-y-3">
                 <Item label="履约链" value="ERP 自动供应商履约" />
                 <Item label="供应商" value={order.supplierName} />
-                <Item label="连接" value={order.connectionCode} />
+                <Item
+                    label="连接"
+                    value={<span className="num">{order.connectionCode}</span>}
+                />
                 <Item
                     label="供给数据版本"
                     value={
@@ -51,13 +64,21 @@ export function OverviewSection({
                     label="来源采购单"
                     value={
                         purchaseOrderId && purchaseOrderNo ? (
-                            <Link
-                                id="supplier-order-overview-open-purchase"
-                                className="num text-primary underline underline-offset-4"
-                                href={`/procurement/purchase-orders/${encodeURIComponent(purchaseOrderId)}`}
-                            >
-                                {purchaseOrderNo}
-                            </Link>
+                            canReadPurchaseOrder ? (
+                                <Link
+                                    id="supplier-order-overview-open-purchase"
+                                    className="num inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
+                                    href={`/procurement/orders/${encodeURIComponent(purchaseOrderId)}`}
+                                >
+                                    <span>{purchaseOrderNo}</span>
+                                    <ArrowUpRightIcon
+                                        className="size-3.5 shrink-0"
+                                        aria-hidden="true"
+                                    />
+                                </Link>
+                            ) : (
+                                <span className="num">{purchaseOrderNo}</span>
+                            )
                         ) : (
                             <span className="text-muted-foreground">
                                 未关联采购来源
@@ -82,12 +103,21 @@ export function ItemsSection({
     totalQuantity: string
     totalCostGross: string | null
 }) {
+    const distinctUnits = Array.from(
+        new Set(items.map((item) => item.unit.trim()).filter(Boolean)),
+    )
+    const singleUnit = distinctUnits.length === 1 ? distinctUnits[0] : null
+
     return (
         <DetailWorkspaceSection
             title="商品明细"
+            width="full"
             subtitle="一条商品明细只属于一个供应商子订单；下单记录不可改供应商"
         >
-            <div className={detailWorkspaceStyles.dataTableWrapper}>
+            <div
+                data-slot="detail-inline-table"
+                className={detailWorkspaceStyles.dataTableWrapper}
+            >
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -110,12 +140,6 @@ export function ItemsSection({
                                     <div className="num text-xs text-muted-foreground">
                                         {item.skuCode}
                                     </div>
-                                    <Badge
-                                        variant="secondary"
-                                        className="mt-1 text-xs"
-                                    >
-                                        下单记录不可变
-                                    </Badge>
                                 </TableCell>
                                 <TableCell className="num">
                                     {item.quantity} {item.unit}
@@ -133,7 +157,6 @@ export function ItemsSection({
                                         <MoneyValue
                                             display="exact"
                                             value={item.unitCostGross}
-                                            taxBasis="gross"
                                         />
                                     ) : (
                                         <span className="text-muted-foreground">
@@ -143,19 +166,23 @@ export function ItemsSection({
                                 </TableCell>
                             </TableRow>
                         ))}
-                        {items.length > 0 ? (
-                            <TableRow className="border-t-2 border-border font-medium">
+                    </TableBody>
+                    {items.length > 0 ? (
+                        <TableFooter>
+                            <TableRow className="font-medium">
                                 <TableCell>合计</TableCell>
                                 <TableCell className="num">
-                                    {totalQuantity} {items[0].unit}
+                                    {singleUnit
+                                        ? `${totalQuantity} ${singleUnit}`
+                                        : `共 ${items.length} 项（多单位）`}
                                 </TableCell>
                                 <TableCell />
                                 <TableCell />
                                 <TableCell className="text-right">
                                     {totalCostGross != null ? (
                                         <MoneyValue
+                                            display="exact"
                                             value={totalCostGross}
-                                            taxBasis="gross"
                                         />
                                     ) : (
                                         <span className="text-muted-foreground">
@@ -164,8 +191,8 @@ export function ItemsSection({
                                     )}
                                 </TableCell>
                             </TableRow>
-                        ) : null}
-                    </TableBody>
+                        </TableFooter>
+                    ) : null}
                 </Table>
             </div>
         </DetailWorkspaceSection>

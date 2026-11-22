@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { createPortal } from "react-dom"
 import { CheckIcon, PlusIcon, ReceiptTextIcon, Trash2Icon } from "lucide-react"
 import { useStore } from "@tanstack/react-form"
 import { useQueryClient } from "@tanstack/react-query"
@@ -20,9 +19,10 @@ import {
     validateFeedbackFees,
 } from "../lib/feedback-fee-validation"
 import { InquiryFeedbackResults } from "./inquiry-feedback-results"
-import { MoneyValue } from "@/components/business"
+import { MoneyValue, detailWorkspaceStyles } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import {
     Dialog,
     DialogContent,
@@ -62,8 +62,17 @@ export type InquiryPublishContext = {
     task_version: number
 }
 export type InquiryFeedbackEditorHandle = {
+    save: () => void
     saveForPublish: () => Promise<InquiryPublishContext | null>
     adoptQuote: (quote: InternalQuote) => boolean
+}
+export type InquiryFeedbackEditorStatus = {
+    dirty: boolean
+    saving: boolean
+    disabled: boolean
+    completeCount: number
+    totalCount: number
+    saved: boolean
 }
 function newFee(): InquiryFee {
     return {
@@ -106,9 +115,10 @@ export function InquiryFeedbackEditor({
     userId,
     onSaved,
     onDirtyChange,
+    onStatusChange,
     footerActions,
     onInternalQuote,
-    footerContainer,
+    embedded = false,
 }: {
     ref?: React.Ref<InquiryFeedbackEditorHandle>
     publishing?: boolean
@@ -117,9 +127,10 @@ export function InquiryFeedbackEditor({
     userId: string
     onSaved: () => void
     onDirtyChange: (dirty: boolean) => void
+    onStatusChange?: (status: InquiryFeedbackEditorStatus) => void
     footerActions?: React.ReactNode
     onInternalQuote?: (lineId: string) => void
-    footerContainer?: HTMLElement | null
+    embedded?: boolean
 }) {
     const key = inquiryStorageKey(userId, `${inquiry.id}:${task.id}:feedback`)
     const [initial, setInitial] = React.useState<{
@@ -170,9 +181,10 @@ export function InquiryFeedbackEditor({
             userId={userId}
             onSaved={onSaved}
             onDirtyChange={onDirtyChange}
+            onStatusChange={onStatusChange}
             footerActions={footerActions}
             onInternalQuote={onInternalQuote}
-            footerContainer={footerContainer}
+            embedded={embedded}
         />
     ) : (
         <p role="status">正在恢复采购输入…</p>
@@ -189,9 +201,10 @@ function FeedbackEditorContent({
     userId,
     onSaved,
     onDirtyChange,
+    onStatusChange,
     footerActions,
     onInternalQuote,
-    footerContainer,
+    embedded,
 }: {
     ref?: React.Ref<InquiryFeedbackEditorHandle>
     publishing: boolean
@@ -207,15 +220,19 @@ function FeedbackEditorContent({
     userId: string
     onSaved: () => void
     onDirtyChange: (dirty: boolean) => void
+    onStatusChange?: (status: InquiryFeedbackEditorStatus) => void
     footerActions?: React.ReactNode
     onInternalQuote?: (lineId: string) => void
-    footerContainer?: HTMLElement | null
+    embedded: boolean
 }) {
     const client = useQueryClient()
     const command = useInquiryCommand(userId, inquiry.id)
     const publishSave = React.useRef(false)
     const savedVersion = React.useRef<number | null>(null)
     const [error, setError] = React.useState<string | null>(null)
+    const [dirty, setDirty] = React.useState(() =>
+        Boolean(readInquiryLocalValue(storageKey)),
+    )
     const [saved, setSaved] = React.useState(() => {
         const work = inquiry.feedback_work.find(
             (item) =>
@@ -280,6 +297,7 @@ function FeedbackEditorContent({
         listeners: {
             onChange: ({ formApi }) => {
                 setSaved(false)
+                setDirty(true)
                 if (feeFocus.current) setError(null)
                 onDirtyChange(true)
                 try {
@@ -319,10 +337,14 @@ function FeedbackEditorContent({
                     // 服务端保存已成功，本地清理失败不改变提交结果。
                 }
                 setSaved(true)
+                setDirty(false)
                 setFeesOpen(false)
                 setEditingFeeId(null)
                 onDirtyChange(false)
-                if (!publishSave.current) onSaved()
+                if (!publishSave.current) {
+                    toast.add({ title: "处理进度已保存", type: "success" })
+                    onSaved()
+                }
             } catch (failure) {
                 setError(
                     getErrorMessage(
@@ -430,7 +452,9 @@ function FeedbackEditorContent({
         ownCommandRevision,
     ])
     React.useEffect(() => {
-        onDirtyChange(Boolean(readInquiryLocalValue(storageKey)))
+        const localDirty = Boolean(readInquiryLocalValue(storageKey))
+        setDirty(localDirty)
+        onDirtyChange(localDirty)
         return () => onDirtyChange(false)
     }, [storageKey, onDirtyChange])
     React.useEffect(() => {
@@ -440,6 +464,7 @@ function FeedbackEditorContent({
             const unchanged =
                 JSON.stringify(feedbackRequestData(form.state.values)) ===
                 JSON.stringify(resolved.body.data)
+            setDirty(!unchanged)
             onDirtyChange(!unchanged)
             setSaved(unchanged)
             setOwnCommandRevision((value) => value + 1)
@@ -459,7 +484,28 @@ function FeedbackEditorContent({
         command.isPending ||
         !command.ready ||
         command.unresolved
+    React.useEffect(() => {
+        onStatusChange?.({
+            dirty,
+            saving: command.isPending,
+            disabled,
+            completeCount,
+            totalCount: values.lines.length,
+            saved,
+        })
+    }, [
+        command.isPending,
+        completeCount,
+        dirty,
+        disabled,
+        onStatusChange,
+        saved,
+        values.lines.length,
+    ])
     React.useImperativeHandle(ref, () => ({
+        save() {
+            if (!disabled) void form.handleSubmit()
+        },
         adoptQuote(quote) {
             if (disabled || publishSave.current) return false
             const demand = inquiry.draft.lines.find(
@@ -550,9 +596,9 @@ function FeedbackEditorContent({
     const currentWork = inquiry.feedback_work.find(
         (work) => !work.frozen && work.actor_id === userId,
     )?.data
-    const footer = (
-        <div className="flex flex-wrap items-center justify-end gap-3 border-t bg-background py-4">
-            <p className="mr-auto text-xs text-muted-foreground">
+    const embeddedFooter = embedded ? (
+        <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border/60 bg-card py-3">
+            <p className="num mr-auto text-xs text-muted-foreground">
                 已填写完整 {completeCount} / {values.lines.length} 项 ·{" "}
                 {saved
                     ? "处理进度已保存，发布后销售可见"
@@ -562,14 +608,14 @@ function FeedbackEditorContent({
                 id="procurement-inquiry-save-feedback"
                 type="submit"
                 form="procurement-inquiry-feedback-form"
-                variant="outline"
+                variant={dirty ? "default" : "outline"}
                 disabled={disabled}
             >
                 {command.isPending ? "正在保存…" : "保存处理进度"}
             </Button>
             {footerActions}
         </div>
-    )
+    ) : null
     return (
         <form
             id="procurement-inquiry-feedback-form"
@@ -687,6 +733,7 @@ function FeedbackEditorContent({
                                         taskVersion.current = task.version
                                         setConflict(false)
                                         setError(null)
+                                        setDirty(true)
                                         onDirtyChange(true)
                                     } catch {
                                         setError(
@@ -753,13 +800,25 @@ function FeedbackEditorContent({
                             validationRequest={validationRequest}
                             onInternalQuote={onInternalQuote}
                             disabled={disabled}
-                            selectionActions={
+                            toolbarSummary={
+                                <span className="num text-xs text-muted-foreground">
+                                    已填写完整 {completeCount} /{" "}
+                                    {values.lines.length} 项 ·{" "}
+                                    {saved
+                                        ? "处理进度已保存，发布后销售可见"
+                                        : "尚未保存，发布时自动保存"}
+                                </span>
+                            }
+                            toolbarActions={
                                 <Button
                                     id="procurement-feedback-fees-open"
                                     ref={feesTrigger}
                                     type="button"
                                     variant="outline"
                                     size="sm"
+                                    className={
+                                        detailWorkspaceStyles.subtleButton
+                                    }
                                     disabled={
                                         command.isPending || !command.ready
                                     }
@@ -769,8 +828,15 @@ function FeedbackEditorContent({
                                         setFeesOpen(true)
                                     }}
                                 >
-                                    <ReceiptTextIcon aria-hidden="true" />
-                                    额外成本（{values.fees.length}）
+                                    <ReceiptTextIcon
+                                        aria-hidden="true"
+                                        data-icon="inline-start"
+                                    />
+                                    额外成本（
+                                    <span className="num">
+                                        {values.fees.length}
+                                    </span>
+                                    ）
                                 </Button>
                             }
                         />
@@ -1008,9 +1074,7 @@ function FeedbackEditorContent({
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
-                {footerContainer
-                    ? createPortal(footer, footerContainer)
-                    : footer}
+                {embeddedFooter}
             </fieldset>
         </form>
     )

@@ -2,23 +2,37 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { PackageIcon, TruckIcon } from "lucide-react"
+import {
+    BanIcon,
+    CheckSquareIcon,
+    PackageIcon,
+    SearchIcon,
+    TriangleAlertIcon,
+    TruckIcon,
+} from "lucide-react"
 import { useStore } from "@tanstack/react-form"
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
 import {
-    BusinessTableFrame,
+    BusinessStatusBadge,
     DataTable,
+    detailWorkspaceStyles,
+    FormalActionConfirmDialog,
     MoneyValue,
     QuantityValue,
 } from "@/components/business"
+import {
+    TableToolbar,
+    TableToolbarScope,
+} from "@/components/business/table-toolbar"
 import { useAppFilterForm } from "@/components/form"
-import { Badge } from "@/components/ui/badge"
-import { useAccountProfileQuery } from "@/features/auth/queries"
-import { hasPermission } from "@/lib/permissions"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
-import { compactFixed } from "@/lib/fixed-decimal"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { compactFixed } from "@/lib/fixed-decimal"
+import { hasPermission } from "@/lib/permissions"
 import type { BatchRow, BatchRowStatus, BatchView } from "../../api/batch"
 import { catalogUnitLabel } from "../../api/catalog"
 import { CatalogSourceImage } from "../catalog/catalog-source-image"
@@ -33,6 +47,9 @@ type BatchReviewTableProps = {
     onSelectionChange: (ids: string[]) => void
     onEdit: (row: BatchRow) => void
     onReconcile: () => void
+    onExcludeSelected?: (ids: string[]) => Promise<void>
+    excluding?: boolean
+    reconciling?: boolean
     busy: boolean
     canWrite: boolean
     canReadCost: boolean
@@ -42,17 +59,17 @@ const statusMeta: Record<
     BatchRowStatus,
     {
         label: string
-        variant: "secondary" | "warning" | "success" | "destructive" | "info"
+        tone: "neutral" | "warning" | "success" | "destructive" | "info"
     }
 > = {
-    DRAFT: { label: "待补齐", variant: "warning" },
-    READY: { label: "可入库", variant: "success" },
-    PROCESSING: { label: "处理中", variant: "info" },
-    SUCCEEDED: { label: "入库成功", variant: "success" },
-    FAILED: { label: "明确失败", variant: "destructive" },
-    UNKNOWN: { label: "结果待核实", variant: "warning" },
-    SKIPPED: { label: "已完成跳过", variant: "secondary" },
-    EXCLUDED: { label: "已排除", variant: "secondary" },
+    DRAFT: { label: "待补齐", tone: "warning" },
+    READY: { label: "可入库", tone: "success" },
+    PROCESSING: { label: "处理中", tone: "info" },
+    SUCCEEDED: { label: "入库成功", tone: "success" },
+    FAILED: { label: "明确失败", tone: "destructive" },
+    UNKNOWN: { label: "结果待核实", tone: "warning" },
+    SKIPPED: { label: "已完成跳过", tone: "neutral" },
+    EXCLUDED: { label: "已排除", tone: "neutral" },
 }
 
 /** 提交只接受本次已就绪且未执行的确认项；待核实项只查原结果。 */
@@ -98,13 +115,16 @@ function RowStatus({
     const stale = needsRecheck && row.status === "READY" && !row.operation_id
     return (
         <div className="space-y-1">
-            <Badge variant={stale ? "secondary" : state.variant}>
-                {row.status === "READY" && row.operation_id
-                    ? "等待入库"
-                    : stale
-                      ? "待重新核对"
-                      : state.label}
-            </Badge>
+            <BusinessStatusBadge
+                tone={stale ? "neutral" : state.tone}
+                label={
+                    row.status === "READY" && row.operation_id
+                        ? "等待入库"
+                        : stale
+                          ? "待重新核对"
+                          : state.label
+                }
+            />
             {row.status === "UNKNOWN" ? (
                 <p className="text-xs text-warning-soft-foreground">
                     先查询原操作结果，不能直接重提。
@@ -226,6 +246,9 @@ export function BatchReviewTable({
     onSelectionChange,
     onEdit,
     onReconcile,
+    onExcludeSelected,
+    excluding = false,
+    reconciling = false,
     busy,
     canWrite,
     canReadCost,
@@ -240,8 +263,9 @@ export function BatchReviewTable({
         "supplier_offering:detail",
     )
     const prefix = `supplier-catalog-batch-${mode.toLowerCase()}`
+    const [excludeConfirmOpen, setExcludeConfirmOpen] = React.useState(false)
     const form = useAppFilterForm({
-        defaultValues: { status: "ALL", reason: "ALL" },
+        defaultValues: { keyword: "", status: "ALL", reason: "ALL" },
     })
     const filters = useStore(form.store, (state) => state.values)
     const [pagination, setPagination] = React.useState<PaginationState>({
@@ -270,27 +294,48 @@ export function BatchReviewTable({
     const allDropshipOnly =
         baseRows.length > 0 &&
         baseRows.every((row) => !row.terms?.bulk_supply_price_gross)
+    const trimmedKeyword = filters.keyword.trim().toLowerCase()
     const hasActiveFilters =
-        filters.status !== "ALL" || filters.reason !== "ALL"
-    const showFilters =
+        trimmedKeyword !== "" ||
+        filters.status !== "ALL" ||
+        filters.reason !== "ALL"
+    const showStatusSelect =
         mode === "RECOVERY" ||
         new Set(baseRows.map((row) => row.status)).size > 1 ||
-        reasons.length > 0 ||
-        hasActiveFilters
+        filters.status !== "ALL"
+    const showFilters = baseRows.length > 0 || hasActiveFilters
     const filteredRows = React.useMemo(
         () =>
-            baseRows.filter(
-                (row) =>
-                    (filters.status === "ALL" ||
-                        row.status === filters.status) &&
-                    (filters.reason === "ALL" ||
-                        rowMessages(row).includes(filters.reason)),
-            ),
-        [baseRows, filters],
+            baseRows.filter((row) => {
+                if (filters.status !== "ALL" && row.status !== filters.status)
+                    return false
+                if (
+                    filters.reason !== "ALL" &&
+                    !rowMessages(row).includes(filters.reason)
+                )
+                    return false
+                if (trimmedKeyword) {
+                    const haystacks = [
+                        row.source.name,
+                        row.source.specification,
+                        row.source.spec_id,
+                        row.mapping.company_name ?? "",
+                        row.source.category_name ?? "",
+                    ]
+                    if (
+                        !haystacks.some((text) =>
+                            text.toLowerCase().includes(trimmedKeyword),
+                        )
+                    )
+                        return false
+                }
+                return true
+            }),
+        [baseRows, filters.status, filters.reason, trimmedKeyword],
     )
     React.useEffect(() => {
         setPagination((current) => ({ ...current, pageIndex: 0 }))
-    }, [filters.status, filters.reason, mode])
+    }, [filters.keyword, filters.status, filters.reason, mode])
     const pagedRows = filteredRows.slice(
         pagination.pageIndex * pagination.pageSize,
         (pagination.pageIndex + 1) * pagination.pageSize,
@@ -310,18 +355,29 @@ export function BatchReviewTable({
             ),
         [view.rows, view.batch.preview_version, mode],
     )
-    const rowSelection = React.useMemo(
-        () =>
-            Object.fromEntries(
-                selectedIds
-                    .filter((id) => selectableIds.has(id))
-                    .map((id) => [id, true]),
-            ),
+    const selectedSelectableIds = React.useMemo(
+        () => selectedIds.filter((id) => selectableIds.has(id)),
         [selectedIds, selectableIds],
     )
-    const selectedCount = selectedIds.filter((id) =>
-        selectableIds.has(id),
-    ).length
+    const selectedIdSet = React.useMemo(
+        () => new Set(selectedSelectableIds),
+        [selectedSelectableIds],
+    )
+    const selectableFilteredIds = React.useMemo(
+        () =>
+            filteredRows
+                .filter((row) => selectableIds.has(row.source.id))
+                .map((row) => row.source.id),
+        [filteredRows, selectableIds],
+    )
+    const allFilteredSelected =
+        selectableFilteredIds.length > 0 &&
+        selectableFilteredIds.every((id) => selectedIdSet.has(id))
+    const rowSelection = React.useMemo(
+        () => Object.fromEntries(selectedSelectableIds.map((id) => [id, true])),
+        [selectedSelectableIds],
+    )
+    const selectedCount = selectedSelectableIds.length
     const columns = React.useMemo<ColumnDef<BatchRow>[]>(() => {
         const columns: ColumnDef<BatchRow>[] = [
             {
@@ -359,7 +415,10 @@ export function BatchReviewTable({
                                 </p>
                             ) : null}
                             {manuallyAdjusted(row.original) ? (
-                                <Badge variant="warning">已单独调整</Badge>
+                                <BusinessStatusBadge
+                                    tone="warning"
+                                    label="已单独调整"
+                                />
                             ) : null}
                             {mode !== "RESULT" &&
                             !allDropshipOnly &&
@@ -538,6 +597,7 @@ export function BatchReviewTable({
                                 type="button"
                                 variant="outline"
                                 size="sm"
+                                loading={reconciling}
                                 disabled={busy}
                                 onClick={onReconcile}
                             >
@@ -621,6 +681,7 @@ export function BatchReviewTable({
         prefix,
         mode,
         busy,
+        reconciling,
         canWrite,
         canOpenProduct,
         canOpenOffering,
@@ -630,78 +691,110 @@ export function BatchReviewTable({
         needsRecheck,
         allDropshipOnly,
     ])
+    const sectionTitle =
+        mode === "RECOVERY"
+            ? "待处理商品"
+            : mode === "RESULT"
+              ? "入库结果明细"
+              : "逐项核对入库"
     return (
         <div className="min-w-0 space-y-3">
             {mode === "RECOVERY" && view.counts.unknown > 0 ? (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning-border bg-warning-soft px-4 py-3 text-warning-soft-foreground">
-                    <p>
-                        {view.counts.unknown} 个 SKU
-                        的原操作结果待核实；查明前不能选择重试。
-                    </p>
-                    {canWrite && (
-                        <LoadingButton
-                            id={`${prefix}-query-all-unknown`}
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={busy}
-                            onClick={onReconcile}
-                        >
-                            查询原操作结果
-                        </LoadingButton>
-                    )}
-                </div>
-            ) : null}
-            <BusinessTableFrame
-                title={
-                    mode === "RECOVERY"
-                        ? "待处理商品"
-                        : mode === "RESULT"
-                          ? "入库结果明细"
-                          : "逐项核对入库"
-                }
-                className={mode !== "RECOVERY" ? "gap-2" : undefined}
-                tableActions={
-                    allDropshipOnly && mode !== "RESULT" ? (
-                        <span className="text-xs text-muted-foreground">
-                            供应商供货：仅代发
+                <Alert variant="warning">
+                    <TriangleAlertIcon aria-hidden="true" />
+                    <AlertTitle>存在待核实结果</AlertTitle>
+                    <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                        <span>
+                            <span className="num font-medium">
+                                {view.counts.unknown}
+                            </span>{" "}
+                            个 SKU 的原操作结果待核实；查明前不能选择重试。
                         </span>
-                    ) : undefined
-                }
-                toolbar={
-                    showFilters ? (
+                        {canWrite ? (
+                            <LoadingButton
+                                id={`${prefix}-query-all-unknown`}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                loading={reconciling}
+                                disabled={busy}
+                                onClick={onReconcile}
+                            >
+                                查询原操作结果
+                            </LoadingButton>
+                        ) : null}
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+            <TableToolbarScope>
+                <section
+                    aria-label={sectionTitle}
+                    className="flex min-w-0 flex-col gap-3"
+                >
+                    {showFilters ? (
                         <form
                             className="flex min-w-0 flex-wrap items-end gap-3"
                             onSubmit={(event) => event.preventDefault()}
                         >
-                            <form.AppField name="status">
+                            <form.AppField name="keyword">
                                 {(field) => (
-                                    <field.SelectField
-                                        id={`${prefix}-status-filter`}
-                                        label="状态"
-                                        options={[
-                                            {
-                                                value: "ALL",
-                                                label: `全部（${baseRows.length}）`,
-                                            },
-                                            ...Object.entries(statusMeta)
-                                                .filter(([status]) =>
-                                                    baseRows.some(
-                                                        (row) =>
-                                                            row.status ===
-                                                            status,
-                                                    ),
-                                                )
-                                                .map(([value, state]) => ({
-                                                    value,
-                                                    label: `${needsRecheck && value === "READY" ? "上次可入库" : state.label}（${baseRows.filter((row) => row.status === value).length}）`,
-                                                })),
-                                        ]}
-                                        allowClear={false}
-                                        className="w-44"
-                                    />
+                                    <div className="min-w-52 flex-1 sm:max-w-72">
+                                        <label
+                                            htmlFor={`${prefix}-keyword-search`}
+                                            className="mb-1.5 block text-xs font-medium text-foreground"
+                                        >
+                                            搜索商品
+                                        </label>
+                                        <div className="relative">
+                                            <SearchIcon
+                                                aria-hidden="true"
+                                                className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+                                            />
+                                            <Input
+                                                id={`${prefix}-keyword-search`}
+                                                value={field.state.value}
+                                                onChange={(event) =>
+                                                    field.handleChange(
+                                                        event.target.value,
+                                                    )
+                                                }
+                                                placeholder="商品名、规格或来源 SKU 编码"
+                                                className="h-8 pl-8"
+                                            />
+                                        </div>
+                                    </div>
                                 )}
                             </form.AppField>
+                            {showStatusSelect ? (
+                                <form.AppField name="status">
+                                    {(field) => (
+                                        <field.SelectField
+                                            id={`${prefix}-status-filter`}
+                                            label="状态"
+                                            options={[
+                                                {
+                                                    value: "ALL",
+                                                    label: `全部（${baseRows.length}）`,
+                                                },
+                                                ...Object.entries(statusMeta)
+                                                    .filter(([status]) =>
+                                                        baseRows.some(
+                                                            (row) =>
+                                                                row.status ===
+                                                                status,
+                                                        ),
+                                                    )
+                                                    .map(([value, state]) => ({
+                                                        value,
+                                                        label: `${needsRecheck && value === "READY" ? "上次可入库" : state.label}（${baseRows.filter((row) => row.status === value).length}）`,
+                                                    })),
+                                            ]}
+                                            allowClear={false}
+                                            className="w-44"
+                                        />
+                                    )}
+                                </form.AppField>
+                            ) : null}
                             {reasons.length > 0 || filters.reason !== "ALL" ? (
                                 <form.AppField name="reason">
                                     {(field) => (
@@ -729,8 +822,10 @@ export function BatchReviewTable({
                                     id={`${prefix}-reset-filters`}
                                     type="button"
                                     variant="ghost"
+                                    size="sm"
                                     onClick={() =>
                                         form.reset({
+                                            keyword: "",
                                             status: "ALL",
                                             reason: "ALL",
                                         })
@@ -740,87 +835,169 @@ export function BatchReviewTable({
                                 </Button>
                             ) : null}
                         </form>
-                    ) : undefined
-                }
-                selectionBar={
-                    <div className="flex flex-wrap items-center gap-3">
-                        {mode === "RESULT" ? (
-                            <h2 className="text-section-title font-semibold tracking-tight">
-                                入库明细
-                            </h2>
-                        ) : null}
-                        <span className="num">
-                            当前 {filteredRows.length} 个 SKU
-                            {canWrite && mode !== "RESULT"
-                                ? ` · 已选 ${selectedCount} 个 SKU`
-                                : ""}
-                        </span>
-                        {canWrite && mode !== "RESULT" ? (
-                            <Button
-                                id={`${prefix}-clear-selection`}
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                disabled={busy || selectedIds.length === 0}
-                                onClick={() => onSelectionChange([])}
-                            >
-                                清空选择
-                            </Button>
-                        ) : null}
+                    ) : null}
+                    <TableToolbar
+                        isFrameToolbar
+                        actions={
+                            allDropshipOnly && mode !== "RESULT" ? (
+                                <span className="text-xs text-muted-foreground">
+                                    供应商供货：仅代发
+                                </span>
+                            ) : undefined
+                        }
+                    >
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="num text-xs text-muted-foreground">
+                                当前 {filteredRows.length} 个 SKU
+                                {canWrite && mode !== "RESULT"
+                                    ? ` · 已选 ${selectedCount} 个 SKU`
+                                    : ""}
+                            </span>
+                            {canWrite && mode !== "RESULT" ? (
+                                <>
+                                    {selectableFilteredIds.length > 0 &&
+                                    !allFilteredSelected ? (
+                                        <Button
+                                            id={`${prefix}-select-all`}
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            disabled={busy}
+                                            onClick={() =>
+                                                onSelectionChange(
+                                                    Array.from(
+                                                        new Set([
+                                                            ...selectedSelectableIds,
+                                                            ...selectableFilteredIds,
+                                                        ]),
+                                                    ),
+                                                )
+                                            }
+                                        >
+                                            <CheckSquareIcon aria-hidden="true" />
+                                            <span className="num">
+                                                {hasActiveFilters
+                                                    ? `全选筛选 ${selectableFilteredIds.length} 项`
+                                                    : `全选全部 ${selectableFilteredIds.length} 项`}
+                                            </span>
+                                        </Button>
+                                    ) : null}
+                                    <Button
+                                        id={`${prefix}-clear-selection`}
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        disabled={busy || selectedCount === 0}
+                                        onClick={() => onSelectionChange([])}
+                                    >
+                                        清空选择
+                                    </Button>
+                                    {onExcludeSelected ? (
+                                        <LoadingButton
+                                            id={`${prefix}-exclude-selected`}
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className={
+                                                detailWorkspaceStyles.quietDangerButton
+                                            }
+                                            loading={excluding}
+                                            disabled={
+                                                busy || selectedCount === 0
+                                            }
+                                            onClick={() =>
+                                                setExcludeConfirmOpen(true)
+                                            }
+                                        >
+                                            <BanIcon aria-hidden="true" />
+                                            批量排除选中项
+                                        </LoadingButton>
+                                    ) : null}
+                                </>
+                            ) : null}
+                        </div>
+                    </TableToolbar>
+                    <div className={detailWorkspaceStyles.dataTableWrapper}>
+                        <DataTable
+                            id={prefix}
+                            data={pagedRows}
+                            columns={columns}
+                            getRowId={(row) => row.source.id}
+                            rowLabel={(row) =>
+                                `${row.source.name} ${row.source.specification}`
+                            }
+                            rowCount={filteredRows.length}
+                            caption="批量入库逐项核对，接口采购报价为供应商报价，公司售价为含税销售参考价"
+                            manualPagination
+                            manualSorting={false}
+                            pagination={pagination}
+                            onPaginationChange={setPagination}
+                            pageSizeOptions={[20, 50, 100]}
+                            defaultColumnVisibility={{
+                                sourceCategory: false,
+                                market: false,
+                                purchase: mode !== "RESULT",
+                                match: mode !== "RESULT",
+                            }}
+                            showToolbarSummary={false}
+                            rowSelection={rowSelection}
+                            onRowSelectionChange={(selection) =>
+                                onSelectionChange(
+                                    Object.entries(selection)
+                                        .filter(
+                                            ([id, selected]) =>
+                                                selected &&
+                                                selectableIds.has(id),
+                                        )
+                                        .map(([id]) => id),
+                                )
+                            }
+                            enableRowSelection={
+                                !canWrite || mode === "RESULT"
+                                    ? false
+                                    : (row) =>
+                                          !busy &&
+                                          isBatchRowSelectable(
+                                              row.original,
+                                              mode,
+                                          ) &&
+                                          (mode !== "REVIEW" ||
+                                              row.original.preview_version ===
+                                                  view.batch.preview_version)
+                            }
+                            emptyTitle="当前筛选没有商品"
+                            emptyDescription="调整搜索关键词、状态或待处理原因后继续查看。"
+                        />
                     </div>
-                }
-                table={
-                    <DataTable
-                        id={prefix}
-                        data={pagedRows}
-                        columns={columns}
-                        getRowId={(row) => row.source.id}
-                        rowLabel={(row) =>
-                            `${row.source.name} ${row.source.specification}`
-                        }
-                        rowCount={filteredRows.length}
-                        caption="批量入库逐项核对，接口采购报价为供应商报价，公司售价为含税销售参考价"
-                        manualPagination
-                        manualSorting={false}
-                        pagination={pagination}
-                        onPaginationChange={setPagination}
-                        pageSizeOptions={[20]}
-                        defaultColumnVisibility={{
-                            sourceCategory: false,
-                            market: false,
-                            purchase: mode !== "RESULT",
-                            match: mode !== "RESULT",
-                        }}
-                        showToolbarSummary={false}
-                        rowSelection={rowSelection}
-                        onRowSelectionChange={(selection) =>
-                            onSelectionChange(
-                                Object.entries(selection)
-                                    .filter(
-                                        ([id, selected]) =>
-                                            selected && selectableIds.has(id),
-                                    )
-                                    .map(([id]) => id),
-                            )
-                        }
-                        enableRowSelection={
-                            !canWrite || mode === "RESULT"
-                                ? false
-                                : (row) =>
-                                      !busy &&
-                                      isBatchRowSelectable(
-                                          row.original,
-                                          mode,
-                                      ) &&
-                                      (mode !== "REVIEW" ||
-                                          row.original.preview_version ===
-                                              view.batch.preview_version)
-                        }
-                        emptyTitle="当前筛选没有商品"
-                        emptyDescription="调整状态或待处理原因后继续查看。"
-                    />
-                }
-            />
+                </section>
+            </TableToolbarScope>
+            {onExcludeSelected ? (
+                <FormalActionConfirmDialog
+                    idPrefix={`${prefix}-exclude-confirm`}
+                    open={excludeConfirmOpen}
+                    onOpenChange={setExcludeConfirmOpen}
+                    actionLabel="批量排除"
+                    title="确认从本批排除选中商品"
+                    description="排除后的 SKU 不再参与本批入库提交，可在供应商品库中重新发起引入。"
+                    actionVariant="destructive"
+                    confirmLabel={`确认排除 ${selectedCount} 个 SKU`}
+                    fromStatus={{ label: "待引入", tone: "warning" }}
+                    toStatus={{ label: "已排除", tone: "neutral" }}
+                    summary={[
+                        <span key="exclude-count">
+                            待排除数量：
+                            <span className="num font-semibold">
+                                {selectedCount}
+                            </span>{" "}
+                            个 SKU
+                        </span>,
+                    ]}
+                    pending={excluding}
+                    onConfirm={async () => {
+                        await onExcludeSelected(selectedSelectableIds)
+                    }}
+                />
+            ) : null}
         </div>
     )
 }

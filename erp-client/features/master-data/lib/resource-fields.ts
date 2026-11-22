@@ -46,18 +46,27 @@ export function currentResourceFieldValues(
     const byLabel = new Map(facts.map((fact) => [fact.label, fact.value]))
     const out: ResourceFieldValues = {}
     for (const def of RESOURCE_FIELDS[resource]) {
-        // 分类上级存稳定 ID；展示事实是名称，优先从列表行回填
-        if (def.key === "parentId" && !("currentRevision" in target)) {
-            out.parentId = target.parentStableId ?? ""
-            continue
+        // 分类上级存稳定 ID；展示事实是名称，优先从列表行或对象中心层级回填
+        if (def.key === "parentId") {
+            if (!("currentRevision" in target)) {
+                out.parentId = target.parentStableId ?? ""
+                continue
+            }
+            if (resource === "categories" && target.categoryHierarchy) {
+                out.parentId =
+                    target.categoryHierarchy.ancestors.at(-1)?.stableId ?? ""
+                continue
+            }
         }
-        if (
-            def.key === "code" &&
-            !("currentRevision" in target) &&
-            target.dictionaryCode
-        ) {
-            out.code = target.dictionaryCode
-            continue
+        if (def.key === "code") {
+            if (!("currentRevision" in target) && target.dictionaryCode) {
+                out.code = target.dictionaryCode
+                continue
+            }
+            if ("currentRevision" in target && resource === "categories") {
+                out.code = target.stableNo
+                continue
+            }
         }
         if (
             def.key === "productKind" &&

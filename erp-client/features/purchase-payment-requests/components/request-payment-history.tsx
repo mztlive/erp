@@ -97,7 +97,7 @@ export function RequestPaymentHistory({
                                     key={allocation.payable_account_id}
                                     className="flex flex-wrap justify-between gap-2"
                                 >
-                                    <span>
+                                    <span className="num">
                                         原付款分配 ·{" "}
                                         {request.lines.find(
                                             (line) =>
@@ -117,8 +117,15 @@ export function RequestPaymentHistory({
                                 </span>
                                 <Button
                                     id={`ppr-payment-${toAutomationIdSegment(payment.payment_id)}-receipt-download`}
-                                    variant="outline"
+                                    variant={
+                                        detailWorkspace ? "ghost" : "outline"
+                                    }
                                     size="sm"
+                                    className={
+                                        detailWorkspace
+                                            ? detailWorkspaceStyles.subtleButton
+                                            : undefined
+                                    }
                                     disabled={download.isPending}
                                     onClick={() =>
                                         download.mutate({
@@ -159,7 +166,7 @@ export function RequestPaymentHistory({
                                     : "flex flex-wrap justify-between gap-2 rounded-lg border p-4 text-body-compact"
                             }
                         >
-                            <span>
+                            <span className="num">
                                 {request.lines.find(
                                     (line) =>
                                         line.payable_account_id ===

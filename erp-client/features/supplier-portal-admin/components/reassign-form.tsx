@@ -3,6 +3,7 @@
 import { useRef, useState } from "react"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
+import { toast } from "@/components/ui/toast"
 import {
     useWorkItemReassignCandidatesQuery,
     useWorkItemResponsibilityMutation,
@@ -66,6 +67,7 @@ export function PortalReassignForm({
             try {
                 await mutation.mutateAsync(intent.current)
                 intent.current = null
+                toast.add({ title: "已转交处理人", type: "success" })
                 onSuccess()
             } catch (cause) {
                 if (commandFailureDisposition(cause) === "rejected")
@@ -77,7 +79,7 @@ export function PortalReassignForm({
     const locked = mutation.isPending || intent.current !== null
     return (
         <form
-            className="space-y-3 rounded-lg border bg-muted/30 p-4"
+            className="max-w-3xl space-y-3 border-y border-border/60 py-4"
             onSubmit={(event) => {
                 event.preventDefault()
                 void form.handleSubmit()

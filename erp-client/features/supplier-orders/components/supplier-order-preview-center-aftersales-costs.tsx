@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { ArrowUpRightIcon } from "lucide-react"
 
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
@@ -31,6 +32,7 @@ export function AftersalesSection({
     return (
         <DetailWorkspaceSection
             title="售后"
+            width="form"
             subtitle="售后请求 + 余额恢复 / 供应商退款两类记录分别展示"
         >
             {afterSales.length === 0 ? (
@@ -42,7 +44,7 @@ export function AftersalesSection({
                     {afterSales.map((as) => (
                         <section
                             key={as.requestId}
-                            className="flex flex-col gap-3 border-t border-border/60 pt-4"
+                            className="flex flex-col gap-3 border-t border-border/60 pt-4 first:border-t-0 first:pt-0"
                         >
                             <div>
                                 <h3 className="num font-semibold">
@@ -50,11 +52,13 @@ export function AftersalesSection({
                                 </h3>
                                 <p className="text-xs text-muted-foreground">
                                     {as.scope} · 申请于{" "}
-                                    {formatDateTime(
-                                        as.requestedAt,
-                                        "fullIntl",
-                                        "passthrough",
-                                    )}
+                                    <span className="num">
+                                        {formatDateTime(
+                                            as.requestedAt,
+                                            "fullIntl",
+                                            "passthrough",
+                                        )}
+                                    </span>
                                 </p>
                             </div>
                             <div className="grid gap-2 sm:grid-cols-2">
@@ -127,7 +131,8 @@ export function AftersalesSection({
                                 </PermissionGuard>
                             </div>
                             <p className="text-tiny text-muted-foreground">
-                                关联售后申请单：{as.requestNo}
+                                关联售后申请单：
+                                <span className="num">{as.requestNo}</span>
                             </p>
                         </section>
                     ))}
@@ -142,10 +147,17 @@ export function CostsSection({
 }: {
     costs: SupplierOrderDetailView["costs"]
 }) {
+    const settlementHref = costs.settlementId
+        ? `/supplier-api/settlements/${encodeURIComponent(costs.settlementId)}`
+        : costs.settlementNo
+          ? `/supplier-api/settlements?q=${encodeURIComponent(costs.settlementNo)}`
+          : "/supplier-api/settlements"
+
     return (
         <DetailWorkspaceSection
             title="成本与结算"
-            subtitle="金额按含税/不含税分别标注"
+            width="form"
+            subtitle="金额按含税与不含税分别标注"
         >
             <DescriptionList className="gap-y-3">
                 <Item
@@ -156,7 +168,7 @@ export function CostsSection({
                         ) : (
                             <MoneyValue
                                 value={costs.cumulativeCostGross}
-                                taxBasis="gross"
+                                display="exact"
                             />
                         )
                     }
@@ -169,7 +181,7 @@ export function CostsSection({
                         ) : (
                             <MoneyValue
                                 value={costs.cumulativeCostNet}
-                                taxBasis="net"
+                                display="exact"
                             />
                         )
                     }
@@ -181,28 +193,45 @@ export function CostsSection({
                         costs.costVariance == null ? (
                             "—"
                         ) : (
-                            <MoneyValue value={costs.costVariance} />
+                            <MoneyValue
+                                value={costs.costVariance}
+                                display="exact"
+                            />
                         )
                     }
                 />
                 <Item
                     label="差额参照"
                     value={
-                        costs.cumulativeCostGross == null
-                            ? "—"
-                            : `对比累计成本（含税）${costs.cumulativeCostGross}`
+                        costs.cumulativeCostGross == null ? (
+                            "—"
+                        ) : (
+                            <span className="inline-flex flex-wrap items-baseline gap-1">
+                                <span>对比累计成本（含税）</span>
+                                <MoneyValue
+                                    value={costs.cumulativeCostGross}
+                                    display="exact"
+                                />
+                            </span>
+                        )
                     }
                 />
                 <Item
                     label="所属结算单"
                     value={
-                        costs.settlementNo ? (
+                        costs.settlementId || costs.settlementNo ? (
                             <Link
                                 id="supplier-order-center-costs-settlement-link"
-                                href={`/supplier-api/settlements?q=${encodeURIComponent(costs.settlementNo)}`}
-                                className="num text-primary underline-offset-2 hover:underline"
+                                href={settlementHref}
+                                className="num inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
                             >
-                                {costs.settlementNo}
+                                <span>
+                                    {costs.settlementNo ?? "查看结算单详情"}
+                                </span>
+                                <ArrowUpRightIcon
+                                    className="size-3.5 shrink-0"
+                                    aria-hidden="true"
+                                />
                             </Link>
                         ) : (
                             "—"
@@ -217,9 +246,9 @@ export function CostsSection({
                     type="button"
                     size="sm"
                     variant="outline"
-                    render={<Link href="/supplier-api/settlements" />}
+                    render={<Link href={settlementHref} />}
                 >
-                    打开 API 结算
+                    {costs.settlementId ? "查看所属结算单" : "打开 API 结算"}
                 </Button>
                 <Button
                     id="supplier-order-center-costs-open-payable"

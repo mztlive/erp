@@ -21,23 +21,31 @@ export function WorkspaceFrame({ children }: { children: React.ReactNode }) {
     const router = useRouter()
     const queryClient = useQueryClient()
 
+    const lastReportedRef = React.useRef<string>("")
+
     const report = React.useCallback(() => {
         const heading = document.querySelector("h1")?.textContent?.trim()
         const number = document
             .querySelector("[data-workspace-document-number]")
             ?.getAttribute("data-workspace-document-number")
+            ?.trim()
         const state = workspaceFormState()
-        workspaceHost()?.report(window, {
+        const baseTitle =
+            heading || document.title.replace(/ · 福尚云 ERP$/, "")
+        const title =
+            number && (!baseTitle || !baseTitle.includes(number))
+                ? [baseTitle, number].filter(Boolean).join(" · ")
+                : baseTitle
+        const payload = {
             href: tabHref(new URL(window.location.href)),
-            title: [
-                heading || document.title.replace(/ · 福尚云 ERP$/, ""),
-                number,
-            ]
-                .filter(Boolean)
-                .join(" · "),
+            title,
             dirty: state.dirty,
             busy: state.busy || queryClient.isMutating() > 0,
-        })
+        }
+        const signature = `${payload.href}\0${payload.title}\0${payload.dirty}\0${payload.busy}`
+        if (signature === lastReportedRef.current) return
+        lastReportedRef.current = signature
+        workspaceHost()?.report(window, payload)
     }, [queryClient])
 
     React.useEffect(() => {

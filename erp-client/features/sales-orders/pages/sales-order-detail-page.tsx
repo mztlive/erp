@@ -1,13 +1,16 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { useQueryClient } from "@tanstack/react-query"
 
 import {
+    BusinessEmptyState,
     BusinessFailureState,
     DetailWorkspaceBody,
     DetailWorkspaceChrome,
     DetailWorkspacePage,
+    DetailWorkspaceSection,
     DetailWorkspaceSkeleton,
     FormalActionResult,
 } from "@/components/business"
@@ -16,7 +19,10 @@ import { toast } from "@/components/ui/toast"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { SalesChangeOrderApprovalSection } from "@/features/sales-orders/components/sales-change-order-approval-section"
 import { SalesChangeOrderEditDialog } from "@/features/sales-orders/components/sales-change-order-edit-dialog"
-import { SalesOrderDetailSecondaryActions } from "@/features/sales-orders/components/sales-order-detail-command-dialogs"
+import {
+    SalesOrderDetailSecondaryActions,
+    SalesOrderStartChangeAction,
+} from "@/features/sales-orders/components/sales-order-detail-command-dialogs"
 import { SalesOrderEditableCenter } from "@/features/sales-orders/components/sales-order-detail-editable-center"
 import {
     SalesOrderAmountSummary,
@@ -240,17 +246,30 @@ function SalesOrderDetailContent({
             <DetailWorkspacePage>
                 <DetailWorkspaceChrome
                     title="销售单不存在"
-                    meta={
-                        <span>
-                            未找到这张销售单。可能编号有误，或当前角色无权查看。
-                        </span>
-                    }
                     back={{
                         id: "sales-orders-detail-not-found-back",
                         label: "返回列表",
                         href: "/sales/orders",
                     }}
                 />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <BusinessEmptyState
+                            kind="no-data"
+                            title="未找到这张销售单"
+                            description="可能编号有误，或当前角色无权查看。"
+                            action={
+                                <Button
+                                    id="sales-orders-detail-not-found-action"
+                                    size="sm"
+                                    render={<Link href="/sales/orders" />}
+                                >
+                                    返回销售单列表
+                                </Button>
+                            }
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
             </DetailWorkspacePage>
         )
     }
@@ -311,12 +330,13 @@ function SalesOrderDetailContent({
                         : undefined
                 }
                 order={order}
-                secondaryActions={
-                    <SalesOrderDetailSecondaryActions
+                primaryAction={
+                    <SalesOrderStartChangeAction
                         order={order}
                         showChangeAction={
                             !order.activeChangeOrder ||
-                            derived.navSection !== "overview"
+                            (derived.navSection !== "overview" &&
+                                derived.navSection !== "versions")
                         }
                         canStartChange={derived.canStartChange}
                         changeBlocker={derived.changeBlocker}
@@ -339,6 +359,11 @@ function SalesOrderDetailContent({
                                 })
                                 .catch(() => undefined)
                         }}
+                    />
+                }
+                secondaryActions={
+                    <SalesOrderDetailSecondaryActions
+                        order={order}
                         onApprovalResult={handleActionResult}
                     />
                 }

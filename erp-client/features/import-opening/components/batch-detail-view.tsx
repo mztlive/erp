@@ -1,18 +1,21 @@
 "use client"
 
-import type { ComponentProps, ReactNode } from "react"
-import { ArrowLeftIcon, TriangleAlertIcon } from "lucide-react"
+import type { ReactNode } from "react"
+import Link from "next/link"
+import { TriangleAlertIcon } from "lucide-react"
 
 import {
     BusinessEmptyState,
     BusinessFailureState,
     DetailWorkspaceBody,
     DetailWorkspaceChrome,
+    DetailWorkspaceMeta,
+    DetailWorkspaceMetricItem,
+    DetailWorkspaceMetrics,
     DetailWorkspacePage,
     DetailWorkspaceSection,
     DetailWorkspaceSkeleton,
     DetailWorkspaceTabs,
-    detailWorkspaceStyles,
     DocumentHeader,
     ImportStageIndicator,
     PageScaffold,
@@ -30,7 +33,6 @@ import {
     ResultSection,
     TrialSection,
 } from "@/features/import-opening/components/batch-detail-sections"
-import { Fact } from "@/features/import-opening/components/batch-facts"
 import { ProductionGateCard } from "@/features/import-opening/components/production-gate-card"
 import {
     useImportBatchDetailQuery,
@@ -66,6 +68,9 @@ export function BatchDetailView({
     urlState,
     patchUrl,
     replaceUrl,
+    backHref,
+    backAlways = false,
+    onOpenBatch,
     embedded = false,
     onTaskCompleted,
 }: {
@@ -73,9 +78,13 @@ export function BatchDetailView({
     urlState: ImportOpeningUrlState
     patchUrl: (patch: Partial<ImportOpeningUrlState>) => void
     replaceUrl: (next: ImportOpeningUrlState) => void
+    backHref?: string
+    backAlways?: boolean
+    onOpenBatch?: (targetBatchId: string, nextSection?: BatchSection) => void
     embedded?: boolean
     onTaskCompleted?: (workItemId: string) => void
 }) {
+    const section = urlState.section
     const detailQuery = useImportBatchDetailQuery({
         batchId,
         workItemId: urlState.workItemId,
@@ -91,11 +100,24 @@ export function BatchDetailView({
             page: Math.max(1, urlState.page),
             pageSize: 20,
         },
-        Boolean(batchId),
+        Boolean(batchId) && section === "trial",
     )
 
     const batch = detailQuery.data
-    const section = urlState.section
+    const resolvedBackHref =
+        backHref ??
+        (urlState.environment === "PRODUCTION"
+            ? "/governance/imports?environment=PRODUCTION"
+            : "/governance/imports")
+
+    const chromeBack = {
+        id: "operations-import-batch-detail-back",
+        label: "返回批次列表",
+        href: resolvedBackHref,
+        visibility: backAlways
+            ? ("always" as const)
+            : ("standalone-only" as const),
+    }
 
     const wrap = (children: ReactNode) =>
         embedded ? (
@@ -110,7 +132,9 @@ export function BatchDetailView({
         )
 
     if (detailQuery.isPending) {
-        if (!embedded) return <DetailWorkspaceSkeleton title="导入批次" />
+        if (!embedded) {
+            return <DetailWorkspaceSkeleton title="导入批次详情" summary />
+        }
         return wrap(
             <div
                 className="h-40 animate-pulse rounded-lg bg-muted"
@@ -120,7 +144,7 @@ export function BatchDetailView({
     }
 
     if (detailQuery.isError) {
-        return wrap(
+        const failureContent = (
             <DetailWorkspaceSection width="form">
                 <BusinessFailureState
                     title="批次加载失败"
@@ -137,12 +161,23 @@ export function BatchDetailView({
                         </Button>
                     }
                 />
-            </DetailWorkspaceSection>,
+            </DetailWorkspaceSection>
+        )
+        if (embedded) return wrap(failureContent)
+        return wrap(
+            <>
+                <DetailWorkspaceChrome
+                    title="导入批次详情"
+                    meta="批次加载失败"
+                    back={chromeBack}
+                />
+                <DetailWorkspaceBody>{failureContent}</DetailWorkspaceBody>
+            </>,
         )
     }
 
     if (!batch) {
-        return wrap(
+        const emptyContent = (
             <DetailWorkspaceSection width="form">
                 <BusinessEmptyState
                     kind="no-data"
@@ -150,27 +185,50 @@ export function BatchDetailView({
                     description="未找到该导入批次，请返回列表重新选择。"
                     className="rounded-lg border-0 bg-transparent shadow-none ring-0"
                     action={
-                        <Button
-                            id="operations-import-batch-detail-empty-back"
-                            type="button"
-                            variant="secondary"
-                            className="rounded-lg shadow-none"
-                            onClick={() =>
-                                replaceUrl({
-                                    ...urlState,
-                                    batchId: undefined,
-                                    section: "overview",
-                                    workItemId: undefined,
-                                    confirmationScope: undefined,
-                                    queueContextId: undefined,
-                                })
-                            }
-                        >
-                            返回列表
-                        </Button>
+                        embedded ? (
+                            <Button
+                                id="operations-import-batch-detail-empty-back"
+                                type="button"
+                                variant="secondary"
+                                className="rounded-lg shadow-none"
+                                onClick={() =>
+                                    replaceUrl({
+                                        ...urlState,
+                                        batchId: undefined,
+                                        section: "overview",
+                                        workItemId: undefined,
+                                        confirmationScope: undefined,
+                                        queueContextId: undefined,
+                                    })
+                                }
+                            >
+                                返回列表
+                            </Button>
+                        ) : (
+                            <Button
+                                id="operations-import-batch-detail-empty-back"
+                                type="button"
+                                variant="secondary"
+                                className="rounded-lg shadow-none"
+                                render={<Link href={resolvedBackHref} />}
+                            >
+                                返回列表
+                            </Button>
+                        )
                     }
                 />
-            </DetailWorkspaceSection>,
+            </DetailWorkspaceSection>
+        )
+        if (embedded) return wrap(emptyContent)
+        return wrap(
+            <>
+                <DetailWorkspaceChrome
+                    title="导入批次详情"
+                    meta="批次不存在"
+                    back={chromeBack}
+                />
+                <DetailWorkspaceBody>{emptyContent}</DetailWorkspaceBody>
+            </>,
         )
     }
 
@@ -179,93 +237,98 @@ export function BatchDetailView({
         (b) => b.action === "CONFIRM_SCOPE",
     )
     const workItemTypeMissing = !batch.productionGates.workItemTypeRegistered
-    const identity = {
-        title: batch.sourceSystem.name,
-        documentNumber: batch.batchNo,
-        primaryStatus: {
-            label: BATCH_STATUS_LABEL[batch.status],
-            tone: BATCH_STATUS_TONE[batch.status],
-        },
-        version: batch.version,
-        meta: (
-            <span>
-                {ENVIRONMENT_LABEL[batch.environment]} · 基准日{" "}
-                {batch.baselineDate}
-            </span>
-        ),
-        statuses: [
-            {
-                id: "env",
-                label: "环境",
-                status: {
-                    label: ENVIRONMENT_LABEL[batch.environment],
-                    tone:
-                        batch.environment === "PRODUCTION"
-                            ? "destructive"
-                            : "info",
-                },
-            },
-            {
-                id: "baseline",
-                label: "基准日",
-                status: { label: batch.baselineDate, tone: "neutral" },
-            },
-            {
-                id: "rule",
-                label: "规则版本",
-                status: { label: batch.importRuleVersion, tone: "neutral" },
-            },
-            {
-                id: "stage",
-                label: "当前阶段",
-                status: {
-                    label: PIPELINE_STAGE_LABEL[batch.stage],
-                    tone: "info",
-                },
-            },
-        ],
-    } satisfies ComponentProps<typeof DetailWorkspaceChrome>
+    const primaryStatus = {
+        label: BATCH_STATUS_LABEL[batch.status],
+        tone: BATCH_STATUS_TONE[batch.status],
+    }
+    const showExecutionSection =
+        !embedded &&
+        (section === "overview" ||
+            section === "confirm" ||
+            section === "progress")
+    const showProductionGate =
+        showExecutionSection &&
+        batch.stage !== "RESULT" &&
+        batch.stage !== "APPLY"
 
     return wrap(
         <>
             {embedded ? (
-                <DocumentHeader density="compact" {...identity} />
+                <DocumentHeader
+                    density="compact"
+                    title={batch.sourceSystem.name}
+                    documentNumber={batch.batchNo}
+                    primaryStatus={primaryStatus}
+                    version={batch.version}
+                    meta={
+                        <DetailWorkspaceMeta
+                            items={[
+                                ENVIRONMENT_LABEL[batch.environment],
+                                <span key="baseline">
+                                    基准日{" "}
+                                    <span className="num">
+                                        {batch.baselineDate}
+                                    </span>
+                                </span>,
+                                <span key="rule">
+                                    规则版本{" "}
+                                    <span className="num">
+                                        {batch.importRuleVersion}
+                                    </span>
+                                </span>,
+                                `当前阶段：${PIPELINE_STAGE_LABEL[batch.stage]}`,
+                            ]}
+                        />
+                    }
+                />
             ) : (
                 <DetailWorkspaceChrome
-                    {...identity}
-                    secondaryActions={
-                        <Button
-                            id="operations-import-batch-detail-back"
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className={detailWorkspaceStyles.quietButton}
-                            onClick={() =>
-                                replaceUrl({
-                                    ...urlState,
-                                    batchId: undefined,
-                                    section: "overview",
-                                    issueCode: undefined,
-                                    issueObjectType: undefined,
-                                    rowStatus: undefined,
-                                    workItemId: undefined,
-                                    confirmationScope: undefined,
-                                    queueContextId: undefined,
-                                })
-                            }
-                        >
-                            <ArrowLeftIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            返回批次列表
-                        </Button>
+                    title={batch.sourceSystem.name}
+                    primaryStatus={primaryStatus}
+                    back={chromeBack}
+                    meta={
+                        <DetailWorkspaceMeta
+                            items={[
+                                <span key="batch-no">
+                                    批次号：
+                                    <span
+                                        className="num"
+                                        data-workspace-document-number={
+                                            batch.batchNo
+                                        }
+                                    >
+                                        {batch.batchNo}
+                                    </span>
+                                </span>,
+                                <span key="version">
+                                    版本{" "}
+                                    <span className="num">{batch.version}</span>
+                                </span>,
+                                ENVIRONMENT_LABEL[batch.environment],
+                                <span key="baseline">
+                                    基准日{" "}
+                                    <span className="num">
+                                        {batch.baselineDate}
+                                    </span>
+                                </span>,
+                                <span key="rule">
+                                    规则版本{" "}
+                                    <span className="num">
+                                        {batch.importRuleVersion}
+                                    </span>
+                                </span>,
+                                `当前阶段：${PIPELINE_STAGE_LABEL[batch.stage]}`,
+                            ]}
+                        />
                     }
                     tabs={
                         <DetailWorkspaceTabs
                             value={section}
                             onValueChange={(value) =>
-                                patchUrl({ section: value as BatchSection })
+                                patchUrl({
+                                    section: value as BatchSection,
+                                    page: 1,
+                                })
                             }
                             items={SECTION_TABS.map((tab) => ({
                                 ...tab,
@@ -278,22 +341,24 @@ export function BatchDetailView({
 
             <DetailWorkspaceBody
                 summary={
-                    <div className="grid gap-3 py-4 sm:grid-cols-2 lg:grid-cols-4">
-                        <Fact
+                    <DetailWorkspaceMetrics
+                        columns={4}
+                        variant="bar"
+                        ariaLabel="导入批次摘要"
+                    >
+                        <DetailWorkspaceMetricItem
                             label="导入数据类型"
                             value={formatObjectSet(batch.sourceObjectSet)}
                         />
-                        <Fact
+                        <DetailWorkspaceMetricItem
                             label="预检版本"
                             value={batch.trialVersion}
-                            mono
                         />
-                        <Fact
-                            label="来源系统"
-                            value={batch.sourceSystem.name}
+                        <DetailWorkspaceMetricItem
+                            label="发起人"
+                            value={batch.initiatorLabel}
                         />
-                        <Fact label="发起人" value={batch.initiatorLabel} />
-                        <Fact
+                        <DetailWorkspaceMetricItem
                             label="更新时间"
                             value={formatDateTime(
                                 batch.updatedAt,
@@ -301,27 +366,46 @@ export function BatchDetailView({
                                 "passthrough",
                             )}
                         />
-                    </div>
+                    </DetailWorkspaceMetrics>
                 }
                 alerts={
-                    !batch.formalDataFormed ? (
-                        <Alert variant="warning">
-                            <TriangleAlertIcon />
-                            <AlertTitle>尚未形成业务数据</AlertTitle>
-                            <AlertDescription>
-                                {batch.notFormalDataMessage}
-                            </AlertDescription>
-                        </Alert>
-                    ) : (
-                        <Alert variant="success">
-                            <AlertTitle>
-                                期初数据已写入系统（部分或全部）
-                            </AlertTitle>
-                            <AlertDescription>
-                                {batch.notFormalDataMessage}
-                            </AlertDescription>
-                        </Alert>
-                    )
+                    <>
+                        {!batch.formalDataFormed ? (
+                            <Alert variant="warning">
+                                <TriangleAlertIcon />
+                                <AlertTitle>尚未形成业务数据</AlertTitle>
+                                <AlertDescription>
+                                    {batch.notFormalDataMessage}
+                                </AlertDescription>
+                            </Alert>
+                        ) : (
+                            <Alert variant="success">
+                                <AlertTitle>
+                                    期初数据已写入系统（部分或全部）
+                                </AlertTitle>
+                                <AlertDescription>
+                                    {batch.notFormalDataMessage}
+                                </AlertDescription>
+                            </Alert>
+                        )}
+                        {batch.invalidation ? (
+                            <Alert variant="warning">
+                                <TriangleAlertIcon />
+                                <AlertTitle>旧确认已失效</AlertTitle>
+                                <AlertDescription>
+                                    {batch.invalidation.reason}（
+                                    <span className="num">
+                                        {formatDateTime(
+                                            batch.invalidation.invalidatedAt,
+                                            "dateStyle",
+                                            "passthrough",
+                                        )}
+                                    </span>
+                                    ）。数据或规则已更新，需按最新预检结果重新核对后才能正式导入。
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
+                    </>
                 }
             >
                 <DetailWorkspaceSection>
@@ -335,7 +419,7 @@ export function BatchDetailView({
                 {section === "overview" ? (
                     <OverviewSection
                         batch={batch}
-                        onGoSection={(s) => patchUrl({ section: s })}
+                        onGoSection={(s) => patchUrl({ section: s, page: 1 })}
                     />
                 ) : null}
 
@@ -366,31 +450,33 @@ export function BatchDetailView({
                 {section === "result" ? (
                     <ResultSection
                         batch={batch}
-                        onOpenRepair={(id) =>
-                            patchUrl({
-                                batchId: id,
-                                section: "progress",
-                                page: 1,
-                            })
-                        }
+                        onOpenRepair={(id) => {
+                            if (onOpenBatch) {
+                                onOpenBatch(id, "progress")
+                            } else {
+                                patchUrl({
+                                    batchId: id,
+                                    section: "progress",
+                                    page: 1,
+                                })
+                            }
+                        }}
                     />
                 ) : null}
 
                 {section === "audit" ? <AuditSection batch={batch} /> : null}
 
-                {!embedded ? (
+                {showExecutionSection ? (
                     <ImportExecutionActions
                         batch={batch}
                         onGoSection={(nextSection) =>
-                            patchUrl({ section: nextSection })
+                            patchUrl({ section: nextSection, page: 1 })
                         }
                     />
                 ) : null}
 
                 {/* 生产应用门禁：仅提交应用前阶段展示 */}
-                {!embedded &&
-                batch.stage !== "RESULT" &&
-                batch.stage !== "APPLY" ? (
+                {showProductionGate ? (
                     <ProductionGateCard batch={batch} />
                 ) : null}
             </DetailWorkspaceBody>

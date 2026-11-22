@@ -60,7 +60,7 @@ export function BatchPriceTable({
                     >
                         售价预览
                     </h2>
-                    <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                    <span className="num rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                         {rows.length} 个 SKU
                     </span>
                 </div>
@@ -102,7 +102,7 @@ export function BatchPriceTable({
                     }
                 >
                     {pageCount > 1 ? (
-                        <span className="text-xs text-muted-foreground">
+                        <span className="num text-xs text-muted-foreground">
                             {start + 1}–
                             {Math.min(start + PAGE_SIZE, rows.length)} /{" "}
                             {rows.length} 项

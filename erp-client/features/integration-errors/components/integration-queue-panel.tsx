@@ -18,12 +18,14 @@ import { cn } from "@/lib/utils"
 type IntegrationQueuePanelProps = Readonly<{
     items: readonly IntegrationResolutionItemView[]
     selectedId?: string
+    returnTo?: string
     onSelect: (item: IntegrationResolutionItemView) => void
 }>
 
 export function IntegrationQueuePanel({
     items,
     selectedId,
+    returnTo,
     onSelect,
 }: IntegrationQueuePanelProps) {
     return (
@@ -36,10 +38,13 @@ export function IntegrationQueuePanel({
             </CardHeader>
             <CardContent className="max-h-[70vh] space-y-2 overflow-y-auto pt-3">
                 {items.map((item) => {
-                    const detailHref =
+                    const baseHref =
                         item.identity.itemType === "ERROR_TASK"
                             ? `/governance/integration-errors/errors/${item.identity.id}`
                             : `/governance/integration-errors/differences/${item.identity.id}`
+                    const detailHref = returnTo
+                        ? `${baseHref}?returnTo=${encodeURIComponent(returnTo)}`
+                        : baseHref
                     return (
                         <div
                             key={item.identity.id}

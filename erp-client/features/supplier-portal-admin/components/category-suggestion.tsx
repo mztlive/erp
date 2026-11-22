@@ -1,6 +1,6 @@
 "use client"
 
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import type { PortalCategoryMappingSuggestion } from "@/features/supplier-portal/types"
 
 const productKindLabels: Record<string, string> = {
@@ -18,8 +18,10 @@ export function PortalCategoryMappingEvidence({
 }) {
     if (!suggestion)
         return (
-            <section className="space-y-2 rounded-lg border p-4">
-                <h3 className="font-medium">此前分类核对记录</h3>
+            <section className="space-y-1.5 border-t border-border/60 pt-4">
+                <h4 className="text-body-compact font-medium">
+                    此前分类核对记录
+                </h4>
                 <p className="text-xs text-muted-foreground">
                     当前未读取到此前确认的分类记录，请按本次原始资料核对分类。
                 </p>
@@ -29,27 +31,34 @@ export function PortalCategoryMappingEvidence({
     const requiresRecheck = suggestion.status === "recheck_required"
     const category = suggestion.category
     return (
-        <section className="space-y-3 rounded-lg border p-4">
+        <section className="space-y-3 border-t border-border/60 pt-4">
             <div className="flex flex-wrap items-center gap-2">
-                <h3 className="font-medium">此前分类核对记录</h3>
-                <Badge variant={requiresRecheck ? "warning" : "info"}>
-                    {requiresRecheck ? "需重新核对" : "待本次人工确认"}
-                </Badge>
+                <h4 className="text-body-compact font-medium">
+                    此前分类核对记录
+                </h4>
+                <StatusBadge
+                    tone={requiresRecheck ? "warning" : "info"}
+                    label={requiresRecheck ? "需重新核对" : "待本次人工确认"}
+                />
             </div>
             <dl className="grid gap-x-4 gap-y-2 text-body-compact sm:grid-cols-[auto_1fr]">
-                <dt className="text-muted-foreground">商品类型</dt>
+                <dt className="text-xs text-muted-foreground">商品类型</dt>
                 <dd>
                     {productKindLabels[suggestion.product_kind] ?? "待核对"}
                 </dd>
-                <dt className="text-muted-foreground">供应商原始完整路径</dt>
+                <dt className="text-xs text-muted-foreground">
+                    供应商原始完整路径
+                </dt>
                 <dd className="min-w-0 break-words">
                     {suggestion.original_category_path}
                 </dd>
-                <dt className="text-muted-foreground">先前确认分类路径</dt>
+                <dt className="text-xs text-muted-foreground">
+                    先前确认分类路径
+                </dt>
                 <dd className="min-w-0 break-words">
                     {suggestion.confirmed_category_path}
                 </dd>
-                <dt className="text-muted-foreground">当前分类路径</dt>
+                <dt className="text-xs text-muted-foreground">当前分类路径</dt>
                 <dd className="min-w-0 break-words">
                     {category?.path || category?.name || "当前已无可选分类"}
                 </dd>

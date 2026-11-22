@@ -6,13 +6,11 @@ import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
 import {
     DetailWorkspaceBody,
     DetailWorkspacePage,
-    DetailWorkspaceSection,
     DetailWorkspaceTabs,
     SequentialProcessBar,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { CrossEntryBanner } from "@/features/supplier-settlements/components/cross-entry-banner"
 import { DifferencesWorkspace } from "@/features/supplier-settlements/components/differences-workspace"
 import { SettlementCenterAudit } from "@/features/supplier-settlements/components/settlement-center-audit"
 import { SettlementCenterBlockersAlert } from "@/features/supplier-settlements/components/settlement-center-blockers"
@@ -27,6 +25,7 @@ import { SettlementCenterDocumentHeader } from "@/features/supplier-settlements/
 import {
     SettlementCenterEmpty,
     SettlementCenterError,
+    SettlementCenterForbidden,
     SettlementCenterLoading,
 } from "@/features/supplier-settlements/components/settlement-center-states"
 import { SettlementCenterItems } from "@/features/supplier-settlements/components/settlement-center-items"
@@ -44,7 +43,7 @@ import {
     SECTIONS,
     type SettlementSection,
 } from "@/features/supplier-settlements/types"
-import { formatDateTime } from "@/lib/datetime"
+import { isNotFoundError } from "@/lib/api/errors"
 
 function SettlementCenter({
     statementId,
@@ -66,6 +65,10 @@ function SettlementCenter({
     onTaskCompleted?: (workItemId: string) => void
 }) {
     const account = useAccountProfileQuery()
+    const canDetail = hasPermission(
+        account.data?.permissions,
+        "supplier_settlement_statement:detail",
+    )
     const canReview = hasPermission(
         account.data?.permissions,
         "supplier_settlement_statement:confirm",
@@ -76,22 +79,62 @@ function SettlementCenter({
         urlState,
         patchUrl,
         onTaskCompleted,
+        detailEnabled: !account.isPending && canDetail,
     })
     useSettlementResultFocus(actions.result, actions.resultRef)
     useSettlementSectionHotkey(patchUrl)
 
     const detailQuery = actions.detailQuery
     const section = urlState.section
+    const backLabel = returnTo ? "返回来源页" : "返回对账单列表"
+    const backVisibility = returnTo ? "always" : "standalone-only"
 
-    if (detailQuery.isPending) {
+    if (account.isPending || (canDetail && detailQuery.isPending)) {
         return <SettlementCenterLoading />
     }
 
+    if (account.isError) {
+        return (
+            <SettlementCenterError
+                error={account.error}
+                onBack={onBack}
+                backLabel={backLabel}
+                backVisibility={backVisibility}
+                embedded={embedded}
+                onRetry={() => void account.refetch()}
+            />
+        )
+    }
+
+    if (!canDetail) {
+        return (
+            <SettlementCenterForbidden
+                onBack={onBack}
+                backLabel={backLabel}
+                backVisibility={backVisibility}
+                embedded={embedded}
+            />
+        )
+    }
+
     if (detailQuery.isError) {
+        if (isNotFoundError(detailQuery.error)) {
+            return (
+                <SettlementCenterEmpty
+                    onBack={onBack}
+                    backLabel={backLabel}
+                    backVisibility={backVisibility}
+                    embedded={embedded}
+                />
+            )
+        }
         return (
             <SettlementCenterError
                 error={detailQuery.error}
                 onBack={onBack}
+                backLabel={backLabel}
+                backVisibility={backVisibility}
+                embedded={embedded}
                 onRetry={() => void detailQuery.refetch()}
             />
         )
@@ -99,10 +142,23 @@ function SettlementCenter({
 
     const detail = actions.data
     if (!detail) {
-        return <SettlementCenterEmpty onBack={onBack} />
+        return (
+            <SettlementCenterEmpty
+                onBack={onBack}
+                backLabel={backLabel}
+                backVisibility={backVisibility}
+                embedded={embedded}
+            />
+        )
     }
 
     const st = detail.statement
+    const hasAlertContent = Boolean(
+        detail.workItem ||
+        detail.workItemBlocker ||
+        detail.actionBlockers.length > 0 ||
+        actions.result,
+    )
 
     return (
         <DetailWorkspacePage>
@@ -113,6 +169,8 @@ function SettlementCenter({
                 refreshPending={actions.refreshMutation.isPending}
                 submitBlocker={actions.submitBlocker}
                 onBack={onBack}
+                backLabel={backLabel}
+                backVisibility={backVisibility}
                 onRefresh={actions.onRefresh}
                 onSubmitReview={() => actions.setSubmitOpen(true)}
                 embedded={embedded}
@@ -127,9 +185,11 @@ function SettlementCenter({
                             label: SECTION_LABEL[id],
                             badge:
                                 id === "differences" &&
-                                detail.differenceSummary.blocking > 0
-                                    ? ` (${detail.differenceSummary.blocking})`
-                                    : undefined,
+                                detail.differenceSummary.blocking > 0 ? (
+                                    <span className="num ml-1.5 rounded-sm bg-destructive-soft px-1.5 text-tiny leading-4 font-semibold text-destructive-soft-foreground">
+                                        {detail.differenceSummary.blocking}
+                                    </span>
+                                ) : undefined,
                         }))}
                         ariaLabel="结算单分区"
                         tabIdPrefix="supplier-settlements-center-tab"
@@ -139,127 +199,106 @@ function SettlementCenter({
             <DetailWorkspaceBody
                 summary={<SettlementCenterTotals detail={detail} />}
                 alerts={
-                    <>
-                        {returnTo ? (
-                            <CrossEntryBanner returnTo={returnTo} />
-                        ) : null}
-
-                        {detail.workItem ? (
-                            <WorkspaceTaskFooter inline={!embedded}>
-                                <div className="flex flex-wrap items-center gap-2">
-                                    {embedded ? (
-                                        canReview && (
-                                            <Button
-                                                id="supplier-settlements-center-confirm-task"
-                                                disabled={
-                                                    actions.responsibilityStatus !==
-                                                        "assigned_to_me" ||
+                    hasAlertContent ? (
+                        <>
+                            {detail.workItem ? (
+                                <WorkspaceTaskFooter inline={!embedded}>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {embedded ? (
+                                            canReview && (
+                                                <Button
+                                                    id="supplier-settlements-center-confirm-task"
+                                                    disabled={
+                                                        actions.responsibilityStatus !==
+                                                            "assigned_to_me" ||
+                                                        !actions.allowed.has(
+                                                            "CONFIRM",
+                                                        ) ||
+                                                        actions.decisionMutation
+                                                            .isPending
+                                                    }
+                                                    onClick={() =>
+                                                        actions.setConfirmOpen(
+                                                            true,
+                                                        )
+                                                    }
+                                                >
+                                                    确认结算
+                                                </Button>
+                                            )
+                                        ) : (
+                                            <SequentialProcessBar
+                                                id="supplier-settlements-center-process-bar"
+                                                current={1}
+                                                total={1}
+                                                responsibilityStatus={
+                                                    actions.responsibilityStatus
+                                                }
+                                                processLabel="确认结算"
+                                                showProcess={canReview}
+                                                processDisabled={
                                                     !actions.allowed.has(
                                                         "CONFIRM",
-                                                    ) ||
+                                                    )
+                                                }
+                                                showProcessNext={false}
+                                                pending={
+                                                    actions.decisionMutation
+                                                        .isPending
+                                                }
+                                                onBack={onBack}
+                                                onProcess={() =>
+                                                    actions.setConfirmOpen(true)
+                                                }
+                                                onProcessNext={() => undefined}
+                                            />
+                                        )}
+                                        {canReview &&
+                                        actions.responsibilityStatus ===
+                                            "assigned_to_me" &&
+                                        actions.allowed.has("REJECT") ? (
+                                            <Button
+                                                id="supplier-settlements-center-reject-trigger"
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                disabled={
                                                     actions.decisionMutation
                                                         .isPending
                                                 }
                                                 onClick={() =>
-                                                    actions.setConfirmOpen(true)
+                                                    actions.setRejectOpen(true)
                                                 }
                                             >
-                                                确认结算
+                                                驳回复核
                                             </Button>
-                                        )
-                                    ) : (
-                                        <SequentialProcessBar
-                                            id="supplier-settlements-center-process-bar"
-                                            current={1}
-                                            total={1}
-                                            responsibilityStatus={
-                                                actions.responsibilityStatus
-                                            }
-                                            processLabel="确认结算"
-                                            showProcess={canReview}
-                                            processDisabled={
-                                                !actions.allowed.has("CONFIRM")
-                                            }
-                                            showProcessNext={false}
-                                            pending={
-                                                actions.decisionMutation
-                                                    .isPending
-                                            }
-                                            onBack={onBack}
-                                            onProcess={() =>
-                                                actions.setConfirmOpen(true)
-                                            }
-                                            onProcessNext={() => undefined}
-                                        />
-                                    )}
-                                    {canReview &&
-                                    actions.responsibilityStatus ===
-                                        "assigned_to_me" &&
-                                    actions.allowed.has("REJECT") ? (
-                                        <Button
-                                            id="supplier-settlements-center-reject-trigger"
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            disabled={
-                                                actions.decisionMutation
-                                                    .isPending
-                                            }
-                                            onClick={() =>
-                                                actions.setRejectOpen(true)
-                                            }
-                                        >
-                                            驳回复核
-                                        </Button>
-                                    ) : null}
-                                </div>
-                            </WorkspaceTaskFooter>
-                        ) : detail.workItemBlocker ? (
-                            <Alert variant="warning">
-                                <AlertTitle>当前无法办理结算复核</AlertTitle>
-                                <AlertDescription>
-                                    {detail.workItemBlocker.message}
-                                </AlertDescription>
-                            </Alert>
-                        ) : null}
+                                        ) : null}
+                                    </div>
+                                </WorkspaceTaskFooter>
+                            ) : detail.workItemBlocker ? (
+                                <Alert variant="warning">
+                                    <AlertTitle>
+                                        当前无法办理结算复核
+                                    </AlertTitle>
+                                    <AlertDescription>
+                                        {detail.workItemBlocker.message}
+                                    </AlertDescription>
+                                </Alert>
+                            ) : null}
 
-                        <SettlementCenterBlockersAlert
-                            blockers={detail.actionBlockers}
-                        />
+                            <SettlementCenterBlockersAlert
+                                blockers={detail.actionBlockers}
+                            />
 
-                        <SettlementCenterResultPanel
-                            result={actions.result}
-                            resultRef={actions.resultRef}
-                        />
-                    </>
+                            <SettlementCenterResultPanel
+                                result={actions.result}
+                                resultRef={actions.resultRef}
+                                onClose={actions.clearResult}
+                            />
+                        </>
+                    ) : undefined
                 }
             >
-                <DetailWorkspaceSection contentClassName="space-y-1">
-                    <div className="text-xs text-muted-foreground">
-                        <span className="font-medium text-foreground">
-                            来源数据{" "}
-                        </span>
-                        更新时间 {formatDateTime(st.sourceAsOf, "default")}
-                        {st.externalBillNo ? (
-                            <>
-                                {" "}
-                                · 账单 {st.externalBillNo}（第{" "}
-                                {String(st.externalBillVersion ?? "").replace(
-                                    /^v/i,
-                                    "",
-                                )}{" "}
-                                版）
-                            </>
-                        ) : null}
-                        <span className="ml-2">
-                            以下数据仅供参考，不进入结算结果
-                        </span>
-                    </div>
-
-                    <p className="text-xs text-muted-foreground">
-                        快捷键 d 可直达差异处理
-                    </p>
-                </DetailWorkspaceSection>
                 {section === "overview" ? (
                     <SettlementCenterOverview
                         detail={detail}
@@ -301,6 +340,7 @@ function SettlementCenter({
             <SettlementResolveDialog
                 open={actions.resolveOpen}
                 onOpenChange={actions.setResolveOpen}
+                activeDiff={actions.activeDiff}
                 resolution={actions.resolution}
                 onResolutionChange={actions.setResolution}
                 reasonCode={actions.reasonCode}
@@ -324,6 +364,7 @@ function SettlementCenter({
                 open={actions.submitOpen}
                 onOpenChange={actions.setSubmitOpen}
                 statement={st}
+                totals={detail.totals}
                 reviewerUserId={actions.reviewerUserId}
                 onReviewerUserIdChange={actions.setReviewerUserId}
                 pending={actions.submitMutation.isPending}
@@ -348,6 +389,8 @@ function SettlementCenter({
                 onOpenChange={actions.setRejectOpen}
                 reasonCode={actions.rejectReason}
                 onReasonCodeChange={actions.setRejectReason}
+                comment={actions.rejectComment}
+                onCommentChange={actions.setRejectComment}
                 pending={actions.decisionMutation.isPending}
                 onSubmit={actions.onReject}
             />

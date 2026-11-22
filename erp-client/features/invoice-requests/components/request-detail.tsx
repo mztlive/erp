@@ -1,13 +1,14 @@
 "use client"
-import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
-import { WORKSPACE_QUEUE_ROUTES } from "@/lib/workspace-queue-routes"
+
 import Link from "next/link"
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
+import { format } from "date-fns"
 import { ArrowLeftIcon, ExternalLinkIcon } from "lucide-react"
 import { z } from "zod"
+
 import { useAppForm } from "@/components/form"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -15,16 +16,23 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { toast } from "@/components/ui/toast"
 import {
+    BusinessEmptyState,
     BusinessFailureState,
     BusinessStatusBadge,
     DetailWorkspaceBody,
     DetailWorkspaceChrome,
+    DetailWorkspaceMeta,
     DetailWorkspaceMetricItem,
     DetailWorkspaceMetrics,
     DetailWorkspacePage,
     DetailWorkspaceSection,
+    DetailWorkspaceSkeleton,
+    FormalActionConfirmDialog,
     MoneyValue,
+    detailWorkspaceStyles,
+    type DetailWorkspaceBackLink,
 } from "@/components/business"
 import type { StatusTone } from "@/components/ui/status-badge"
 import { ApprovalReadonly } from "@/features/approval-workflow/components/approval-readonly"
@@ -32,18 +40,31 @@ import {
     mapDocumentApprovalViewDto,
     type DocumentApprovalView,
 } from "@/features/approval-workflow/types"
-import { classifyFormalCommandError } from "@/lib/formal-command"
-import { getErrorMessage } from "@/lib/api/errors"
-import { hasPermission } from "@/lib/permissions"
 import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
+import { getErrorMessage, isNotFoundError } from "@/lib/api/errors"
 import { subtractFixed } from "@/lib/fixed-decimal"
+import { classifyFormalCommandError } from "@/lib/formal-command"
+import { hasPermission } from "@/lib/permissions"
+import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
+import { WORKSPACE_QUEUE_ROUTES } from "@/lib/workspace-queue-routes"
+
+import { cancelRequest, requestStatusLabels, type InvoiceRequest } from "../api"
 import {
     useInvoiceRequest,
     useInvoiceRequestCommands,
     useInvoiceRequestPermissions,
 } from "../hooks/queries"
-import { cancelRequest, requestStatusLabels, type InvoiceRequest } from "../api"
-import { InvoiceRequestDetails } from "./request-details"
+import {
+    InvoiceRequestInfoFacts,
+    InvoiceRequestLinesTable,
+    resolveInvoiceRequestLines,
+} from "./request-details"
+
+export type InvoiceRequestDetailPresentation =
+    | "workspace"
+    | "embedded"
+    | "dialog"
+    | "inline"
 
 const requestStatusTones: Record<InvoiceRequest["status"], StatusTone> = {
     draft: "neutral",
@@ -56,6 +77,11 @@ const requestStatusTones: Record<InvoiceRequest["status"], StatusTone> = {
 function textOrDash(value?: string | null): string {
     const text = value?.trim()
     return text ? text : "—"
+}
+
+function formatCreatedAt(seconds: number): string | null {
+    if (!Number.isFinite(seconds) || seconds <= 0) return null
+    return format(new Date(seconds * 1000), "yyyy-MM-dd HH:mm")
 }
 
 function safeRemaining(amount: string, invoiced: string): string {
@@ -103,32 +129,45 @@ function requestFacts(
     }
 }
 
-/** 单据详情呈现批准与执行的独立进度；inline 态使用完整 DetailWorkspacePage，dialog 态保持紧凑弹窗。 */
+/**
+ * 单据详情呈现批准与执行的独立进度：
+ * - `workspace`：独立详情页壳（`DetailWorkspacePage` + 吸顶 `DetailWorkspaceChrome`）；
+ * - `embedded`（含兼容值 `inline`）：内嵌于客户往来等父页子面板，不重复渲染页壳与吸顶头部；
+ * - `dialog`：销售单内紧凑弹窗。
+ */
 export function InvoiceRequestDetail({
     id,
     onBack,
     onEdit,
-    presentation = "inline",
+    presentation = "workspace",
     currentSalesOrderId,
+    backLabel = "返回申请列表",
+    backVisibility = "standalone-only",
 }: {
     id: string
     onBack: () => void
     onEdit: (request: InvoiceRequest) => void
-    presentation?: "inline" | "dialog"
+    presentation?: InvoiceRequestDetailPresentation
     currentSalesOrderId?: string
+    backLabel?: string
+    backVisibility?: DetailWorkspaceBackLink["visibility"]
 }) {
+    const normalizedMode: "workspace" | "embedded" | "dialog" =
+        presentation === "inline" ? "embedded" : presentation
     const [closeBlocked, setCloseBlocked] = useState(false)
     const content = (
         <InvoiceRequestDetailBody
             id={id}
             onBack={onBack}
             onEdit={onEdit}
-            presentation={presentation}
+            mode={normalizedMode}
             currentSalesOrderId={currentSalesOrderId}
+            backLabel={backLabel}
+            backVisibility={backVisibility}
             onCloseBlockedChange={setCloseBlocked}
         />
     )
-    if (presentation === "inline") return content
+    if (normalizedMode !== "dialog") return content
     return (
         <Dialog
             open
@@ -156,71 +195,95 @@ function InvoiceRequestDetailBody({
     id,
     onBack,
     onEdit,
-    presentation,
+    mode,
     currentSalesOrderId,
+    backLabel,
+    backVisibility,
     onCloseBlockedChange,
 }: {
     id: string
     onBack: () => void
     onEdit: (request: InvoiceRequest) => void
-    presentation: "inline" | "dialog"
+    mode: "workspace" | "embedded" | "dialog"
     currentSalesOrderId?: string
+    backLabel: string
+    backVisibility: DetailWorkspaceBackLink["visibility"]
     onCloseBlockedChange: (blocked: boolean) => void
 }) {
     const query = useInvoiceRequest(id)
     const permissions = useInvoiceRequestPermissions()
     const profile = useAccountProfileQuery().data
-    const [cancelling, setCancelling] = useState(false)
+    const [cancelOpen, setCancelOpen] = useState(false)
     const [reviseRejected, setReviseRejected] = useState(false)
     const request = query.data
-    const isInline = presentation === "inline"
+    const isWorkspace = mode === "workspace"
+    const isEmbedded = mode === "embedded"
 
     if (query.isPending) {
-        if (!isInline) {
+        if (isWorkspace) {
             return (
-                <div className="space-y-4 py-4">
-                    <div className="h-16 animate-pulse rounded-lg bg-muted" />
-                    <div className="h-44 animate-pulse rounded-lg bg-muted" />
-                </div>
+                <DetailWorkspaceSkeleton
+                    title="开票申请详情"
+                    description="正在读取申请金额、开票资料与审批进度…"
+                    summary
+                    sidebar
+                />
             )
         }
         return (
-            <DetailWorkspacePage>
-                <DetailWorkspaceChrome
-                    title="开票申请详情"
-                    secondaryActions={
-                        <Button
-                            id="invoice-request-detail-back"
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={onBack}
-                        >
-                            <ArrowLeftIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            返回申请列表
-                        </Button>
-                    }
-                />
-                <div className="space-y-4 px-(--scaffold-px) py-6">
-                    <div className="h-16 animate-pulse rounded-lg bg-muted" />
-                    <div className="h-64 animate-pulse rounded-lg bg-muted" />
-                </div>
-            </DetailWorkspacePage>
+            <div className="space-y-4 py-4" aria-busy="true">
+                {isEmbedded ? (
+                    <Button
+                        id="invoice-request-detail-back"
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={detailWorkspaceStyles.quietButton}
+                        onClick={onBack}
+                    >
+                        <ArrowLeftIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        {backLabel}
+                    </Button>
+                ) : null}
+                <div className="h-16 animate-pulse rounded-lg bg-muted" />
+                <div className="h-44 animate-pulse rounded-lg bg-muted" />
+            </div>
         )
     }
 
-    if (!request) {
-        const failure = (
+    if (query.isError || !request) {
+        const notFound = isNotFoundError(query.error)
+        const failure = notFound ? (
+            <BusinessEmptyState
+                kind="no-data"
+                title="未找到该开票申请"
+                description="申请单可能已删除或编号不存在，请返回申请列表核对。"
+                action={
+                    <Button
+                        id="invoice-request-detail-not-found-back"
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={onBack}
+                    >
+                        {backLabel}
+                    </Button>
+                }
+            />
+        ) : (
             <BusinessFailureState
+                idPrefix="invoice-request-detail"
+                error={query.error}
                 title="申请读取失败"
-                description={getErrorMessage(query.error, "请重试加载")}
                 action={
                     <Button
                         id="invoice-request-detail-retry"
+                        type="button"
                         variant="outline"
+                        size="sm"
                         onClick={() => void query.refetch()}
                     >
                         重试
@@ -228,80 +291,51 @@ function InvoiceRequestDetailBody({
                 }
             />
         )
-        if (!isInline) return <div role="alert">{failure}</div>
-        return (
-            <DetailWorkspacePage>
-                <DetailWorkspaceChrome
-                    title="开票申请详情"
-                    secondaryActions={
-                        <Button
-                            id="invoice-request-detail-back"
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={onBack}
-                        >
-                            <ArrowLeftIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            返回申请列表
-                        </Button>
-                    }
-                />
-                <div
-                    role="alert"
-                    className="mx-auto w-full max-w-3xl px-(--scaffold-px) py-8"
-                >
-                    {failure}
-                </div>
-            </DetailWorkspacePage>
-        )
-    }
 
-    if (cancelling) {
-        const cancelForm = (
-            <CancelRequestForm
-                request={request}
-                onCloseBlockedChange={onCloseBlockedChange}
-                reviseRejected={reviseRejected}
-                onDone={async () => {
-                    setCancelling(false)
-                    const refreshed = await query.refetch()
-                    if (reviseRejected && refreshed.data?.status === "draft")
-                        onEdit(refreshed.data)
-                }}
-                onBack={() => setCancelling(false)}
-            />
-        )
-        if (!isInline) return cancelForm
-        return (
-            <DetailWorkspacePage>
-                <DetailWorkspaceChrome
-                    title={reviseRejected ? "修改原单" : "撤回开票申请"}
-                    meta={request.request_no}
-                    secondaryActions={
-                        <Button
-                            id="invoice-request-detail-back"
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setCancelling(false)}
+        if (isWorkspace) {
+            return (
+                <DetailWorkspacePage>
+                    <DetailWorkspaceChrome
+                        title="开票申请详情"
+                        back={{
+                            id: "invoice-request-detail-back",
+                            label: backLabel,
+                            visibility: backVisibility,
+                            onClick: onBack,
+                        }}
+                    />
+                    <DetailWorkspaceBody>
+                        <div
+                            role={notFound ? undefined : "alert"}
+                            className="mx-auto w-full max-w-3xl py-8"
                         >
-                            <ArrowLeftIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            返回详情
-                        </Button>
-                    }
-                />
-                <DetailWorkspaceBody>
-                    <DetailWorkspaceSection width="form">
-                        {cancelForm}
-                    </DetailWorkspaceSection>
-                </DetailWorkspaceBody>
-            </DetailWorkspacePage>
+                            {failure}
+                        </div>
+                    </DetailWorkspaceBody>
+                </DetailWorkspacePage>
+            )
+        }
+
+        return (
+            <div className="space-y-4 py-2">
+                {isEmbedded ? (
+                    <Button
+                        id="invoice-request-detail-back"
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={detailWorkspaceStyles.quietButton}
+                        onClick={onBack}
+                    >
+                        <ArrowLeftIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        {backLabel}
+                    </Button>
+                ) : null}
+                <div role={notFound ? undefined : "alert"}>{failure}</div>
+            </div>
         )
     }
 
@@ -310,15 +344,46 @@ function InvoiceRequestDetailBody({
         label: requestStatusLabels[request.status] ?? "审批中",
         tone: requestStatusTones[request.status] ?? ("warning" as const),
     }
+    const createdAtLabel = formatCreatedAt(request.created_at)
+    const lines = resolveInvoiceRequestLines(request.data)
 
-    const actionButtons = (
+    const canViewSalesOrder = Boolean(
+        permissions.canReadSalesOrder &&
+        request.sales_order_id &&
+        request.sales_order_id !== currentSalesOrderId,
+    )
+    const canOpenTask = Boolean(
+        request.work_item_id &&
+        (request.status === "approved" || request.status === "completed") &&
+        hasPermission(profile?.permissions, "work_item:detail"),
+    )
+    const canCancelRequest = Boolean(
+        facts.applicantId === permissions.userId &&
+        request.version > 0 &&
+        request.status === "in_approval" &&
+        permissions.canCancel,
+    )
+    const canEditRequest = Boolean(
+        request.created_by === permissions.userId &&
+        (request.status === "draft" || request.status === "rejected") &&
+        permissions.canSubmit,
+    )
+    const isRejectedInApproval = Boolean(
+        facts.approval?.instance?.latestRejection,
+    )
+
+    const secondaryActionButtons = (
         <>
-            {request.sales_order_id &&
-            request.sales_order_id !== currentSalesOrderId ? (
+            {canViewSalesOrder ? (
                 <Button
                     id="invoice-request-source"
-                    variant="outline"
-                    size={isInline ? "sm" : "default"}
+                    variant={isWorkspace || isEmbedded ? "ghost" : "outline"}
+                    size="sm"
+                    className={
+                        isWorkspace || isEmbedded
+                            ? detailWorkspaceStyles.quietButton
+                            : undefined
+                    }
                     render={
                         <Link
                             href={`/sales/orders/${encodeURIComponent(request.sales_order_id)}?section=invoice`}
@@ -332,13 +397,16 @@ function InvoiceRequestDetailBody({
                     />
                 </Button>
             ) : null}
-            {request.work_item_id &&
-            (request.status === "approved" || request.status === "completed") &&
-            hasPermission(profile?.permissions, "work_item:detail") ? (
+            {canOpenTask && request.work_item_id ? (
                 <Button
                     id="invoice-request-open-task"
-                    variant="outline"
-                    size={isInline ? "sm" : "default"}
+                    variant={isWorkspace || isEmbedded ? "ghost" : "outline"}
+                    size="sm"
+                    className={
+                        isWorkspace || isEmbedded
+                            ? detailWorkspaceStyles.quietButton
+                            : undefined
+                    }
                     render={
                         <Link
                             href={buildWorkspaceDetailHref(
@@ -358,39 +426,51 @@ function InvoiceRequestDetailBody({
                     查看开票任务
                 </Button>
             ) : null}
-            {facts.applicantId === permissions.userId &&
-            request.version > 0 &&
-            request.status === "in_approval" &&
-            permissions.canCancel ? (
+            {canCancelRequest ? (
                 <Button
                     id="invoice-request-cancel"
-                    variant="outline"
-                    size={isInline ? "sm" : "default"}
+                    type="button"
+                    variant={isWorkspace || isEmbedded ? "ghost" : "outline"}
+                    size="sm"
+                    className={
+                        isWorkspace || isEmbedded
+                            ? detailWorkspaceStyles.quietDangerButton
+                            : undefined
+                    }
                     onClick={() => {
-                        setReviseRejected(
-                            Boolean(facts.approval?.instance?.latestRejection),
-                        )
-                        setCancelling(true)
+                        setReviseRejected(isRejectedInApproval)
+                        setCancelOpen(true)
                     }}
                 >
-                    {facts.approval?.instance?.latestRejection
-                        ? "修改原单"
-                        : "撤回申请"}
-                </Button>
-            ) : null}
-            {request.created_by === permissions.userId &&
-            (request.status === "draft" || request.status === "rejected") &&
-            permissions.canSubmit ? (
-                <Button
-                    id="invoice-request-edit"
-                    size={isInline ? "sm" : "default"}
-                    onClick={() => onEdit(request)}
-                >
-                    修改并重新提交
+                    {isRejectedInApproval ? "修改原单" : "撤回申请"}
                 </Button>
             ) : null}
         </>
     )
+
+    const primaryActionButton = canEditRequest ? (
+        <Button
+            id="invoice-request-edit"
+            type="button"
+            size="sm"
+            onClick={() => onEdit(request)}
+        >
+            修改并重新提交
+        </Button>
+    ) : undefined
+
+    const metaItems = [
+        <span key="order" className="num">
+            销售单 {request.sales_order_no || "—"}
+        </span>,
+        facts.title !== "—" ? facts.title : null,
+        request.created_by_name ? `申请人 ${request.created_by_name}` : null,
+        createdAtLabel ? (
+            <span key="created-at" className="num">
+                申请时间 {createdAtLabel}
+            </span>
+        ) : null,
+    ]
 
     const metrics = (
         <DetailWorkspaceMetrics
@@ -414,209 +494,388 @@ function InvoiceRequestDetailBody({
         </DetailWorkspaceMetrics>
     )
 
-    if (!isInline) {
+    const cancelDialog = canCancelRequest ? (
+        <CancelRequestDialog
+            open={cancelOpen}
+            onOpenChange={setCancelOpen}
+            request={request}
+            status={status}
+            reviseRejected={reviseRejected}
+            onCloseBlockedChange={onCloseBlockedChange}
+            onDone={async () => {
+                toast.add({
+                    type: "success",
+                    title: reviseRejected
+                        ? "已撤回申请，请修改后重新提交"
+                        : "开票申请已撤回",
+                })
+                const refreshed = await query.refetch()
+                if (reviseRejected && refreshed.data?.status === "draft") {
+                    onEdit(refreshed.data)
+                }
+            }}
+        />
+    ) : null
+
+    if (mode === "dialog") {
         return (
-            <section className="space-y-5" aria-label="开票申请详情">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                        <h2 className="num break-all text-section-title font-semibold tracking-tight">
-                            {request.request_no || "开票申请"}
-                        </h2>
-                        <div className="mt-1 flex flex-wrap items-center gap-2 text-body-compact text-muted-foreground">
-                            <span>
-                                {request.sales_order_no || "—"} · {facts.title}
-                            </span>
+            <>
+                <section className="space-y-5" aria-label="开票申请详情">
+                    <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="num break-all text-section-title font-semibold tracking-tight">
+                                {request.request_no || "开票申请"}
+                            </h2>
                             <BusinessStatusBadge
                                 context="detail"
                                 label={status.label}
                                 tone={status.tone}
                             />
                         </div>
+                        <DetailWorkspaceMeta
+                            items={[
+                                request.version > 0 ? (
+                                    <span key="version" className="num">
+                                        版本 {request.version}
+                                    </span>
+                                ) : null,
+                                ...metaItems,
+                            ]}
+                        />
                     </div>
-                </div>
-                <div className="border-y border-border/60">{metrics}</div>
-                <InvoiceRequestDetails data={request.data} />
-                {facts.approval ? (
-                    <ApprovalReadonly
-                        id={`invoice-request-${id}-approval`}
-                        approval={facts.approval}
-                    />
-                ) : null}
-                <div className="flex flex-wrap justify-end gap-2 border-t border-border/60 pt-4">
-                    {actionButtons}
-                </div>
-            </section>
+                    <div className="border-y border-border/60">{metrics}</div>
+                    <div className="space-y-5">
+                        <InvoiceRequestInfoFacts data={request.data} />
+                        <InvoiceRequestLinesTable
+                            data={request.data}
+                            showHeader
+                        />
+                    </div>
+                    {facts.approval ? (
+                        <ApprovalReadonly
+                            id={`invoice-request-${id}-approval`}
+                            approval={facts.approval}
+                        />
+                    ) : null}
+                    {canViewSalesOrder ||
+                    canOpenTask ||
+                    canCancelRequest ||
+                    canEditRequest ? (
+                        <div className="flex flex-wrap justify-end gap-2 border-t border-border/60 pt-4">
+                            {secondaryActionButtons}
+                            {primaryActionButton}
+                        </div>
+                    ) : null}
+                </section>
+                {cancelDialog}
+            </>
         )
     }
 
-    return (
-        <DetailWorkspacePage aria-label="开票申请详情">
-            <DetailWorkspaceChrome
-                title={request.request_no || "开票申请"}
-                primaryStatus={status}
-                meta={
-                    <span className="inline-flex flex-wrap items-center gap-x-2">
-                        <span className="num">
-                            销售单 {request.sales_order_no || "—"}
-                        </span>
-                        <span>·</span>
-                        <span>{facts.title}</span>
-                        {request.created_by_name ? (
-                            <>
-                                <span>·</span>
-                                <span>申请人 {request.created_by_name}</span>
-                            </>
-                        ) : null}
-                    </span>
-                }
-                secondaryActions={
-                    <div className="flex flex-wrap items-center gap-2">
+    if (isEmbedded) {
+        return (
+            <>
+                <section className="space-y-5" aria-label="开票申请详情">
+                    <div className="space-y-2 border-b border-border/60 pb-4">
                         <Button
                             id="invoice-request-detail-back"
                             type="button"
                             variant="ghost"
-                            size="sm"
+                            size="xs"
+                            className="-ml-2 text-muted-foreground hover:text-foreground"
                             onClick={onBack}
                         >
                             <ArrowLeftIcon
                                 data-icon="inline-start"
                                 aria-hidden="true"
                             />
-                            返回申请列表
+                            {backLabel}
                         </Button>
-                        {actionButtons}
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0 space-y-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <h2 className="num break-all text-section-title font-semibold tracking-tight text-foreground">
+                                        {request.request_no || "开票申请"}
+                                    </h2>
+                                    <BusinessStatusBadge
+                                        context="detail"
+                                        label={status.label}
+                                        tone={status.tone}
+                                    />
+                                </div>
+                                <DetailWorkspaceMeta
+                                    items={[
+                                        request.version > 0 ? (
+                                            <span key="version" className="num">
+                                                版本 {request.version}
+                                            </span>
+                                        ) : null,
+                                        ...metaItems,
+                                    ]}
+                                />
+                            </div>
+                            <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                                {secondaryActionButtons}
+                                {primaryActionButton}
+                            </div>
+                        </div>
                     </div>
-                }
-            />
-            <div className="border-b border-border/60 bg-card px-(--scaffold-px)">
-                {metrics}
-            </div>
-            <DetailWorkspaceBody
-                sidebar={
-                    facts.approval ? (
-                        <ApprovalReadonly
-                            id={`invoice-request-${id}-approval`}
-                            approval={facts.approval}
-                        />
-                    ) : undefined
-                }
-            >
-                <DetailWorkspaceSection title="开票资料与明细">
-                    <InvoiceRequestDetails data={request.data} />
-                </DetailWorkspaceSection>
-            </DetailWorkspaceBody>
-        </DetailWorkspacePage>
+                    <div className="border-b border-border/60">{metrics}</div>
+                    <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+                        <div className="min-w-0 space-y-6">
+                            <div className="max-w-4xl space-y-3">
+                                <h3 className="text-section-title font-semibold tracking-tight text-foreground">
+                                    开票资料
+                                </h3>
+                                <InvoiceRequestInfoFacts data={request.data} />
+                            </div>
+                            <div className="space-y-3 border-t border-border/60 pt-5">
+                                <div className="flex items-center gap-2">
+                                    <h3 className="text-section-title font-semibold tracking-tight text-foreground">
+                                        开票明细
+                                    </h3>
+                                    {lines.length ? (
+                                        <span className="num rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                                            共 {lines.length} 行
+                                        </span>
+                                    ) : null}
+                                </div>
+                                <InvoiceRequestLinesTable data={request.data} />
+                            </div>
+                        </div>
+                        {facts.approval ? (
+                            <aside
+                                aria-label="审批进度"
+                                className="min-w-0 border-t border-border/60 pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6"
+                            >
+                                <ApprovalReadonly
+                                    id={`invoice-request-${id}-approval`}
+                                    approval={facts.approval}
+                                />
+                            </aside>
+                        ) : null}
+                    </div>
+                </section>
+                {cancelDialog}
+            </>
+        )
+    }
+
+    return (
+        <>
+            <DetailWorkspacePage aria-label="开票申请详情">
+                <DetailWorkspaceChrome
+                    back={{
+                        id: "invoice-request-detail-back",
+                        label: backLabel,
+                        visibility: backVisibility,
+                        onClick: onBack,
+                    }}
+                    title={request.request_no || "开票申请"}
+                    headingProps={{ className: "num" }}
+                    version={request.version > 0 ? request.version : undefined}
+                    primaryStatus={status}
+                    meta={<DetailWorkspaceMeta items={metaItems} />}
+                    secondaryActions={secondaryActionButtons}
+                    primaryAction={primaryActionButton}
+                />
+                <DetailWorkspaceBody
+                    summary={metrics}
+                    sidebarLabel="审批进度"
+                    sidebar={
+                        facts.approval ? (
+                            <ApprovalReadonly
+                                id={`invoice-request-${id}-approval`}
+                                approval={facts.approval}
+                            />
+                        ) : undefined
+                    }
+                >
+                    <DetailWorkspaceSection title="开票资料" width="form">
+                        <InvoiceRequestInfoFacts data={request.data} />
+                    </DetailWorkspaceSection>
+                    <DetailWorkspaceSection
+                        title="开票明细"
+                        width="full"
+                        badge={
+                            lines.length ? (
+                                <span className="num rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                                    共 {lines.length} 行
+                                </span>
+                            ) : undefined
+                        }
+                    >
+                        <InvoiceRequestLinesTable data={request.data} />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
+            {cancelDialog}
+        </>
     )
 }
 
-/** 撤回必须保留原因；未知结果期间仅允许同载荷重试。 */
-function CancelRequestForm({
+/** 撤回申请确认弹窗：保留详情页上下文与原因校验，未知结果期间锁定输入仅允许同载荷重试。 */
+function CancelRequestDialog({
+    open,
+    onOpenChange,
     request,
+    status,
+    reviseRejected,
     onDone,
-    onBack,
-    reviseRejected = false,
     onCloseBlockedChange,
 }: {
+    open: boolean
+    onOpenChange: (open: boolean) => void
     request: InvoiceRequest
+    status: { label: string; tone: StatusTone }
+    reviseRejected: boolean
     onDone: () => void | Promise<void>
-    onBack: () => void
-    reviseRejected?: boolean
     onCloseBlockedChange: (blocked: boolean) => void
 }) {
     const { cancel } = useInvoiceRequestCommands()
     const pending = useRef<Parameters<typeof cancelRequest>[0] | null>(null)
     const [uncertain, setUncertain] = useState(false)
-    useEffect(() => {
-        onCloseBlockedChange(cancel.isPending || uncertain)
-        return () => onCloseBlockedChange(false)
-    }, [cancel.isPending, uncertain, onCloseBlockedChange])
+    const [submitError, setSubmitError] = useState<string | null>(null)
+    const reasonSchema = z
+        .string()
+        .trim()
+        .min(1, "请输入撤回原因")
+        .max(1000, "撤回原因最多 1000 字")
+
     const form = useAppForm({
         defaultValues: {
             reason: reviseRejected ? "按驳回意见修改原单后重新提交" : "",
         },
         validators: {
             onSubmit: z.object({
-                reason: z.string().trim().min(1, "请输入撤回原因").max(1000),
+                reason: reasonSchema,
             }),
         },
-        onSubmit: async ({ value }) => {
-            const input = pending.current ?? {
-                id: request.id,
-                expected_version: request.version,
-                reason: value.reason,
-                idempotency_key: crypto.randomUUID(),
-            }
-            pending.current = input
-            try {
-                await cancel.mutateAsync(input)
-                pending.current = null
-                setUncertain(false)
-                await onDone()
-            } catch (error) {
-                const unknown = classifyFormalCommandError(error) === "unknown"
-                setUncertain(unknown)
-                if (!unknown) pending.current = null
-            }
-        },
     })
+
+    useEffect(() => {
+        if (!open) return
+        pending.current = null
+        setUncertain(false)
+        setSubmitError(null)
+        form.reset({
+            reason: reviseRejected ? "按驳回意见修改原单后重新提交" : "",
+        })
+    }, [form, open, reviseRejected])
+
+    useEffect(() => {
+        onCloseBlockedChange(open && (cancel.isPending || uncertain))
+        return () => onCloseBlockedChange(false)
+    }, [cancel.isPending, onCloseBlockedChange, open, uncertain])
+
+    const amount = request.data?.amount || "0.00"
+
     return (
-        <form
-            id="invoice-request-cancel-form"
-            className="space-y-4"
-            onSubmit={(e) => {
-                e.preventDefault()
-                void form.handleSubmit()
+        <FormalActionConfirmDialog
+            idPrefix="invoice-request-cancel-dialog"
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && (cancel.isPending || uncertain)) return
+                onOpenChange(next)
             }}
-        >
-            <h3 className="font-semibold">
-                {reviseRejected ? "修改原单" : "撤回"} {request.request_no}
-            </h3>
-            <p className="text-xs text-muted-foreground">
-                撤回后释放本次申请额度，申请保留为草稿。
-                {reviseRejected
-                    ? "原申请编号和审批记录保留，修改后重新提交审批。"
-                    : null}
-            </p>
-            <form.AppField name="reason">
-                {(field) => (
-                    <field.TextareaField
-                        id="invoice-request-cancel-reason"
-                        label="撤回原因"
-                        required
-                        disabled={cancel.isPending || uncertain}
-                    />
-                )}
-            </form.AppField>
-            {cancel.error ? (
-                <p role="alert" className="text-body-compact text-destructive">
-                    {uncertain
-                        ? "结果尚未确认，请核对撤回结果。"
-                        : getErrorMessage(cancel.error, "撤回失败")}
-                </p>
-            ) : null}
-            <div className="flex justify-end gap-2">
-                <Button
-                    id="invoice-request-cancel-back"
-                    type="button"
-                    variant="outline"
-                    disabled={cancel.isPending || uncertain}
-                    onClick={onBack}
-                >
-                    返回
-                </Button>
-                <LoadingButton
-                    id="invoice-request-cancel-submit"
-                    type="submit"
-                    loading={cancel.isPending}
-                    disabled={cancel.isPending}
-                >
-                    {uncertain
-                        ? "核对撤回结果"
-                        : reviseRejected
-                          ? "撤回并修改原单"
-                          : "撤回申请"}
-                </LoadingButton>
-            </div>
-        </form>
+            pending={cancel.isPending}
+            title={
+                reviseRejected
+                    ? `撤回并修改 ${request.request_no || "开票申请"}`
+                    : `撤回开票申请 ${request.request_no || ""}`.trim()
+            }
+            description="请确认撤回影响并填写撤回原因，详情信息将继续保留在当前页面。"
+            actionLabel={reviseRejected ? "撤回并修改原单" : "撤回申请"}
+            confirmLabel={
+                uncertain
+                    ? "核对撤回结果"
+                    : reviseRejected
+                      ? "确认撤回并修改原单"
+                      : "确认撤回申请"
+            }
+            cancelLabel="返回详情"
+            actionVariant="destructive"
+            fromStatus={status}
+            toStatus={{ label: "草稿", tone: "neutral" }}
+            summary={[
+                <span key="no">
+                    申请单号：
+                    <span className="num font-medium text-foreground">
+                        {request.request_no || "—"}
+                    </span>
+                </span>,
+                <span key="amount" className="inline-flex items-baseline gap-1">
+                    申请金额：
+                    <MoneyValue value={amount} display="exact" />
+                </span>,
+            ]}
+            effects={[
+                "撤回后释放本次申请额度，申请保留为草稿。",
+                ...(reviseRejected
+                    ? ["原申请编号和审批记录保留，修改后可重新提交审批。"]
+                    : []),
+            ]}
+            formContent={
+                <div className="space-y-3">
+                    <form.AppField name="reason">
+                        {(field) => (
+                            <field.TextareaField
+                                id="invoice-request-cancel-reason"
+                                label="撤回原因"
+                                placeholder="请说明撤回本次开票申请的原因"
+                                rows={3}
+                                maxLength={1000}
+                                required
+                                disabled={cancel.isPending || uncertain}
+                            />
+                        )}
+                    </form.AppField>
+                    {submitError ? (
+                        <Alert variant="destructive">
+                            <AlertDescription>{submitError}</AlertDescription>
+                        </Alert>
+                    ) : null}
+                </div>
+            }
+            onConfirmError={() => {
+                // 校验错误与请求错误均在弹窗表单区内展示
+            }}
+            onConfirm={async () => {
+                setSubmitError(null)
+                if (!pending.current) {
+                    const parsed = reasonSchema.safeParse(
+                        form.state.values.reason,
+                    )
+                    if (!parsed.success) {
+                        await form.validateAllFields("submit")
+                        throw new Error("请输入撤回原因")
+                    }
+                    pending.current = {
+                        id: request.id,
+                        expected_version: request.version,
+                        reason: parsed.data,
+                        idempotency_key: crypto.randomUUID(),
+                    }
+                }
+                try {
+                    await cancel.mutateAsync(pending.current)
+                    pending.current = null
+                    setUncertain(false)
+                    setSubmitError(null)
+                    await onDone()
+                } catch (error) {
+                    const isUnknown =
+                        classifyFormalCommandError(error) === "unknown"
+                    setUncertain(isUnknown)
+                    if (!isUnknown) pending.current = null
+                    setSubmitError(
+                        isUnknown
+                            ? "结果尚未确认，请点击「核对撤回结果」核对原请求，切勿重复操作。"
+                            : getErrorMessage(error, "撤回失败，请稍后重试。"),
+                    )
+                    throw error
+                }
+            }}
+        />
     )
 }

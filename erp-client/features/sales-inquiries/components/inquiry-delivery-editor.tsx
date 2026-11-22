@@ -4,9 +4,9 @@ import * as React from "react"
 import { withForm } from "@/components/form"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { QuantityValue } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { compareDecimal, sumFixed } from "@/lib/fixed-decimal"
 import type { AddressImportChanges } from "../lib/address-import-plan"
@@ -228,15 +228,14 @@ export const InquiryDeliveryEditor = withForm({
                             需求{" "}
                             <QuantityValue value={line.quantity} unit={unit} />
                         </span>
-                        <Badge
-                            variant={
+                        <StatusBadge
+                            tone={
                                 progress.complete && !progress.overAllocated
-                                    ? "secondary"
+                                    ? "neutral"
                                     : "warning"
                             }
-                        >
-                            {progress.label}
-                        </Badge>
+                            label={progress.label}
+                        />
                     </div>
                     <form.Field name={allocationsPath} mode="array">
                         {() => (

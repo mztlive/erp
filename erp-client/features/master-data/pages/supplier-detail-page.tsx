@@ -14,6 +14,7 @@ import {
     DetailWorkspaceBody,
     DetailWorkspaceChrome,
     DetailWorkspacePage,
+    DetailWorkspaceSection,
     DetailWorkspaceSkeleton,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -25,23 +26,51 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
     const editor = useSupplierEditor(stableId)
     const { isCreate, detailQuery, data, listHref, accountQuery, canCreate } =
         editor
+    const backLink = {
+        id: "master-data-supplier-detail-back-list",
+        label: "供应商列表",
+        href: listHref,
+    } as const
 
     if (isCreate && accountQuery.isPending) {
         return <DetailWorkspaceSkeleton title="新建供应商" />
     }
 
+    if (isCreate && accountQuery.isError) {
+        return (
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title="新建供应商" back={backLink} />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection>
+                        <BusinessFailureState
+                            error={accountQuery.error}
+                            onRetry={() => void accountQuery.refetch()}
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
+        )
+    }
+
     if (isCreate && !canCreate) {
         return (
             <DetailWorkspacePage>
-                <DetailWorkspaceChrome title="新建供应商" />
+                <DetailWorkspaceChrome title="新建供应商" back={backLink} />
                 <DetailWorkspaceBody>
-                    <div className="pt-4">
+                    <DetailWorkspaceSection>
                         <BusinessFailureState
                             kind="permission"
-                            error={accountQuery.error}
-                            description="当前账号没有创建供应商的权限。"
+                            description="当前账号没有创建供应商的权限，请联系管理员或有权限的同事。"
+                            action={
+                                <Button
+                                    id="master-data-supplier-detail-back-list-action"
+                                    render={<Link href={listHref} />}
+                                >
+                                    {masterDataCopy.actionBackList}
+                                </Button>
+                            }
                         />
-                    </div>
+                    </DetailWorkspaceSection>
                 </DetailWorkspaceBody>
             </DetailWorkspacePage>
         )
@@ -59,9 +88,9 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
     if (!isCreate && (detailQuery.isError || !data)) {
         return (
             <DetailWorkspacePage>
-                <DetailWorkspaceChrome title="供应商详情" />
+                <DetailWorkspaceChrome title="供应商详情" back={backLink} />
                 <DetailWorkspaceBody>
-                    <div className="pt-4">
+                    <DetailWorkspaceSection>
                         <BusinessFailureState
                             error={
                                 detailQuery.isError
@@ -86,7 +115,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                                     </Button>
                                 ) : (
                                     <Button
-                                        id="master-data-supplier-detail-back-list"
+                                        id="master-data-supplier-detail-back-list-action"
                                         render={<Link href={listHref} />}
                                     >
                                         {masterDataCopy.actionBackList}
@@ -94,7 +123,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                                 )
                             }
                         />
-                    </div>
+                    </DetailWorkspaceSection>
                 </DetailWorkspaceBody>
             </DetailWorkspacePage>
         )

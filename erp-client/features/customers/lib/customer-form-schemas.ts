@@ -77,17 +77,21 @@ const createSchema = z.object({
     bankAccounts: z.array(bankAccountRowSchema),
 })
 
-const editSchema = z.object({
+const editDraftSchema = z.object({
     reuseExistingParty: z.boolean(),
     legalName: z.string().trim().min(2, "请填写法定名称"),
     shortName: z.string(),
     unifiedCreditCode: unifiedCreditCodeSchema,
     defaultPaymentTerm: z.string(),
     status: z.enum(["active", "disabled"]),
-    changeReason: z.string().trim().min(2, "请填写修改原因"),
+    changeReason: z.string(),
     contacts: z.array(contactRowSchema),
     addresses: z.array(addressRowSchema),
     bankAccounts: z.array(bankAccountRowSchema),
 })
 
-export { createSchema, editSchema }
+const editSchema = editDraftSchema.extend({
+    changeReason: z.string().trim().min(2, "请填写修改原因"),
+})
+
+export { createSchema, editDraftSchema, editSchema }

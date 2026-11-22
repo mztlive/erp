@@ -411,16 +411,29 @@ export function InquiryFeesContent({
                 </p>
             ) : (
                 <>
-                    <div className="overflow-x-auto rounded-lg border">
+                    <div
+                        data-slot="detail-inline-table"
+                        className="min-w-0 border-y border-border/70"
+                    >
                         <Table>
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>费用及条件</TableHead>
-                                    <TableHead>反馈金额</TableHead>
-                                    <TableHead>未分摊</TableHead>
-                                    <TableHead>办理中</TableHead>
-                                    <TableHead>已办理</TableHead>
-                                    <TableHead>可用余额</TableHead>
+                                    <TableHead data-align="end">
+                                        反馈金额
+                                    </TableHead>
+                                    <TableHead data-align="end">
+                                        未分摊
+                                    </TableHead>
+                                    <TableHead data-align="end">
+                                        办理中
+                                    </TableHead>
+                                    <TableHead data-align="end">
+                                        已办理
+                                    </TableHead>
+                                    <TableHead data-align="end">
+                                        可用余额
+                                    </TableHead>
                                     {canAllocate && (
                                         <TableHead className="text-right">
                                             操作
@@ -449,31 +462,46 @@ export function InquiryFeesContent({
                                                 {summary.fee.public_note}
                                             </p>
                                         </TableCell>
-                                        <TableCell>
+                                        <TableCell
+                                            data-align="end"
+                                            className="num"
+                                        >
                                             <MoneyValue
                                                 value={summary.fee.amount_gross}
                                                 display="exact"
                                             />
                                         </TableCell>
-                                        <TableCell>
+                                        <TableCell
+                                            data-align="end"
+                                            className="num"
+                                        >
                                             <MoneyValue
                                                 value={summary.unallocated}
                                                 display="exact"
                                             />
                                         </TableCell>
-                                        <TableCell>
+                                        <TableCell
+                                            data-align="end"
+                                            className="num"
+                                        >
                                             <MoneyValue
                                                 value={summary.reserved}
                                                 display="exact"
                                             />
                                         </TableCell>
-                                        <TableCell>
+                                        <TableCell
+                                            data-align="end"
+                                            className="num"
+                                        >
                                             <MoneyValue
                                                 value={summary.handled}
                                                 display="exact"
                                             />
                                         </TableCell>
-                                        <TableCell>
+                                        <TableCell
+                                            data-align="end"
+                                            className="num"
+                                        >
                                             <MoneyValue
                                                 value={summary.available}
                                                 display="exact"
@@ -761,14 +789,21 @@ export function InquiryFeesContent({
                         </DialogContent>
                     </Dialog>
                     {allocationRows.length ? (
-                        <div className="overflow-x-auto rounded-lg border">
+                        <div
+                            data-slot="detail-inline-table"
+                            className="min-w-0 border-y border-border/70"
+                        >
                             <Table>
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>费用</TableHead>
                                         <TableHead>归属销售单</TableHead>
-                                        <TableHead>已分摊金额</TableHead>
-                                        <TableHead>本笔可用</TableHead>
+                                        <TableHead data-align="end">
+                                            已分摊金额
+                                        </TableHead>
+                                        <TableHead data-align="end">
+                                            本笔可用
+                                        </TableHead>
                                         <TableHead>办理条件</TableHead>
                                         {canCreateExpense && (
                                             <TableHead className="text-right">
@@ -785,14 +820,17 @@ export function InquiryFeesContent({
                                             <TableCell>
                                                 {row.fee.name}
                                             </TableCell>
-                                            <TableCell>
+                                            <TableCell className="num">
                                                 {sourceById.get(
                                                     row.allocation
                                                         .sales_order_id,
                                                 )?.order_no ??
                                                     "关联销售单待核对"}
                                             </TableCell>
-                                            <TableCell>
+                                            <TableCell
+                                                data-align="end"
+                                                className="num"
+                                            >
                                                 <MoneyValue
                                                     value={
                                                         row.allocation.amount
@@ -800,7 +838,10 @@ export function InquiryFeesContent({
                                                     display="exact"
                                                 />
                                             </TableCell>
-                                            <TableCell>
+                                            <TableCell
+                                                data-align="end"
+                                                className="num"
+                                            >
                                                 <MoneyValue
                                                     value={row.balance}
                                                     display="exact"

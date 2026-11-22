@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type ReactNode } from "react"
+import { useCallback, useState, type ReactNode } from "react"
 import { ArrowRightIcon } from "lucide-react"
 import {
     WorkspaceTaskPageSlot,
@@ -11,25 +11,22 @@ import {
     DetailWorkspaceMetricItem,
     DetailWorkspaceMetrics,
     DetailWorkspaceSection,
+    DetailWorkspaceTabs,
     MoneyValue,
     detailWorkspaceStyles,
 } from "@/components/business"
-import {
-    ObjectSectionTabs,
-    ObjectSectionTabsPanel,
-} from "@/components/business/object-section-tabs"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { cn } from "@/lib/utils"
 import { compareDecimal } from "@/lib/fixed-decimal"
+import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
+import { cn } from "@/lib/utils"
 import { requestStatusLabel, requestStatusTone } from "../lib/display"
 import type { PaymentRequest } from "../types"
-import { RequestOrderDetails } from "./request-order-details"
 import { RequestMaterials } from "./request-materials"
+import { RequestOrderDetails } from "./request-order-details"
 import { RequestPaymentHistory } from "./request-payment-history"
-import { RequestSubmissionHistory } from "./request-submission-history"
 import { RequestReviewContent } from "./request-review-content"
+import { RequestSubmissionHistory } from "./request-submission-history"
 
 const detailSections = [
     { id: "details", label: "申请内容" },
@@ -38,14 +35,22 @@ const detailSections = [
     { id: "history", label: "审批记录" },
 ] as const
 
+type DetailSectionId = (typeof detailSections)[number]["id"]
+
 const sectionsId = "ppr-detail-sections"
 const sectionTabId = (id: string) => `${sectionsId}-tab-${id}`
+
+function resolveDetailSection(
+    value: string | null | undefined,
+): DetailSectionId {
+    return detailSections.find((item) => item.id === value)?.id ?? "details"
+}
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
     return (
         <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1">
-            <dt className="text-muted-foreground">{label}</dt>
-            <dd className="min-w-0 whitespace-pre-wrap break-words">
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd className="min-w-0 whitespace-pre-wrap break-words text-body-compact">
                 {children}
             </dd>
         </div>
@@ -90,7 +95,9 @@ function PaymentInformation({
             {request.execution_method.type === "supplier_deposit" ? (
                 <div
                     className={
-                        fullPage ? "space-y-3" : "space-y-3 border-t pt-5"
+                        fullPage
+                            ? "space-y-3"
+                            : "space-y-3 border-t border-border/60 pt-5"
                     }
                 >
                     <Heading className={headingClassName}>
@@ -98,9 +105,21 @@ function PaymentInformation({
                     </Heading>
                     <p className="text-body-compact">
                         人民币预存款
-                        {request.deposit_account?.identity.external_account_ref
-                            ? ` · 账户标识 ****${request.deposit_account.identity.external_account_ref.slice(-4)}`
-                            : "账户已冻结"}
+                        {request.deposit_account?.identity
+                            .external_account_ref ? (
+                            <>
+                                {" "}
+                                · 账户标识{" "}
+                                <span className="num">
+                                    ****
+                                    {request.deposit_account.identity.external_account_ref.slice(
+                                        -4,
+                                    )}
+                                </span>
+                            </>
+                        ) : (
+                            " · 账户已冻结"
+                        )}
                     </p>
                     <p className="text-xs text-muted-foreground">
                         使用提交时已冻结的同主体、同供应商预存款账户。批准后按采购执行组占用，实际扣款核实后才核销，不登记本次银行付款。
@@ -109,7 +128,9 @@ function PaymentInformation({
             ) : (
                 <div
                     className={
-                        fullPage ? "space-y-3" : "space-y-3 border-t pt-5"
+                        fullPage
+                            ? "space-y-3"
+                            : "space-y-3 border-t border-border/60 pt-5"
                     }
                 >
                     <Heading className={headingClassName}>收款信息</Heading>
@@ -147,7 +168,7 @@ export function RequestDetailContent({
     workItemId?: string
 }) {
     const fullPage = useWorkspaceTaskPage()
-    const [section, setSection] = useState("details")
+    const [section, setSection] = useState<DetailSectionId>("details")
     if (fullPage)
         return (
             <RequestReviewContent
@@ -160,6 +181,7 @@ export function RequestDetailContent({
                 workItemId={workItemId}
             />
         )
+    const items = showHistory ? detailSections : detailSections.slice(0, 2)
     return (
         <div className="@container/payment-detail min-w-0 space-y-5">
             <WorkspaceTaskPageSlot slot="aside">
@@ -168,18 +190,21 @@ export function RequestDetailContent({
                     submissionVersion={submissionVersion}
                 />
             </WorkspaceTaskPageSlot>
-            <ObjectSectionTabs
-                id={sectionsId}
-                value={section}
-                onValueChange={setSection}
-                listLabel="付款申请分区"
-                items={
-                    showHistory ? detailSections : detailSections.slice(0, 2)
-                }
-            >
-                <ObjectSectionTabsPanel value="details" className="space-y-6">
+            <div className="border-b border-border/60">
+                <DetailWorkspaceTabs
+                    value={section}
+                    onValueChange={(next) =>
+                        setSection(resolveDetailSection(next))
+                    }
+                    items={items}
+                    ariaLabel="付款申请分区"
+                    tabIdPrefix={`${sectionsId}-tab`}
+                />
+            </div>
+            {section === "details" && (
+                <div className="space-y-6">
                     <PaymentInformation request={request} account={account} />
-                    <div className="border-t pt-5">
+                    <div className="border-t border-border/60 pt-5">
                         <RequestOrderDetails
                             request={request}
                             compact={embedded}
@@ -189,44 +214,37 @@ export function RequestDetailContent({
                         request={request}
                         onOpen={() => setSection("materials")}
                     />
-                </ObjectSectionTabsPanel>
-                <ObjectSectionTabsPanel
-                    value="materials"
-                    className="[&>section]:border-t-0 [&>section]:pt-0"
-                >
+                </div>
+            )}
+            {section === "materials" && (
+                <div className="[&>section]:border-t-0 [&>section]:pt-0">
                     <RequestMaterials
                         request={request}
                         workItemId={workItemId}
                         submissionVersion={submissionVersion}
                     />
-                </ObjectSectionTabsPanel>
-                {showHistory && (
-                    <>
-                        <ObjectSectionTabsPanel
-                            value="payments"
-                            className="[&>section]:border-t-0 [&>section]:pt-0"
-                        >
-                            <RequestPaymentHistory
-                                request={request}
-                                workItemId={workItemId}
-                            />
-                        </ObjectSectionTabsPanel>
-                        <ObjectSectionTabsPanel
-                            value="history"
-                            className="[&>section:first-child]:border-t-0 [&>section:first-child]:pt-0"
-                        >
-                            {approval ?? (
-                                <p className="text-xs text-muted-foreground">
-                                    尚未提交财务审核。
-                                </p>
-                            )}
-                            {!embedded && (
-                                <RequestSubmissionHistory request={request} />
-                            )}
-                        </ObjectSectionTabsPanel>
-                    </>
-                )}
-            </ObjectSectionTabs>
+                </div>
+            )}
+            {showHistory && section === "payments" && (
+                <div className="[&>section]:border-t-0 [&>section]:pt-0">
+                    <RequestPaymentHistory
+                        request={request}
+                        workItemId={workItemId}
+                    />
+                </div>
+            )}
+            {showHistory && section === "history" && (
+                <div className="space-y-5">
+                    {approval ?? (
+                        <p className="text-xs text-muted-foreground">
+                            尚未提交财务审核。
+                        </p>
+                    )}
+                    {!embedded && (
+                        <RequestSubmissionHistory request={request} />
+                    )}
+                </div>
+            )}
         </div>
     )
 }
@@ -244,7 +262,7 @@ function RequestMaterialsLink({
         <div
             className={cn(
                 "flex flex-wrap items-center justify-between gap-3",
-                !detailWorkspace && "border-t pt-4",
+                !detailWorkspace && "border-t border-border/60 pt-4",
             )}
         >
             <p className="text-xs text-muted-foreground">
@@ -256,11 +274,7 @@ function RequestMaterialsLink({
                 id="ppr-detail-open-materials"
                 variant="ghost"
                 size="sm"
-                className={
-                    detailWorkspace
-                        ? detailWorkspaceStyles.subtleButton
-                        : undefined
-                }
+                className={detailWorkspaceStyles.subtleButton}
                 onClick={() => {
                     onOpen()
                     document.getElementById(sectionTabId("materials"))?.focus()
@@ -290,7 +304,7 @@ function ClosedPaymentNotice({
             className={
                 detailWorkspace
                     ? "space-y-1 border-t border-border/60 py-3 text-body-compact"
-                    : "space-y-1 border-t pt-3 text-body-compact"
+                    : "space-y-1 border-t border-border/60 pt-3 text-body-compact"
             }
         >
             <p>
@@ -317,11 +331,11 @@ function RequestPaymentSummary({
 }) {
     return (
         <section
-            className="space-y-3 rounded-lg bg-muted/40 px-5 py-4"
+            className="space-y-3 border-b border-border/60 pb-4"
             aria-label="付款申请摘要"
         >
             <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs text-muted-foreground">
+                <span className="num text-xs text-muted-foreground">
                     {submissionVersion
                         ? `第 ${submissionVersion} 次提交时的付款情况`
                         : "当前付款情况"}
@@ -333,31 +347,23 @@ function RequestPaymentSummary({
                     />
                 )}
             </div>
-            <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-                {(
-                    [
-                        ["申请金额", request.total_amount],
-                        ["已付金额", request.paid_amount],
-                        ["待付金额", request.unpaid_amount],
-                    ] as const
-                ).map(([label, value]) => (
-                    <div key={label} className="min-w-0 space-y-1">
-                        <dt
-                            className="text-xs text-muted-foreground"
-                            title={
-                                label === "已付金额"
-                                    ? "扣除已冲正金额后的有效付款"
-                                    : undefined
-                            }
-                        >
-                            {label}
-                        </dt>
-                        <dd className="text-body-compact font-medium">
-                            <MoneyValue value={value} />
-                        </dd>
-                    </div>
-                ))}
-            </dl>
+            <DetailWorkspaceMetrics columns={3} variant="inline">
+                <DetailWorkspaceMetricItem
+                    label="申请金额"
+                    value={<MoneyValue value={request.total_amount} />}
+                    emphasis="primary"
+                />
+                <DetailWorkspaceMetricItem
+                    label={
+                        <span title="扣除已冲正金额后的有效付款">已付金额</span>
+                    }
+                    value={<MoneyValue value={request.paid_amount} />}
+                />
+                <DetailWorkspaceMetricItem
+                    label="待付金额"
+                    value={<MoneyValue value={request.unpaid_amount} />}
+                />
+            </DetailWorkspaceMetrics>
             <ClosedPaymentNotice request={request} />
         </section>
     )
@@ -376,34 +382,35 @@ export function RequestDetailWorkspaceContent({
     alerts: ReactNode
     renderChrome: (tabs: ReactNode) => ReactNode
 }) {
-    const [section, setSection] = useState("details")
+    const router = useRouter()
+    const pathname = usePathname()
+    const searchParams = useSearchParams()
+    const section = resolveDetailSection(searchParams.get("section"))
+
+    const selectSection = useCallback(
+        (next: string) => {
+            const resolved = resolveDetailSection(next)
+            const params = new URLSearchParams(searchParams.toString())
+            if (resolved === "details") params.delete("section")
+            else params.set("section", resolved)
+            const qs = params.toString()
+            router.replace(qs ? `${pathname}?${qs}` : pathname, {
+                scroll: false,
+            })
+        },
+        [pathname, router, searchParams],
+    )
+
     return (
-        <Tabs
-            id={sectionsId}
-            value={section}
-            onValueChange={(next) => {
-                if (next) setSection(next)
-            }}
-            className="min-w-0 flex-1 gap-0"
-        >
-            {/* 共用 Tabs 根节点，保留分区与页签的无障碍关联。 */}
+        <>
             {renderChrome(
-                <TabsList
-                    variant="line"
-                    aria-label="付款申请分区"
-                    className={detailWorkspaceStyles.tabsList}
-                >
-                    {detailSections.map(({ id, label }) => (
-                        <TabsTrigger
-                            key={id}
-                            id={sectionTabId(id)}
-                            value={id}
-                            className={detailWorkspaceStyles.tab}
-                        >
-                            {label}
-                        </TabsTrigger>
-                    ))}
-                </TabsList>,
+                <DetailWorkspaceTabs
+                    value={section}
+                    onValueChange={selectSection}
+                    items={detailSections}
+                    ariaLabel="付款申请分区"
+                    tabIdPrefix={`${sectionsId}-tab`}
+                />,
             )}
             <DetailWorkspaceBody
                 className="@container/payment-detail"
@@ -445,45 +452,57 @@ export function RequestDetailWorkspaceContent({
                     </section>
                 }
             >
-                <TabsContent value="details">
-                    <DetailWorkspaceSection width="form">
-                        <PaymentInformation
+                {section === "details" && (
+                    <>
+                        <DetailWorkspaceSection width="form" divider={false}>
+                            <PaymentInformation
+                                request={request}
+                                account={account}
+                                detailWorkspace
+                            />
+                        </DetailWorkspaceSection>
+                        <RequestOrderDetails
                             request={request}
-                            account={account}
                             detailWorkspace
                         />
-                    </DetailWorkspaceSection>
-                    <RequestOrderDetails request={request} detailWorkspace />
-                    <DetailWorkspaceSection>
-                        <RequestMaterialsLink
-                            request={request}
-                            onOpen={() => setSection("materials")}
-                            detailWorkspace
-                        />
-                    </DetailWorkspaceSection>
-                </TabsContent>
-                <TabsContent value="materials">
+                        <DetailWorkspaceSection width="form">
+                            <RequestMaterialsLink
+                                request={request}
+                                onOpen={() => selectSection("materials")}
+                                detailWorkspace
+                            />
+                        </DetailWorkspaceSection>
+                    </>
+                )}
+                {section === "materials" && (
                     <RequestMaterials request={request} detailWorkspace />
-                </TabsContent>
-                <TabsContent value="payments">
-                    <DetailWorkspaceSection>
+                )}
+                {section === "payments" && (
+                    <DetailWorkspaceSection width="form" divider={false}>
                         <RequestPaymentHistory
                             request={request}
                             detailWorkspace
                         />
                     </DetailWorkspaceSection>
-                </TabsContent>
-                <TabsContent value="history">
-                    <DetailWorkspaceSection title="审批记录" width="form">
+                )}
+                {section === "history" && (
+                    <DetailWorkspaceSection
+                        title="审批记录"
+                        width="form"
+                        divider={false}
+                    >
                         {approval ?? (
                             <p className="text-xs text-muted-foreground">
                                 尚未提交财务审核。
                             </p>
                         )}
-                        <RequestSubmissionHistory request={request} />
+                        <RequestSubmissionHistory
+                            request={request}
+                            detailWorkspace
+                        />
                     </DetailWorkspaceSection>
-                </TabsContent>
+                )}
             </DetailWorkspaceBody>
-        </Tabs>
+        </>
     )
 }

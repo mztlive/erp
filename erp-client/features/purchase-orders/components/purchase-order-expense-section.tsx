@@ -41,7 +41,7 @@ import { useConfirmExpenseOccurrenceMutation } from "@/features/purchase-orders/
 import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { compareDecimal, multiplyFixed } from "@/lib/fixed-decimal"
+import { compareDecimal, multiplyFixed, sumFixed } from "@/lib/fixed-decimal"
 import { hasPermission } from "@/lib/permissions"
 
 type ExpenseLine = PurchaseOrderCenterView["currentContent"]["lines"][number]
@@ -104,6 +104,12 @@ export function PurchaseOrderExpenseSection({
     const lines = order.currentContent.lines.filter((line) => line.expense)
     if (lines.length === 0) return null
     const expenseOnly = lines.length === order.currentContent.lines.length
+    const expenseSubtotal = expenseOnly
+        ? order.currentContent.totals.gross
+        : sumFixed(
+              lines.map((line) => line.grossAmount),
+              { maxScale: 2, outputScale: 2 },
+          )
     const pending = lines.filter(
         (line) =>
             !line.expenseOccurrence &&
@@ -155,23 +161,19 @@ export function PurchaseOrderExpenseSection({
                     </TableBody>
                 </Table>
             </div>
-            {expenseOnly ? (
-                <div className="flex flex-wrap items-baseline justify-end gap-x-4 gap-y-1 pt-1 text-xs text-muted-foreground">
-                    <span className="num">共 {lines.length} 项</span>
-                    <span>
-                        含税合计{" "}
-                        <span className="num text-body-compact font-semibold text-foreground">
-                            {costMasked ? (
-                                "•••"
-                            ) : (
-                                <MoneyValue
-                                    value={order.currentContent.totals.gross}
-                                />
-                            )}
-                        </span>
+            <div className="flex flex-wrap items-baseline justify-end gap-x-4 gap-y-1 pt-1 text-xs text-muted-foreground">
+                <span className="num">共 {lines.length} 项</span>
+                <span>
+                    {expenseOnly ? "含税合计" : "费用含税小计"}{" "}
+                    <span className="num text-body-compact font-semibold text-foreground">
+                        {costMasked ? (
+                            "•••"
+                        ) : (
+                            <MoneyValue value={expenseSubtotal} />
+                        )}
                     </span>
-                </div>
-            ) : null}
+                </span>
+            </div>
             <ConfirmExpenseDialog
                 order={order}
                 line={confirming}

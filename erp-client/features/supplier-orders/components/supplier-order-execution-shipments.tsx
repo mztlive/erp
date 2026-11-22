@@ -1,7 +1,11 @@
 "use client"
 
-import { QuantityValue } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import {
+    BusinessStatusBadge,
+    DetailWorkspaceSection,
+    QuantityValue,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import {
     Table,
     TableBody,
@@ -10,6 +14,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import { cn } from "@/lib/utils"
 import type { SupplierExecutionShipment } from "../api/execution-setup"
 
 /** 来源发货数量与运单独立展示，运单不承担数量分摊。 */
@@ -20,18 +25,18 @@ export function SupplierOrderExecutionShipments({
 }) {
     if (shipments.length === 0) return null
     return (
-        <section
-            className="space-y-3 rounded-xl border bg-card p-5"
-            aria-label="供应商发货与物流"
+        <DetailWorkspaceSection
+            title="供应商发货与物流"
+            width="full"
+            subtitle="物流查询与 ERP 交付分别记录，已发货数量以已应用的交付记录为准"
         >
-            <div className="space-y-1">
-                <h3 className="font-semibold">供应商发货与物流</h3>
-                <p className="text-xs text-muted-foreground">
-                    物流查询与 ERP
-                    交付分别记录。已发货数量以已应用的交付记录为准。
-                </p>
-            </div>
-            <div className="min-w-0 overflow-x-auto">
+            <div
+                data-slot="detail-inline-table"
+                className={cn(
+                    detailWorkspaceStyles.inlineTableWrapper,
+                    "overflow-x-auto",
+                )}
+            >
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -82,9 +87,12 @@ export function SupplierOrderExecutionShipments({
                                         </ul>
                                     ) : (
                                         <div className="space-y-1">
-                                            <Badge variant="outline">
-                                                仅记录物流
-                                            </Badge>
+                                            <BusinessStatusBadge
+                                                context="list"
+                                                appearance="quiet"
+                                                tone="neutral"
+                                                label="仅记录物流"
+                                            />
                                             <p className="text-xs text-muted-foreground">
                                                 此运单不分摊商品数量；发货进度见对应子单及交付记录。
                                             </p>
@@ -96,6 +104,6 @@ export function SupplierOrderExecutionShipments({
                     </TableBody>
                 </Table>
             </div>
-        </section>
+        </DetailWorkspaceSection>
     )
 }

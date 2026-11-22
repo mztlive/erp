@@ -6,9 +6,10 @@ import { RefreshCwIcon, SendIcon } from "lucide-react"
 
 import {
     DetailWorkspaceChrome,
+    DetailWorkspaceMeta,
     detailWorkspaceStyles,
     GuardedBusinessAction,
-    WorkspaceTaskFooter,
+    type DetailWorkspaceBackLink,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
@@ -22,6 +23,8 @@ function SettlementCenterDocumentHeader({
     refreshPending,
     submitBlocker,
     onBack,
+    backLabel = "返回对账单列表",
+    backVisibility = "standalone-only",
     onRefresh,
     onSubmitReview,
     embedded = false,
@@ -33,12 +36,18 @@ function SettlementCenterDocumentHeader({
     refreshPending: boolean
     submitBlocker?: { message: string }
     onBack: () => void
+    backLabel?: string
+    backVisibility?: DetailWorkspaceBackLink["visibility"]
     onRefresh: () => void
     onSubmitReview: () => void
     embedded?: boolean
     tabs: ReactNode
 }) {
     const st = statement
+    const billVersion = st.externalBillVersion
+        ? String(st.externalBillVersion).replace(/^v/i, "")
+        : ""
+
     return (
         <DetailWorkspaceChrome
             tabs={tabs}
@@ -47,7 +56,8 @@ function SettlementCenterDocumentHeader({
                     ? undefined
                     : {
                           id: "supplier-settlements-center-back",
-                          label: "对账单列表",
+                          label: backLabel,
+                          visibility: backVisibility,
                           onClick: onBack,
                       }
             }
@@ -56,114 +66,85 @@ function SettlementCenterDocumentHeader({
             primaryStatus={{ label: st.statusLabel, tone: st.statusTone }}
             version={st.lockVersion}
             meta={
-                <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                    <span>
-                        经办{" "}
-                        <span className="font-medium text-foreground">
-                            {st.preparedBy?.displayName ?? "—"}
-                        </span>
-                    </span>
-                    <span className="text-border" aria-hidden="true">
-                        ·
-                    </span>
-                    <span>
-                        复核{" "}
-                        <span className="font-medium text-foreground">
-                            {st.reviewedBy?.displayName ?? "待复核人"}
-                        </span>
-                    </span>
-                    <span className="text-border" aria-hidden="true">
-                        ·
-                    </span>
-                    <span className="text-muted-foreground">
-                        记录 {formatDateTime(immutableFactsAsOf, "default")}
-                    </span>
-                </span>
+                <DetailWorkspaceMeta
+                    items={[
+                        <span key="prepared">
+                            经办{" "}
+                            <span className="font-medium text-foreground">
+                                {st.preparedBy?.displayName ?? "—"}
+                            </span>
+                        </span>,
+                        <span key="reviewed">
+                            复核{" "}
+                            <span className="font-medium text-foreground">
+                                {st.reviewedBy?.displayName ?? "待复核人"}
+                            </span>
+                        </span>,
+                        <span key="facts-as-of" className="num">
+                            记录 {formatDateTime(immutableFactsAsOf, "default")}
+                        </span>,
+                        st.externalBillNo ? (
+                            <span key="bill" className="num">
+                                账单 {st.externalBillNo}
+                                {billVersion ? `（第 ${billVersion} 版）` : ""}
+                            </span>
+                        ) : null,
+                    ]}
+                />
+            }
+            secondaryActions={
+                <PermissionGuard permission="supplier_settlement_statement:update">
+                    {allowed.has("REFRESH_TRIAL") ? (
+                        <LoadingButton
+                            id="supplier-settlements-center-refresh"
+                            loading={refreshPending}
+                            type="button"
+                            variant="ghost"
+                            className={detailWorkspaceStyles.quietButton}
+                            size="sm"
+                            disabled={refreshPending}
+                            onClick={() => void onRefresh()}
+                        >
+                            {!refreshPending ? (
+                                <RefreshCwIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                            ) : null}
+                            {refreshPending ? "刷新中…" : "刷新试算"}
+                        </LoadingButton>
+                    ) : null}
+                </PermissionGuard>
             }
             primaryAction={
-                <WorkspaceTaskFooter
-                    fallback={
-                        <SettlementCenterHeaderActions
-                            allowed={allowed}
-                            refreshPending={refreshPending}
-                            submitBlocker={submitBlocker}
-                            onRefresh={onRefresh}
-                            onSubmitReview={onSubmitReview}
-                        />
-                    }
-                >
-                    <SettlementCenterHeaderActions
-                        allowed={allowed}
-                        refreshPending={refreshPending}
-                        submitBlocker={submitBlocker}
-                        onRefresh={onRefresh}
-                        onSubmitReview={onSubmitReview}
-                    />
-                </WorkspaceTaskFooter>
+                <PermissionGuard permission="supplier_settlement_statement:submit">
+                    {allowed.has("SUBMIT_REVIEW") ? (
+                        <Button
+                            id="supplier-settlements-center-submit-review"
+                            type="button"
+                            size="sm"
+                            onClick={onSubmitReview}
+                        >
+                            <SendIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            提交复核
+                        </Button>
+                    ) : submitBlocker ? (
+                        <GuardedBusinessAction
+                            id="supplier-settlements-center-submit-review-disabled"
+                            type="button"
+                            size="sm"
+                            disabled
+                            reason={submitBlocker.message}
+                        >
+                            提交复核
+                        </GuardedBusinessAction>
+                    ) : undefined}
+                </PermissionGuard>
             }
         />
-    )
-}
-
-function SettlementCenterHeaderActions({
-    allowed,
-    refreshPending,
-    submitBlocker,
-    onRefresh,
-    onSubmitReview,
-}: {
-    allowed: Set<string>
-    refreshPending: boolean
-    submitBlocker?: { message: string }
-    onRefresh: () => void
-    onSubmitReview: () => void
-}) {
-    return (
-        <div className="flex flex-wrap gap-2">
-            <PermissionGuard permission="supplier_settlement_statement:update">
-                {allowed.has("REFRESH_TRIAL") ? (
-                    <LoadingButton
-                        id="supplier-settlements-center-refresh"
-                        loading={refreshPending}
-                        type="button"
-                        variant="ghost"
-                        className={detailWorkspaceStyles.quietButton}
-                        size="sm"
-                        disabled={refreshPending}
-                        onClick={() => void onRefresh()}
-                    >
-                        <RefreshCwIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                        />
-                        {refreshPending ? "刷新中…" : "刷新试算"}
-                    </LoadingButton>
-                ) : null}
-            </PermissionGuard>
-            <PermissionGuard permission="supplier_settlement_statement:submit">
-                {allowed.has("SUBMIT_REVIEW") ? (
-                    <Button
-                        id="supplier-settlements-center-submit-review"
-                        type="button"
-                        size="sm"
-                        onClick={onSubmitReview}
-                    >
-                        <SendIcon data-icon="inline-start" aria-hidden="true" />
-                        提交复核
-                    </Button>
-                ) : submitBlocker ? (
-                    <GuardedBusinessAction
-                        id="supplier-settlements-center-submit-review-disabled"
-                        type="button"
-                        size="sm"
-                        disabled
-                        reason={submitBlocker.message}
-                    >
-                        提交复核
-                    </GuardedBusinessAction>
-                ) : null}
-            </PermissionGuard>
-        </div>
     )
 }
 

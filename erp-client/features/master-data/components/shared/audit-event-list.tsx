@@ -1,6 +1,6 @@
 "use client"
 
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type { MasterDataCenterView } from "@/features/master-data/types"
 import { formatDateTime } from "@/lib/datetime"
@@ -19,18 +19,21 @@ export function MasterDataAuditList({
         )
     }
     return (
-        <ul className="space-y-2 text-body-compact">
+        <ul className="divide-y divide-border/60 text-body-compact">
             {events.map((ev) => (
-                <li
-                    key={ev.id}
-                    className="rounded-md border border-border px-3 py-2"
-                >
-                    <div className="flex flex-wrap gap-2">
+                <li key={ev.id} className="py-2.5 first:pt-0 last:pb-0">
+                    <div className="flex flex-wrap items-center gap-2">
                         <span className="num text-xs text-muted-foreground">
                             {formatDateTime(ev.at, "full", "passthrough")}
                         </span>
-                        <span>{ev.actor}</span>
-                        <Badge variant="outline">{ev.action}</Badge>
+                        <span className="font-medium text-foreground">
+                            {ev.actor}
+                        </span>
+                        <StatusBadge
+                            tone="neutral"
+                            appearance="quiet"
+                            label={ev.action}
+                        />
                     </div>
                     <div className="mt-1 text-muted-foreground">
                         {ev.detail}

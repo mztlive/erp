@@ -3,6 +3,7 @@
 import * as React from "react"
 import { z } from "zod"
 
+import { DiscardConfirmDialog } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -16,6 +17,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { FieldGroup } from "@/components/ui/field"
+import { toast } from "@/components/ui/toast"
 import { DialogScrollBody } from "@/features/master-data/components/shared/action-dialog-shared"
 import { FixedResourceDisableDialog } from "@/features/master-data/components/shared/disable-action-dialog"
 import {
@@ -87,8 +89,12 @@ export function WarehouseReviseDialog({
             ? target.warehouseFulfillmentHandlers
             : undefined
     const [error, setError] = React.useState<string | null>(null)
+    const [discardOpen, setDiscardOpen] = React.useState(false)
     const optionsQuery = useWarehouseFulfillmentHandlerOptionsQuery(open)
     const updateMutation = useUpdateWarehouseFulfillmentHandlersMutation()
+
+    const initialInbound = handlers?.inboundUserId ?? ""
+    const initialOutbound = handlers?.outboundUserId ?? ""
 
     const inboundOptions = React.useMemo(
         () =>
@@ -114,8 +120,8 @@ export function WarehouseReviseDialog({
     )
     const form = useAppForm({
         defaultValues: {
-            inboundUserId: handlers?.inboundUserId ?? "",
-            outboundUserId: handlers?.outboundUserId ?? "",
+            inboundUserId: initialInbound,
+            outboundUserId: initialOutbound,
         },
         validators: {
             onChange: warehouseHandlersSchema,
@@ -138,6 +144,12 @@ export function WarehouseReviseDialog({
                     inboundHandlerUserId: value.inboundUserId,
                     outboundHandlerUserId: value.outboundUserId,
                 })
+                toast.add({
+                    title: "收发责任已保存",
+                    description: `仓库 ${identity.stableNo} 的收发经办人配置已更新。`,
+                    type: "success",
+                    timeout: 4000,
+                })
                 onOpenChange(false)
             } catch (cause) {
                 setError(getErrorMessage(cause, "收发责任未更新，请稍后重试。"))
@@ -149,145 +161,185 @@ export function WarehouseReviseDialog({
     React.useEffect(() => {
         if (!open) return
         form.reset({
-            inboundUserId: handlers?.inboundUserId ?? "",
-            outboundUserId: handlers?.outboundUserId ?? "",
+            inboundUserId: initialInbound,
+            outboundUserId: initialOutbound,
         })
         setError(null)
-    }, [
-        form,
-        handlers?.inboundUserId,
-        handlers?.outboundUserId,
-        identity.stableId,
-        open,
-    ])
+        setDiscardOpen(false)
+    }, [form, initialInbound, initialOutbound, identity.stableId, open])
+
+    const handleOpenChange = (next: boolean) => {
+        if (updateMutation.isPending) return
+        if (!next) {
+            const current = form.state.values
+            const dirty =
+                current.inboundUserId !== initialInbound ||
+                current.outboundUserId !== initialOutbound
+            if (dirty) {
+                setDiscardOpen(true)
+                return
+            }
+        }
+        onOpenChange(next)
+    }
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg">
-                <DialogHeader>
-                    <DialogTitle>配置收发责任</DialogTitle>
-                    <DialogDescription>
-                        仓库 <span className="num">{identity.stableNo}</span>
-                        ；配置保存后只用于新建的入库与仓发任务。
-                    </DialogDescription>
-                </DialogHeader>
-                <form
-                    className="flex min-h-0 flex-1 flex-col"
-                    onSubmit={(event) => {
-                        event.preventDefault()
-                        void form.handleSubmit()
-                    }}
+        <>
+            <Dialog open={open} onOpenChange={handleOpenChange}>
+                <DialogContent
+                    closeButtonId="master-data-warehouse-handler-close"
+                    showCloseButton={!updateMutation.isPending}
+                    className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg"
                 >
-                    <DialogScrollBody>
-                        {optionsQuery.isError ? (
-                            <Alert variant="destructive">
-                                <AlertTitle>经办人选项加载失败</AlertTitle>
-                                <AlertDescription>
-                                    {getErrorMessage(
-                                        optionsQuery.error,
-                                        "请稍后重试",
-                                    )}
-                                </AlertDescription>
-                            </Alert>
-                        ) : null}
-                        {error ? (
-                            <Alert variant="destructive">
-                                <AlertTitle>没有保存</AlertTitle>
-                                <AlertDescription>{error}</AlertDescription>
-                            </Alert>
-                        ) : null}
-                        <FieldGroup>
-                            <form.AppField name="inboundUserId">
-                                {(field) => (
-                                    <field.SelectField
-                                        id="master-data-warehouse-handler-inbound-combobox"
-                                        label="入库经办人"
-                                        options={inboundOptions}
-                                        onRefresh={() =>
-                                            optionsQuery.refetch({
-                                                throwOnError: true,
-                                            })
-                                        }
-                                        placeholder="选择具备入库确认权限的账号"
-                                        description="负责该仓库的采购收货与入库过账。"
-                                        loading={optionsQuery.isFetching}
-                                        disabled={optionsQuery.isPending}
-                                        allowClear={false}
-                                        required
-                                    />
-                                )}
-                            </form.AppField>
-                            <form.AppField name="outboundUserId">
-                                {(field) => (
-                                    <field.SelectField
-                                        id="master-data-warehouse-handler-outbound-combobox"
-                                        label="仓发经办人"
-                                        options={outboundOptions}
-                                        onRefresh={() =>
-                                            optionsQuery.refetch({
-                                                throwOnError: true,
-                                            })
-                                        }
-                                        placeholder="选择具备发货确认权限的账号"
-                                        description="负责该仓库的现货发货与入库后发货；可与入库经办人为同一人。"
-                                        loading={optionsQuery.isFetching}
-                                        disabled={optionsQuery.isPending}
-                                        allowClear={false}
-                                        required
-                                    />
-                                )}
-                            </form.AppField>
-                        </FieldGroup>
-                        <DialogFooter>
-                            <DialogClose
-                                render={
-                                    <Button
-                                        id="master-data-warehouse-handler-cancel"
-                                        type="button"
-                                        variant="outline"
-                                    />
-                                }
-                            >
-                                取消
-                            </DialogClose>
-                            <form.Subscribe
-                                selector={(state) =>
-                                    [
-                                        state.values.inboundUserId,
-                                        state.values.outboundUserId,
-                                    ] as const
-                                }
-                            >
-                                {([inboundUserId, outboundUserId]) => (
-                                    <form.AppForm>
-                                        <form.SubmitButton
-                                            loading={updateMutation.isPending}
-                                            id="master-data-warehouse-handler-save"
-                                            label="保存配置"
-                                            pendingLabel="保存中…"
-                                            disabled={
-                                                updateMutation.isPending ||
-                                                optionsQuery.isPending ||
-                                                optionsQuery.isError ||
-                                                !inboundOptions.some(
-                                                    (option) =>
-                                                        option.value ===
-                                                        inboundUserId,
-                                                ) ||
-                                                !outboundOptions.some(
-                                                    (option) =>
-                                                        option.value ===
-                                                        outboundUserId,
-                                                )
+                    <DialogHeader>
+                        <DialogTitle>配置收发责任</DialogTitle>
+                        <DialogDescription>
+                            仓库{" "}
+                            <span className="num">{identity.stableNo}</span>
+                            ；配置保存后只用于新建的入库与仓发任务。
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form
+                        className="flex min-h-0 flex-1 flex-col"
+                        onSubmit={(event) => {
+                            event.preventDefault()
+                            void form.handleSubmit()
+                        }}
+                    >
+                        <DialogScrollBody>
+                            {optionsQuery.isError ? (
+                                <Alert variant="destructive">
+                                    <AlertTitle>经办人选项加载失败</AlertTitle>
+                                    <AlertDescription>
+                                        {getErrorMessage(
+                                            optionsQuery.error,
+                                            "请稍后重试",
+                                        )}
+                                    </AlertDescription>
+                                </Alert>
+                            ) : null}
+                            {error ? (
+                                <Alert variant="destructive">
+                                    <AlertTitle>没有保存</AlertTitle>
+                                    <AlertDescription>{error}</AlertDescription>
+                                </Alert>
+                            ) : null}
+                            <FieldGroup>
+                                <form.AppField name="inboundUserId">
+                                    {(field) => (
+                                        <field.SelectField
+                                            id="master-data-warehouse-handler-inbound-combobox"
+                                            label="入库经办人"
+                                            options={inboundOptions}
+                                            onRefresh={() =>
+                                                optionsQuery.refetch({
+                                                    throwOnError: true,
+                                                })
                                             }
+                                            placeholder="选择具备入库确认权限的账号"
+                                            description="负责该仓库的采购收货与入库过账。"
+                                            loading={optionsQuery.isFetching}
+                                            disabled={
+                                                optionsQuery.isPending ||
+                                                updateMutation.isPending
+                                            }
+                                            allowClear={false}
+                                            required
                                         />
-                                    </form.AppForm>
-                                )}
-                            </form.Subscribe>
-                        </DialogFooter>
-                    </DialogScrollBody>
-                </form>
-            </DialogContent>
-        </Dialog>
+                                    )}
+                                </form.AppField>
+                                <form.AppField name="outboundUserId">
+                                    {(field) => (
+                                        <field.SelectField
+                                            id="master-data-warehouse-handler-outbound-combobox"
+                                            label="仓发经办人"
+                                            options={outboundOptions}
+                                            onRefresh={() =>
+                                                optionsQuery.refetch({
+                                                    throwOnError: true,
+                                                })
+                                            }
+                                            placeholder="选择具备发货确认权限的账号"
+                                            description="负责该仓库的现货发货与入库后发货；可与入库经办人为同一人。"
+                                            loading={optionsQuery.isFetching}
+                                            disabled={
+                                                optionsQuery.isPending ||
+                                                updateMutation.isPending
+                                            }
+                                            allowClear={false}
+                                            required
+                                        />
+                                    )}
+                                </form.AppField>
+                            </FieldGroup>
+                            <DialogFooter>
+                                <DialogClose
+                                    render={
+                                        <Button
+                                            id="master-data-warehouse-handler-cancel"
+                                            type="button"
+                                            variant="outline"
+                                            disabled={updateMutation.isPending}
+                                        />
+                                    }
+                                >
+                                    取消
+                                </DialogClose>
+                                <form.Subscribe
+                                    selector={(state) =>
+                                        [
+                                            state.values.inboundUserId,
+                                            state.values.outboundUserId,
+                                        ] as const
+                                    }
+                                >
+                                    {([inboundUserId, outboundUserId]) => (
+                                        <form.AppForm>
+                                            <form.SubmitButton
+                                                loading={
+                                                    updateMutation.isPending
+                                                }
+                                                id="master-data-warehouse-handler-save"
+                                                label="保存配置"
+                                                pendingLabel="保存中…"
+                                                disabled={
+                                                    updateMutation.isPending ||
+                                                    optionsQuery.isPending ||
+                                                    optionsQuery.isError ||
+                                                    !inboundOptions.some(
+                                                        (option) =>
+                                                            option.value ===
+                                                            inboundUserId,
+                                                    ) ||
+                                                    !outboundOptions.some(
+                                                        (option) =>
+                                                            option.value ===
+                                                            outboundUserId,
+                                                    )
+                                                }
+                                            />
+                                        </form.AppForm>
+                                    )}
+                                </form.Subscribe>
+                            </DialogFooter>
+                        </DialogScrollBody>
+                    </form>
+                </DialogContent>
+            </Dialog>
+            <DiscardConfirmDialog
+                idPrefix="master-data-warehouse-handler-discard"
+                open={discardOpen}
+                onOpenChange={setDiscardOpen}
+                onConfirm={() => {
+                    setDiscardOpen(false)
+                    form.reset({
+                        inboundUserId: initialInbound,
+                        outboundUserId: initialOutbound,
+                    })
+                    setError(null)
+                    onOpenChange(false)
+                }}
+            />
+        </>
     )
 }

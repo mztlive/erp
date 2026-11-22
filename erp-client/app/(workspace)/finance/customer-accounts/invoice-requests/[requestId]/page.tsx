@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { PageScaffold } from "@/components/business"
+import { DetailWorkspaceSkeleton } from "@/components/business"
 import { InvoiceRequestDetailPage } from "@/features/invoice-requests/components/request-detail-page"
 
 export const metadata: Metadata = {
@@ -17,10 +17,12 @@ export default async function Page({
     return (
         <Suspense
             fallback={
-                <PageScaffold>
-                    <div className="h-12 w-48 animate-pulse rounded-lg bg-muted" />
-                    <div className="h-72 animate-pulse rounded-lg bg-muted" />
-                </PageScaffold>
+                <DetailWorkspaceSkeleton
+                    title="开票申请详情"
+                    description="正在读取申请金额、开票资料与审批进度…"
+                    summary
+                    sidebar
+                />
             }
         >
             <InvoiceRequestDetailPage requestId={requestId} />

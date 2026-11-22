@@ -1,3 +1,5 @@
+import type { StatusTone } from "@/components/ui/status-badge"
+
 /** 销售接口白名单：不包含供应商、原始报价、内部附件或收款资料。 */
 export type InquiryStatus =
     | "draft"
@@ -234,6 +236,15 @@ export const INQUIRY_STATUS_LABEL: Record<InquiryStatus, string> = {
     awaiting_sales: "待销售处理",
     confirmed: "已确认",
     closed: "已关闭",
+}
+export const INQUIRY_STATUS_TONE: Record<InquiryStatus, StatusTone> = {
+    draft: "neutral",
+    awaiting_procurement: "info",
+    procurement_processing: "info",
+    awaiting_sales_supplement: "warning",
+    awaiting_sales: "warning",
+    confirmed: "success",
+    closed: "neutral",
 }
 export const INQUIRY_CONCLUSION_LABEL: Record<InquiryConclusion, string> = {
     available: "可供应",

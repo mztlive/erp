@@ -54,6 +54,7 @@ export function DocumentWithdrawApprovalButton<TCommand>({
     successHref,
     reference,
     onResult,
+    onTriggerClick,
     triggerVariant = "outline",
     triggerClassName,
 }: {
@@ -80,6 +81,7 @@ export function DocumentWithdrawApprovalButton<TCommand>({
     successHref?: string
     reference?: string
     onResult?: (result: WithdrawResult) => void
+    onTriggerClick?: () => void
     triggerVariant?: React.ComponentProps<typeof Button>["variant"]
     triggerClassName?: string
 }) {
@@ -107,6 +109,7 @@ export function DocumentWithdrawApprovalButton<TCommand>({
                 disabled={!gate.enabled}
                 title={gate.reason}
                 onClick={() => {
+                    onTriggerClick?.()
                     pendingCommand.current = null
                     setUncertain(false)
                     setReason(

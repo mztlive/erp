@@ -5,8 +5,9 @@ import {
     ArrowRightIcon,
     RefreshCwIcon,
 } from "lucide-react"
+import { BusinessStatusBadge } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { cn } from "@/lib/utils"
 import type { BatchView } from "../../api/batch"
 
@@ -17,6 +18,9 @@ export function BatchResultSummary({
     preparing,
     unsubmittedReady,
     busy,
+    refreshing = false,
+    recovering = false,
+    reconciling = false,
     canWrite,
     onRefresh,
     onRecovery,
@@ -28,6 +32,9 @@ export function BatchResultSummary({
     preparing: boolean
     unsubmittedReady: number
     busy: boolean
+    refreshing?: boolean
+    recovering?: boolean
+    reconciling?: boolean
     canWrite: boolean
     onRefresh: () => void
     onRecovery: () => void
@@ -57,13 +64,17 @@ export function BatchResultSummary({
           ? CircleCheckIcon
           : CircleAlertIcon
     const details = [
-        { label: "处理中", count: processing },
-        { label: "待核实", count: counts.unknown },
-        { label: "失败", count: counts.failed },
-        { label: "待补齐", count: counts.draft },
-        { label: "待提交", count: unsubmittedReady },
-        { label: "已完成跳过", count: counts.skipped },
-        { label: "已排除", count: counts.excluded },
+        { label: "处理中", count: processing, tone: "info" as const },
+        { label: "待核实", count: counts.unknown, tone: "warning" as const },
+        { label: "失败", count: counts.failed, tone: "destructive" as const },
+        { label: "待补齐", count: counts.draft, tone: "warning" as const },
+        { label: "待提交", count: unsubmittedReady, tone: "neutral" as const },
+        {
+            label: "已完成跳过",
+            count: counts.skipped,
+            tone: "neutral" as const,
+        },
+        { label: "已排除", count: counts.excluded, tone: "neutral" as const },
     ].filter(({ count }) => count > 0)
     return (
         <section aria-label="入库结果摘要" className="border-y py-6 sm:py-8">
@@ -105,20 +116,13 @@ export function BatchResultSummary({
                         ) : null}
                         {details.length > 0 ? (
                             <div className="flex flex-wrap gap-2">
-                                {details.map(({ label, count }) => (
-                                    <Badge
+                                {details.map(({ label, count, tone }) => (
+                                    <BusinessStatusBadge
                                         key={label}
-                                        variant={
-                                            label === "失败"
-                                                ? "destructive"
-                                                : label === "待核实" ||
-                                                    label === "待补齐"
-                                                  ? "warning"
-                                                  : "secondary"
-                                        }
-                                    >
-                                        {label} {count}
-                                    </Badge>
+                                        className="num"
+                                        tone={tone}
+                                        label={`${label} ${count}`}
+                                    />
                                 ))}
                             </div>
                         ) : null}
@@ -130,37 +134,40 @@ export function BatchResultSummary({
                     </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                    <Button
+                    <LoadingButton
                         id="supplier-catalog-batch-refresh-results"
                         variant="ghost"
+                        loading={refreshing}
                         disabled={busy}
                         onClick={onRefresh}
                     >
                         <RefreshCwIcon aria-hidden />
                         刷新结果
-                    </Button>
+                    </LoadingButton>
                     {actionable > 0 && !running && canWrite ? (
-                        <Button
+                        <LoadingButton
                             id="supplier-catalog-batch-open-recovery"
                             variant={counts.unknown > 0 ? "outline" : "default"}
+                            loading={recovering}
                             disabled={busy || !canWrite}
                             onClick={onRecovery}
                         >
-                            处理待办 {actionable}
+                            处理待办 <span className="num">{actionable}</span>
                             <ArrowRightIcon
                                 aria-hidden
                                 data-icon="inline-end"
                             />
-                        </Button>
+                        </LoadingButton>
                     ) : null}
                     {counts.unknown > 0 && canWrite ? (
-                        <Button
+                        <LoadingButton
                             id="supplier-catalog-batch-result-reconcile"
+                            loading={reconciling}
                             disabled={busy || !canWrite}
                             onClick={onReconcile}
                         >
                             核实入库结果
-                        </Button>
+                        </LoadingButton>
                     ) : null}
                     <Button
                         id="supplier-catalog-batch-result-continue"

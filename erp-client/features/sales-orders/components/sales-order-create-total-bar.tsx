@@ -140,11 +140,7 @@ export function SalesOrderCreateTotalBar({
                     return (
                         <StickyTotalBar
                             layout="inline"
-                            className={
-                                compact
-                                    ? "mt-auto shrink-0 rounded-b-xl border-grid px-4 py-3 sm:px-5"
-                                    : "mt-auto rounded-b-xl border-grid px-4 py-3 sm:px-5"
-                            }
+                            className="mt-auto shrink-0 border-border/60 px-0 py-3.5"
                             items={[
                                 {
                                     id: "gross",

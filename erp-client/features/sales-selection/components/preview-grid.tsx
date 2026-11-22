@@ -22,15 +22,16 @@ import { PreviewTable } from "./preview-table"
 import {
     BusinessEmptyState,
     BusinessTableFrame,
+    DetailWorkspaceSubTabs,
     MoneyValue,
+    detailWorkspaceStyles,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { DisplayItem } from "@/features/sales-selection/types"
-import { cn } from "@/lib/utils"
 
 const previewGridClassName =
     "grid grid-cols-[repeat(auto-fill,minmax(0,min(100%,16rem)))] gap-3.5"
@@ -47,7 +48,7 @@ const PreviewCard = ({
     deleting,
 }: {
     item: DisplayItem
-    onDelete?: (itemId: string) => void
+    onDelete?: (item: DisplayItem) => void
     onEditPrice?: (item: DisplayItem) => void
     canDelete: boolean
     pending: boolean
@@ -81,12 +82,9 @@ const PreviewCard = ({
                             </div>
                         )}
                         {item.missing_image ? (
-                            <Badge
-                                variant="warning"
-                                className="absolute top-2 left-2 shadow-xs"
-                            >
-                                缺图
-                            </Badge>
+                            <div className="absolute top-2 left-2 shadow-xs">
+                                <StatusBadge tone="warning" label="缺图" />
+                            </div>
                         ) : null}
                     </div>
 
@@ -136,7 +134,7 @@ const PreviewCard = ({
                             </p>
                         ) : null}
                         {members.length > 0 ? (
-                            <ul className="flex flex-col gap-0.5 rounded-md bg-muted/30 p-1.5 text-xs">
+                            <ul className="flex flex-col gap-0.5 border-t border-border/50 pt-1.5 text-xs">
                                 {members.slice(0, 3).map((member) => (
                                     <li
                                         key={member.sku_id}
@@ -179,10 +177,10 @@ const PreviewCard = ({
                                 type="button"
                                 variant="ghost"
                                 size="xs"
-                                className="flex-1 justify-center text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                className={`flex-1 justify-center ${detailWorkspaceStyles.quietDangerButton}`}
                                 disabled={pending}
                                 loading={deleting}
-                                onClick={() => onDelete(item.item_id)}
+                                onClick={() => onDelete(item)}
                             >
                                 <Trash2Icon
                                     className="size-3.5"
@@ -224,6 +222,7 @@ export const PreviewGrid = ({
     onEditPrice,
     priceEditor,
     pending = false,
+    savingSkuIds,
     deletingItemId,
     regeneratingTierIds,
     emptyState,
@@ -233,8 +232,8 @@ export const PreviewGrid = ({
     items: readonly DisplayItem[]
     selectionForm: "SINGLE_SKU" | "PACKAGE"
     tiers?: readonly PreviewTierConfig[]
-    onRegenerateTier?: (tierId: string) => void
-    onDelete?: (itemId: string) => void
+    onRegenerateTier?: (tierId: string, tierName: string) => void
+    onDelete?: (item: DisplayItem) => void
     priceEditor?: {
         batchId: string
         version: number
@@ -242,6 +241,7 @@ export const PreviewGrid = ({
     }
     onEditPrice?: (item: DisplayItem) => void
     pending?: boolean
+    savingSkuIds?: ReadonlySet<string>
     deletingItemId?: string
     regeneratingTierIds?: readonly string[]
     emptyState?: { title: string; description: string }
@@ -249,7 +249,7 @@ export const PreviewGrid = ({
     actions?: React.ReactNode
 }) => {
     const canDelete = typeof onDelete === "function"
-    const [tierFilter, setTierFilter] = React.useState<string>("ALL")
+    const [tierFilter, setTierFilter] = React.useState<string>("all")
     const [onlyMissingImage, setOnlyMissingImage] = React.useState(false)
     const [layout, setLayout] = React.useState<"gallery" | "table">("gallery")
 
@@ -304,7 +304,7 @@ export const PreviewGrid = ({
 
     // 过滤特定档位
     const visibleGroups = groups
-        ? tierFilter === "ALL"
+        ? tierFilter === "all"
             ? groups
             : groups.filter(([tierName]) => tierName === tierFilter)
         : null
@@ -312,37 +312,77 @@ export const PreviewGrid = ({
     const tableItems = visibleGroups
         ? visibleGroups.flatMap(([, group]) => group)
         : filteredItems
+
     const viewToggle = (
-        <div
-            role="group"
-            aria-label="陈列视图"
-            className="flex items-center gap-1"
-        >
-            <Button
-                id="selection-preview-layout-table"
-                variant={layout === "table" ? "secondary" : "ghost"}
-                size="sm"
-                aria-pressed={layout === "table"}
-                onClick={() => setLayout("table")}
-            >
-                <TableIcon data-icon="inline-start" aria-hidden="true" />
-                表格
-            </Button>
-            <Button
-                id="selection-preview-layout-gallery"
-                variant={layout === "gallery" ? "secondary" : "ghost"}
-                size="sm"
-                aria-pressed={layout === "gallery"}
-                onClick={() => setLayout("gallery")}
-            >
-                <LayoutGridIcon data-icon="inline-start" aria-hidden="true" />
-                卡片
-            </Button>
-        </div>
+        <DetailWorkspaceSubTabs
+            ariaLabel="陈列视图"
+            idPrefix="selection-preview-layout"
+            className="pt-0"
+            value={layout}
+            onValueChange={(next) =>
+                setLayout(next === "table" ? "table" : "gallery")
+            }
+            items={[
+                {
+                    id: "table",
+                    label: (
+                        <span className="inline-flex items-center gap-1.5">
+                            <TableIcon
+                                className="size-3.5"
+                                aria-hidden="true"
+                            />
+                            表格
+                        </span>
+                    ),
+                },
+                {
+                    id: "gallery",
+                    label: (
+                        <span className="inline-flex items-center gap-1.5">
+                            <LayoutGridIcon
+                                className="size-3.5"
+                                aria-hidden="true"
+                            />
+                            卡片
+                        </span>
+                    ),
+                },
+            ]}
+        />
     )
+
+    const tierTabItems =
+        selectionForm === "PACKAGE" && tierNames.length > 1
+            ? [
+                  {
+                      id: "all",
+                      label: (
+                          <span>
+                              全部档位{" "}
+                              <span className="num">({items.length})</span>
+                          </span>
+                      ),
+                  },
+                  ...tierNames.map((name) => {
+                      const count = items.filter(
+                          (i) => (i.tier_name ?? i.tier_id) === name,
+                      ).length
+                      return {
+                          id: name,
+                          label: (
+                              <span>
+                                  {name} <span className="num">({count})</span>
+                              </span>
+                          ),
+                      }
+                  }),
+              ]
+            : []
+
     return (
         <BusinessTableFrame
-            title="陈列预览"
+            title="陈列明细"
+            headingLevel="h3"
             className="gap-2"
             tableActions={
                 <>
@@ -355,61 +395,35 @@ export const PreviewGrid = ({
                     {summary}
                     {!summary || tableItems.length !== items.length ? (
                         <span className="text-xs text-muted-foreground">
-                            共 {tableItems.length} 项
-                            {tableItems.length !== items.length
-                                ? ` / 全部 ${items.length} 项`
-                                : ""}
+                            共 <span className="num">{tableItems.length}</span>{" "}
+                            项
+                            {tableItems.length !== items.length ? (
+                                <>
+                                    {" "}
+                                    / 全部{" "}
+                                    <span className="num">
+                                        {items.length}
+                                    </span>{" "}
+                                    项
+                                </>
+                            ) : null}
                         </span>
                     ) : null}
                 </div>
             }
             toolbar={
-                (selectionForm === "PACKAGE" && tierNames.length > 1) ||
-                missingImageCount > 0 ? (
+                tierTabItems.length > 0 || missingImageCount > 0 ? (
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                            {selectionForm === "PACKAGE" &&
-                            tierNames.length > 1 ? (
-                                <>
-                                    <button
-                                        id="selection-preview-tier-all"
-                                        type="button"
-                                        onClick={() => setTierFilter("ALL")}
-                                        className={cn(
-                                            "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                                            tierFilter === "ALL"
-                                                ? "bg-primary text-primary-foreground shadow-2xs"
-                                                : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground",
-                                        )}
-                                    >
-                                        全部档位 ({items.length})
-                                    </button>
-                                    {tierNames.map((name) => {
-                                        const count = items.filter(
-                                            (i) =>
-                                                (i.tier_name ?? i.tier_id) ===
-                                                name,
-                                        ).length
-                                        return (
-                                            <button
-                                                id={`selection-preview-tier-${toAutomationIdSegment(name)}`}
-                                                key={name}
-                                                type="button"
-                                                onClick={() =>
-                                                    setTierFilter(name)
-                                                }
-                                                className={cn(
-                                                    "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                                                    tierFilter === name
-                                                        ? "bg-primary text-primary-foreground shadow-2xs"
-                                                        : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground",
-                                                )}
-                                            >
-                                                {name} ({count})
-                                            </button>
-                                        )
-                                    })}
-                                </>
+                        <div className="min-w-0">
+                            {tierTabItems.length > 0 ? (
+                                <DetailWorkspaceSubTabs
+                                    ariaLabel="按档位筛选"
+                                    idPrefix="selection-preview-tier"
+                                    className="pt-0"
+                                    value={tierFilter}
+                                    onValueChange={setTierFilter}
+                                    items={tierTabItems}
+                                />
                             ) : null}
                         </div>
 
@@ -431,9 +445,16 @@ export const PreviewGrid = ({
                                     className="mr-1 size-3.5"
                                     aria-hidden="true"
                                 />
-                                {onlyMissingImage
-                                    ? "显示全部"
-                                    : `仅看缺图 (${missingImageCount})`}
+                                {onlyMissingImage ? (
+                                    "显示全部"
+                                ) : (
+                                    <span>
+                                        仅看缺图{" "}
+                                        <span className="num">
+                                            ({missingImageCount})
+                                        </span>
+                                    </span>
+                                )}
                             </Button>
                         ) : null}
                     </div>
@@ -445,6 +466,7 @@ export const PreviewGrid = ({
                         priceEditor={priceEditor}
                         items={tableItems}
                         pending={pending}
+                        savingSkuIds={savingSkuIds}
                         deletingItemId={deletingItemId}
                         onDelete={onDelete}
                         onEditPrice={onEditPrice}
@@ -503,23 +525,20 @@ export const PreviewGrid = ({
                                                     aria-label={tierName}
                                                     className="flex flex-col gap-3.5"
                                                 >
-                                                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/30 px-3.5 py-2">
-                                                        <div className="flex flex-wrap items-baseline gap-2">
+                                                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2">
+                                                        <div className="flex flex-wrap items-baseline gap-2.5">
                                                             <h3 className="font-semibold text-foreground">
                                                                 {tierName}
                                                             </h3>
-                                                            <Badge
-                                                                variant="secondary"
-                                                                className="text-xs"
-                                                            >
+                                                            <span className="num text-xs text-muted-foreground">
                                                                 {
                                                                     tierItems.length
                                                                 }{" "}
                                                                 套
-                                                            </Badge>
+                                                            </span>
                                                             {tierConfig ? (
-                                                                <span className="text-xs text-muted-foreground">
-                                                                    目标 ¥
+                                                                <span className="num text-xs text-muted-foreground">
+                                                                    · 目标 ¥
                                                                     {
                                                                         tierConfig.target_amount
                                                                     }{" "}
@@ -542,7 +561,10 @@ export const PreviewGrid = ({
                                                                 id={`selection-regenerate-inline-${tierConfig.tier_id}`}
                                                                 type="button"
                                                                 size="xs"
-                                                                variant="outline"
+                                                                variant="ghost"
+                                                                className={
+                                                                    detailWorkspaceStyles.subtleButton
+                                                                }
                                                                 disabled={
                                                                     pending
                                                                 }
@@ -552,9 +574,9 @@ export const PreviewGrid = ({
                                                                 onClick={() =>
                                                                     onRegenerateTier(
                                                                         tierConfig.tier_id,
+                                                                        tierConfig.name,
                                                                     )
                                                                 }
-                                                                className="h-7 text-xs"
                                                             >
                                                                 <RefreshCwIcon
                                                                     className="mr-1 size-3"

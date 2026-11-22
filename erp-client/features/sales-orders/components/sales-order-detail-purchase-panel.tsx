@@ -4,6 +4,7 @@ import * as React from "react"
 
 import { detailWorkspaceStyles } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import {
     ExpensePurchaseCreateDialog,
     type ExpensePurchasePrefill,
@@ -143,7 +144,14 @@ export function PurchasePanel({
                 open={expenseOpen}
                 onOpenChange={setExpenseOpen}
                 prefill={expensePrefill}
-                onCreated={(created) => setExpenseCreated(created.purchaseNo)}
+                onCreated={(created) => {
+                    setExpenseCreated(created.purchaseNo)
+                    toast.add({
+                        title: "费用采购单已创建",
+                        description: `采购单 ${created.purchaseNo} 已提交审批。`,
+                        type: "success",
+                    })
+                }}
             />
         </>
     )

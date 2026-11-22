@@ -3,10 +3,15 @@
 import * as React from "react"
 import { PlusIcon } from "lucide-react"
 
-import { FormalActionConfirmDialog } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import {
+    BusinessEmptyState,
+    BusinessFailureState,
+    FormalActionConfirmDialog,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { getErrorMessage } from "@/lib/api/errors"
+import { StatusBadge } from "@/components/ui/status-badge"
+import { toast } from "@/components/ui/toast"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
 import {
@@ -42,80 +47,84 @@ export function SupplierDeliveryTemplatesSection({
         >
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="space-y-1">
-                    <h2
-                        id="supplier-delivery-templates-title"
-                        className="text-section-title font-semibold tracking-tight"
-                    >
-                        配送模板
-                    </h2>
+                    <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                        <h2
+                            id="supplier-delivery-templates-title"
+                            className="text-section-title font-semibold tracking-tight text-foreground"
+                        >
+                            配送模板
+                        </h2>
+                        {query.isSuccess ? (
+                            <span className="num text-xs text-muted-foreground">
+                                {templates.length} 个模板 · 独立实时保存
+                            </span>
+                        ) : null}
+                    </div>
                     <p className="text-xs text-muted-foreground">
-                        供给未指定模板时跟随供应商默认模板；都没有时按全国配送、包邮判定。
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                        模板单独保存并立即生效，无需保存供应商资料。修改模板会影响使用该模板的供给，调整默认模板会影响跟随默认的供给。
+                        供给未指定模板时跟随供应商默认模板；都没有时按全国配送、包邮判定。模板单独保存并立即生效，无需保存供应商资料。
                     </p>
                 </div>
                 {canEdit ? (
                     <Button
                         id="delivery-templates-create"
                         type="button"
+                        size="sm"
                         onClick={() => setEditing({ template: null })}
                     >
-                        <PlusIcon data-icon="inline-start" aria-hidden />
+                        <PlusIcon data-icon="inline-start" aria-hidden="true" />
                         新建模板
                     </Button>
                 ) : null}
             </div>
             {query.isPending ? (
                 <div
-                    className="h-24 animate-pulse rounded-lg bg-muted"
+                    className="h-24 animate-pulse rounded-md bg-muted"
                     aria-busy="true"
                     aria-label="正在加载配送模板"
                 />
             ) : query.isError ? (
-                <div className="space-y-2">
-                    <p
-                        role="alert"
-                        className="text-body-compact text-destructive"
-                    >
-                        {getErrorMessage(
-                            query.error,
-                            "配送模板加载失败，请重试。",
-                        )}
-                    </p>
-                    <Button
-                        id="delivery-templates-retry"
-                        type="button"
-                        variant="outline"
-                        onClick={() => void query.refetch()}
-                    >
-                        重试
-                    </Button>
-                </div>
+                <BusinessFailureState
+                    title="配送模板加载失败"
+                    error={query.error}
+                    onRetry={() => {
+                        void query.refetch()
+                    }}
+                />
             ) : templates.length === 0 ? (
-                <p className="rounded-lg border border-dashed p-4 text-xs text-muted-foreground">
-                    该供应商还没有配送模板，其供给按全国配送、包邮判定。
-                </p>
+                <BusinessEmptyState
+                    kind="no-data"
+                    title="暂无配送模板"
+                    description="该供应商还没有配送模板，其供给按全国配送、包邮判定。"
+                />
             ) : (
-                <ul className="divide-y rounded-lg border">
+                <ul className="divide-y divide-border/60 border-y border-border/60">
                     {templates.map((template) => {
                         const id = `delivery-templates-${toAutomationIdSegment(template.id)}`
                         return (
-                            <li key={template.id} className="space-y-2 p-4">
+                            <li
+                                key={template.id}
+                                className="space-y-2 py-4 first:pt-3.5 last:pb-3.5"
+                            >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <span className="flex items-center gap-2 font-medium">
+                                    <span className="flex flex-wrap items-center gap-2 font-medium text-foreground">
                                         {template.name}
                                         {template.is_default ? (
-                                            <Badge variant="info">默认</Badge>
+                                            <StatusBadge
+                                                tone="info"
+                                                label="默认模板"
+                                            />
                                         ) : null}
                                     </span>
                                     {canEdit ? (
-                                        <span className="flex gap-1">
+                                        <span className="flex items-center gap-1">
                                             <Button
                                                 id={`${id}-edit`}
                                                 type="button"
                                                 size="sm"
                                                 variant="ghost"
+                                                className={
+                                                    detailWorkspaceStyles.quietButton
+                                                }
                                                 onClick={() =>
                                                     setEditing({ template })
                                                 }
@@ -127,6 +136,9 @@ export function SupplierDeliveryTemplatesSection({
                                                 type="button"
                                                 size="sm"
                                                 variant="ghost"
+                                                className={
+                                                    detailWorkspaceStyles.quietDangerButton
+                                                }
                                                 disabled={remove.isPending}
                                                 onClick={() => {
                                                     setDeleting(template)
@@ -151,7 +163,7 @@ export function SupplierDeliveryTemplatesSection({
                                 <details>
                                     <summary
                                         id={`${id}-rules`}
-                                        className="cursor-pointer text-body-compact"
+                                        className="cursor-pointer text-body-compact text-primary hover:underline"
                                     >
                                         查看配送规则
                                     </summary>
@@ -200,11 +212,17 @@ export function SupplierDeliveryTemplatesSection({
                     }
                     pending={remove.isPending}
                     onConfirm={async () => {
+                        const deletedName = deleting.name
                         await remove.mutateAsync({
                             id: deleting.id,
                             expectedVersion: deleting.version,
                         })
                         setDeleting(null)
+                        toast.add({
+                            title: "已删除配送模板",
+                            description: `模板「${deletedName}」已删除。`,
+                            type: "success",
+                        })
                     }}
                 />
             ) : null}

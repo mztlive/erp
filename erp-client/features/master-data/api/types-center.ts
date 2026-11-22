@@ -78,6 +78,22 @@ export type MasterDataCenterView = Readonly<{
         inboundUserId?: string
         outboundUserId?: string
     }>
+    /** 商品分类专用：层级路径与直接下级，供对象中心概览直接导航。 */
+    categoryHierarchy?: Readonly<{
+        ancestors: ReadonlyArray<
+            Readonly<{ stableId: string; name: string; code: string }>
+        >
+        directChildren: ReadonlyArray<
+            Readonly<{
+                stableId: string
+                name: string
+                code: string
+                lifecycleStatusLabel: string
+                lifecycleTone: StatusTone
+            }>
+        >
+        descendantCount: number
+    }>
     /**
      * 商品 SPU 约束摘要（不含规格标识：签名由属性组合系统派生，UI 不展示）。
      */

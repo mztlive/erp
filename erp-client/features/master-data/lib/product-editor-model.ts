@@ -82,10 +82,6 @@ type ProductEditorFormValues = Readonly<{
     changeReason: string
     fields: ProductFields
     specDrafts: readonly ProductSpecDraft[]
-    batchSalePrice: string
-    batchBulkPrice: string
-    batchBulkMinQuantity: string
-    batchMarketPrice: string
 }>
 
 type ProductEditorSectionId =
@@ -105,7 +101,7 @@ const PRODUCT_EDITOR_SECTIONS: ReadonlyArray<{
     { id: "sku", label: "规格与 SKU" },
     { id: "media", label: "图片与详情" },
     { id: "effective", label: "生效信息" },
-    { id: "history", label: "变更记录与引用" },
+    { id: "history", label: "变更记录" },
 ]
 
 function applySpecsFromDrafts(
@@ -222,13 +218,6 @@ function productDetailToFields(detail: ProductDetailView): ProductFields {
     }
 }
 
-const EMPTY_BATCH_REFERENCE_PRICE_FIELDS = {
-    batchSalePrice: "",
-    batchBulkPrice: "",
-    batchBulkMinQuantity: "",
-    batchMarketPrice: "",
-} as const
-
 function hydrateFromCenter(
     data: MasterDataCenterView,
 ): ProductEditorFormValues {
@@ -245,7 +234,6 @@ function hydrateFromCenter(
             productKind: data.productKind ?? "",
         },
         specDrafts: fields.specs.map((s) => createSpecDraft(s.name, s.values)),
-        ...EMPTY_BATCH_REFERENCE_PRICE_FIELDS,
     }
 }
 
@@ -257,7 +245,6 @@ function createProductDefaults(isCreate: boolean): ProductEditorFormValues {
         changeReason: isCreate ? "新建商品" : "",
         fields: emptyProductFields(),
         specDrafts: [],
-        ...EMPTY_BATCH_REFERENCE_PRICE_FIELDS,
     }
 }
 

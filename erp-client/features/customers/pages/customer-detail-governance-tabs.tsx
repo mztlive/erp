@@ -36,6 +36,7 @@ export function CustomerDetailQualityTab({
     return (
         <DetailWorkspaceSection
             title="经营摘要"
+            width="form"
             actions={
                 <Button
                     id="customers-detail-quality-open"
@@ -97,6 +98,7 @@ export function CustomerDetailQualityTab({
                                     value:
                                         customer.qualitySummary
                                             .lastBusinessAt ?? "—",
+                                    numeric: true,
                                 },
                             ]}
                         />
@@ -192,7 +194,7 @@ export function CustomerDetailAuditTab({
                                     <span className="font-medium">
                                         {assignment.userName}
                                     </span>
-                                    <span className="ml-auto text-muted-foreground">
+                                    <span className="num ml-auto text-muted-foreground">
                                         {periodLabel(
                                             assignment.effectiveFrom,
                                             assignment.effectiveTo,
@@ -222,7 +224,7 @@ export function CustomerDetailAuditTab({
                                     <span className="min-w-0 text-muted-foreground">
                                         {revision.reason}
                                     </span>
-                                    <span className="ml-auto text-xs text-muted-foreground">
+                                    <span className="num ml-auto text-xs text-muted-foreground">
                                         {revision.effectiveAt}
                                     </span>
                                 </DetailRecordRow>

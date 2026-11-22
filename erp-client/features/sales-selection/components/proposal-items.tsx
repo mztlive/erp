@@ -126,7 +126,7 @@ export function ProposalItems({ proposal }: { proposal: ProposalView }) {
                                 <TableHead>
                                     {isPackage ? "套餐 / 内含商品" : "商品"}
                                 </TableHead>
-                                <TableHead data-align="end" className="w-28">
+                                <TableHead data-align="end" className="w-36">
                                     单价
                                 </TableHead>
                                 {showQuantity ? (
@@ -140,7 +140,7 @@ export function ProposalItems({ proposal }: { proposal: ProposalView }) {
                                 {showQuantity ? (
                                     <TableHead
                                         data-align="end"
-                                        className="w-28"
+                                        className="w-36"
                                     >
                                         小计
                                     </TableHead>
@@ -188,7 +188,11 @@ export function ProposalItems({ proposal }: { proposal: ProposalView }) {
                                                         {isPackage ? (
                                                             <p className="mt-1 text-xs text-muted-foreground">
                                                                 含{" "}
-                                                                {members.length}{" "}
+                                                                <span className="num">
+                                                                    {
+                                                                        members.length
+                                                                    }
+                                                                </span>{" "}
                                                                 款商品
                                                             </p>
                                                         ) : null}

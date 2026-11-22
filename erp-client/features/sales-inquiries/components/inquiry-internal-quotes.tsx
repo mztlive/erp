@@ -19,9 +19,9 @@ import {
     RateValue,
 } from "@/components/business"
 import { OptionCombobox } from "@/components/business/option-combobox"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
     Dialog,
@@ -295,18 +295,19 @@ export function InquiryInternalQuotes({
                                                 </span>
                                             </p>
                                         </div>
-                                        <Badge
-                                            variant={
+                                        <StatusBadge
+                                            tone={
                                                 isCurrent ? "info" : "neutral"
                                             }
+                                            label={
+                                                quote.system_price_kind
+                                                    ? "系统参考"
+                                                    : isCurrent
+                                                      ? "当前回复"
+                                                      : "历史回复"
+                                            }
                                             className="mt-0.5 shrink-0"
-                                        >
-                                            {quote.system_price_kind
-                                                ? "系统参考"
-                                                : isCurrent
-                                                  ? "当前回复"
-                                                  : "历史回复"}
-                                        </Badge>
+                                        />
                                     </div>
                                     <div className="flex flex-wrap items-center justify-end gap-2">
                                         {onAdopt && isCurrent && (

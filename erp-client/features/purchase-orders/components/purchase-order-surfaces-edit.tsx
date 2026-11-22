@@ -6,6 +6,7 @@ import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import {
+    BusinessFailureState,
     DataTable,
     DetailWorkspaceSection,
     detailWorkspaceStyles,
@@ -178,6 +179,7 @@ function LineNumberInput({
         <>
             <Input
                 id={id}
+                inputMode="decimal"
                 className={cn("num text-right", widthClass)}
                 value={value}
                 onChange={(event) => onValueChange(event.target.value)}
@@ -308,7 +310,7 @@ const editLineColumns: ColumnDef<PurchaseOrderLineRow>[] = [
             return (
                 <LineNumberInput
                     id={`procurement-orders-detail-edit-row-${toAutomationIdSegment(line.lineId)}-cost`}
-                    value={draft?.unitCostGross ?? ""}
+                    value={draft?.unitCostGross ?? line.unitCostGross ?? ""}
                     ariaLabel={`${line.itemName} 含税单价`}
                     widthClass="w-28"
                     invalid={
@@ -484,6 +486,9 @@ export function EditSurface({
     lineEdits,
     setLineEdits,
     draftEditToken,
+    editLockPending = false,
+    editLockError,
+    onRetryEditLock,
     canSubmit = false,
     savePending,
     onSave,
@@ -493,6 +498,9 @@ export function EditSurface({
     lineEdits: LineEdits
     setLineEdits: LineEditSetter
     draftEditToken: string | null
+    editLockPending?: boolean
+    editLockError?: unknown
+    onRetryEditLock?: () => void
     /** 弹窗复用时在表底渲染保存/提交按钮；详情页编辑态由吸顶页头承载，避免同屏双按钮。 */
     canSubmit?: boolean
     savePending: boolean
@@ -529,12 +537,22 @@ export function EditSurface({
             subtitle="可改数量、含税单价、税率、预计交付日和收件分配；预计交付日不晚于销售履约期限。⌘S 保存草稿 · ⌘↵ 提交审批。"
         >
             {!draftEditToken ? (
-                <Alert variant="warning">
-                    <AlertTitle>正在准备编辑会话…</AlertTitle>
-                    <AlertDescription>
-                        修改内容保存在当前页面，刷新或离开前请先保存草稿。
-                    </AlertDescription>
-                </Alert>
+                editLockError && !editLockPending ? (
+                    <BusinessFailureState
+                        id="procurement-orders-detail-edit-lock"
+                        title="获取编辑锁失败"
+                        error={editLockError}
+                        onRetry={onRetryEditLock}
+                        retryLabel="重新获取编辑锁"
+                    />
+                ) : (
+                    <Alert variant="warning">
+                        <AlertTitle>正在准备编辑会话…</AlertTitle>
+                        <AlertDescription>
+                            修改内容保存在当前页面，刷新或离开前请先保存草稿。
+                        </AlertDescription>
+                    </Alert>
+                )
             ) : null}
 
             <dl className="flex flex-wrap items-center gap-x-6 gap-y-2 border-y border-border/60 py-2.5 text-xs text-muted-foreground">

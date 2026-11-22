@@ -182,6 +182,7 @@ export function ContactRowsSection({
                                                     id={`customers-form-contacts-${rowKey}-phone`}
                                                     label="手机"
                                                     required
+                                                    inputClassName="num"
                                                     placeholder="11 位手机号"
                                                 />
                                             )}
@@ -193,6 +194,7 @@ export function ContactRowsSection({
                                                 <nested.TextField
                                                     id={`customers-form-contacts-${rowKey}-telephone`}
                                                     label="固定电话"
+                                                    inputClassName="num"
                                                     placeholder="可选"
                                                 />
                                             )}
@@ -229,6 +231,9 @@ export function ContactRowsSection({
                                             type="button"
                                             size="sm"
                                             variant="ghost"
+                                            className={
+                                                detailWorkspaceStyles.quietDangerButton
+                                            }
                                             onClick={() =>
                                                 field.removeValue(index)
                                             }
@@ -387,6 +392,9 @@ export function AddressRowsSection({
                                             type="button"
                                             size="sm"
                                             variant="ghost"
+                                            className={
+                                                detailWorkspaceStyles.quietDangerButton
+                                            }
                                             onClick={() =>
                                                 field.removeValue(index)
                                             }

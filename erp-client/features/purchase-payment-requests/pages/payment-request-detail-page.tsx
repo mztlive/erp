@@ -1,17 +1,17 @@
 "use client"
 
 import type { ComponentProps } from "react"
-import { useSearchParams } from "next/navigation"
-import { RefreshCwIcon } from "lucide-react"
 import {
+    BusinessEmptyState,
+    BusinessFailureState,
     DetailWorkspaceBody,
     DetailWorkspaceChrome,
+    DetailWorkspaceMeta,
     DetailWorkspacePage,
     DetailWorkspaceSection,
-    detailWorkspaceStyles,
+    DetailWorkspaceSkeleton,
 } from "@/components/business"
-import { Button } from "@/components/ui/button"
-import { getErrorMessage } from "@/lib/api"
+import { useSearchParams } from "@/lib/navigation"
 import { usePaymentRequestQuery } from "../hooks/queries"
 import { RequestDetail } from "../components/request-detail"
 import { requestStatusLabel, requestStatusTone } from "../lib/display"
@@ -31,77 +31,124 @@ export function PaymentRequestDetailPage({ requestId }: { requestId: string }) {
             ? "返回采购单"
             : "返回上一页"
         : "返回申请列表"
-    const refresh = (
-        <Button
-            id="ppr-detail-refresh"
-            variant="ghost"
-            size="sm"
-            className={detailWorkspaceStyles.quietButton}
-            onClick={() => void query.refetch()}
-        >
-            <RefreshCwIcon data-icon="inline-start" aria-hidden="true" />
-            刷新
-        </Button>
-    )
+    const back = {
+        id: "ppr-detail-back",
+        label: backLabel,
+        href: backHref,
+        visibility: (returnTo ? "always" : "standalone-only") as
+            | "always"
+            | "standalone-only",
+    }
+
+    if (query.isPending) {
+        return (
+            <DetailWorkspaceSkeleton
+                title="采购付款申请"
+                description="正在读取付款申请…"
+                summary
+            />
+        )
+    }
+
+    if (query.isError) {
+        return (
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome
+                    back={back}
+                    title="采购付款申请"
+                    meta={<span>详情加载失败</span>}
+                />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <BusinessFailureState
+                            id="ppr-detail-retry"
+                            title="付款申请读取失败"
+                            error={query.error}
+                            onRetry={() => void query.refetch()}
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
+        )
+    }
+
+    const request = query.data
+    if (!request) {
+        return (
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome
+                    back={back}
+                    title="采购付款申请不存在"
+                    meta={<span>申请可能已删除或编号有误</span>}
+                />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <BusinessEmptyState
+                            kind="no-data"
+                            title="未找到该采购付款申请"
+                            description="该付款申请可能不存在或不在当前账号的数据范围内。"
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
+        )
+    }
+
+    const paymentMethodLabel =
+        request.execution_method.type === "supplier_deposit"
+            ? "供应商预存款"
+            : "银行转账"
+
     const renderChrome: NonNullable<
         ComponentProps<typeof RequestDetail>["renderChrome"]
     > = ({ tabs, secondaryActions, primaryAction }) => (
         <DetailWorkspaceChrome
-            back={{ id: "ppr-detail-back", label: backLabel, href: backHref }}
-            title={query.data?.supplier_name ?? "采购付款申请"}
+            back={back}
+            title={request.supplier_name || "采购付款申请"}
             numberLabel="申请单号"
-            documentNumber={query.data?.request_no}
-            primaryStatus={
-                query.data && {
-                    label: requestStatusLabel[query.data.status],
-                    tone: requestStatusTone[query.data.status],
-                }
+            documentNumber={request.request_no}
+            primaryStatus={{
+                label: requestStatusLabel[request.status],
+                tone: requestStatusTone[request.status],
+            }}
+            meta={
+                <DetailWorkspaceMeta
+                    items={[
+                        <span key="company">
+                            付款主体{" "}
+                            <span className="font-medium text-foreground">
+                                {request.our_company_name}
+                            </span>
+                        </span>,
+                        <span key="applicant">
+                            申请人{" "}
+                            <span className="font-medium text-foreground">
+                                {request.applicant_name}
+                            </span>
+                        </span>,
+                        <span key="date">
+                            希望付款日{" "}
+                            <span className="num font-medium text-foreground">
+                                {request.desired_payment_date}
+                            </span>
+                        </span>,
+                        <span key="method">{paymentMethodLabel}</span>,
+                    ]}
+                />
             }
-            secondaryActions={
-                <>
-                    {refresh}
-                    {secondaryActions}
-                </>
-            }
+            secondaryActions={secondaryActions}
             primaryAction={primaryAction}
             tabs={tabs}
         />
     )
+
     return (
         <DetailWorkspacePage>
-            {query.isPending || query.isError ? (
-                <>
-                    {renderChrome({})}
-                    <DetailWorkspaceBody>
-                        <DetailWorkspaceSection>
-                            {query.isPending ? (
-                                <p
-                                    role="status"
-                                    className="text-xs text-muted-foreground"
-                                >
-                                    正在读取付款申请…
-                                </p>
-                            ) : (
-                                <p
-                                    role="alert"
-                                    className="text-body-compact text-destructive"
-                                >
-                                    {getErrorMessage(
-                                        query.error,
-                                        "付款申请读取失败，请刷新后重试",
-                                    )}
-                                </p>
-                            )}
-                        </DetailWorkspaceSection>
-                    </DetailWorkspaceBody>
-                </>
-            ) : (
-                <RequestDetail
-                    key={requestId}
-                    request={query.data}
-                    renderChrome={renderChrome}
-                />
-            )}
+            <RequestDetail
+                key={requestId}
+                request={request}
+                renderChrome={renderChrome}
+            />
         </DetailWorkspacePage>
     )
 }

@@ -17,8 +17,10 @@ function SettlementCenterReview({ detail }: { detail: SettlementDetailView }) {
                 <Alert variant="info">
                     <AlertTitle>复核任务</AlertTitle>
                     <AlertDescription>
-                        {detail.statement.statementNo} · 供应商{" "}
-                        {detail.statement.supplierName}
+                        <span className="num">
+                            {detail.statement.statementNo}
+                        </span>{" "}
+                        · 供应商 {detail.statement.supplierName}
                         {detail.workItem.ownerUser
                             ? ` · 当前处理人 ${detail.workItem.ownerUser.displayName}`
                             : " · 当前责任人信息不可用"}
@@ -31,13 +33,15 @@ function SettlementCenterReview({ detail }: { detail: SettlementDetailView }) {
                 detail.reviewRecords.map((r) => (
                     <div
                         key={r.recordId}
-                        className="border-t border-border/60 py-2 text-body-compact"
+                        className="border-t border-border/60 py-2 text-body-compact first:border-t-0 first:pt-0"
                     >
                         <div className="font-medium">
                             {r.actionLabel} · {r.by.displayName}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                            {formatDateTime(r.at, "default")}
+                            <span className="num">
+                                {formatDateTime(r.at, "default")}
+                            </span>
                             {r.reasonCode
                                 ? ` · ${REASON_CODE_LABEL[r.reasonCode] ?? r.reasonCode}`
                                 : ""}

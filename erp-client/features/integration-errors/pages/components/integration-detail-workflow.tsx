@@ -38,21 +38,6 @@ export function IntegrationDetailWorkflow({
     onProcessNext: () => void
     onRefresh: () => void
 }) {
-    const progress = (
-        <IntegrationItemProgress
-            id="integration-item-progress"
-            item={item}
-            positionIndex={positionIndex}
-            positionTotal={positionTotal}
-            responsibilityStatus={responsibilityStatus}
-            formalPending={formalPending}
-            focusMode={focusMode}
-            flat={detailWorkspace}
-            onBack={onBack}
-            onProcess={onProcess}
-            onProcessNext={onProcessNext}
-        />
-    )
     const summary = (
         <>
             <IntegrationItemSummary
@@ -70,14 +55,24 @@ export function IntegrationDetailWorkflow({
             ) : null}
         </>
     )
-    return detailWorkspace ? (
+    if (detailWorkspace) {
+        return <DetailWorkspaceSection>{summary}</DetailWorkspaceSection>
+    }
+    return (
         <>
-            {progress}
-            <DetailWorkspaceSection>{summary}</DetailWorkspaceSection>
-        </>
-    ) : (
-        <>
-            {progress}
+            <IntegrationItemProgress
+                id="integration-item-progress"
+                item={item}
+                positionIndex={positionIndex}
+                positionTotal={positionTotal}
+                responsibilityStatus={responsibilityStatus}
+                formalPending={formalPending}
+                focusMode={focusMode}
+                flat={detailWorkspace}
+                onBack={onBack}
+                onProcess={onProcess}
+                onProcessNext={onProcessNext}
+            />
             {summary}
         </>
     )

@@ -2,17 +2,21 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { BanIcon, HistoryIcon } from "lucide-react"
+import { BanIcon, InfoIcon, PencilIcon } from "lucide-react"
 
 import {
+    BusinessEmptyState,
     BusinessFailureState,
     DetailWorkspaceBody,
     DetailWorkspaceChrome,
     DetailWorkspacePage,
     DetailWorkspaceSection,
     DetailWorkspaceSkeleton,
+    DetailWorkspaceTabs,
     detailWorkspaceStyles,
+    type DetailWorkspaceBackLink,
 } from "@/components/business"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
@@ -27,7 +31,6 @@ import type {
     MasterDataSectionId,
 } from "@/features/master-data/types"
 import { hasPermission } from "@/lib/permissions"
-import { cn } from "@/lib/utils"
 
 const SECTION_NAV: readonly { id: MasterDataSectionId; label: string }[] = [
     { id: "overview", label: masterDataCopy.centerOverview },
@@ -39,11 +42,23 @@ function resolveSection(section?: string | null): MasterDataSectionId {
     return SECTION_NAV.find((item) => item.id === section)?.id ?? "overview"
 }
 
+export type ObjectCenterPrimaryActionConfig = Readonly<{
+    action: string
+    permission: string
+    label: string
+    icon?: React.ComponentType<React.SVGProps<SVGSVGElement>>
+    blockedMessage?: (message: string) => string
+}>
+
 export function ObjectCenterView({
     idPrefix,
     data,
     baseHref,
     section,
+    backVisibility,
+    primaryActionConfig,
+    hideDisableAction = false,
+    overviewExtra,
     onBack,
     onRevise,
     onDisable,
@@ -53,34 +68,56 @@ export function ObjectCenterView({
     data: MasterDataCenterView
     baseHref: string
     section?: string
+    backVisibility?: DetailWorkspaceBackLink["visibility"]
+    primaryActionConfig?: ObjectCenterPrimaryActionConfig
+    hideDisableAction?: boolean
+    overviewExtra?: React.ReactNode
     onBack: () => void
     onRevise: () => void
-    onDisable: () => void
+    onDisable?: () => void
     dialogs: React.ReactNode
 }) {
     const prefix = idPrefix ?? "master-data-shared-object-center-view"
     const accountQuery = useAccountProfileQuery()
-    const activeSection = resolveSection(section)
-    const writePermission =
+    const [activeSection, setActiveSection] =
+        React.useState<MasterDataSectionId>(() => resolveSection(section))
+
+    React.useEffect(() => {
+        setActiveSection(resolveSection(section))
+    }, [section])
+
+    const defaultWritePermission =
         data.resource === "categories"
             ? "product_category:update"
             : "warehouse:update"
-    const canWrite = hasPermission(
+    const primaryActionKey = primaryActionConfig?.action ?? "CREATE_REVISION"
+    const primaryPermission =
+        primaryActionConfig?.permission ?? defaultWritePermission
+    const primaryLabel =
+        primaryActionConfig?.label ?? masterDataCopy.actionUpdate
+    const PrimaryIcon = primaryActionConfig?.icon ?? PencilIcon
+
+    const canWritePrimary = hasPermission(
         accountQuery.data?.permissions,
-        writePermission,
+        primaryPermission,
     )
-    const canRevise = data.allowedActions.includes("CREATE_REVISION")
-    const canDisable = data.allowedActions.includes("DISABLE")
+    const canWriteDisable = hasPermission(
+        accountQuery.data?.permissions,
+        defaultWritePermission,
+    )
+    const canPrimary = data.allowedActions.includes(primaryActionKey)
+    const canDisable =
+        !hideDisableAction && data.allowedActions.includes("DISABLE")
     const canRevealSensitive = hasPermission(
         accountQuery.data?.permissions,
         "supplier_sensitive:reveal",
     )
-    const reviseBlocker = data.actionBlockers.find(
-        (blocker) => blocker.action === "CREATE_REVISION",
+    const primaryBlocker = data.actionBlockers.find(
+        (blocker) => blocker.action === primaryActionKey,
     )
-    const disableBlocker = data.actionBlockers.find(
-        (blocker) => blocker.action === "DISABLE",
-    )
+    const disableBlocker = !hideDisableAction
+        ? data.actionBlockers.find((blocker) => blocker.action === "DISABLE")
+        : undefined
 
     const scrollToSection = React.useCallback((id: MasterDataSectionId) => {
         const target = document.getElementById(`md-section-${id}`)
@@ -107,12 +144,31 @@ export function ObjectCenterView({
         scrollToSection(activeSection)
     }, [activeSection, scrollToSection])
 
+    const handleSectionChange = React.useCallback(
+        (next: string) => {
+            const resolved = resolveSection(next)
+            setActiveSection(resolved)
+            scrollToSection(resolved)
+            const nextHref = `${baseHref}${baseHref.includes("?") ? "&" : "?"}section=${resolved}`
+            window.history.replaceState(window.history.state, "", nextHref)
+        },
+        [baseHref, scrollToSection],
+    )
+
+    const hasAlerts =
+        (canWritePrimary && !canPrimary && Boolean(primaryBlocker)) ||
+        (!hideDisableAction &&
+            canWriteDisable &&
+            !canDisable &&
+            Boolean(disableBlocker))
+
     return (
         <DetailWorkspacePage>
             <DetailWorkspaceChrome
                 back={{
                     id: `${prefix}-back`,
                     label: masterDataCopy.actionBackList,
+                    visibility: backVisibility,
                     onClick: onBack,
                 }}
                 numberLabel="编号"
@@ -157,10 +213,12 @@ export function ObjectCenterView({
                         : []),
                 ]}
                 primaryAction={
-                    canWrite ? (
+                    canWritePrimary ? (
                         <span
                             title={
-                                !canRevise ? reviseBlocker?.message : undefined
+                                !canPrimary
+                                    ? primaryBlocker?.message
+                                    : undefined
                             }
                             className="inline-flex"
                         >
@@ -168,20 +226,20 @@ export function ObjectCenterView({
                                 id={`${prefix}-revise`}
                                 type="button"
                                 size="sm"
-                                disabled={!canRevise}
+                                disabled={!canPrimary}
                                 onClick={onRevise}
                             >
-                                <HistoryIcon
+                                <PrimaryIcon
                                     data-icon="inline-start"
                                     aria-hidden="true"
                                 />
-                                {masterDataCopy.actionUpdate}
+                                {primaryLabel}
                             </Button>
                         </span>
                     ) : null
                 }
                 secondaryActions={
-                    canWrite ? (
+                    !hideDisableAction && canWriteDisable && onDisable ? (
                         <span
                             title={
                                 !canDisable
@@ -211,76 +269,67 @@ export function ObjectCenterView({
                     ) : null
                 }
                 tabs={
-                    <nav
-                        aria-label="资料分区"
-                        className={cn(
-                            "flex items-center",
-                            detailWorkspaceStyles.tabsList,
-                        )}
-                    >
-                        {SECTION_NAV.map((item) => (
-                            <Link
-                                id={`${prefix}-nav-${item.id}`}
-                                key={item.id}
-                                href={`${baseHref}${baseHref.includes("?") ? "&" : "?"}section=${item.id}`}
-                                scroll={false}
-                                aria-current={
-                                    item.id === activeSection
-                                        ? "location"
-                                        : undefined
-                                }
-                                data-active={
-                                    item.id === activeSection ? "" : undefined
-                                }
-                                className={detailWorkspaceStyles.tab}
-                                onClick={(event) => {
-                                    if (
-                                        item.id === activeSection &&
-                                        !event.metaKey &&
-                                        !event.ctrlKey &&
-                                        !event.shiftKey &&
-                                        !event.altKey
-                                    ) {
-                                        event.preventDefault()
-                                        scrollToSection(item.id)
-                                    }
-                                }}
-                            >
-                                {item.label}
-                            </Link>
-                        ))}
-                    </nav>
+                    <DetailWorkspaceTabs
+                        value={activeSection}
+                        onValueChange={handleSectionChange}
+                        ariaLabel="资料分区"
+                        items={SECTION_NAV.map((item) => ({
+                            id: item.id,
+                            label: item.label,
+                            triggerId: `${prefix}-nav-${item.id}`,
+                        }))}
+                    />
                 }
             />
 
             <DetailWorkspaceBody
                 alerts={
-                    <>
-                        {canWrite && !canRevise && reviseBlocker ? (
-                            <p className="text-xs text-muted-foreground">
-                                {masterDataCopy.centerUpdateBlocked(
-                                    reviseBlocker.message,
-                                )}
-                            </p>
-                        ) : null}
-                        {canWrite && !canDisable && disableBlocker ? (
-                            <p className="text-xs text-muted-foreground">
-                                {masterDataCopy.centerDisableBlocked(
-                                    disableBlocker.message,
-                                )}
-                            </p>
-                        ) : null}
-                    </>
+                    hasAlerts ? (
+                        <>
+                            {canWritePrimary &&
+                            !canPrimary &&
+                            primaryBlocker ? (
+                                <Alert variant="info">
+                                    <InfoIcon aria-hidden="true" />
+                                    <AlertTitle>当前不可执行主操作</AlertTitle>
+                                    <AlertDescription>
+                                        {primaryActionConfig?.blockedMessage
+                                            ? primaryActionConfig.blockedMessage(
+                                                  primaryBlocker.message,
+                                              )
+                                            : masterDataCopy.centerUpdateBlocked(
+                                                  primaryBlocker.message,
+                                              )}
+                                    </AlertDescription>
+                                </Alert>
+                            ) : null}
+                            {!hideDisableAction &&
+                            canWriteDisable &&
+                            !canDisable &&
+                            disableBlocker ? (
+                                <Alert variant="info">
+                                    <InfoIcon aria-hidden="true" />
+                                    <AlertTitle>当前不可停用</AlertTitle>
+                                    <AlertDescription>
+                                        {masterDataCopy.centerDisableBlocked(
+                                            disableBlocker.message,
+                                        )}
+                                    </AlertDescription>
+                                </Alert>
+                            ) : null}
+                        </>
+                    ) : undefined
                 }
             >
                 <ObjectCenterOverviewSection
                     data={data}
                     canRevealSensitive={canRevealSensitive}
+                    extra={overviewExtra}
                 />
                 <ObjectCenterVersionsSection data={data} />
                 <ObjectCenterAuditSection data={data} />
             </DetailWorkspaceBody>
-            {canWrite ? dialogs : null}
+            {canWritePrimary || canWriteDisable ? dialogs : null}
         </DetailWorkspacePage>
     )
 }
@@ -289,6 +338,7 @@ export function ObjectCenterQueryState({
     idPrefix,
     title,
     listHref,
+    backVisibility,
     isPending,
     isError,
     error,
@@ -298,6 +348,7 @@ export function ObjectCenterQueryState({
     idPrefix?: string
     title: string
     listHref: string
+    backVisibility?: DetailWorkspaceBackLink["visibility"]
     isPending: boolean
     isError: boolean
     error: unknown
@@ -316,7 +367,15 @@ export function ObjectCenterQueryState({
     if (isError) {
         return (
             <DetailWorkspacePage>
-                <DetailWorkspaceChrome title={title} />
+                <DetailWorkspaceChrome
+                    title={title}
+                    back={{
+                        id: `${prefix}-back`,
+                        label: masterDataCopy.actionBackList,
+                        visibility: backVisibility,
+                        href: listHref,
+                    }}
+                />
                 <DetailWorkspaceBody>
                     <DetailWorkspaceSection>
                         <BusinessFailureState
@@ -340,17 +399,31 @@ export function ObjectCenterQueryState({
         return (
             <DetailWorkspacePage>
                 <DetailWorkspaceChrome
-                    title={masterDataCopy.centerMissingTitle}
-                    meta={masterDataCopy.centerMissingDesc}
-                    primaryAction={
-                        <Button
-                            id={`${prefix}-back-list`}
-                            render={<Link href={listHref} />}
-                        >
-                            {masterDataCopy.actionBackList}
-                        </Button>
-                    }
+                    title={title}
+                    back={{
+                        id: `${prefix}-back`,
+                        label: masterDataCopy.actionBackList,
+                        visibility: backVisibility,
+                        href: listHref,
+                    }}
                 />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection>
+                        <BusinessEmptyState
+                            kind="no-data"
+                            title={masterDataCopy.centerMissingTitle}
+                            description={masterDataCopy.centerMissingDesc}
+                            action={
+                                <Button
+                                    id={`${prefix}-back-list`}
+                                    render={<Link href={listHref} />}
+                                >
+                                    {masterDataCopy.actionBackList}
+                                </Button>
+                            }
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
             </DetailWorkspacePage>
         )
     }

@@ -1,16 +1,14 @@
 "use client"
 
-import { RequiredMark } from "@/components/ui/required-mark"
-
 import { useQuery } from "@tanstack/react-query"
 import { fetchSettlementReviewerOptions } from "../api/reviewer-options"
 
 import {
     FormalActionConfirmDialog,
+    MoneyValue,
     OptionCombobox,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -21,16 +19,46 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { LoadingButton } from "@/components/ui/loading-button"
+import { RequiredMark } from "@/components/ui/required-mark"
 import { Textarea } from "@/components/ui/textarea"
 import {
     RESOLUTION_LABEL,
     type DifferenceResolution,
     type SettlementDetailView,
+    type SettlementDifferenceView,
 } from "@/features/supplier-settlements/types"
+import { describeMoney } from "@/lib/money-display"
+
+function MoneyWithReadout({
+    label,
+    value,
+}: {
+    label: string
+    value: string | null | undefined
+}) {
+    const readout = describeMoney(value)?.readout
+    return (
+        <span className="inline-flex flex-wrap items-baseline gap-1.5">
+            <span>{label}：</span>
+            <MoneyValue
+                value={value}
+                display="exact"
+                className="font-semibold"
+            />
+            {readout ? (
+                <span className="text-xs text-muted-foreground">
+                    （{readout}）
+                </span>
+            ) : null}
+        </span>
+    )
+}
 
 function SettlementResolveDialog({
     open,
     onOpenChange,
+    activeDiff,
     resolution,
     onResolutionChange,
     reasonCode,
@@ -40,6 +68,7 @@ function SettlementResolveDialog({
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
+    activeDiff?: SettlementDifferenceView | null
     resolution: DifferenceResolution
     onResolutionChange: (resolution: DifferenceResolution) => void
     reasonCode: string
@@ -47,6 +76,7 @@ function SettlementResolveDialog({
     pending: boolean
     onSubmit: () => void
 }) {
+    const diffReadout = describeMoney(activeDiff?.amountGross)?.readout
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent closeButtonId="supplier-settlements-resolve-close">
@@ -56,6 +86,72 @@ function SettlementResolveDialog({
                         登记后将更新待确认成本差额，结论不可撤回；原始证据和历史成本保留。
                     </DialogDescription>
                 </DialogHeader>
+                {activeDiff ? (
+                    <dl className="grid gap-2.5 rounded-lg border border-border/70 bg-muted/35 p-3 text-xs sm:grid-cols-3">
+                        <div className="sm:col-span-3">
+                            <dt className="text-muted-foreground">
+                                当前目标差异
+                            </dt>
+                            <dd className="mt-0.5 flex flex-wrap items-baseline gap-2 font-medium text-foreground">
+                                <span>{activeDiff.typeLabel}</span>
+                                {activeDiff.amountGross ? (
+                                    <>
+                                        <MoneyValue
+                                            value={activeDiff.amountGross}
+                                            display="exact"
+                                            className="text-warning-soft-foreground"
+                                        />
+                                        {diffReadout ? (
+                                            <span className="font-normal text-muted-foreground">
+                                                （{diffReadout}）
+                                            </span>
+                                        ) : null}
+                                    </>
+                                ) : null}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt className="text-muted-foreground">
+                                ERP 侧金额
+                            </dt>
+                            <dd className="mt-0.5">
+                                {activeDiff.erpSideAmount ? (
+                                    <MoneyValue
+                                        value={activeDiff.erpSideAmount}
+                                        display="exact"
+                                    />
+                                ) : (
+                                    <span>
+                                        {activeDiff.erpSideLabel || "—"}
+                                    </span>
+                                )}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt className="text-muted-foreground">
+                                供应商侧金额
+                            </dt>
+                            <dd className="mt-0.5">
+                                {activeDiff.supplierSideAmount ? (
+                                    <MoneyValue
+                                        value={activeDiff.supplierSideAmount}
+                                        display="exact"
+                                    />
+                                ) : (
+                                    <span>
+                                        {activeDiff.supplierSideLabel || "—"}
+                                    </span>
+                                )}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt className="text-muted-foreground">差异方向</dt>
+                            <dd className="mt-0.5 text-foreground">
+                                {activeDiff.amountDirectionLabel || "—"}
+                            </dd>
+                        </div>
+                    </dl>
+                ) : null}
                 <div className="space-y-3">
                     <div className="space-y-1.5">
                         <Label htmlFor="supplier-settlements-resolve-resolution">
@@ -165,20 +261,23 @@ function SettlementEvidenceDialog({
                 <DialogHeader>
                     <DialogTitle>追加采购协同证据</DialogTitle>
                     <DialogDescription>
-                        补充供应商证据或业务说明，不修改结论和金额。
+                        登记供应商确认记录、工单号或外部凭证链接，用于财务核对差异；不直接修改结算金额与结论。
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-1.5">
                     <Label htmlFor="supplier-settlements-evidence-reference">
-                        凭证编号或链接
+                        凭证编号或外部链接
                         <RequiredMark />
                     </Label>
                     <Input
                         id="supplier-settlements-evidence-reference"
                         value={referenceId}
                         onChange={(e) => onReferenceIdChange(e.target.value)}
-                        placeholder="例如 ticket://T-123 或 attachment://..."
+                        placeholder="如：供应商工单号、对账确认邮件编号或归档文档链接"
                     />
+                    <p className="text-xs text-muted-foreground">
+                        请填写可追溯的业务凭证编号或共享文档地址，方便复核人查证。
+                    </p>
                 </div>
                 <div className="space-y-1.5">
                     <Label htmlFor="supplier-settlements-evidence-comment">
@@ -188,6 +287,7 @@ function SettlementEvidenceDialog({
                         id="supplier-settlements-evidence-comment"
                         value={comment}
                         onChange={(e) => onCommentChange(e.target.value)}
+                        placeholder="说明差异核实过程、供应商答复结果或补差约定"
                         rows={3}
                     />
                 </div>
@@ -221,6 +321,8 @@ function SettlementRejectDialog({
     onOpenChange,
     reasonCode,
     onReasonCodeChange,
+    comment,
+    onCommentChange,
     pending,
     onSubmit,
 }: {
@@ -228,6 +330,8 @@ function SettlementRejectDialog({
     onOpenChange: (open: boolean) => void
     reasonCode: string
     onReasonCodeChange: (reasonCode: string) => void
+    comment: string
+    onCommentChange: (comment: string) => void
     pending: boolean
     onSubmit: () => void
 }) {
@@ -237,33 +341,48 @@ function SettlementRejectDialog({
                 <DialogHeader>
                     <DialogTitle>驳回复核</DialogTitle>
                     <DialogDescription>
-                        原因必填，退回经办并保留记录。
+                        驳回后将退回经办人补充核对并保留本次复核意见记录。
                     </DialogDescription>
                 </DialogHeader>
-                <div className="space-y-1.5">
-                    <Label htmlFor="supplier-settlements-reject-reason">
-                        处理原因
-                        <RequiredMark />
-                    </Label>
-                    <OptionCombobox
-                        id="supplier-settlements-reject-reason"
-                        value={reasonCode || null}
-                        onValueChange={(v) => onReasonCodeChange(v ?? "")}
-                        options={[
-                            { value: "", label: "请选择" },
-                            {
-                                value: "NEEDS_MORE_EVIDENCE",
-                                label: "证据不足",
-                            },
-                            {
-                                value: "AMOUNT_MISMATCH",
-                                label: "金额仍不一致",
-                            },
-                            { value: "OTHER", label: "其他" },
-                        ]}
-                        placeholder="请选择"
-                        allowClear={false}
-                    />
+                <div className="space-y-3">
+                    <div className="space-y-1.5">
+                        <Label htmlFor="supplier-settlements-reject-reason">
+                            驳回原因
+                            <RequiredMark />
+                        </Label>
+                        <OptionCombobox
+                            id="supplier-settlements-reject-reason"
+                            value={reasonCode || null}
+                            onValueChange={(v) => onReasonCodeChange(v ?? "")}
+                            options={[
+                                { value: "", label: "请选择" },
+                                {
+                                    value: "NEEDS_MORE_EVIDENCE",
+                                    label: "证据不足",
+                                },
+                                {
+                                    value: "AMOUNT_MISMATCH",
+                                    label: "金额仍不一致",
+                                },
+                                { value: "OTHER", label: "其他" },
+                            ]}
+                            placeholder="请选择"
+                            allowClear={false}
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="supplier-settlements-reject-comment">
+                            具体驳回意见
+                        </Label>
+                        <Textarea
+                            id="supplier-settlements-reject-comment"
+                            value={comment}
+                            onChange={(e) => onCommentChange(e.target.value)}
+                            placeholder="说明需要经办人补充核对的明细行、差异或凭证"
+                            rows={3}
+                            disabled={pending}
+                        />
+                    </div>
                 </div>
                 <DialogFooter>
                     <Button
@@ -279,6 +398,7 @@ function SettlementRejectDialog({
                         id="supplier-settlements-reject-confirm"
                         loading={pending}
                         type="button"
+                        variant="destructive"
                         disabled={!reasonCode || pending}
                         onClick={() => void onSubmit()}
                     >
@@ -294,6 +414,7 @@ function SettlementSubmitReviewDialog({
     open,
     onOpenChange,
     statement,
+    totals,
     reviewerUserId,
     onReviewerUserIdChange,
     pending,
@@ -302,6 +423,7 @@ function SettlementSubmitReviewDialog({
     open: boolean
     onOpenChange: (open: boolean) => void
     statement: SettlementDetailView["statement"]
+    totals: SettlementDetailView["totals"]
     reviewerUserId: string
     onReviewerUserIdChange: (reviewerUserId: string) => void
     pending: boolean
@@ -316,6 +438,11 @@ function SettlementSubmitReviewDialog({
     const selectedReviewer = reviewers.data?.find(
         (person) => person.user_id === reviewerUserId,
     )
+    const previewPayable =
+        statement.supplierAmountGross ??
+        totals.supplierAmountGross ??
+        totals.erpAmountGross
+
     return (
         <FormalActionConfirmDialog
             actionVariant="default"
@@ -331,8 +458,24 @@ function SettlementSubmitReviewDialog({
                 tone: statement.statusTone,
             }}
             toStatus={{ label: "待复核", tone: "warning" }}
-            summary={[statement.statementNo]}
-
+            summary={[
+                <span key="no">
+                    结算单号：
+                    <span className="num font-medium text-foreground">
+                        {statement.statementNo}
+                    </span>
+                </span>,
+                <MoneyWithReadout
+                    key="erp"
+                    label="ERP 计算金额"
+                    value={totals.erpAmountGross}
+                />,
+                <MoneyWithReadout
+                    key="payable"
+                    label="本次结算金额"
+                    value={previewPayable}
+                />,
+            ]}
             formContent={
                 <div className="space-y-1.5">
                     <Label htmlFor="supplier-settlements-submit-reviewer-input">
@@ -395,6 +538,10 @@ function SettlementConfirmSettlementDialog({
     pending: boolean
     onConfirm: () => Promise<void>
 }) {
+    const payablePreview =
+        statement.supplierAmountGross ?? statement.erpAmountGross
+    const costDeltaPreview = totals.pendingCostDeltaGross ?? "0.00"
+
     return (
         <FormalActionConfirmDialog
             actionVariant="default"
@@ -411,13 +558,27 @@ function SettlementConfirmSettlementDialog({
             }}
             toStatus={{ label: "已确认", tone: "success" }}
             summary={[
-                statement.statementNo,
-                `应付金额预览 ${statement.supplierAmountGross ?? statement.erpAmountGross}`,
-                `成本差额预览 ${totals.pendingCostDeltaGross ?? "0.00"}`,
-                `经办 ${statement.preparedBy?.displayName ?? "—"}`,
+                <span key="no">
+                    结算单号：
+                    <span className="num font-medium text-foreground">
+                        {statement.statementNo}
+                    </span>
+                </span>,
+                <MoneyWithReadout
+                    key="payable"
+                    label="应付金额预览"
+                    value={payablePreview}
+                />,
+                <MoneyWithReadout
+                    key="delta"
+                    label="成本差额预览"
+                    value={costDeltaPreview}
+                />,
+                <span key="prepared">
+                    经办：{statement.preparedBy?.displayName ?? "—"}
+                </span>,
             ]}
             effects={["追加成本差额记录", "生成供应商应付"]}
-
             nextDepartment="供应商往来"
             pending={pending}
             onConfirm={onConfirm}

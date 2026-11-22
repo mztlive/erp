@@ -31,13 +31,22 @@ export function contractSectionHref(
     return section === "overview" ? base : `${base}?section=${section}`
 }
 
+/** 距离合同有效期止的剩余天数；长期有效或无有效日期时返回 null。 */
+export function contractRemainingDays(
+    contract: ContractCenterView,
+): number | null {
+    const rawValidTo = contract.currentRevision.validTo
+    if (!rawValidTo || rawValidTo === "9999-12-31") return null
+    const validTo = new Date(rawValidTo + "T00:00:00")
+    if (Number.isNaN(validTo.getTime())) return null
+    const now = new Date()
+    const dayMs = 24 * 60 * 60 * 1000
+    return Math.ceil((validTo.getTime() - now.getTime()) / dayMs)
+}
+
 /** 30 日内将到期：与列表页同口径（仍生效 + 有效期止在 30 天内）。 */
 export function isExpiringWithin30Days(contract: ContractCenterView): boolean {
     if (contract.status !== "EFFECTIVE") return false
-    const validTo = new Date(contract.currentRevision.validTo + "T00:00:00")
-    if (Number.isNaN(validTo.getTime())) return false
-    const now = new Date()
-    const dayMs = 24 * 60 * 60 * 1000
-    const diff = Math.ceil((validTo.getTime() - now.getTime()) / dayMs)
-    return diff >= 0 && diff <= 30
+    const diff = contractRemainingDays(contract)
+    return diff != null && diff >= 0 && diff <= 30
 }

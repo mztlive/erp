@@ -22,7 +22,7 @@ export function useSupplierOrderCenterSection(
     const searchParams = useSearchParams()
 
     const activeSection = resolveSection(
-        sectionProp ?? searchParams.get("section"),
+        searchParams.get("section") ?? sectionProp,
     )
 
     const setSection = (section: OrderSection) => {
@@ -31,7 +31,7 @@ export function useSupplierOrderCenterSection(
         else params.set("section", section)
         const qs = params.toString()
         router.replace(
-            `/supplier-api/orders/${supplierOrderId}${qs ? `?${qs}` : ""}`,
+            `/supplier-api/orders/${encodeURIComponent(supplierOrderId)}${qs ? `?${qs}` : ""}`,
             { scroll: false },
         )
     }

@@ -45,17 +45,25 @@ export function useConnectionListQuery(input: ListQueryInput) {
     })
 }
 
-export function useConnectionCenterQuery(connectionId: string | undefined) {
+const HEALTH_UNKNOWN_POLL_WINDOW_MS = 2 * 60 * 1000
+
+export function useConnectionCenterQuery(
+    connectionId: string | undefined,
+    enabled = true,
+) {
     return useQuery({
         queryKey: supplierConnectionKeys.center(connectionId ?? ""),
         queryFn: () => fetchConnectionCenter({ connectionId: connectionId! }),
-        enabled: Boolean(connectionId),
-        refetchInterval: (query) =>
-            query.state.data?.healthRecords.some(
-                (record) => record.result === "UNKNOWN",
-            )
+        enabled: enabled && Boolean(connectionId),
+        refetchInterval: (query) => {
+            const latest = query.state.data?.healthRecords[0]
+            if (!latest || latest.result !== "UNKNOWN") return false
+            const checkedAt = Date.parse(latest.at)
+            if (!Number.isFinite(checkedAt)) return false
+            return Date.now() - checkedAt < HEALTH_UNKNOWN_POLL_WINDOW_MS
                 ? 2000
-                : false,
+                : false
+        },
     })
 }
 

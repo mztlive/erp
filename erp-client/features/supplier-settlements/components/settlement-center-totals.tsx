@@ -16,7 +16,7 @@ function SettlementCenterTotals({ detail }: { detail: SettlementDetailView }) {
             value: (
                 <MoneyValue
                     value={detail.totals.orderAmountGross}
-                    taxBasis="gross"
+                    display="exact"
                 />
             ),
         },
@@ -26,7 +26,7 @@ function SettlementCenterTotals({ detail }: { detail: SettlementDetailView }) {
             value: (
                 <MoneyValue
                     value={detail.totals.freightGross}
-                    taxBasis="gross"
+                    display="exact"
                 />
             ),
         },
@@ -36,7 +36,7 @@ function SettlementCenterTotals({ detail }: { detail: SettlementDetailView }) {
             value: (
                 <MoneyValue
                     value={detail.totals.serviceFeeGross}
-                    taxBasis="gross"
+                    display="exact"
                 />
             ),
         },
@@ -44,10 +44,7 @@ function SettlementCenterTotals({ detail }: { detail: SettlementDetailView }) {
             id: "refund",
             label: "供应商退款",
             value: (
-                <MoneyValue
-                    value={detail.totals.refundGross}
-                    taxBasis="gross"
-                />
+                <MoneyValue value={detail.totals.refundGross} display="exact" />
             ),
         },
         {
@@ -56,9 +53,10 @@ function SettlementCenterTotals({ detail }: { detail: SettlementDetailView }) {
             value: (
                 <MoneyValue
                     value={detail.totals.erpAmountGross}
-                    taxBasis="gross"
+                    display="exact"
                 />
             ),
+            detail: `口径：${detail.totals.taxBasisLabel}`,
         },
         {
             id: "supplier",
@@ -66,13 +64,16 @@ function SettlementCenterTotals({ detail }: { detail: SettlementDetailView }) {
             value: detail.totals.supplierAmountGross ? (
                 <MoneyValue
                     value={detail.totals.supplierAmountGross}
-                    taxBasis="gross"
+                    display="exact"
                 />
             ) : (
                 <span className="text-body-compact font-normal text-muted-foreground">
-                    账单未同步 · 刷新试算后以 ERP 金额预填
+                    账单未同步
                 </span>
             ),
+            detail: detail.totals.supplierAmountGross
+                ? undefined
+                : "刷新试算后以 ERP 金额预填",
         },
         {
             id: "diff",
@@ -80,7 +81,7 @@ function SettlementCenterTotals({ detail }: { detail: SettlementDetailView }) {
             value: detail.totals.differenceAmountGross ? (
                 <MoneyValue
                     value={detail.totals.differenceAmountGross}
-                    taxBasis="gross"
+                    display="exact"
                 />
             ) : (
                 "—"
@@ -100,39 +101,36 @@ function SettlementCenterTotals({ detail }: { detail: SettlementDetailView }) {
                         detail.totals.pendingCostDeltaGross ??
                         "0.00"
                     }
-                    taxBasis="gross"
+                    display="exact"
                 />
             ),
         },
     ]
+
     return (
-        <section className="py-4" aria-label="金额摘要">
-            <h2 className="text-section-title font-semibold tracking-tight">
-                金额摘要
-            </h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-                订单、运费、服务费、退款与 ERP
-                计算金额、供应商账单金额、差异方向对比 · 全部
-                {detail.totals.taxBasisLabel}
-            </p>
-            <DetailWorkspaceMetrics columns={4}>
-                {items.map((item) => (
-                    <DetailWorkspaceMetricItem
-                        key={item.id}
-                        label={item.label}
-                        value={item.value}
-                        detail={
-                            item.warning ? (
-                                <span className="text-warning-soft-foreground">
-                                    {item.warning}
-                                </span>
-                            ) : undefined
-                        }
-                        emphasis={item.id === "erp" ? "primary" : "default"}
-                    />
-                ))}
-            </DetailWorkspaceMetrics>
-        </section>
+        <DetailWorkspaceMetrics
+            columns={4}
+            variant="bar"
+            ariaLabel={`结算金额摘要（${detail.totals.taxBasisLabel}）`}
+        >
+            {items.map((item) => (
+                <DetailWorkspaceMetricItem
+                    key={item.id}
+                    label={item.label}
+                    value={item.value}
+                    detail={
+                        item.warning ? (
+                            <span className="text-warning-soft-foreground">
+                                {item.warning}
+                            </span>
+                        ) : (
+                            item.detail
+                        )
+                    }
+                    emphasis={item.id === "erp" ? "primary" : "default"}
+                />
+            ))}
+        </DetailWorkspaceMetrics>
     )
 }
 

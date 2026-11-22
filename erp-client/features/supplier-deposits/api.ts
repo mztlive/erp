@@ -1,5 +1,8 @@
 import { apiGet, apiPost } from "@/lib/api"
-import { downloadFileAsset } from "@/features/file-assets/api"
+import {
+    downloadFileAsset,
+    fetchFileAssetPreviewBlob,
+} from "@/features/file-assets/api"
 import type {
     AccountDetail,
     AccountRow,
@@ -33,4 +36,14 @@ export function executeDepositCommand(command: DepositCommand) {
 /** 从受控文件接口读取已核实的对账凭证，不向页面展示内部文件编号。 */
 export function downloadDepositResolutionEvidence(assetId: string) {
     return downloadFileAsset(assetId, "预存款对账核实凭证")
+}
+
+/** 从受控文件接口下载充值银行付款回单。 */
+export function downloadDepositBankReceipt(assetId: string) {
+    return downloadFileAsset(assetId, "预存款充值银行回单")
+}
+
+/** 从受控文件接口拉取充值银行付款回单预览内容。 */
+export function previewDepositBankReceipt(assetId: string) {
+    return fetchFileAssetPreviewBlob(assetId)
 }

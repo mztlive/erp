@@ -19,11 +19,13 @@ import { hasPermission } from "@/lib/permissions"
 export function PurchaseOrderCancelApprovalButton({
     order,
     onResult,
+    onTriggerClick,
     triggerVariant,
     triggerClassName,
 }: {
     order: PurchaseOrderCenterView
     onResult?: (result: PurchaseOrderDetailResult) => void
+    onTriggerClick?: () => void
     triggerVariant?: ComponentProps<typeof Button>["variant"]
     triggerClassName?: string
 }) {
@@ -88,6 +90,7 @@ export function PurchaseOrderCancelApprovalButton({
             documentType="PurchaseOrder"
             documentIdOf={(command) => command.purchaseOrderId}
             submit={(command) => cancelMutation.mutateAsync(command)}
+            onTriggerClick={onTriggerClick}
             successHref={
                 reviseRejected
                     ? `/procurement/orders/${encodeURIComponent(orderId)}?mode=edit`

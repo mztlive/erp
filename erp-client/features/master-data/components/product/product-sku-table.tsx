@@ -452,7 +452,7 @@ function ProductSkuTable({
         >
             <Table
                 data-density="comfortable"
-                className="min-w-[62rem] table-fixed [--table-cell-inline:0.625rem] [&_thead_th]:!static"
+                className="min-w-[62rem] table-fixed [--table-cell-inline:0.625rem] [&_thead_th:not(:first-child)]:!static"
             >
                 <colgroup>
                     {showSupplyColumn ? (
@@ -480,7 +480,7 @@ function ProductSkuTable({
                 </colgroup>
                 <TableHeader>
                     <TableRow>
-                        <TableHead>
+                        <TableHead className="sticky left-0 z-10 bg-card">
                             SKU 名称与规格
                             <RequiredMark />
                         </TableHead>

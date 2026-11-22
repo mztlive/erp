@@ -10,6 +10,7 @@ import {
 } from "@/lib/supplier-payment-terms"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { RequiredMark } from "@/components/ui/required-mark"
 import {
     CapabilityCheckboxGroup,
     FieldShell,
@@ -34,6 +35,7 @@ export function SupplierEditorCommercialSection({
     const term = parsePeriodicTerm(values.paymentTerm)
     return (
         <SectionPanel
+            id="supplier-section-commercial"
             title="商务合作"
             description="能力、结算与主体用于采购选用；评估分便于后续优选。"
         >
@@ -49,7 +51,10 @@ export function SupplierEditorCommercialSection({
 
                 <div className="grid gap-4 sm:grid-cols-2">
                     <FieldShell>
-                        <Label>{masterDataCopy.fSettlement}</Label>
+                        <Label htmlFor="master-data-supplier-commercial-settlement-combobox">
+                            {masterDataCopy.fSettlement}
+                            <RequiredMark />
+                        </Label>
                         <OptionCombobox
                             id="master-data-supplier-commercial-settlement-combobox"
                             value={values.settlement || null}
@@ -84,23 +89,33 @@ export function SupplierEditorCommercialSection({
                                     : SETTLEMENT_MODE_OPTIONS
                             }
                             allowClear
+                            required
                             placeholder="请选择结算方式"
                             className="w-full"
                             disabled={!canEdit}
                         />
                     </FieldShell>
                     <FieldShell>
-                        <Label htmlFor="master-data-supplier-commercial-payment-days">
+                        <Label
+                            htmlFor={
+                                cycle
+                                    ? "master-data-supplier-commercial-payment-days"
+                                    : "master-data-supplier-commercial-payment-term-combobox"
+                            }
+                        >
                             {cycle
                                 ? "结算后付款天数"
                                 : masterDataCopy.fPaymentTerm}
+                            <RequiredMark />
                         </Label>
                         {cycle ? (
                             <Input
                                 id="master-data-supplier-commercial-payment-days"
+                                className="num"
                                 type="number"
                                 min={0}
                                 max={366}
+                                aria-required="true"
                                 value={
                                     term
                                         ? String(term.days)
@@ -132,6 +147,7 @@ export function SupplierEditorCommercialSection({
                                         : SUPPLIER_PAYMENT_TERM_OPTIONS
                                 }
                                 allowClear
+                                required
                                 placeholder="请选择具体付款条件"
                                 className="w-full"
                                 disabled={!canEdit || !values.settlement}
@@ -146,6 +162,7 @@ export function SupplierEditorCommercialSection({
                     <FieldShell>
                         <Label htmlFor="master-data-supplier-commercial-reconciliation-cycle-combobox">
                             {masterDataCopy.fReconciliationCycle}
+                            <RequiredMark />
                         </Label>
                         <OptionCombobox
                             id="master-data-supplier-commercial-reconciliation-cycle-combobox"
@@ -158,6 +175,7 @@ export function SupplierEditorCommercialSection({
                             }
                             options={RECONCILIATION_CYCLES}
                             allowClear={false}
+                            required
                             placeholder="请选择对账频率"
                             disabled={!canEdit}
                             className="w-full"
@@ -184,28 +202,38 @@ export function SupplierEditorCommercialSection({
                         />
                     </FieldShell>
                     <FieldShell>
-                        <Label>{masterDataCopy.fSigningEntity}</Label>
-                        <CompanySearchCombobox
-                            id="master-data-supplier-commercial-signing-entity-combobox"
-                            value={values.signingEntity || undefined}
-                            onValueChange={(value) =>
-                                setFieldValue("signingEntity", value ?? "")
-                            }
-                            placeholder="选择与供应商签约的公司主体"
-                            disabled={!canEdit}
-                        />
+                        <Label htmlFor="master-data-supplier-commercial-signing-entity-combobox">
+                            {masterDataCopy.fSigningEntity}
+                            <RequiredMark />
+                        </Label>
+                        <div aria-required="true">
+                            <CompanySearchCombobox
+                                id="master-data-supplier-commercial-signing-entity-combobox"
+                                value={values.signingEntity || undefined}
+                                onValueChange={(value) =>
+                                    setFieldValue("signingEntity", value ?? "")
+                                }
+                                placeholder="选择与供应商签约的公司主体"
+                                disabled={!canEdit}
+                            />
+                        </div>
                     </FieldShell>
                     <FieldShell>
-                        <Label>{masterDataCopy.fPaymentEntity}</Label>
-                        <CompanySearchCombobox
-                            id="master-data-supplier-commercial-payment-entity-combobox"
-                            value={values.paymentEntity || undefined}
-                            onValueChange={(value) =>
-                                setFieldValue("paymentEntity", value ?? "")
-                            }
-                            placeholder="选择向供应商付款的公司主体"
-                            disabled={!canEdit}
-                        />
+                        <Label htmlFor="master-data-supplier-commercial-payment-entity-combobox">
+                            {masterDataCopy.fPaymentEntity}
+                            <RequiredMark />
+                        </Label>
+                        <div aria-required="true">
+                            <CompanySearchCombobox
+                                id="master-data-supplier-commercial-payment-entity-combobox"
+                                value={values.paymentEntity || undefined}
+                                onValueChange={(value) =>
+                                    setFieldValue("paymentEntity", value ?? "")
+                                }
+                                placeholder="选择向供应商付款的公司主体"
+                                disabled={!canEdit}
+                            />
+                        </div>
                     </FieldShell>
                 </div>
 
@@ -216,6 +244,8 @@ export function SupplierEditorCommercialSection({
                         </Label>
                         <Input
                             id="supplier-initial-score"
+                            className="num"
+                            inputMode="numeric"
                             value={values.initialScore}
                             onChange={(e) =>
                                 setFieldValue("initialScore", e.target.value)
@@ -225,7 +255,9 @@ export function SupplierEditorCommercialSection({
                         />
                     </FieldShell>
                     <FieldShell>
-                        <Label>{masterDataCopy.fSupplierRating}</Label>
+                        <Label htmlFor="master-data-supplier-commercial-rating-combobox">
+                            {masterDataCopy.fSupplierRating}
+                        </Label>
                         <OptionCombobox
                             id="master-data-supplier-commercial-rating-combobox"
                             value={values.supplierRating || null}
@@ -248,6 +280,8 @@ export function SupplierEditorCommercialSection({
                         </Label>
                         <Input
                             id="supplier-current-score"
+                            className="num"
+                            inputMode="numeric"
                             value={values.currentScore}
                             onChange={(e) =>
                                 setFieldValue("currentScore", e.target.value)

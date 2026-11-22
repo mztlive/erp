@@ -79,7 +79,7 @@ function SkuBulkPriceBar({
             <Button
                 id="master-data-product-product-sku-bulk-bar-button-1"
                 type="button"
-                variant="default"
+                variant="secondary"
                 size="sm"
                 className="self-end"
                 disabled={

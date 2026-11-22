@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
 import { useQueryClient } from "@tanstack/react-query"
 
 import {
@@ -14,8 +13,8 @@ import {
     FormalActionResult,
     detailWorkspaceStyles,
 } from "@/components/business"
-import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import { PurchaseChangeOrderApprovalSection } from "@/features/purchase-orders/components/purchase-change-order-approval-section"
 import { PurchaseChangeOrderEditDialog } from "@/features/purchase-orders/components/purchase-change-order-edit-dialog"
 import { PurchaseOrderDetailDialogs } from "@/features/purchase-orders/components/purchase-order-detail-dialogs"
@@ -46,10 +45,11 @@ import {
     isPurchaseChangeOrderWorkItem,
     purchaseChangeOrderApprovalPhase,
 } from "@/features/purchase-orders/lib/purchase-change-order-approval"
-import { purchaseOrderDraftFormSchema } from "@/features/purchase-orders/lib/purchase-order-validation"
 import {
     type PurchaseOrderDetailSectionId,
+    purchaseOrderDetailHref,
     purchaseOrderSectionHref,
+    resolvePurchaseOrderBackContext,
     resolvePurchaseOrderDetailMode,
     resolvePurchaseOrderDetailSection,
 } from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
@@ -76,6 +76,7 @@ export function PurchaseOrderDetailPage({
 }) {
     const router = useRouter()
     const searchParams = useSearchParams()
+    const backContext = resolvePurchaseOrderBackContext(searchParams)
     const focusedWorkItemQuery = useWorkItemDetailQuery(workItemId ?? "")
     const focusedWorkItem = focusedWorkItemQuery.data
         ? mapWorkItemDto(focusedWorkItemQuery.data)
@@ -93,28 +94,39 @@ export function PurchaseOrderDetailPage({
     )
     const mode = resolvePurchaseOrderDetailMode(modeParam)
     const order = query.data
+    const permissions = usePurchaseOrderDetailPermissions(order)
+    const isEditing = mode === "edit" && permissions.canEdit
 
     const { commandLedger, result, setResult } =
         usePurchaseOrderDetailCommandState(purchaseOrderId)
 
-    // 审批决定/命令成功后单据状态会变（如审批中→已生效），统一在结果落定时
-    // 刷新采购单查询，避免页面停留在旧状态。
+    // 审批决定/命令成功后单据状态会变（如审批中→已生效），统一 toast 反馈并
+    // 失效采购单相关缓存，setResult 使用函数式更新避免陈旧闭包。
     const queryClient = useQueryClient()
     const handleResult = React.useCallback(
         (next: React.SetStateAction<PurchaseOrderDetailResult | null>) => {
-            const resolved = typeof next === "function" ? next(result) : next
-            if (
-                resolved &&
-                (resolved.status === "succeeded" ||
-                    resolved.status === "unknown")
-            ) {
-                void queryClient.invalidateQueries({
-                    queryKey: purchaseOrderKeys.detail(purchaseOrderId),
-                })
-            }
-            setResult(resolved)
+            setResult((prev) => {
+                const resolved = typeof next === "function" ? next(prev) : next
+                if (resolved?.status === "succeeded") {
+                    toast.add({
+                        title: resolved.title,
+                        description: resolved.description,
+                        type: "success",
+                    })
+                    void queryClient.invalidateQueries({
+                        queryKey: purchaseOrderKeys.all,
+                    })
+                    return null
+                }
+                if (resolved?.status === "unknown") {
+                    void queryClient.invalidateQueries({
+                        queryKey: purchaseOrderKeys.all,
+                    })
+                }
+                return resolved
+            })
         },
-        [queryClient, purchaseOrderId, result, setResult],
+        [queryClient, setResult],
     )
 
     const selectSection = React.useCallback(
@@ -127,37 +139,22 @@ export function PurchaseOrderDetailPage({
         [purchaseOrderId, router, searchParams],
     )
 
-    const draftForm = useAppForm({
-        defaultValues: {
-            paymentTermCode: order?.header.paymentTermCode ?? "POSTPAY_NET15",
-            note: "",
-        },
-        validators: { onChange: purchaseOrderDraftFormSchema },
-        onSubmit: async () => {
-            await editActions.handleSave()
-        },
-    })
-
     const editActions = usePurchaseOrderDetailEditActions({
         purchaseOrderId,
         mode,
+        isEditing,
         order,
         refetch: query.refetch,
         commandLedger,
         setResult: handleResult,
-        getPaymentTermCode: () => draftForm.state.values.paymentTermCode,
-        setDraftPaymentTermCode: (value) =>
-            draftForm.setFieldValue("paymentTermCode", value),
     })
-
-    const permissions = usePurchaseOrderDetailPermissions(order)
 
     const guard = usePurchaseOrderDetailEditGuard({
         mode,
+        isEditing,
         order,
-        paymentTermCode: draftForm.state.values.paymentTermCode,
-        note: draftForm.state.values.note,
         lineEdits: editActions.lineEdits,
+        busy: editActions.savePending || editActions.submitPending,
         onSave: editActions.handleSave,
     })
 
@@ -168,27 +165,61 @@ export function PurchaseOrderDetailPage({
 
     React.useEffect(() => {
         titleRef.current?.focus()
-    }, [purchaseOrderId, mode])
+    }, [purchaseOrderId, isEditing])
+
+    const handleSaveRef = React.useRef(editActions.handleSave)
+    handleSaveRef.current = editActions.handleSave
+
+    const { draftEditToken, savePending, submitPending, setSubmitConfirmOpen } =
+        editActions
 
     React.useEffect(() => {
+        if (!isEditing) return
         const onKey = (event: KeyboardEvent) => {
-            if (mode !== "edit") return
             if (
-                (event.metaKey || event.ctrlKey) &&
-                event.key.toLowerCase() === "s"
+                event.defaultPrevented ||
+                event.isComposing ||
+                event.repeat ||
+                event.altKey ||
+                event.shiftKey ||
+                !(event.metaKey || event.ctrlKey) ||
+                (event.target instanceof Element &&
+                    event.target.closest(
+                        '[role="dialog"], [role="alertdialog"]',
+                    ))
             ) {
-                event.preventDefault()
-                void editActions.handleSave()
+                return
             }
-            if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+            if (event.key.toLowerCase() === "s") {
                 event.preventDefault()
-                editActions.setSubmitConfirmOpen(true)
+                if (draftEditToken && !savePending) {
+                    void handleSaveRef.current()
+                }
+                return
+            }
+            if (event.key === "Enter") {
+                if (
+                    isEditing &&
+                    permissions.canSubmit &&
+                    draftEditToken &&
+                    !savePending &&
+                    !submitPending
+                ) {
+                    event.preventDefault()
+                    setSubmitConfirmOpen(true)
+                }
             }
         }
         window.addEventListener("keydown", onKey)
         return () => window.removeEventListener("keydown", onKey)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [mode, editActions.draftEditToken, editActions.lineEdits, order])
+    }, [
+        draftEditToken,
+        isEditing,
+        permissions.canSubmit,
+        savePending,
+        setSubmitConfirmOpen,
+        submitPending,
+    ])
 
     if (query.isPending) {
         return (
@@ -207,10 +238,14 @@ export function PurchaseOrderDetailPage({
                 <DetailWorkspaceChrome
                     title="采购单"
                     meta={<span>详情加载失败</span>}
+                    navigationMeta={backContext.sourceHint}
                     back={{
                         id: "procurement-orders-detail-error-back",
-                        label: "返回列表",
-                        href: "/procurement/orders",
+                        label: backContext.label,
+                        href: backContext.href,
+                        visibility: backContext.hasReturnTo
+                            ? "always"
+                            : "standalone-only",
                     }}
                 />
                 <DetailWorkspaceBody>
@@ -219,35 +254,18 @@ export function PurchaseOrderDetailPage({
                             title="详情加载失败"
                             error={query.error}
                             action={
-                                <>
-                                    <Button
-                                        id="procurement-orders-detail-retry"
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        className={
-                                            detailWorkspaceStyles.subtleButton
-                                        }
-                                        onClick={() => void query.refetch()}
-                                    >
-                                        重试
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className={
-                                            detailWorkspaceStyles.quietButton
-                                        }
-                                        render={
-                                            <Link
-                                                id="procurement-orders-detail-back-from-error"
-                                                href="/procurement/orders"
-                                            />
-                                        }
-                                    >
-                                        返回列表
-                                    </Button>
-                                </>
+                                <Button
+                                    id="procurement-orders-detail-retry"
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className={
+                                        detailWorkspaceStyles.subtleButton
+                                    }
+                                    onClick={() => void query.refetch()}
+                                >
+                                    重试
+                                </Button>
                             }
                         />
                     </div>
@@ -262,10 +280,14 @@ export function PurchaseOrderDetailPage({
                 <DetailWorkspaceChrome
                     title="采购单不存在"
                     meta={<span>单据可能已删除或编号有误</span>}
+                    navigationMeta={backContext.sourceHint}
                     back={{
                         id: "procurement-orders-detail-missing-back-top",
-                        label: "采购单列表",
-                        href: "/procurement/orders",
+                        label: backContext.label,
+                        href: backContext.href,
+                        visibility: backContext.hasReturnTo
+                            ? "always"
+                            : "standalone-only",
                     }}
                 />
                 <DetailWorkspaceBody>
@@ -275,23 +297,6 @@ export function PurchaseOrderDetailPage({
                             title="未找到该采购单"
                             description="该采购单可能已删除或不在当前数据范围内。"
                             className="rounded-lg border-0 bg-transparent shadow-none ring-0"
-                            action={
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className={
-                                        detailWorkspaceStyles.subtleButton
-                                    }
-                                    render={
-                                        <Link
-                                            id="procurement-orders-detail-missing-back"
-                                            href="/procurement/orders"
-                                        />
-                                    }
-                                >
-                                    返回列表
-                                </Button>
-                            }
                         />
                     </div>
                 </DetailWorkspaceBody>
@@ -299,13 +304,11 @@ export function PurchaseOrderDetailPage({
         )
     }
 
-    const baseHref = `/procurement/orders/${order.identity.purchaseOrderId}`
     const displayNo =
         order.identity.purchaseNo ??
         order.identity.draftLabel ??
         "采购单（未编号）"
     const costMasked = order.currentContent.costMasked
-    const isEditing = mode === "edit" && permissions.canEdit
 
     const modeLabel = isEditing
         ? order.identity.status === "REJECTED" ||
@@ -324,6 +327,10 @@ export function PurchaseOrderDetailPage({
         ) === "draft" &&
         activeChange.approval?.allowedActions.includes("SUBMIT"),
     )
+    const changeIsPrimary =
+        !isEditing && continueChange && !permissions.canSubmit
+    const hasHeaderPrimaryAction = permissions.canSubmit || changeIsPrimary
+
     /** 发起或继续改单都直接打开改单弹窗（与销售改单一致）。 */
     const openChange = () => {
         if (continueChange && activeChange) {
@@ -335,6 +342,22 @@ export function PurchaseOrderDetailPage({
         })
     }
 
+    const viewHref = purchaseOrderDetailHref(
+        order.identity.purchaseOrderId,
+        searchParams,
+        { mode: null },
+    )
+    const editHref = purchaseOrderDetailHref(
+        order.identity.purchaseOrderId,
+        searchParams,
+        { mode: "edit" },
+    )
+    const changesHref = purchaseOrderDetailHref(
+        order.identity.purchaseOrderId,
+        searchParams,
+        { mode: null, section: "changes" },
+    )
+
     return (
         <DetailWorkspacePage>
             <PurchaseOrderDetailHeader
@@ -344,7 +367,6 @@ export function PurchaseOrderDetailPage({
                 modeLabel={modeLabel}
                 titleRef={titleRef}
                 router={router}
-                baseHref={baseHref}
                 canEdit={permissions.canEdit}
                 canSubmit={permissions.canSubmit}
                 canVoid={permissions.canVoid}
@@ -356,7 +378,7 @@ export function PurchaseOrderDetailPage({
                 savePending={editActions.savePending}
                 requestLeave={guard.requestLeave}
                 onExitEdit={() =>
-                    guard.requestLeave(() => router.replace(baseHref))
+                    guard.requestLeave(() => router.replace(viewHref))
                 }
                 onSaveDraft={() => void editActions.handleSave()}
                 onRequestVoid={() => editActions.setVoidConfirmOpen(true)}
@@ -418,7 +440,7 @@ export function PurchaseOrderDetailPage({
                             canVoid={permissions.canVoid}
                             canChange={permissions.canChange || continueChange}
                             continueChange={continueChange}
-                            onEdit={() => router.push(`${baseHref}?mode=edit`)}
+                            onEdit={() => router.push(editHref)}
                             onRequestVoid={() =>
                                 editActions.setVoidConfirmOpen(true)
                             }
@@ -435,13 +457,6 @@ export function PurchaseOrderDetailPage({
                                 baseRevisionNo={order.identity.revisionNo}
                                 paidAmount={
                                     order.payableSummary?.paidAllocatedAmount
-                                }
-                                workItemId={focusedWorkItem?.workItemId}
-                                expectedTaskVersion={
-                                    focusedWorkItem?.taskVersion
-                                }
-                                workItemAllowedActions={
-                                    focusedWorkItem?.allowedActions
                                 }
                                 onResult={handleResult}
                             />
@@ -469,26 +484,17 @@ export function PurchaseOrderDetailPage({
                                 lineEdits={editActions.lineEdits}
                                 setLineEdits={editActions.setLineEdits}
                                 draftEditToken={editActions.draftEditToken}
+                                editLockPending={editActions.editLockPending}
+                                editLockError={editActions.editLockError}
+                                onRetryEditLock={
+                                    editActions.retryAcquireEditToken
+                                }
                                 savePending={editActions.savePending}
                             />
                         ) : undefined
                     }
                     costMasked={costMasked}
-                    changeWorkItemId={
-                        isChangeOrderTask
-                            ? focusedWorkItem?.workItemId
-                            : undefined
-                    }
-                    changeExpectedTaskVersion={
-                        isChangeOrderTask
-                            ? focusedWorkItem?.taskVersion
-                            : undefined
-                    }
-                    changeWorkItemAllowedActions={
-                        isChangeOrderTask
-                            ? focusedWorkItem?.allowedActions
-                            : undefined
-                    }
+                    hasHeaderPrimaryAction={hasHeaderPrimaryAction}
                     onChangeApprovalResult={handleResult}
                 />
             </DetailWorkspaceBody>
@@ -529,7 +535,7 @@ export function PurchaseOrderDetailPage({
                     onResult={(next) => {
                         handleResult(next)
                         if (next.status === "succeeded")
-                            router.replace(`${baseHref}?section=changes`)
+                            router.replace(changesHref)
                     }}
                 />
             ) : null}

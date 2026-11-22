@@ -1,7 +1,5 @@
 "use client"
 
-import { SupplierTaxRateField } from "../supplier-tax-rate-field"
-
 import * as React from "react"
 
 import { useAppForm } from "@/components/form"
@@ -17,17 +15,31 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { FieldGroup, FieldLegend, FieldSet } from "@/components/ui/field"
+import { toast } from "@/components/ui/toast"
 import { useReviseSupplierOfferingMutation } from "@/features/supplier-offerings/hooks/queries"
 import {
+    apiReviseSchema,
     errorMessage,
     idempotencyKey,
     percentageFromRate,
     rateFromPercentage,
     reviseSchema,
-    apiReviseSchema,
 } from "@/features/supplier-offerings/lib/offering-forms"
-import type { SupplierOfferingView } from "@/features/supplier-offerings/types"
+import type {
+    ReviseSupplierOfferingInput,
+    SupplierOfferingView,
+} from "@/features/supplier-offerings/types"
 import { OFFERING_STATUS_LABELS } from "@/features/supplier-offerings/types"
+import {
+    FormalCommandKeyLedger,
+    classifyFormalCommandError,
+} from "@/lib/formal-command"
+import { SupplierTaxRateField } from "../supplier-tax-rate-field"
+
+type ReviseOfferingPayload = Omit<
+    ReviseSupplierOfferingInput,
+    "idempotency_key"
+>
 
 export function ReviseOfferingDialog({
     offering,
@@ -38,6 +50,13 @@ export function ReviseOfferingDialog({
 }) {
     const mutation = useReviseSupplierOfferingMutation()
     const [submitError, setSubmitError] = React.useState<string | null>(null)
+    const ledgerRef = React.useRef<FormalCommandKeyLedger | null>(null)
+    if (ledgerRef.current === null) {
+        ledgerRef.current = new FormalCommandKeyLedger((prefix) =>
+            idempotencyKey(prefix),
+        )
+    }
+
     const form = useAppForm({
         defaultValues: {
             dropshipPrice: offering.dropship_supply_price_gross ?? "",
@@ -49,7 +68,7 @@ export function ReviseOfferingDialog({
             validFrom: offering.valid_from ?? "",
             validTo: offering.valid_to ?? "",
             status: offering.status,
-            changeReason: "调整供给条款",
+            changeReason: "",
         },
         validators: {
             onSubmit:
@@ -57,37 +76,61 @@ export function ReviseOfferingDialog({
         },
         onSubmit: async ({ value }) => {
             setSubmitError(null)
+            const ledger = ledgerRef.current!
+            const slot = `revise:${offering.id}`
+            const payload: ReviseOfferingPayload = {
+                offeringId: offering.id,
+                expected_revision_no: offering.current_revision_no ?? 1,
+                terms: {
+                    dropship_supply_price_gross: value.dropshipPrice.trim(),
+                    bulk_supply_price_gross: value.bulkPrice.trim() || null,
+                    input_tax_rate: rateFromPercentage(
+                        value.inputTaxPercentage,
+                    ),
+                    bulk_minimum_order_quantity:
+                        value.minimumQuantity.trim() || null,
+                    product_capabilities: offering.product_capabilities,
+                    valid_from: value.validFrom,
+                    valid_to: value.validTo || null,
+                },
+                status: value.status,
+                change_reason: value.changeReason.trim(),
+            }
+            const command = ledger.acquire(
+                slot,
+                "revise-supplier-offering",
+                payload,
+            )
             try {
                 await mutation.mutateAsync({
-                    offeringId: offering.id,
-                    expected_revision_no: offering.current_revision_no ?? 1,
-                    terms: {
-                        dropship_supply_price_gross: value.dropshipPrice.trim(),
-                        bulk_supply_price_gross: value.bulkPrice.trim() || null,
-                        input_tax_rate: rateFromPercentage(
-                            value.inputTaxPercentage,
-                        ),
-                        bulk_minimum_order_quantity:
-                            value.minimumQuantity.trim() || null,
-                        product_capabilities: offering.product_capabilities,
-                        valid_from: value.validFrom,
-                        valid_to: value.validTo || null,
-                    },
-                    status: value.status,
-                    change_reason: value.changeReason.trim(),
-                    idempotency_key: idempotencyKey("revise-supplier-offering"),
+                    ...command.payload,
+                    idempotency_key: command.idempotencyKey,
+                })
+                ledger.settle(slot, "succeeded")
+                toast.add({
+                    title: "供给条款已修订",
+                    description: "新版本条款已生效。",
+                    type: "success",
                 })
                 onOpenChange(false)
             } catch (error) {
+                ledger.settle(slot, classifyFormalCommandError(error))
                 setSubmitError(errorMessage(error, "供给条款保存失败"))
             }
         },
     })
 
     return (
-        <Dialog open onOpenChange={onOpenChange}>
+        <Dialog
+            open
+            onOpenChange={(next) => {
+                if (!next && mutation.isPending) return
+                onOpenChange(next)
+            }}
+        >
             <DialogContent
                 closeButtonId="supplier-offerings-dialog-revise-close"
+                showCloseButton={!mutation.isPending}
                 className="w-[calc(100vw-2rem)] gap-4 p-5 sm:max-w-4xl"
             >
                 <DialogHeader>
@@ -132,6 +175,7 @@ export function ReviseOfferingDialog({
                                                     offering.source_type ===
                                                     "API"
                                                 }
+                                                inputMode="decimal"
                                                 label="一件代发采购价（含税）"
                                                 required
                                             />
@@ -145,6 +189,7 @@ export function ReviseOfferingDialog({
                                                     offering.source_type ===
                                                     "API"
                                                 }
+                                                inputMode="decimal"
                                                 label="集采采购价（含税）"
                                                 required={
                                                     offering.source_type !==
@@ -161,6 +206,7 @@ export function ReviseOfferingDialog({
                                                     offering.source_type ===
                                                     "API"
                                                 }
+                                                inputMode="decimal"
                                                 label="集采起订量"
                                                 required={
                                                     offering.source_type !==
@@ -230,6 +276,7 @@ export function ReviseOfferingDialog({
                                             <field.TextField
                                                 id="supplier-offerings-dialog-revise-change-reason"
                                                 label="变更原因"
+                                                placeholder="例如：调整供给价格、税率或有效期"
                                                 required
                                             />
                                         )}

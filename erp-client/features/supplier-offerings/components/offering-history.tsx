@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { BusinessFailureState, BusinessEmptyState } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { useOfferingHistoryQuery } from "../hooks/queries"
 import { OfferingTerms } from "./offering-terms"
@@ -65,11 +65,14 @@ export function OfferingHistory({
                         >
                             <span className="space-y-1">
                                 <span className="flex items-center gap-2">
-                                    条款 v{revision.revision_no}
+                                    <span className="num">
+                                        条款 v{revision.revision_no}
+                                    </span>
                                     {revision.is_current ? (
-                                        <Badge variant="outline">
-                                            当前版本
-                                        </Badge>
+                                        <StatusBadge
+                                            tone="info"
+                                            label="当前版本"
+                                        />
                                     ) : null}
                                 </span>
                                 <span className="num block text-xs font-normal text-muted-foreground">
@@ -104,7 +107,7 @@ export function OfferingHistory({
                     aria-label={`条款 v${selected.revision_no}`}
                 >
                     <div>
-                        <h2 className="text-section-title font-semibold tracking-tight">
+                        <h2 className="num text-section-title font-semibold tracking-tight">
                             条款 v{selected.revision_no}
                         </h2>
                         <p className="num mt-1 text-xs text-muted-foreground">

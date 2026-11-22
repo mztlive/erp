@@ -1,7 +1,15 @@
 "use client"
 
 import Link from "next/link"
+import { AlertCircleIcon } from "lucide-react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
+import {
+    Progress,
+    ProgressLabel,
+    ProgressValue,
+} from "@/components/ui/progress"
 import type { AdoptionBatch } from "../../api/batch"
 import { useControlBatchWorkMutation } from "../../hooks/batch"
 
@@ -21,6 +29,10 @@ export function BatchWorkStatus({
             : work.phase === "REVIEWING"
               ? "正在核对商品与供给"
               : "正在检查全批一致性"
+    const percent =
+        work.total > 0
+            ? Math.min(100, Math.round((work.completed / work.total) * 100))
+            : 0
     return (
         <div
             className={
@@ -29,26 +41,33 @@ export function BatchWorkStatus({
                     : "flex flex-col gap-4"
             }
         >
-            <div role="status" aria-live="polite" className="space-y-2">
-                <p className="font-medium">
-                    {work.status === "FAILED" ? "本次处理已中断" : label}
-                </p>
-                <p>
-                    已处理 {work.completed} / {work.total} 个 SKU
-                </p>
+            <div role="status" aria-live="polite" className="space-y-2.5">
+                <Progress value={percent} className="w-full max-w-md">
+                    <ProgressLabel>
+                        {work.status === "FAILED" ? "本次处理已中断" : label}
+                    </ProgressLabel>
+                    <ProgressValue className="num">
+                        {() =>
+                            `${work.completed} / ${work.total} 个 SKU（${percent}%）`
+                        }
+                    </ProgressValue>
+                </Progress>
                 <p className="text-xs text-muted-foreground">
                     本次设置已受理。可离开页面，稍后从“入库批次”查看进度；完成后会继续到对应步骤。
                 </p>
-                {work.error ? (
-                    <p className="text-body-compact text-destructive">
-                        {work.error}
-                    </p>
-                ) : null}
             </div>
+            {work.error ? (
+                <Alert variant="destructive">
+                    <AlertCircleIcon aria-hidden="true" />
+                    <AlertTitle>处理中断</AlertTitle>
+                    <AlertDescription>{work.error}</AlertDescription>
+                </Alert>
+            ) : null}
             <div className="flex flex-wrap gap-2">
                 <Button
                     id="supplier-catalog-batch-work-return"
                     variant="outline"
+                    size="sm"
                     render={
                         <Link
                             href={
@@ -63,8 +82,13 @@ export function BatchWorkStatus({
                 </Button>
                 {work.status === "FAILED" ? (
                     <>
-                        <Button
+                        <LoadingButton
                             id="supplier-catalog-batch-work-retry"
+                            size="sm"
+                            loading={
+                                control.isPending &&
+                                control.variables?.retry === true
+                            }
                             disabled={control.isPending}
                             onClick={() =>
                                 control.mutate({
@@ -76,11 +100,16 @@ export function BatchWorkStatus({
                             }
                         >
                             继续处理
-                        </Button>
+                        </LoadingButton>
                         {work.phase !== "SAVING" || work.completed === 0 ? (
-                            <Button
+                            <LoadingButton
                                 id="supplier-catalog-batch-work-edit"
+                                size="sm"
                                 variant="ghost"
+                                loading={
+                                    control.isPending &&
+                                    control.variables?.retry === false
+                                }
                                 disabled={control.isPending}
                                 onClick={() =>
                                     control.mutate({
@@ -92,15 +121,16 @@ export function BatchWorkStatus({
                                 }
                             >
                                 结束本次处理并返回编辑
-                            </Button>
+                            </LoadingButton>
                         ) : null}
                     </>
                 ) : null}
             </div>
             {control.error ? (
-                <p role="alert" className="text-destructive">
-                    {control.error.message}
-                </p>
+                <Alert variant="destructive">
+                    <AlertCircleIcon aria-hidden="true" />
+                    <AlertDescription>{control.error.message}</AlertDescription>
+                </Alert>
             ) : null}
         </div>
     )

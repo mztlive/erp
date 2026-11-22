@@ -1,26 +1,51 @@
 "use client"
 
-import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
 import * as React from "react"
-import { useAccountProfileQuery } from "@/features/auth/queries"
-import { hasPermission } from "@/lib/permissions"
-import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 
-import { SettlementCenter } from "@/features/supplier-settlements/components/settlement-center"
+import { DetailWorkspaceSkeleton } from "@/components/business"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { SettlementList } from "@/features/supplier-settlements/components/settlement-list"
 import {
     buildSettlementsSearchParams,
     parseSettlementsSearchParams,
     type SettlementsUrlState,
 } from "@/features/supplier-settlements/lib/url-state"
+import { useRouter, useSearchParams } from "@/lib/navigation"
+import { hasPermission } from "@/lib/permissions"
+
+function buildDetailHref(
+    statementId: string,
+    state?: Partial<
+        Pick<
+            SettlementsUrlState,
+            | "section"
+            | "diff"
+            | "returnTo"
+            | "workItemId"
+            | "queueContextId"
+            | "from"
+        >
+    >,
+): string {
+    const base = `/supplier-api/settlements/${encodeURIComponent(statementId)}`
+    const params = new URLSearchParams()
+    if (state?.section && state.section !== "overview") {
+        params.set("section", state.section)
+    }
+    if (state?.diff) params.set("diff", state.diff)
+    if (state?.returnTo) params.set("returnTo", state.returnTo)
+    if (state?.workItemId) params.set("workItemId", state.workItemId)
+    if (state?.queueContextId) {
+        params.set("queueContextId", state.queueContextId)
+    }
+    if (state?.from) params.set("from", state.from)
+    const qs = params.toString()
+    return qs ? `${base}?${qs}` : base
+}
 
 export function SupplierSettlementsPage() {
     const router = useRouter()
-    const pathname = usePathname()
     const searchParams = useSearchParams()
-
-    const pathMatch = pathname.match(/\/supplier-api\/settlements\/([^/]+)$/)
-    const pathStatementId = pathMatch?.[1]
 
     const account = useAccountProfileQuery()
     const canUsePeople = hasPermission(
@@ -32,6 +57,7 @@ export function SupplierSettlementsPage() {
         account.data?.permissions,
         "supplier:list",
     )
+
     const sanitize = React.useCallback(
         (state: SettlementsUrlState): SettlementsUrlState => {
             if (state.statementId) return state
@@ -61,48 +87,48 @@ export function SupplierSettlementsPage() {
         },
         [canFilterSupplier, canUseOrg, canUsePeople],
     )
-    const parsed = React.useMemo(() => {
-        const state = parseSettlementsSearchParams(searchParams)
-        return pathStatementId && !state.statementId
-            ? { ...state, statementId: pathStatementId }
-            : state
-    }, [searchParams, pathStatementId])
+
+    const parsed = React.useMemo(
+        () => parseSettlementsSearchParams(searchParams),
+        [searchParams],
+    )
     const urlState = React.useMemo(() => sanitize(parsed), [parsed, sanitize])
+
+    // 兼容旧链接 `/supplier-api/settlements?statementId=X`，重定向至独立详情页签路由
+    React.useEffect(() => {
+        if (!parsed.statementId) return
+        router.replace(buildDetailHref(parsed.statementId, parsed), {
+            scroll: false,
+        })
+    }, [parsed, router])
 
     const replaceUrl = React.useCallback(
         (next: SettlementsUrlState) => {
-            if (pathStatementId && next.statementId === pathStatementId) {
-                const base = `/supplier-api/settlements/${pathStatementId}`
-                const params = new URLSearchParams()
-                if (next.section !== "overview")
-                    params.set("section", next.section)
-                if (next.returnTo) params.set("returnTo", next.returnTo)
-                if (next.workItemId) params.set("workItemId", next.workItemId)
-                if (next.queueContextId)
-                    params.set("queueContextId", next.queueContextId)
-                if (next.from) params.set("from", next.from)
-                const qs = params.toString()
-                router.replace(qs ? `${base}?${qs}` : base, { scroll: false })
-                return
-            }
             const listPath = "/supplier-api/settlements"
-            const qs = buildSettlementsSearchParams(next)
+            const qs = buildSettlementsSearchParams({
+                ...next,
+                statementId: undefined,
+            })
             router.replace(`${listPath}${qs}`, { scroll: false })
         },
-        [pathStatementId, router],
+        [router],
     )
 
     const patchUrl = React.useCallback(
         (patch: Partial<SettlementsUrlState>) => {
+            if (patch.statementId) {
+                router.push(buildDetailHref(patch.statementId, patch))
+                return
+            }
             replaceUrl(sanitize({ ...urlState, ...patch }))
         },
-        [replaceUrl, sanitize, urlState],
+        [replaceUrl, router, sanitize, urlState],
     )
 
     React.useEffect(() => {
         if (
             account.data &&
-            !urlState.statementId &&
+            !parsed.statementId &&
             buildSettlementsSearchParams(parsed) !==
                 buildSettlementsSearchParams(urlState)
         ) {
@@ -110,27 +136,12 @@ export function SupplierSettlementsPage() {
         }
     }, [account.data, parsed, replaceUrl, urlState])
 
-    if (urlState.statementId) {
-        const taskReturnTo = urlState.workItemId
-            ? buildWorkspaceDetailHref("tasks", urlState.workItemId)
-            : undefined
+    if (parsed.statementId) {
         return (
-            <SettlementCenter
-                statementId={urlState.statementId}
-                workItemId={urlState.workItemId}
-                urlState={urlState}
-                patchUrl={patchUrl}
-                returnTo={urlState.returnTo ?? taskReturnTo}
-                onBack={() =>
-                    patchUrl({
-                        statementId: undefined,
-                        section: "overview",
-                        preview: undefined,
-                        workItemId: undefined,
-                        queueContextId: undefined,
-                        from: undefined,
-                    })
-                }
+            <DetailWorkspaceSkeleton
+                title="供应商结算单"
+                description="正在打开结算单详情…"
+                summary
             />
         )
     }
@@ -140,16 +151,7 @@ export function SupplierSettlementsPage() {
             urlState={urlState}
             patchUrl={patchUrl}
             returnTo={urlState.returnTo}
-            onOpen={(id) =>
-                patchUrl({
-                    statementId: id,
-                    section: "overview",
-                    preview: undefined,
-                    workItemId: undefined,
-                    queueContextId: undefined,
-                    from: undefined,
-                })
-            }
+            onOpen={(id) => router.push(buildDetailHref(id))}
         />
     )
 }

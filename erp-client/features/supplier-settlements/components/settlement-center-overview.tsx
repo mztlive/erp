@@ -1,9 +1,14 @@
 "use client"
 
-import { DetailWorkspaceSection } from "@/components/business/detail-workspace"
+import {
+    DetailWorkspaceFact,
+    DetailWorkspaceFacts,
+    DetailWorkspaceSection,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { SettlementsUrlState } from "@/features/supplier-settlements/lib/url-state"
 import type { SettlementDetailView } from "@/features/supplier-settlements/types"
+import { formatDateTime } from "@/lib/datetime"
 
 function SettlementCenterOverview({
     detail,
@@ -13,25 +18,47 @@ function SettlementCenterOverview({
     patchUrl: (patch: Partial<SettlementsUrlState>) => void
 }) {
     const st = detail.statement
+    const billVersion = st.externalBillVersion
+        ? String(st.externalBillVersion).replace(/^v/i, "")
+        : ""
+
     return (
         <DetailWorkspaceSection
             title="概览"
             width="form"
-            contentClassName="space-y-2 text-body-compact"
+            subtitle="账单、订单与成本原值只读，不可在本页改写以消差；快捷键 d 可直达差异处理"
         >
-            <p>供应商：{st.supplierName}（记录时，不受后续更名影响）</p>
-            <p className="num">
-                期间：{st.periodStart} ~ {st.periodEnd}
-            </p>
-            <p>状态：{st.statusLabel}</p>
-            <p>
-                未决阻断差异：
-                {detail.differenceSummary.blocking} / 差异合计{" "}
-                {detail.differenceSummary.total}
-            </p>
-            <p className="text-muted-foreground">
-                账单/订单/成本原值只读，不可在本页改写以消差。
-            </p>
+            <DetailWorkspaceFacts columns={2} ariaLabel="结算单基础信息">
+                <DetailWorkspaceFact
+                    label="供应商"
+                    value={`${st.supplierName}（记录时，不受后续更名影响）`}
+                />
+                <DetailWorkspaceFact
+                    label="结算期间"
+                    value={`${st.periodStart} ~ ${st.periodEnd}`}
+                    numeric
+                />
+                <DetailWorkspaceFact label="当前状态" value={st.statusLabel} />
+                <DetailWorkspaceFact
+                    label="未决阻断差异 / 合计"
+                    value={`${detail.differenceSummary.blocking} / ${detail.differenceSummary.total}`}
+                    numeric
+                />
+                <DetailWorkspaceFact
+                    label="来源数据更新时间"
+                    value={formatDateTime(st.sourceAsOf, "default")}
+                    numeric
+                />
+                <DetailWorkspaceFact
+                    label="供应商账单"
+                    value={
+                        st.externalBillNo
+                            ? `${st.externalBillNo}${billVersion ? `（第 ${billVersion} 版）` : ""}`
+                            : "尚未同步"
+                    }
+                    numeric
+                />
+            </DetailWorkspaceFacts>
             <div className="flex flex-wrap gap-2 pt-2">
                 <Button
                     id="supplier-settlements-center-overview-open-differences"

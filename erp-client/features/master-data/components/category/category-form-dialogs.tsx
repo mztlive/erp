@@ -6,6 +6,7 @@ import { useAppForm } from "@/components/form"
 import { CategoryFormDialogFrame } from "@/features/master-data/components/category/category-form-dialog-frame"
 import {
     categoryFormSchema,
+    categoryMoveSchema,
     emptyCategoryForm,
 } from "@/features/master-data/components/category/category-form-schema"
 import {
@@ -124,7 +125,9 @@ export function CategoryReviseDialog({
     }
     const form = useAppForm({
         defaultValues: initialValues,
-        validators: { onChange: categoryFormSchema },
+        validators: {
+            onChange: mode === "move" ? categoryMoveSchema : categoryFormSchema,
+        },
         onSubmit: async ({ value }) => {
             if (!ids.stableId || !ids.baseRevisionId) return
             const response = await mutation.mutateAsync({

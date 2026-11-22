@@ -8,10 +8,15 @@ import {
     ShieldAlertIcon,
 } from "lucide-react"
 
-import { BusinessDiffPanel, BusinessStatusBadge } from "@/components/business"
+import {
+    BusinessDiffPanel,
+    BusinessStatusBadge,
+    DetailWorkspaceFact,
+    DetailWorkspaceFacts,
+} from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { formatDateTime } from "@/lib/datetime"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { hasAuthenticationRecovery } from "../lib/presentation"
@@ -40,34 +45,39 @@ export function IntegrationItemSummary({
     const failureMessage = error?.[2] || failure?.summary
 
     return (
-        <section aria-labelledby="integration-item-title" className="space-y-5">
-            <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0 space-y-2">
-                    <h3
-                        id="integration-item-title"
-                        ref={headingRef}
-                        tabIndex={-1}
-                        className={
-                            flat
-                                ? "scroll-mt-32 break-words text-section-title font-semibold tracking-tight outline-none"
-                                : "break-words text-body-compact font-semibold outline-none"
-                        }
-                    >
-                        {[item.identity.number, item.businessObject.title]
-                            .filter(Boolean)
-                            .join(" · ")}
-                    </h3>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                        <span>处理人：{item.ownerUser ?? item.ownerRole}</span>
-                        <span>已滞留 {item.ageLabel}</span>
-                        <span>{item.fundsImpactLabel}</span>
-                        {item.environment ? (
-                            <span>{item.environmentLabel}环境</span>
-                        ) : null}
+        <section
+            aria-labelledby={flat ? undefined : "integration-item-title"}
+            aria-label={flat ? "异常详情概要" : undefined}
+            className="space-y-5"
+        >
+            {!flat ? (
+                <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 space-y-2">
+                        <h3
+                            id="integration-item-title"
+                            ref={headingRef}
+                            tabIndex={-1}
+                            className="break-words text-body-compact font-semibold outline-none"
+                        >
+                            {[item.identity.number, item.businessObject.title]
+                                .filter(Boolean)
+                                .join(" · ")}
+                        </h3>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                            <span>
+                                处理人：{item.ownerUser ?? item.ownerRole}
+                            </span>
+                            <span>
+                                已滞留{" "}
+                                <span className="num">{item.ageLabel}</span>
+                            </span>
+                            <span>{item.fundsImpactLabel}</span>
+                            {item.environment ? (
+                                <span>{item.environmentLabel}环境</span>
+                            ) : null}
+                        </div>
                     </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                    {!flat && (
+                    <div className="flex shrink-0 items-center gap-2">
                         <BusinessStatusBadge
                             context="detail"
                             label={item.status.label}
@@ -79,20 +89,20 @@ export function IntegrationItemSummary({
                                       : "info"
                             }
                         />
-                    )}
-                    <Button
-                        id="integration-item-summary-refresh"
-                        type="button"
-                        size="icon-sm"
-                        variant="ghost"
-                        onClick={onRefresh}
-                        aria-label="刷新当前任务"
-                        title="刷新当前任务"
-                    >
-                        <RefreshCwIcon aria-hidden />
-                    </Button>
+                        <Button
+                            id="integration-item-summary-refresh"
+                            type="button"
+                            size="icon-sm"
+                            variant="ghost"
+                            onClick={onRefresh}
+                            aria-label="刷新当前任务"
+                            title="刷新当前任务"
+                        >
+                            <RefreshCwIcon aria-hidden />
+                        </Button>
+                    </div>
                 </div>
-            </div>
+            ) : null}
 
             {authentication ? (
                 <Alert variant={recovered ? "success" : "warning"}>
@@ -134,7 +144,10 @@ export function IntegrationItemSummary({
                         }
                     />
                     {item.compensationOpen ? (
-                        <Badge variant="destructive">后续补救未完成</Badge>
+                        <StatusBadge
+                            tone="destructive"
+                            label="后续补救未完成"
+                        />
                     ) : null}
                     {item.classification.errorClass ===
                     "parameter-or-mapping" ? (
@@ -150,7 +163,7 @@ export function IntegrationItemSummary({
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                         <span>原始异常 · {failure.operation}</span>
                         {failure.failedAt ? (
-                            <time dateTime={failure.failedAt}>
+                            <time className="num" dateTime={failure.failedAt}>
                                 {formatDateTime(failure.failedAt, "default")}
                             </time>
                         ) : null}
@@ -176,7 +189,9 @@ export function IntegrationItemSummary({
                                     <div>错误代码：{error[1]}</div>
                                 ) : null}
                                 {failure.jobNumber ? (
-                                    <div>检查编号：{failure.jobNumber}</div>
+                                    <div className="num">
+                                        检查编号：{failure.jobNumber}
+                                    </div>
                                 ) : null}
                             </div>
                         </details>
@@ -211,30 +226,30 @@ export function IntegrationItemSummary({
             ) : null}
 
             {item.originalAction || item.message ? (
-                <dl className="grid gap-x-6 gap-y-3 text-body-compact sm:grid-cols-2">
+                <DetailWorkspaceFacts columns={2}>
                     {item.originalAction ? (
-                        <Fact
+                        <DetailWorkspaceFact
                             label="原动作"
                             value={item.originalAction.actionLabel}
                         />
                     ) : null}
                     {item.message ? (
                         <>
-                            <Fact
+                            <DetailWorkspaceFact
                                 label="同步方向"
                                 value={item.message.directionLabel}
                             />
-                            <Fact
+                            <DetailWorkspaceFact
                                 label="事件摘要"
                                 value={item.message.eventIdSummary}
                             />
-                            <Fact
+                            <DetailWorkspaceFact
                                 label="消息摘要"
                                 value={item.message.maskedPayloadSummary}
                             />
                         </>
                     ) : null}
-                </dl>
+                </DetailWorkspaceFacts>
             ) : null}
             {item.difference ? (
                 <>
@@ -273,19 +288,15 @@ export function IntegrationItemSummary({
                     />
                     <p className="text-xs text-muted-foreground">
                         数据范围 {item.difference.boundary} · 更新时间{" "}
-                        {formatDateTime(item.difference.watermark, "default")}
+                        <span className="num">
+                            {formatDateTime(
+                                item.difference.watermark,
+                                "default",
+                            )}
+                        </span>
                     </p>
                 </>
             ) : null}
         </section>
-    )
-}
-
-function Fact({ label, value }: { label: string; value: React.ReactNode }) {
-    return (
-        <div className="min-w-0 space-y-1">
-            <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd className="break-words">{value}</dd>
-        </div>
     )
 }

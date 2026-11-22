@@ -3,7 +3,7 @@
 import * as React from "react"
 
 import type { RevisionTimelineEntry } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 
 export type MasterDataRevisionSnapshot = {
@@ -16,6 +16,12 @@ export type MasterDataRevisionSnapshot = {
     lifecycleAtRevision: "ENABLED" | "DISABLED"
     isCurrent: boolean
     timingLabel?: string
+}
+
+function timingTone(timingLabel: string): StatusTone {
+    if (timingLabel === masterDataCopy.timingFuture) return "warning"
+    if (timingLabel === masterDataCopy.timingCurrent) return "info"
+    return "neutral"
 }
 
 /**
@@ -55,15 +61,27 @@ export function masterDataRevisionEntry(
                 >
                     {rev.changeReason}
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     {options.showTiming && rev.timingLabel ? (
-                        <Badge variant="outline">{rev.timingLabel}</Badge>
+                        <StatusBadge
+                            tone={timingTone(rev.timingLabel)}
+                            appearance="quiet"
+                            label={rev.timingLabel}
+                        />
                     ) : null}
-                    <Badge variant="secondary">
-                        {rev.lifecycleAtRevision === "ENABLED"
-                            ? "启用"
-                            : "停用"}
-                    </Badge>
+                    <StatusBadge
+                        tone={
+                            rev.lifecycleAtRevision === "ENABLED"
+                                ? "success"
+                                : "neutral"
+                        }
+                        appearance="quiet"
+                        label={
+                            rev.lifecycleAtRevision === "ENABLED"
+                                ? "启用"
+                                : "停用"
+                        }
+                    />
                 </div>
                 {options.extra}
             </div>

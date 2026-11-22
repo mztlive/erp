@@ -1,289 +1,47 @@
 "use client"
 
 import * as React from "react"
-import { createPortal } from "react-dom"
 import { HistoryIcon } from "lucide-react"
 import {
     DetailWorkspaceSection,
+    DetailWorkspaceTabs,
     QuickPreviewSheet,
     detailWorkspaceStyles,
+    type DetailWorkspaceTabItem,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { InquiryHistory } from "./inquiry-history"
+import { StatusBadge } from "@/components/ui/status-badge"
 import type { ProcurementInquiry, SalesInquiry } from "../types"
+import { InquiryHistory } from "./inquiry-history"
 
 type InquiryTab = "demand" | "feedback" | "published" | "fees"
 
-/** 分区持续挂载；后台刷新只更新内容，不重置当前页签及输入。 */
-export function InquiryDetailTabs({
+/** 操作记录入口与抽屉：直接渲染于页头次要操作区，不再使用 DOM Portal。 */
+export function InquiryHistoryButton({
     inquiry,
-    procurement,
     workspace,
-    renderLayout,
-    salesProducts,
-    feedback,
-    feedbackActions,
-    publishedFeedback,
-    fees,
-    feeCount,
-    actionsContainer,
-    onFeedbackVisibilityChange,
 }: {
     inquiry: SalesInquiry | ProcurementInquiry
-    procurement: boolean
     workspace: boolean
-    renderLayout: (
-        navigation: React.ReactNode,
-        panels: React.ReactNode,
-    ) => React.ReactNode
-    salesProducts?: React.ReactNode
-    feedback: React.ReactNode
-    feedbackActions?: React.ReactNode
-    publishedFeedback?: React.ReactNode
-    fees: React.ReactNode
-    feeCount: number
-    actionsContainer?: HTMLElement | null
-    onFeedbackVisibilityChange?: (visible: boolean) => void
 }) {
-    const [active, setActive] = React.useState<InquiryTab>(() =>
-        procurement ? "feedback" : "demand",
-    )
-    const activeTab =
-        (active === "published" && !publishedFeedback) ||
-        (procurement && active === "demand")
-            ? "feedback"
-            : active
-    const tabs: InquiryTab[] = !procurement
-        ? ["demand", "fees"]
-        : publishedFeedback
-          ? ["feedback", "published", "fees"]
-          : ["feedback", "fees"]
     const [historyOpen, setHistoryOpen] = React.useState(false)
     const historyTrigger = React.useRef<HTMLButtonElement>(null)
-    const panelRefs = React.useRef<Partial<Record<InquiryTab, HTMLDivElement>>>(
-        {},
-    )
-    const positions = React.useRef<
-        Record<
-            InquiryTab,
-            { element: HTMLElement; top: number; left: number }[]
-        >
-    >({
-        demand: [],
-        feedback: [],
-        published: [],
-        fees: [],
-    })
-    React.useLayoutEffect(() => {
-        onFeedbackVisibilityChange?.(activeTab === "feedback")
-    }, [activeTab, onFeedbackVisibilityChange])
-    React.useLayoutEffect(() => {
-        for (const position of positions.current[activeTab]) {
-            if (!position.element.isConnected) continue
-            position.element.scrollTop = position.top
-            position.element.scrollLeft = position.left
-        }
-    }, [activeTab])
-    const navigation = (
-        <div
-            className={
-                workspace
-                    ? "min-w-0"
-                    : "flex shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b"
-            }
-        >
-            <TabsList
-                variant="line"
-                aria-label="询价内容分区"
-                className={
-                    workspace
-                        ? detailWorkspaceStyles.tabsList
-                        : "max-w-full flex-wrap gap-x-5"
-                }
-            >
-                {!procurement && (
-                    <TabsTrigger
-                        id="sales-inquiry-tab-demand"
-                        value="demand"
-                        aria-controls="sales-inquiry-panel-demand"
-                        className={
-                            workspace ? detailWorkspaceStyles.tab : undefined
-                        }
-                    >
-                        商品与报价
-                        {inquiry.status === "awaiting_sales" && (
-                            <span className="text-xs text-muted-foreground">
-                                待确认
-                            </span>
-                        )}
-                    </TabsTrigger>
-                )}
-                {procurement && (
-                    <TabsTrigger
-                        id="sales-inquiry-tab-feedback"
-                        value="feedback"
-                        aria-controls="sales-inquiry-panel-feedback"
-                        className={
-                            workspace ? detailWorkspaceStyles.tab : undefined
-                        }
-                    >
-                        采购反馈
-                        {inquiry.status === "awaiting_sales" ? (
-                            <span className="text-xs text-muted-foreground">
-                                待确认
-                            </span>
-                        ) : !publishedFeedback &&
-                          inquiry.feedbacks.length > 0 ? (
-                            <span className="text-xs text-muted-foreground">
-                                {inquiry.feedbacks.length} 轮
-                            </span>
-                        ) : null}
-                    </TabsTrigger>
-                )}
-                {procurement && publishedFeedback && (
-                    <TabsTrigger
-                        id="sales-inquiry-tab-published"
-                        value="published"
-                        aria-controls="sales-inquiry-panel-published"
-                        className={
-                            workspace ? detailWorkspaceStyles.tab : undefined
-                        }
-                    >
-                        已发布反馈
-                        <span className="text-xs text-muted-foreground">
-                            {inquiry.feedbacks.length} 轮
-                        </span>
-                    </TabsTrigger>
-                )}
-                <TabsTrigger
-                    id="sales-inquiry-tab-fees"
-                    value="fees"
-                    aria-controls="sales-inquiry-panel-fees"
-                    className={
-                        workspace ? detailWorkspaceStyles.tab : undefined
-                    }
-                >
-                    费用与办理
-                    {feeCount > 0 && (
-                        <Badge variant="warning">额外费用 {feeCount} 项</Badge>
-                    )}
-                </TabsTrigger>
-            </TabsList>
-            {!workspace && procurement && feedbackActions && (
-                <div
-                    className={
-                        activeTab === "feedback"
-                            ? "ml-auto flex flex-wrap items-center justify-end gap-2 pb-2"
-                            : "hidden"
-                    }
-                >
-                    {feedbackActions}
-                </div>
-            )}
-        </div>
-    )
-    const panels = tabs.map((tab) => {
-        const content =
-            tab === "demand"
-                ? salesProducts
-                : tab === "feedback"
-                  ? feedback
-                  : tab === "published"
-                    ? publishedFeedback
-                    : fees
-        return (
-            <TabsContent
-                key={tab}
-                id={`sales-inquiry-panel-${tab}`}
-                value={tab}
-                aria-labelledby={`sales-inquiry-tab-${tab}`}
-                keepMounted
-                hidden={activeTab !== tab}
-                ref={(element) => {
-                    panelRefs.current[tab] = element ?? undefined
-                }}
-                className={
-                    !procurement && tab === "demand"
-                        ? "min-h-0 min-w-0 overflow-hidden"
-                        : "min-h-0 min-w-0 overflow-auto overscroll-contain"
-                }
-            >
-                {workspace ? (
-                    <DetailWorkspaceSection
-                        className={
-                            tab === "demand"
-                                ? "flex h-full min-h-0 flex-col"
-                                : undefined
-                        }
-                        contentClassName={
-                            tab === "demand" ? "min-h-0 flex-1" : undefined
-                        }
-                        actions={
-                            tab === "feedback" ? feedbackActions : undefined
-                        }
-                    >
-                        {content}
-                    </DetailWorkspaceSection>
-                ) : (
-                    content
-                )}
-            </TabsContent>
-        )
-    })
     return (
-        <Tabs
-            value={activeTab}
-            onValueChange={(value) => {
-                if (
-                    value !== "demand" &&
-                    value !== "feedback" &&
-                    value !== "published" &&
-                    value !== "fees"
-                )
-                    return
-                const panel = panelRefs.current[activeTab]
-                if (panel)
-                    positions.current[activeTab] = [
-                        panel,
-                        ...panel.querySelectorAll<HTMLElement>(
-                            '[data-slot="table-container"]',
-                        ),
-                    ].map((element) => ({
-                        element,
-                        top: element.scrollTop,
-                        left: element.scrollLeft,
-                    }))
-                setActive(value)
-            }}
-            className={
-                workspace
-                    ? "min-h-0 min-w-0 flex-1 gap-0"
-                    : "min-h-0 min-w-0 flex-1 gap-5 overflow-hidden"
-            }
-        >
-            {renderLayout(navigation, panels)}
-            {actionsContainer &&
-                createPortal(
-                    <Button
-                        id="sales-inquiry-history-open"
-                        ref={historyTrigger}
-                        type="button"
-                        variant={workspace ? "ghost" : "outline"}
-                        className={
-                            workspace
-                                ? detailWorkspaceStyles.quietButton
-                                : undefined
-                        }
-                        size="sm"
-                        onClick={() => setHistoryOpen(true)}
-                    >
-                        <HistoryIcon aria-hidden="true" />
-                        操作记录
-                    </Button>,
-                    actionsContainer,
-                )}
+        <>
+            <Button
+                id="sales-inquiry-history-open"
+                ref={historyTrigger}
+                type="button"
+                variant={workspace ? "ghost" : "outline"}
+                className={
+                    workspace ? detailWorkspaceStyles.quietButton : undefined
+                }
+                size="sm"
+                onClick={() => setHistoryOpen(true)}
+            >
+                <HistoryIcon aria-hidden="true" data-icon="inline-start" />
+                操作记录
+            </Button>
             <QuickPreviewSheet
                 idPrefix="sales-inquiry-history"
                 open={historyOpen}
@@ -306,6 +64,181 @@ export function InquiryDetailTabs({
             >
                 <InquiryHistory inquiry={inquiry} />
             </QuickPreviewSheet>
-        </Tabs>
+        </>
     )
+}
+
+/** 分区持续挂载；后台刷新只更新内容，不重置当前页签及输入。 */
+export function InquiryDetailTabs({
+    inquiry,
+    procurement,
+    workspace,
+    renderLayout,
+    salesProducts,
+    feedback,
+    feedbackActions,
+    publishedFeedback,
+    fees,
+    feeCount,
+    onFeedbackVisibilityChange,
+}: {
+    inquiry: SalesInquiry | ProcurementInquiry
+    procurement: boolean
+    workspace: boolean
+    renderLayout: (
+        navigation: React.ReactNode,
+        panels: React.ReactNode,
+    ) => React.ReactNode
+    salesProducts?: React.ReactNode
+    feedback?: React.ReactNode
+    feedbackActions?: React.ReactNode
+    publishedFeedback?: React.ReactNode
+    fees: React.ReactNode
+    feeCount: number
+    onFeedbackVisibilityChange?: (visible: boolean) => void
+}) {
+    const [active, setActive] = React.useState<InquiryTab>(() =>
+        procurement ? "feedback" : "demand",
+    )
+    const activeTab: InquiryTab =
+        (active === "published" && !publishedFeedback) ||
+        (procurement && active === "demand")
+            ? "feedback"
+            : active
+    const tabs: InquiryTab[] = !procurement
+        ? ["demand", "fees"]
+        : publishedFeedback
+          ? ["feedback", "published", "fees"]
+          : ["feedback", "fees"]
+
+    React.useLayoutEffect(() => {
+        onFeedbackVisibilityChange?.(activeTab === "feedback")
+    }, [activeTab, onFeedbackVisibilityChange])
+
+    const tabItems: DetailWorkspaceTabItem[] = []
+    if (!procurement) {
+        tabItems.push({
+            id: "demand",
+            triggerId: "sales-inquiry-tab-demand",
+            label: "商品与报价",
+            badge:
+                inquiry.status === "awaiting_sales" ? (
+                    <span className="text-xs text-muted-foreground">
+                        待确认
+                    </span>
+                ) : undefined,
+        })
+    } else {
+        tabItems.push({
+            id: "feedback",
+            triggerId: "sales-inquiry-tab-feedback",
+            label: "采购反馈",
+            badge:
+                inquiry.status === "awaiting_sales" ? (
+                    <span className="text-xs text-muted-foreground">
+                        待确认
+                    </span>
+                ) : !publishedFeedback && inquiry.feedbacks.length > 0 ? (
+                    <span className="num text-xs text-muted-foreground">
+                        {inquiry.feedbacks.length} 轮
+                    </span>
+                ) : undefined,
+        })
+        if (publishedFeedback) {
+            tabItems.push({
+                id: "published",
+                triggerId: "sales-inquiry-tab-published",
+                label: "已发布反馈",
+                badge: (
+                    <span className="num text-xs text-muted-foreground">
+                        {inquiry.feedbacks.length} 轮
+                    </span>
+                ),
+            })
+        }
+    }
+    tabItems.push({
+        id: "fees",
+        triggerId: "sales-inquiry-tab-fees",
+        label: "费用与办理",
+        badge:
+            feeCount > 0 ? (
+                <StatusBadge tone="warning" label={`额外费用 ${feeCount} 项`} />
+            ) : undefined,
+    })
+
+    const handleTabChange = (next: string) => {
+        if (
+            next === "demand" ||
+            next === "feedback" ||
+            next === "published" ||
+            next === "fees"
+        ) {
+            setActive(next)
+        }
+    }
+
+    const navigation = workspace ? (
+        <DetailWorkspaceTabs
+            value={activeTab}
+            onValueChange={handleTabChange}
+            items={tabItems}
+            ariaLabel="询价内容分区"
+        />
+    ) : (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-border/60">
+            <DetailWorkspaceTabs
+                value={activeTab}
+                onValueChange={handleTabChange}
+                items={tabItems}
+                ariaLabel="询价内容分区"
+            />
+            {procurement && feedbackActions && activeTab === "feedback" ? (
+                <div className="ml-auto flex flex-wrap items-center justify-end gap-2 pb-2">
+                    {feedbackActions}
+                </div>
+            ) : null}
+        </div>
+    )
+
+    const panels = tabs.map((tab) => {
+        const content =
+            tab === "demand"
+                ? salesProducts
+                : tab === "feedback"
+                  ? feedback
+                  : tab === "published"
+                    ? publishedFeedback
+                    : fees
+        const isActive = activeTab === tab
+        return (
+            <div
+                key={tab}
+                id={`sales-inquiry-panel-${tab}`}
+                role="tabpanel"
+                aria-labelledby={`sales-inquiry-tab-${tab}`}
+                hidden={!isActive}
+                className={
+                    workspace
+                        ? "min-w-0"
+                        : "min-h-0 flex-1 overflow-auto overscroll-contain pt-4"
+                }
+            >
+                {workspace ? (
+                    <DetailWorkspaceSection
+                        divider={false}
+                        actions={
+                            tab === "feedback" ? feedbackActions : undefined
+                        }
+                    >
+                        {content}
+                    </DetailWorkspaceSection>
+                ) : (
+                    content
+                )}
+            </div>
+        )
+    })
+
+    return <>{renderLayout(navigation, panels)}</>
 }

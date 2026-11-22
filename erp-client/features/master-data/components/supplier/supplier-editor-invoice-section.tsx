@@ -17,6 +17,7 @@ import type {
 } from "@/features/master-data/components/supplier/supplier-editor-section-props"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { INVOICE_TYPE_OPTIONS } from "@/features/master-data/lib/resource-fields"
+import type { SupplierSensitiveFieldKey } from "@/features/master-data/lib/supplier-editor-model"
 import { SupplierTaxRatesField } from "./supplier-tax-rates-field"
 
 export function SupplierEditorInvoiceSection({
@@ -26,17 +27,18 @@ export function SupplierEditorInvoiceSection({
     bankSensitive,
     canRevealSensitive,
     refreshSensitiveToken,
-    editedSensitiveRef,
+    editedSensitive,
+    markSensitiveEdited,
 }: SupplierEditorSectionProps & {
     bankSensitive: SupplierSensitiveInfo | undefined
     canRevealSensitive: boolean
     refreshSensitiveToken: SupplierRefreshRevealToken
-    editedSensitiveRef: React.MutableRefObject<
-        Set<"contactPhone" | "address" | "bankAccount">
-    >
+    editedSensitive: ReadonlySet<SupplierSensitiveFieldKey>
+    markSensitiveEdited: (field: SupplierSensitiveFieldKey) => void
 }) {
     return (
         <SectionPanel
+            id="supplier-section-invoice"
             title="开票信息"
             description="税号与银行信息用于采购开票与付款。"
         >
@@ -47,6 +49,7 @@ export function SupplierEditorInvoiceSection({
                     </Label>
                     <Input
                         id="master-data-supplier-invoice-tax-no"
+                        className="num"
                         value={values.taxNo}
                         onChange={(event) =>
                             setFieldValue("taxNo", event.target.value)
@@ -75,6 +78,7 @@ export function SupplierEditorInvoiceSection({
                     </Label>
                     <Input
                         id="master-data-supplier-bank-routing-number"
+                        className="num"
                         value={values.bankRoutingNumber}
                         onChange={(event) =>
                             setFieldValue(
@@ -95,8 +99,10 @@ export function SupplierEditorInvoiceSection({
                         value={values.bankAccount}
                         maskedValue={bankSensitive?.maskedValue}
                         revealToken={bankSensitive?.revealToken}
+                        edited={editedSensitive.has("bankAccount")}
+                        numeric
                         onChange={(next) => {
-                            editedSensitiveRef.current.add("bankAccount")
+                            markSensitiveEdited("bankAccount")
                             setFieldValue("bankAccount", next)
                         }}
                         disabled={!canEdit}
@@ -108,7 +114,9 @@ export function SupplierEditorInvoiceSection({
                     />
                 </FieldShell>
                 <FieldShell>
-                    <Label>{masterDataCopy.fInvoiceType}</Label>
+                    <Label htmlFor="master-data-supplier-invoice-type-combobox">
+                        {masterDataCopy.fInvoiceType}
+                    </Label>
                     <OptionCombobox
                         id="master-data-supplier-invoice-type-combobox"
                         value={values.invoiceType || null}

@@ -47,8 +47,8 @@ import { buildSalesOrderSubmitSnapshot } from "@/features/sales-orders/component
 import type { SalesOrderNature } from "@/features/sales-orders/types"
 import { useSalesOrderCreateCommandLedger } from "@/features/sales-orders/hooks/use-sales-order-create-command-ledger"
 import { useSalesOrderCreateDefaults } from "@/features/sales-orders/hooks/use-sales-order-create-defaults"
-import { useSalesOrderCreateUnloadGuard } from "@/features/sales-orders/hooks/use-sales-order-create-unload-guard"
 import { useSalesOrderCreateSubmission } from "@/features/sales-orders/hooks/use-sales-order-create-submission"
+import { useWorkspaceDirtyState } from "@/lib/workspace-form-guard"
 import { useSalesLineProcurementResponsibilities } from "@/features/sales-orders/hooks/use-sales-line-procurement-responsibilities"
 import { SalesOrderCreateAlerts } from "@/features/sales-orders/components/sales-order-create-alerts"
 import { SalesOrderCreateContractSection } from "@/features/sales-orders/components/sales-order-create-contract-section"
@@ -79,6 +79,7 @@ export function SalesOrderCreateForm({
     purpose = "create",
     chrome = "page",
     onSubmitted,
+    onDirtyStateChange,
     commandLedger: commandLedgerProp,
 }: {
     initialInquiryValues?: CreateSalesOrderFormValues
@@ -94,6 +95,7 @@ export function SalesOrderCreateForm({
     /** page：独立建单页；none：嵌在对象中心内，外壳由详情页提供。 */
     chrome?: "page" | "none"
     onSubmitted?: (salesOrderId: string) => void
+    onDirtyStateChange?: (state: { dirty: boolean; busy: boolean }) => void
     commandLedger?: FormalCommandKeyLedger
 }) {
     const embeddedDraft = chrome === "none" && purpose === "draft"
@@ -395,7 +397,17 @@ export function SalesOrderCreateForm({
         error: procurementResponsibilityQuery.error,
         isFetching: procurementResponsibilityQuery.isFetching,
     }
-    useSalesOrderCreateUnloadGuard(dirty || uploadOpen)
+    const hasUnsavedChanges = dirty || uploadOpen
+    useWorkspaceDirtyState({
+        dirty: chrome === "page" && hasUnsavedChanges,
+        busy: chrome === "page" && submission.isSubmitting,
+    })
+    React.useEffect(() => {
+        onDirtyStateChange?.({
+            dirty: hasUnsavedChanges,
+            busy: submission.isSubmitting,
+        })
+    }, [hasUnsavedChanges, onDirtyStateChange, submission.isSubmitting])
 
     React.useEffect(() => {
         const contract = contractQuery.data
@@ -747,11 +759,7 @@ export function SalesOrderCreateForm({
                     />
                 ) : (
                     <form
-                        className={
-                            embeddedDraft
-                                ? "flex min-h-0 min-w-0 flex-1 flex-col"
-                                : "flex min-w-0 flex-1 flex-col"
-                        }
+                        className="flex min-w-0 flex-1 flex-col"
                         noValidate
                         onSubmit={(event) => {
                             event.preventDefault()
@@ -759,43 +767,18 @@ export function SalesOrderCreateForm({
                             void form.handleSubmit()
                         }}
                     >
-                        <div
-                            className={
-                                chrome === "page"
-                                    ? "flex min-w-0 flex-1 flex-col"
-                                    : "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-grid bg-card"
-                            }
-                        >
+                        <div className="flex min-w-0 flex-1 flex-col">
                             <div
                                 id={
                                     embeddedDraft
                                         ? "sales-orders-draft-content-scroll"
                                         : undefined
                                 }
-                                role={embeddedDraft ? "region" : undefined}
-                                aria-label={
-                                    embeddedDraft ? "销售草稿编辑区" : undefined
-                                }
-                                tabIndex={embeddedDraft ? 0 : undefined}
-                                className={
-                                    embeddedDraft
-                                        ? "min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                                        : "contents"
-                                }
+                                className="contents"
                             >
-                                <div
-                                    className={
-                                        embeddedDraft && showContractSummary
-                                            ? "grid min-w-0 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"
-                                            : "contents"
-                                    }
-                                >
+                                <div className="contents">
                                     <section
-                                        className={
-                                            embeddedDraft
-                                                ? "min-w-0 space-y-4 bg-muted/20 p-4 sm:p-5"
-                                                : "min-w-0 space-y-5 py-6"
-                                        }
+                                        className="min-w-0 space-y-5 py-6 first:pt-5"
                                         aria-labelledby={
                                             orderBasis === "contract"
                                                 ? "sales-create-contract-title"
@@ -807,74 +790,81 @@ export function SalesOrderCreateForm({
                                                 : undefined
                                         }
                                     >
-                                        {orderBasis === "contract" ? (
-                                            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-                                                <h2
-                                                    id="sales-create-contract-title"
-                                                    tabIndex={-1}
-                                                    className="font-heading text-section-title font-semibold outline-none tracking-tight"
-                                                >
-                                                    {showContractSummary
-                                                        ? "合同信息"
-                                                        : "客户与合同"}
-                                                </h2>
-                                                {!showContractSummary &&
-                                                !submission.draftIdentity &&
-                                                purpose === "create" ? (
-                                                    <form.Subscribe
-                                                        selector={(state) =>
-                                                            state.values
-                                                                .evidenceUploadPending
-                                                        }
+                                        <div
+                                            data-slot="detail-form-grid"
+                                            className="max-w-4xl space-y-5"
+                                        >
+                                            {orderBasis === "contract" ? (
+                                                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                                                    <h2
+                                                        id="sales-create-contract-title"
+                                                        tabIndex={-1}
+                                                        className="font-heading text-section-title font-semibold tracking-tight outline-none"
                                                     >
-                                                        {(uploading) => (
-                                                            <Button
-                                                                id="sales-orders-create-change-entry"
-                                                                type="button"
-                                                                variant="ghost"
-                                                                size="sm"
-                                                                disabled={
-                                                                    uploading ||
-                                                                    submission.isSubmitting
-                                                                }
-                                                                onClick={() =>
-                                                                    setEntryOpen(
-                                                                        true,
-                                                                    )
-                                                                }
-                                                            >
-                                                                更换开单方式
-                                                            </Button>
-                                                        )}
-                                                    </form.Subscribe>
-                                                ) : null}
-                                                {chrome === "none"
-                                                    ? owner
-                                                    : null}
-                                            </div>
-                                        ) : chrome === "none" ? (
-                                            owner
-                                        ) : null}
-                                        {showContractSummary &&
-                                        contractQuery.data ? (
-                                            <SalesOrderCreateContractSummary
-                                                compact={embeddedDraft}
-                                                form={form}
-                                                contract={contractQuery.data}
-                                                imported={
-                                                    importedContractId ===
-                                                    selectedContractId
-                                                }
-                                                canChange={
+                                                        {showContractSummary
+                                                            ? "合同信息"
+                                                            : "客户与合同"}
+                                                    </h2>
+                                                    {!showContractSummary &&
                                                     !submission.draftIdentity &&
-                                                    !submission.isSubmitting
-                                                }
-                                                onChange={() =>
-                                                    setContractPickerOpen(true)
-                                                }
-                                            />
-                                        ) : (
-                                            <>
+                                                    purpose === "create" ? (
+                                                        <form.Subscribe
+                                                            selector={(state) =>
+                                                                state.values
+                                                                    .evidenceUploadPending
+                                                            }
+                                                        >
+                                                            {(uploading) => (
+                                                                <Button
+                                                                    id="sales-orders-create-change-entry"
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    disabled={
+                                                                        uploading ||
+                                                                        submission.isSubmitting
+                                                                    }
+                                                                    onClick={() =>
+                                                                        setEntryOpen(
+                                                                            true,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    更换开单方式
+                                                                </Button>
+                                                            )}
+                                                        </form.Subscribe>
+                                                    ) : null}
+                                                    {chrome === "none"
+                                                        ? owner
+                                                        : null}
+                                                </div>
+                                            ) : chrome === "none" ? (
+                                                owner
+                                            ) : null}
+                                            {showContractSummary &&
+                                            contractQuery.data ? (
+                                                <SalesOrderCreateContractSummary
+                                                    compact={embeddedDraft}
+                                                    form={form}
+                                                    contract={
+                                                        contractQuery.data
+                                                    }
+                                                    imported={
+                                                        importedContractId ===
+                                                        selectedContractId
+                                                    }
+                                                    canChange={
+                                                        !submission.draftIdentity &&
+                                                        !submission.isSubmitting
+                                                    }
+                                                    onChange={() =>
+                                                        setContractPickerOpen(
+                                                            true,
+                                                        )
+                                                    }
+                                                />
+                                            ) : (
                                                 <SalesOrderCreateContractSection
                                                     form={form}
                                                     sourceCustomerLocked={Boolean(
@@ -894,15 +884,11 @@ export function SalesOrderCreateForm({
                                                         picker.selectFile
                                                     }
                                                 />
-                                            </>
-                                        )}
+                                            )}
+                                        </div>
                                     </section>
                                     <section
-                                        className={
-                                            embeddedDraft && showContractSummary
-                                                ? "min-w-0 space-y-4 border-t border-grid p-4 sm:p-5 xl:border-t-0 xl:border-l"
-                                                : "min-w-0 space-y-5 border-t border-border/60 py-6"
-                                        }
+                                        className="min-w-0 space-y-5 border-t border-border/60 py-6"
                                         aria-labelledby="sales-create-settlement-title"
                                     >
                                         <h2
@@ -912,22 +898,11 @@ export function SalesOrderCreateForm({
                                             本次销售信息
                                         </h2>
                                         <div
-                                            data-slot={
-                                                chrome === "page"
-                                                    ? "detail-form-grid"
-                                                    : undefined
-                                            }
-                                            className={
-                                                chrome === "page"
-                                                    ? "max-w-4xl"
-                                                    : undefined
-                                            }
+                                            data-slot="detail-form-grid"
+                                            className="max-w-4xl"
                                         >
                                             <SalesOrderCreateHeaderFields
-                                                compact={
-                                                    embeddedDraft &&
-                                                    showContractSummary
-                                                }
+                                                compact={false}
                                                 form={form}
                                                 natureLocked={natureLocked}
                                                 contractResolved={
@@ -999,13 +974,7 @@ export function SalesOrderCreateForm({
             ) : null}
             <div
                 id="sales-orders-create-contract-import"
-                className={
-                    !uploadOpen
-                        ? "hidden"
-                        : embeddedDraft
-                          ? "min-h-0 min-w-0 flex-1 overflow-y-auto"
-                          : "min-w-0"
-                }
+                className={!uploadOpen ? "hidden" : "min-w-0"}
             >
                 <input
                     id="sales-orders-create-contract-upload-input"

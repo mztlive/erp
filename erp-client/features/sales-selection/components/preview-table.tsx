@@ -2,10 +2,14 @@
 
 import * as React from "react"
 import type { CellContext, ColumnDef } from "@tanstack/react-table"
-import { DataTable, MoneyValue } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import {
+    DataTable,
+    MoneyValue,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { DisplayItem } from "../types"
@@ -20,20 +24,23 @@ export type PreviewTableProps = {
     items: readonly DisplayItem[]
     priceEditor?: InlinePriceEditorContext
     pending: boolean
+    savingSkuIds?: ReadonlySet<string>
     deletingItemId?: string
     onEditPrice?: (item: DisplayItem) => void
-    onDelete?: (itemId: string) => void
-    onRegenerateTier?: (tierId: string) => void
+    onDelete?: (item: DisplayItem) => void
+    onRegenerateTier?: (tierId: string, tierName: string) => void
     regeneratingTierIds?: readonly string[]
 }
 
 const PriceCellContext = React.createContext<{
     pending: boolean
+    savingSkuIds?: ReadonlySet<string>
     priceEditor?: InlinePriceEditorContext
 }>({ pending: false })
 
 function CustomerPriceCell({ row }: CellContext<DisplayItem, unknown>) {
-    const { pending, priceEditor } = React.useContext(PriceCellContext)
+    const { pending, savingSkuIds, priceEditor } =
+        React.useContext(PriceCellContext)
     const item = row.original
     const products =
         item.kind === "PACKAGE"
@@ -68,7 +75,8 @@ function CustomerPriceCell({ row }: CellContext<DisplayItem, unknown>) {
                         skuId={product.sku_id}
                         name={product.name}
                         price={product.price}
-                        pending={pending}
+                        disabled={pending}
+                        saving={savingSkuIds?.has(product.sku_id) ?? false}
                         context={priceEditor}
                     />
                 </div>
@@ -87,6 +95,7 @@ export function PreviewTable({
     items,
     priceEditor,
     pending,
+    savingSkuIds,
     deletingItemId,
     onEditPrice,
     onDelete,
@@ -114,12 +123,19 @@ export function PreviewTable({
                             </p>
                             <p className="line-clamp-2 text-xs text-muted-foreground">
                                 {row.original.spec_label ||
-                                    (row.original.kind === "PACKAGE"
-                                        ? `${row.original.members.length} 件商品`
-                                        : "—")}
+                                    (row.original.kind === "PACKAGE" ? (
+                                        <>
+                                            <span className="num">
+                                                {row.original.members.length}
+                                            </span>{" "}
+                                            件商品
+                                        </>
+                                    ) : (
+                                        "—"
+                                    ))}
                             </p>
                             {row.original.missing_image ? (
-                                <Badge variant="warning">缺图</Badge>
+                                <StatusBadge tone="warning" label="缺图" />
                             ) : null}
                         </div>
                     </div>
@@ -239,15 +255,15 @@ export function PreviewTable({
                                               id={`selection-table-${key}-delete`}
                                               variant="ghost"
                                               size="xs"
-                                              className="text-destructive"
+                                              className={
+                                                  detailWorkspaceStyles.quietDangerButton
+                                              }
                                               disabled={pending}
                                               loading={
                                                   deletingItemId ===
                                                   item.item_id
                                               }
-                                              onClick={() =>
-                                                  onDelete(item.item_id)
-                                              }
+                                              onClick={() => onDelete(item)}
                                           >
                                               删除
                                           </LoadingButton>
@@ -257,6 +273,9 @@ export function PreviewTable({
                                               id={`selection-table-${key}-regenerate`}
                                               variant="ghost"
                                               size="xs"
+                                              className={
+                                                  detailWorkspaceStyles.quietButton
+                                              }
                                               disabled={pending}
                                               loading={regeneratingTierIds?.includes(
                                                   item.tier_id,
@@ -264,6 +283,8 @@ export function PreviewTable({
                                               onClick={() =>
                                                   onRegenerateTier(
                                                       item.tier_id!,
+                                                      item.tier_name ??
+                                                          item.tier_id!,
                                                   )
                                               }
                                           >
@@ -289,8 +310,10 @@ export function PreviewTable({
     )
 
     return (
-        <PriceCellContext.Provider value={{ pending, priceEditor }}>
-            <div className="space-y-2">
+        <PriceCellContext.Provider
+            value={{ pending, savingSkuIds, priceEditor }}
+        >
+            <div data-slot="detail-inline-table" className="space-y-2">
                 <p className="text-xs text-muted-foreground">
                     价格均含税
                     {priceEditor

@@ -5,14 +5,15 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 
 import {
+    BusinessEmptyState,
     BusinessFailureState,
     DetailWorkspaceBody,
     DetailWorkspaceChrome,
     DetailWorkspacePage,
     DetailWorkspaceSection,
+    DetailWorkspaceSkeleton,
     DetailWorkspaceTabs,
 } from "@/components/business"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { clearAddressReveal } from "@/features/supplier-orders/api/index"
@@ -26,6 +27,7 @@ import {
     useSupplierOrderDetailQuery,
 } from "@/features/supplier-orders/hooks/queries"
 import { SECTION_LABEL, SECTIONS } from "@/features/supplier-orders/types"
+import { isNotFoundError } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
 import { SupplierOrderExecutionSetup } from "../components/supplier-order-execution-setup"
 import { SupplierOrderExecutionProgress } from "../components/supplier-order-execution-progress"
@@ -64,6 +66,7 @@ export function SupplierOrderCenterPage({
     supplierOrderId,
     section: sectionProp,
     workItemId: workItemIdProp,
+    embedded = false,
     onTaskCompleted,
 }: {
     supplierOrderId: string
@@ -81,11 +84,17 @@ export function SupplierOrderCenterPage({
         sectionProp,
     )
 
+    const profileQuery = useAccountProfileQuery()
+    const canDetail = hasPermission(
+        profileQuery.data?.permissions,
+        "supplier_fulfillment_order:detail",
+    )
+
     const query = useSupplierOrderDetailQuery({
         orderId: supplierOrderId,
         workItemId,
+        enabled: !profileQuery.isPending && canDetail,
     })
-    const profileQuery = useAccountProfileQuery()
     const queryResultMutation = useQueryResultMutation()
     const replayMutation = useReplayOrderMutation()
     const completeTaskMutation = useCompleteOrderTaskMutation()
@@ -141,17 +150,53 @@ export function SupplierOrderCenterPage({
         }
     }, [supplierOrderId])
 
-    if (query.isPending) {
+    const listBack = embedded
+        ? undefined
+        : {
+              id: "supplier-order-center-header-back-list",
+              label: "返回供应商订单列表",
+              href: "/supplier-api/orders",
+          }
+
+    if (profileQuery.isPending || (canDetail && query.isPending)) {
+        return (
+            <DetailWorkspaceSkeleton
+                title="供应商订单详情"
+                description="正在读取履约进度、商品明细与结算信息…"
+                sidebar
+            />
+        )
+    }
+
+    if (profileQuery.isError) {
         return (
             <DetailWorkspacePage>
-                <DetailWorkspaceChrome title="供应商订单" />
+                <DetailWorkspaceChrome title="供应商订单" back={listBack} />
                 <DetailWorkspaceBody>
                     <DetailWorkspaceSection width="form">
-                        <div aria-busy="true" className="flex flex-col gap-4">
-                            <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
-                            <div className="h-28 animate-pulse rounded-lg bg-muted" />
-                            <div className="h-64 animate-pulse rounded-lg bg-muted" />
-                        </div>
+                        <BusinessFailureState
+                            idPrefix="supplier-order-center-profile"
+                            title="账号权限读取失败"
+                            error={profileQuery.error}
+                            onRetry={() => void profileQuery.refetch()}
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
+        )
+    }
+
+    if (!canDetail) {
+        return (
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title="供应商订单" back={listBack} />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <BusinessFailureState
+                            kind="permission"
+                            title="权限不足"
+                            description="当前账号没有查看供应商订单详情的权限，请联系管理员开通。"
+                        />
                     </DetailWorkspaceSection>
                 </DetailWorkspaceBody>
             </DetailWorkspacePage>
@@ -159,24 +204,51 @@ export function SupplierOrderCenterPage({
     }
 
     if (query.isError) {
+        const notFound = isNotFoundError(query.error)
         return (
             <DetailWorkspacePage>
-                <DetailWorkspaceChrome title="供应商订单" />
+                <DetailWorkspaceChrome title="供应商订单" back={listBack} />
                 <DetailWorkspaceBody>
                     <DetailWorkspaceSection width="form">
-                        <BusinessFailureState
-                            title="供应商订单加载失败"
-                            error={query.error}
-                            action={
-                                <Button
-                                    id="supplier-order-center-error-retry"
-                                    type="button"
-                                    onClick={() => void query.refetch()}
-                                >
-                                    重试
-                                </Button>
-                            }
-                        />
+                        {notFound ? (
+                            <BusinessEmptyState
+                                kind="no-data"
+                                title="未找到供应商订单"
+                                description="该供应商订单不存在或已归档，请返回列表重新选择。"
+                                action={
+                                    !embedded ? (
+                                        <Button
+                                            id="supplier-order-center-not-found-back"
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            render={
+                                                <Link href="/supplier-api/orders" />
+                                            }
+                                        >
+                                            返回供应商订单列表
+                                        </Button>
+                                    ) : undefined
+                                }
+                            />
+                        ) : (
+                            <BusinessFailureState
+                                idPrefix="supplier-order-center-error"
+                                title="供应商订单加载失败"
+                                error={query.error}
+                                action={
+                                    <Button
+                                        id="supplier-order-center-error-retry"
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => void query.refetch()}
+                                    >
+                                        重试
+                                    </Button>
+                                }
+                            />
+                        )}
                     </DetailWorkspaceSection>
                 </DetailWorkspaceBody>
             </DetailWorkspacePage>
@@ -186,26 +258,29 @@ export function SupplierOrderCenterPage({
     if (!detail) {
         return (
             <DetailWorkspacePage>
-                <DetailWorkspaceChrome title="供应商订单" />
+                <DetailWorkspaceChrome title="供应商订单" back={listBack} />
                 <DetailWorkspaceBody>
                     <DetailWorkspaceSection width="form">
-                        <Alert variant="warning">
-                            <AlertTitle>未找到供应商订单</AlertTitle>
-                            <AlertDescription>
-                                该订单不存在或当前角色无权访问。
-                                <Button
-                                    id="supplier-order-center-not-found-back"
-                                    type="button"
-                                    variant="link"
-                                    className="px-1"
-                                    render={
-                                        <Link href="/supplier-api/orders" />
-                                    }
-                                >
-                                    返回列表
-                                </Button>
-                            </AlertDescription>
-                        </Alert>
+                        <BusinessEmptyState
+                            kind="no-data"
+                            title="未找到供应商订单"
+                            description="该订单不存在或当前角色无权访问。"
+                            action={
+                                !embedded ? (
+                                    <Button
+                                        id="supplier-order-center-not-found-back"
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        render={
+                                            <Link href="/supplier-api/orders" />
+                                        }
+                                    >
+                                        返回供应商订单列表
+                                    </Button>
+                                ) : undefined
+                            }
+                        />
                     </DetailWorkspaceSection>
                 </DetailWorkspaceBody>
             </DetailWorkspacePage>
@@ -213,6 +288,19 @@ export function SupplierOrderCenterPage({
     }
 
     const o = detail.order
+    const canEditExecution = hasPermission(
+        profileQuery.data?.permissions,
+        "supplier_fulfillment_order:submit",
+    )
+
+    const hasAlertContent = Boolean(
+        detail.workItem ||
+        detail.workItemBlocker ||
+        detail.trackingError ||
+        derivation.isResultUnknown ||
+        (o.fulfillmentStatus === "COMPLETED" && o.refundStatus === "PARTIAL") ||
+        result,
+    )
 
     return (
         <DetailWorkspacePage>
@@ -229,6 +317,7 @@ export function SupplierOrderCenterPage({
                 onReplayClick={() => {
                     if (derivation.canReplay) actions.setReplayOpen(true)
                 }}
+                embedded={embedded}
                 tabs={
                     <DetailWorkspaceTabs
                         value={activeSection}
@@ -245,53 +334,56 @@ export function SupplierOrderCenterPage({
                 }
             />
             <DetailWorkspaceBody
-                alerts={
-                    <>
-                        <WorkItemProcessPanel
-                            workItem={detail.workItem}
-                            workItemBlocker={detail.workItemBlocker}
-                            responsibilityStatus={
-                                derivation.responsibilityStatus
-                            }
-                            canCompleteTask={derivation.canCompleteTask}
-                            pending={completeTaskMutation.isPending}
-                            onProcess={() => task.setCompleteOpen(true)}
-                        />
-
+                sidebarLabel="执行配置与协同任务"
+                sidebar={
+                    <div className="space-y-5">
                         <SupplierOrderExecutionSetup
                             orderId={supplierOrderId}
                             addressSummary={
                                 detail.address.revealed ?? detail.address.masked
                             }
-                            canEdit={hasPermission(
-                                profileQuery.data?.permissions,
-                                "supplier_fulfillment_order:submit",
-                            )}
+                            executionNotice={o.executionNotice}
+                            canEdit={canEditExecution}
                         />
-
-                        <StatusAlertsPanel
-                            order={o}
-                            lastInvestigation={detail.lastInvestigation}
-                            noQueryCapability={derivation.noQueryCapability}
-                            trackingError={detail.trackingError}
-                        />
-
                         {detail.workItem ? (
                             <WorkItemCard
                                 workItem={detail.workItem}
                                 orderNo={o.orderNo}
                             />
                         ) : null}
-
-                        {result ? (
-                            <ResultPanel
-                                result={result}
-                                order={o}
-                                costs={detail.costs}
-                                onClose={() => setResult(null)}
+                    </div>
+                }
+                alerts={
+                    hasAlertContent ? (
+                        <>
+                            <WorkItemProcessPanel
+                                workItem={detail.workItem}
+                                workItemBlocker={detail.workItemBlocker}
+                                responsibilityStatus={
+                                    derivation.responsibilityStatus
+                                }
+                                canCompleteTask={derivation.canCompleteTask}
+                                pending={completeTaskMutation.isPending}
+                                onProcess={() => task.setCompleteOpen(true)}
                             />
-                        ) : null}
-                    </>
+
+                            <StatusAlertsPanel
+                                order={o}
+                                lastInvestigation={detail.lastInvestigation}
+                                noQueryCapability={derivation.noQueryCapability}
+                                trackingError={detail.trackingError}
+                            />
+
+                            {result ? (
+                                <ResultPanel
+                                    result={result}
+                                    order={o}
+                                    costs={detail.costs}
+                                    onClose={() => setResult(null)}
+                                />
+                            ) : null}
+                        </>
+                    ) : undefined
                 }
             >
                 {activeSection === "overview" ? (
@@ -312,11 +404,9 @@ export function SupplierOrderCenterPage({
 
                 {activeSection === "fulfillment" ? (
                     <>
-                        <DetailWorkspaceSection>
-                            <SupplierOrderExecutionProgress
-                                orderId={supplierOrderId}
-                            />
-                        </DetailWorkspaceSection>
+                        <SupplierOrderExecutionProgress
+                            orderId={supplierOrderId}
+                        />
                         <FulfillmentSection
                             logistics={detail.logistics}
                             address={detail.address}

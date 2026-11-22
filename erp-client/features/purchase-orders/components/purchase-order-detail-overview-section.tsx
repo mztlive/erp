@@ -14,6 +14,7 @@ import {
 } from "@/features/purchase-orders/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
+import { sumFixed } from "@/lib/fixed-decimal"
 import { PurchaseOrderDetailLines } from "./purchase-order-detail-lines"
 import { PurchaseOrderDetailSection as DetailRecordSection } from "./purchase-order-detail-section"
 
@@ -56,6 +57,15 @@ export function PurchaseOrderDetailOverviewSection({
     const hasExpenses = expenseLines.length > 0
     const showProductLines = productLines.length > 0 || !hasExpenses
     const notEffective = order.identity.revisionNo == null
+    const productSubtotal =
+        productLines.length > 0
+            ? hasExpenses
+                ? sumFixed(
+                      productLines.map((line) => line.grossAmount),
+                      { maxScale: 2, outputScale: 2 },
+                  )
+                : order.currentContent.totals.gross
+            : null
 
     return (
         <>
@@ -80,23 +90,18 @@ export function PurchaseOrderDetailOverviewSection({
                             costMasked={costMasked}
                         />
                     </div>
-                    {!hasExpenses && productLines.length > 0 ? (
+                    {productSubtotal != null ? (
                         <div className="flex flex-wrap items-baseline justify-end gap-x-4 gap-y-1 pt-1 text-xs text-muted-foreground">
                             <span className="num">
                                 共 {productLines.length} 项
                             </span>
                             <span>
-                                含税合计{" "}
+                                {hasExpenses ? "商品含税小计" : "含税合计"}{" "}
                                 <span className="num text-body-compact font-semibold text-foreground">
                                     {costMasked ? (
                                         "•••"
                                     ) : (
-                                        <MoneyValue
-                                            value={
-                                                order.currentContent.totals
-                                                    .gross
-                                            }
-                                        />
+                                        <MoneyValue value={productSubtotal} />
                                     )}
                                 </span>
                             </span>

@@ -27,9 +27,22 @@ export function useJdVopAuthorizationQuery(
     const [pollUntil, setPollUntil] = useState(
         () => Date.now() + POLL_WINDOW_MS,
     )
+    const [pollExpired, setPollExpired] = useState(false)
     const [pendingOperationId, setPendingOperationId] = useState<string | null>(
         null,
     )
+    useEffect(() => {
+        const remaining = pollUntil - Date.now()
+        if (remaining <= 0) {
+            setPollExpired(true)
+            return
+        }
+        setPollExpired(false)
+        const timer = window.setTimeout(() => {
+            setPollExpired(true)
+        }, remaining)
+        return () => window.clearTimeout(timer)
+    }, [pollUntil])
     const query = useQuery({
         queryKey: jdVopAuthorizationKeys.status(
             connectionId,
@@ -94,7 +107,7 @@ export function useJdVopAuthorizationQuery(
             queryKey: [...supplierConnectionKeys.all, "list"],
         })
     }, [authorized, client, connectionId])
-    return { ...query, restartPolling, pollUntil, unconfirmed }
+    return { ...query, restartPolling, pollUntil, pollExpired, unconfirmed }
 }
 
 /** mutation 变量始终为空；密码和私钥只由本次请求的短生命周期引用持有。 */

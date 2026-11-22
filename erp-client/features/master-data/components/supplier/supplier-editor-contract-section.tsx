@@ -51,6 +51,7 @@ export function SupplierEditorContractSection({
         )
     return (
         <SectionPanel
+            id="supplier-section-contract"
             title="合同与资质"
             description="附件选填，支持 JPG、PNG、WebP、PDF，可上传多个文件。"
         >
@@ -77,6 +78,7 @@ export function SupplierEditorContractSection({
                                 </Label>
                                 <Input
                                     id="master-data-supplier-contract-no"
+                                    className="num"
                                     value={values.contractNo}
                                     onChange={(e) =>
                                         setFieldValue(
@@ -90,7 +92,7 @@ export function SupplierEditorContractSection({
                             </FieldShell>
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <FieldShell>
-                                    <Label>
+                                    <Label htmlFor="master-data-supplier-contract-valid-from-picker">
                                         {masterDataCopy.fContractValidFrom}
                                     </Label>
                                     <DatePicker
@@ -110,7 +112,7 @@ export function SupplierEditorContractSection({
                                     />
                                 </FieldShell>
                                 <FieldShell>
-                                    <Label>
+                                    <Label htmlFor="master-data-supplier-contract-valid-to-picker">
                                         {masterDataCopy.fContractValidTo}
                                     </Label>
                                     <DatePicker
@@ -156,7 +158,7 @@ export function SupplierEditorContractSection({
                     <div className="grid gap-5 lg:grid-cols-2">
                         <div className="grid content-start gap-4 sm:grid-cols-2">
                             <FieldShell>
-                                <Label>
+                                <Label htmlFor="master-data-supplier-contract-auth-from-picker">
                                     {masterDataCopy.fAuthorizationValidFrom}
                                 </Label>
                                 <DatePicker
@@ -176,7 +178,7 @@ export function SupplierEditorContractSection({
                                 />
                             </FieldShell>
                             <FieldShell>
-                                <Label>
+                                <Label htmlFor="master-data-supplier-contract-auth-to-picker">
                                     {masterDataCopy.fAuthorizationValidTo}
                                 </Label>
                                 <DatePicker

@@ -33,12 +33,15 @@ export function IntegrationDirectReconciliation({
     onDirectAction: (kind: IntegrationTaskActionKind) => void
     onRequestTerminal: (confirm: TerminalConfirm) => void
 }) {
+    const hasConfirmNoError = can("CONFIRM_NO_ERROR")
     return (
-        <div className="space-y-3 rounded-xl border border-dashed p-3">
-            <p className="text-body-compact font-medium">登记对账结论</p>
-            <p className="text-xs text-muted-foreground">
-                请选择差异原因并核对关联凭证后，确认该笔对账结果。
-            </p>
+        <div className="space-y-3">
+            <div className="space-y-1">
+                <p className="text-body-compact font-medium">登记对账结论</p>
+                <p className="text-xs text-muted-foreground">
+                    请选择差异原因并核对关联凭证后，确认该笔对账结果。
+                </p>
+            </div>
             {item.reconciliationReasonRegistry ? (
                 <>
                     <OptionCombobox
@@ -58,11 +61,12 @@ export function IntegrationDirectReconciliation({
                         allowClear={false}
                     />
                     <div className="flex flex-wrap gap-2">
-                        {can("CONFIRM_NO_ERROR") ? (
+                        {hasConfirmNoError ? (
                             <Button
                                 id="integration-direct-confirm-no-error"
                                 type="button"
                                 size="sm"
+                                variant="default"
                                 disabled={
                                     formalPending ||
                                     reasonMismatches("CONFIRM_NO_ERROR")
@@ -81,7 +85,9 @@ export function IntegrationDirectReconciliation({
                                 id="integration-direct-confirm-valid-difference"
                                 type="button"
                                 size="sm"
-                                variant="secondary"
+                                variant={
+                                    hasConfirmNoError ? "secondary" : "default"
+                                }
                                 disabled={
                                     formalPending ||
                                     reasonMismatches("CONFIRM_VALID_DIFFERENCE")

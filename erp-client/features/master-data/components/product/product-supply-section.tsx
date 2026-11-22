@@ -21,7 +21,6 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { toFixedSku } from "@/features/master-data/lib/product-fixed-sku"
 import type {
@@ -172,13 +171,55 @@ function OfferingRowsTable({
     sku,
     offerings,
     canViewCosts,
+    canDetail,
     unit,
 }: {
     sku: ProductSkuFields
     offerings: readonly SupplierOfferingView[]
     canViewCosts: boolean
+    canDetail: boolean
     unit: string
 }) {
+    const colWidths = canViewCosts
+        ? canDetail
+            ? {
+                  supplier: "w-[26%]",
+                  dropship: "w-[14%]",
+                  bulk: "w-[14%]",
+                  availability: "w-[15%]",
+                  template: "w-[15%]",
+                  status: "w-[9%]",
+                  action: "w-[7%]",
+              }
+            : {
+                  supplier: "w-[28%]",
+                  dropship: "w-[15%]",
+                  bulk: "w-[15%]",
+                  availability: "w-[16%]",
+                  template: "w-[16%]",
+                  status: "w-[10%]",
+                  action: "",
+              }
+        : canDetail
+          ? {
+                supplier: "w-[36%]",
+                dropship: "",
+                bulk: "",
+                availability: "w-[22%]",
+                template: "w-[22%]",
+                status: "w-[12%]",
+                action: "w-[8%]",
+            }
+          : {
+                supplier: "w-[38%]",
+                dropship: "",
+                bulk: "",
+                availability: "w-[24%]",
+                template: "w-[24%]",
+                status: "w-[14%]",
+                action: "",
+            }
+
     return (
         <div
             data-slot="detail-inline-table"
@@ -189,19 +230,17 @@ function OfferingRowsTable({
                 className="min-w-[56rem] table-fixed [&_thead_th]:!static"
             >
                 <colgroup>
-                    <col className="w-[26%]" />
+                    <col className={colWidths.supplier} />
                     {canViewCosts ? (
                         <>
-                            <col className="w-[14%]" />
-                            <col className="w-[14%]" />
+                            <col className={colWidths.dropship} />
+                            <col className={colWidths.bulk} />
                         </>
                     ) : null}
-                    <col className="w-[15%]" />
-                    <col className="w-[15%]" />
-                    <col className="w-[9%]" />
-                    <PermissionGuard permission="supplier_offering:detail">
-                        <col className="w-[7%]" />
-                    </PermissionGuard>
+                    <col className={colWidths.availability} />
+                    <col className={colWidths.template} />
+                    <col className={colWidths.status} />
+                    {canDetail ? <col className={colWidths.action} /> : null}
                 </colgroup>
                 <TableHeader>
                     <TableRow>
@@ -219,11 +258,11 @@ function OfferingRowsTable({
                         <TableHead>当前可供</TableHead>
                         <TableHead>配送模板</TableHead>
                         <TableHead>关系状态</TableHead>
-                        <PermissionGuard permission="supplier_offering:detail">
+                        {canDetail ? (
                             <TableHead data-align="end">
                                 <span className="sr-only">操作</span>
                             </TableHead>
-                        </PermissionGuard>
+                        ) : null}
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -385,7 +424,7 @@ function OfferingRowsTable({
                                         }
                                     />
                                 </TableCell>
-                                <PermissionGuard permission="supplier_offering:detail">
+                                {canDetail ? (
                                     <TableCell data-align="end">
                                         <Button
                                             id={`master-data-product-supply-open-${toAutomationIdSegment(offering.id)}`}
@@ -406,7 +445,7 @@ function OfferingRowsTable({
                                             />
                                         </Button>
                                     </TableCell>
-                                </PermissionGuard>
+                                ) : null}
                             </TableRow>
                         )
                     })}
@@ -423,6 +462,7 @@ function SkuSupplyWorkspace({
     failed,
     canCreate,
     canViewCosts,
+    canDetail,
     unit,
     showSkuHeading,
     onAdd,
@@ -433,6 +473,7 @@ function SkuSupplyWorkspace({
     failed: boolean
     canCreate: boolean
     canViewCosts: boolean
+    canDetail: boolean
     unit: string
     showSkuHeading: boolean
     onAdd: () => void
@@ -551,6 +592,7 @@ function SkuSupplyWorkspace({
                     sku={sku}
                     offerings={offerings}
                     canViewCosts={canViewCosts}
+                    canDetail={canDetail}
                     unit={unit}
                 />
             )}
@@ -583,6 +625,7 @@ export function ProductSupplySection({
     const account = useAccountProfileQuery()
     const permissions = account.data?.permissions
     const canCreate = hasPermission(permissions, "supplier_offering:create")
+    const canDetail = hasPermission(permissions, "supplier_offering:detail")
     const canViewCosts = hasPermission(
         permissions,
         "supplier_offering_cost:detail",
@@ -679,6 +722,7 @@ export function ProductSupplySection({
                     failed={query.isError}
                     canCreate={canCreate}
                     canViewCosts={canViewCosts}
+                    canDetail={canDetail}
                     unit={sku.baseUnit ?? fields.baseUnit}
                     showSkuHeading={false}
                     onAdd={() =>
@@ -876,6 +920,7 @@ export function ProductSupplySection({
                             failed={query.isError}
                             canCreate={canCreate}
                             canViewCosts={canViewCosts}
+                            canDetail={canDetail}
                             unit={activeSku.baseUnit ?? fields.baseUnit}
                             showSkuHeading
                             onAdd={() =>

@@ -103,11 +103,20 @@ export function CategoryFormDialogFrame({
     mode?: "create" | "edit" | "move"
 }) {
     const prefix = idPrefix ?? "master-data-category-form-dialog"
-    const categoryListQuery = useMasterDataListQuery({
-        resource: "categories",
-        lifecycleStatus: "all",
-        revisionTiming: "all",
-    })
+    const categoryListQuery = useMasterDataListQuery(
+        {
+            resource: "categories",
+            lifecycleStatus: "all",
+            revisionTiming: "all",
+        },
+        open,
+    )
+    const blockedTitle =
+        mode === "move"
+            ? "无法调整上级分类"
+            : mode === "edit"
+              ? masterDataCopy.reviseBlockedTitle
+              : masterDataCopy.createBlockedTitle
     const excludeCategoryIds = React.useMemo(() => {
         if (!excludeStableId) return undefined
         const forest = buildCategoryForest(categoryListQuery.data?.rows ?? [])
@@ -172,7 +181,7 @@ export function CategoryFormDialogFrame({
                                 title={
                                     result.outcome === "conflict"
                                         ? "分类已更新，请重新打开后修改"
-                                        : masterDataCopy.createBlockedTitle
+                                        : blockedTitle
                                 }
                                 description={result.message}
                             />
@@ -280,6 +289,9 @@ export function CategoryFormDialogFrame({
                                                             id ?? "",
                                                         )
                                                     }
+                                                    disabled={
+                                                        pending || disabled
+                                                    }
                                                     placeholder="可选上级；空为根分类"
                                                     emptyLabel="没有可选上级分类"
                                                     className="w-full"
@@ -331,8 +343,8 @@ export function CategoryFormDialogFrame({
                                                             label: option,
                                                         }),
                                                     )}
-                                                    allowClear
-                                                    placeholder="未填写"
+                                                    allowClear={false}
+                                                    placeholder="请选择适用商品类型"
                                                 />
                                             )}
                                         />

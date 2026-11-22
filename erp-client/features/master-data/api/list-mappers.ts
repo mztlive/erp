@@ -318,6 +318,7 @@ export function mapVoucherRow(
 export function mapWarehouseRow(
     wh: WarehouseDto,
     revision?: WarehouseRevisionDto,
+    handlerLabels?: { inbound?: string; outbound?: string },
 ): MasterDataListItem {
     const lifecycle = asLifecycle(wh.status)
     return {
@@ -340,11 +341,15 @@ export function mapWarehouseRow(
             { label: "仓库代码", value: wh.warehouse_code },
             {
                 label: "入库经办人",
-                value: wh.inbound_handler_user_id ? "已配置" : "未配置",
+                value: wh.inbound_handler_user_id
+                    ? (handlerLabels?.inbound ?? "已配置")
+                    : "未配置",
             },
             {
                 label: "仓发经办人",
-                value: wh.outbound_handler_user_id ? "已配置" : "未配置",
+                value: wh.outbound_handler_user_id
+                    ? (handlerLabels?.outbound ?? "已配置")
+                    : "未配置",
             },
             ...(revision
                 ? [{ label: "变更原因", value: revision.change_reason }]

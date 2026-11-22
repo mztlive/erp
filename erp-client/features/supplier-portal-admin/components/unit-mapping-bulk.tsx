@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { detailWorkspaceStyles } from "@/components/business/detail-workspace"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
@@ -192,35 +193,39 @@ export function PortalUnitMappingBulk({
         },
     })
     return (
-        <section className="space-y-3 rounded-lg border p-4">
-            <h3 className="font-medium">批量确认相同单位</h3>
-            <p className="text-xs text-muted-foreground">
-                先逐行确认一个来源规格；提报单位与标准单位名称不同时，必须勾选一致确认并填写说明。再勾选提报单位、包装和报价口径完全一致的未匹配规格，自动填充标准单位及一致说明，并保留供应商提报的包装、价格及数量。
-            </p>
-            <form.AppField name="sourceRowId">
-                {(field) => (
-                    <field.SelectField
-                        id="supplier-portal-review-unit-bulk-source"
-                        label="已确认的来源规格及目标单位"
-                        options={sources.map((source) => ({
-                            value: source.sku.row_id,
-                            label: `${source.sku.name} · ${source.sku.ordering_code} → ${source.unit.name}`,
-                        }))}
-                        disabled={disabled || !sources.length}
-                        placeholder="请选择已确认单位的来源规格"
-                        emptyLabel="请先逐行确认有效单位及包装口径"
-                        onValueChange={() => {
-                            form.setFieldValue("selectedRowIds", [])
-                            setFeedback("")
-                        }}
-                    />
-                )}
-            </form.AppField>
-            {!sources.length && (
+        <section className="space-y-3 border-t border-border/60 pt-5">
+            <div className="max-w-4xl space-y-2">
+                <h4 className="text-body-compact font-semibold">
+                    批量确认相同单位
+                </h4>
                 <p className="text-xs text-muted-foreground">
-                    暂无可用来源。请先逐行确认有效单位及必要的同义依据；单位版本变化、同义核对不完整或包装换算未经供应商确认时，不能批量应用。
+                    先逐行确认一个来源规格；提报单位与标准单位名称不同时，必须勾选一致确认并填写说明。再勾选提报单位、包装和报价口径完全一致的未匹配规格，自动填充标准单位及一致说明，并保留供应商提报的包装、价格及数量。
                 </p>
-            )}
+                <form.AppField name="sourceRowId">
+                    {(field) => (
+                        <field.SelectField
+                            id="supplier-portal-review-unit-bulk-source"
+                            label="已确认的来源规格及目标单位"
+                            options={sources.map((source) => ({
+                                value: source.sku.row_id,
+                                label: `${source.sku.name} · ${source.sku.ordering_code} → ${source.unit.name}`,
+                            }))}
+                            disabled={disabled || !sources.length}
+                            placeholder="请选择已确认单位的来源规格"
+                            emptyLabel="请先逐行确认有效单位及包装口径"
+                            onValueChange={() => {
+                                form.setFieldValue("selectedRowIds", [])
+                                setFeedback("")
+                            }}
+                        />
+                    )}
+                </form.AppField>
+                {!sources.length && (
+                    <p className="text-xs text-muted-foreground">
+                        暂无可用来源。请先逐行确认有效单位及必要的同义依据；单位版本变化、同义核对不完整或包装换算未经供应商确认时，不能批量应用。
+                    </p>
+                )}
+            </div>
             <form.Subscribe selector={(state) => state.values}>
                 {(value) => {
                     const source =
@@ -240,109 +245,132 @@ export function PortalUnitMappingBulk({
                         <>
                             <form.Field name="selectedRowIds">
                                 {(field) => (
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>选择</TableHead>
-                                                <TableHead>
-                                                    规格及订货编码
-                                                </TableHead>
-                                                <TableHead>单位原文</TableHead>
-                                                <TableHead>包装口径</TableHead>
-                                                <TableHead>适用情况</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {skus.map((sku) => {
-                                                const state = applicability(
-                                                    sku,
-                                                    source,
-                                                    mappings,
-                                                )
-                                                const checkboxId = `supplier-portal-review-unit-bulk-select-${toAutomationIdSegment(sku.row_id)}`
-                                                return (
-                                                    <TableRow key={sku.row_id}>
-                                                        <TableCell>
-                                                            <NativeCheckbox
-                                                                id={checkboxId}
-                                                                aria-label={`将目标单位应用到${sku.name}，订货编码${sku.ordering_code}`}
-                                                                aria-describedby={`${checkboxId}-status`}
-                                                                checked={
-                                                                    state.eligible &&
-                                                                    field.state.value.includes(
-                                                                        sku.row_id,
-                                                                    )
-                                                                }
-                                                                disabled={
-                                                                    disabled ||
-                                                                    !state.eligible
-                                                                }
-                                                                onCheckedChange={(
-                                                                    checked,
-                                                                ) => {
-                                                                    field.handleChange(
-                                                                        checked
-                                                                            ? [
-                                                                                  ...field.state.value.filter(
+                                    <div
+                                        className={
+                                            detailWorkspaceStyles.dataTableWrapper
+                                        }
+                                    >
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>选择</TableHead>
+                                                    <TableHead>
+                                                        规格及订货编码
+                                                    </TableHead>
+                                                    <TableHead>
+                                                        单位原文
+                                                    </TableHead>
+                                                    <TableHead>
+                                                        包装口径
+                                                    </TableHead>
+                                                    <TableHead>
+                                                        适用情况
+                                                    </TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {skus.map((sku) => {
+                                                    const state = applicability(
+                                                        sku,
+                                                        source,
+                                                        mappings,
+                                                    )
+                                                    const checkboxId = `supplier-portal-review-unit-bulk-select-${toAutomationIdSegment(sku.row_id)}`
+                                                    return (
+                                                        <TableRow
+                                                            key={sku.row_id}
+                                                        >
+                                                            <TableCell>
+                                                                <NativeCheckbox
+                                                                    id={
+                                                                        checkboxId
+                                                                    }
+                                                                    aria-label={`将目标单位应用到${sku.name}，订货编码${sku.ordering_code}`}
+                                                                    aria-describedby={`${checkboxId}-status`}
+                                                                    checked={
+                                                                        state.eligible &&
+                                                                        field.state.value.includes(
+                                                                            sku.row_id,
+                                                                        )
+                                                                    }
+                                                                    disabled={
+                                                                        disabled ||
+                                                                        !state.eligible
+                                                                    }
+                                                                    onCheckedChange={(
+                                                                        checked,
+                                                                    ) => {
+                                                                        field.handleChange(
+                                                                            checked
+                                                                                ? [
+                                                                                      ...field.state.value.filter(
+                                                                                          (
+                                                                                              id,
+                                                                                          ) =>
+                                                                                              id !==
+                                                                                              sku.row_id,
+                                                                                      ),
+                                                                                      sku.row_id,
+                                                                                  ]
+                                                                                : field.state.value.filter(
                                                                                       (
                                                                                           id,
                                                                                       ) =>
                                                                                           id !==
                                                                                           sku.row_id,
                                                                                   ),
-                                                                                  sku.row_id,
-                                                                              ]
-                                                                            : field.state.value.filter(
-                                                                                  (
-                                                                                      id,
-                                                                                  ) =>
-                                                                                      id !==
-                                                                                      sku.row_id,
-                                                                              ),
-                                                                    )
-                                                                    setFeedback(
-                                                                        "",
-                                                                    )
-                                                                }}
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <label
-                                                                htmlFor={
-                                                                    checkboxId
-                                                                }
-                                                            >
-                                                                {sku.name} ·{" "}
+                                                                        )
+                                                                        setFeedback(
+                                                                            "",
+                                                                        )
+                                                                    }}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <label
+                                                                    htmlFor={
+                                                                        checkboxId
+                                                                    }
+                                                                >
+                                                                    {sku.name} ·{" "}
+                                                                    <span className="num">
+                                                                        {
+                                                                            sku.ordering_code
+                                                                        }
+                                                                    </span>
+                                                                </label>
+                                                            </TableCell>
+                                                            <TableCell>
                                                                 {
-                                                                    sku.ordering_code
+                                                                    sku.unit
+                                                                        .raw_name
                                                                 }
-                                                            </label>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            {sku.unit.raw_name}
-                                                        </TableCell>
-                                                        <TableCell className="max-w-64 whitespace-normal">
-                                                            {packagingLabel(
-                                                                sku,
-                                                            )}
-                                                        </TableCell>
-                                                        <TableCell
-                                                            id={`${checkboxId}-status`}
-                                                            className="max-w-64 whitespace-normal text-muted-foreground"
-                                                        >
-                                                            {state.label}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                )
-                                            })}
-                                        </TableBody>
-                                    </Table>
+                                                            </TableCell>
+                                                            <TableCell className="max-w-64 whitespace-normal">
+                                                                {packagingLabel(
+                                                                    sku,
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell
+                                                                id={`${checkboxId}-status`}
+                                                                className="max-w-64 whitespace-normal text-muted-foreground"
+                                                            >
+                                                                {state.label}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )
+                                                })}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
                                 )}
                             </form.Field>
                             <Button
                                 id="supplier-portal-review-unit-bulk-apply"
                                 type="button"
-                                variant="outline"
+                                size="sm"
+                                variant="ghost"
+                                className={detailWorkspaceStyles.subtleButton}
                                 disabled={
                                     disabled ||
                                     !source ||
@@ -353,8 +381,11 @@ export function PortalUnitMappingBulk({
                                 onClick={() => void form.handleSubmit()}
                             >
                                 应用到已勾选规格
-                                {eligibleSelection.length > 0 &&
-                                    `（${eligibleSelection.length}）`}
+                                {eligibleSelection.length > 0 && (
+                                    <span className="num">
+                                        （{eligibleSelection.length}）
+                                    </span>
+                                )}
                             </Button>
                         </>
                     )

@@ -8,9 +8,9 @@ import {
     MoneyValue,
     QuickPreviewSheet,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     InputGroup,
@@ -25,7 +25,6 @@ import {
     formatBookInstant,
     publicSelectionHref,
 } from "@/features/sales-selection/lib/presentation"
-import { createIdempotencyKey } from "@/features/sales-selection/lib/validation"
 import type { SelectionBookDetail } from "@/features/sales-selection/types"
 import {
     BOOKLET_STATUS_LABEL,
@@ -43,20 +42,37 @@ export function BookDetailInfoSheet({
     detail,
     pending,
     operations,
+    canPrepare,
+    canCopyLink,
+    canOpenProposal,
+    onRegenerateTier,
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
     detail: SelectionBookDetail
     pending: boolean
     operations: Operations
+    canPrepare: boolean
+    canCopyLink: boolean
+    canOpenProposal: boolean
+    onRegenerateTier?: (tierId: string, tierName: string) => void
 }) {
     const bookId = bookIdentity(detail)
-    const publicHref = publicSelectionHref(
-        operations.copyLink.data?.public_url ?? detail.public_url,
-    )
+    const publicHref = canCopyLink
+        ? publicSelectionHref(
+              operations.copyLink.data?.public_url ?? detail.public_url,
+          )
+        : null
     const isPackage = detail.selection_form === "PACKAGE"
+    const showLinkSection =
+        Boolean(publicHref) &&
+        (detail.status === "PUBLISHED" ||
+            detail.status === "SUBMITTED" ||
+            Boolean(operations.copyLink.data?.public_url))
+    const showProposalSection = Boolean(canOpenProposal && detail.proposal_id)
     const archiveFields = [
         ["商品来源", POOL_SOURCE_LABEL[detail.source_kind]],
+        ["销售负责人", detail.sales_owner_name ?? "未指定"],
         ["资格核对日", formatBookInstant(detail.eligibility_as_of)],
         ["清单生成时间", formatBookInstant(detail.prepared_at)],
         ["更新时间", formatBookInstant(detail.updated_at)],
@@ -115,50 +131,59 @@ export function BookDetailInfoSheet({
                 </dl>
             </section>
 
-            {publicHref &&
-            (detail.status === "PUBLISHED" ||
-                detail.status === "SUBMITTED" ||
-                operations.copyLink.data?.public_url) ? (
+            {showLinkSection || showProposalSection ? (
                 <section className="space-y-3 border-t border-border pt-6">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                        <h3 className="font-medium">客户选品链接</h3>
-                        <Badge
-                            variant={
-                                detail.link_revoked ? "outline" : "default"
-                            }
-                        >
-                            {detail.link_revoked ? "已撤销" : "有效（30天）"}
-                        </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                        客户在手机端选品，提交后生成销售方案。
-                    </p>
-                    <InputGroup>
-                        <InputGroupInput
-                            id="selection-copy-link-value"
-                            aria-label="客户选品链接"
-                            readOnly
-                            value={publicHref}
-                            onFocus={(event) => event.target.select()}
-                            className="min-w-0 text-xs"
-                        />
-                        <InputGroupAddon align="inline-end">
-                            <InputGroupButton
-                                id="sales-selection-detail-copy-link-inline"
-                                loading={operations.copyLink.isPending}
-                                disabled={
-                                    operations.copyLink.isPending || pending
-                                }
-                                onClick={() =>
-                                    void operations.copyLink.mutateAsync(bookId)
-                                }
-                            >
-                                复制
-                            </InputGroupButton>
-                        </InputGroupAddon>
-                    </InputGroup>
+                    {showLinkSection && publicHref ? (
+                        <>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <h3 className="font-medium">客户选品链接</h3>
+                                <StatusBadge
+                                    tone={
+                                        detail.link_revoked ? "void" : "success"
+                                    }
+                                    label={
+                                        detail.link_revoked
+                                            ? "已撤销"
+                                            : "有效（30天）"
+                                    }
+                                />
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                客户在手机端选品，提交后生成销售方案。
+                            </p>
+                            <InputGroup>
+                                <InputGroupInput
+                                    id="selection-copy-link-value"
+                                    aria-label="客户选品链接"
+                                    readOnly
+                                    value={publicHref}
+                                    onFocus={(event) => event.target.select()}
+                                    className="min-w-0 text-xs"
+                                />
+                                <InputGroupAddon align="inline-end">
+                                    <InputGroupButton
+                                        id="sales-selection-detail-copy-link-inline"
+                                        loading={operations.copyLink.isPending}
+                                        disabled={
+                                            operations.copyLink.isPending ||
+                                            pending
+                                        }
+                                        onClick={() =>
+                                            void operations.copyLink.mutateAsync(
+                                                bookId,
+                                            )
+                                        }
+                                    >
+                                        复制
+                                    </InputGroupButton>
+                                </InputGroupAddon>
+                            </InputGroup>
+                        </>
+                    ) : (
+                        <h3 className="font-medium">关联销售方案</h3>
+                    )}
 
-                    {detail.proposal_id ? (
+                    {showProposalSection && detail.proposal_id ? (
                         <Button
                             id="sales-selection-sidebar-open-proposal"
                             type="button"
@@ -167,7 +192,7 @@ export function BookDetailInfoSheet({
                             className="h-auto max-w-full whitespace-normal break-words text-left"
                             render={
                                 <Link
-                                    href={`/sales/selection/proposals/${detail.proposal_id}`}
+                                    href={`/sales/selection/proposals/${encodeURIComponent(detail.proposal_id)}`}
                                 />
                             }
                         >
@@ -184,7 +209,7 @@ export function BookDetailInfoSheet({
                 <section className="space-y-4 border-t border-border pt-6">
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
                         <h3 className="font-medium">档位目标与达成</h3>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="num text-xs text-muted-foreground">
                             共 {detail.tiers.length} 档
                         </span>
                     </div>
@@ -203,12 +228,15 @@ export function BookDetailInfoSheet({
                                             {tier.name}
                                         </h4>
                                         {report?.stop_label ? (
-                                            <Badge
-                                                variant="outline"
-                                                className="max-w-full shrink-0 whitespace-normal"
-                                            >
-                                                {report.stop_label}
-                                            </Badge>
+                                            <StatusBadge
+                                                tone={
+                                                    report.actual_count >=
+                                                    report.expected_count
+                                                        ? "success"
+                                                        : "warning"
+                                                }
+                                                label={report.stop_label}
+                                            />
                                         ) : null}
                                     </div>
                                     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs">
@@ -222,18 +250,20 @@ export function BookDetailInfoSheet({
                                             ±¥{tier.tolerance}
                                         </span>
                                     </div>
-                                    <p className="text-xs text-muted-foreground">
+                                    <p className="num text-xs text-muted-foreground">
                                         每套 {tier.sku_count} 件 ·{" "}
                                         {report
                                             ? `达成 ${report.actual_count}/${report.expected_count} 套`
                                             : `计划 ${tier.expected_count} 套`}
                                     </p>
                                     {report && report.image_failures > 0 ? (
-                                        <p className="text-xs text-warning-soft-foreground">
+                                        <p className="num text-xs text-warning-soft-foreground">
                                             图片失败 {report.image_failures} 项
                                         </p>
                                     ) : null}
-                                    {detail.status === "PENDING_PUBLISH" ? (
+                                    {canPrepare &&
+                                    onRegenerateTier &&
+                                    detail.status === "PENDING_PUBLISH" ? (
                                         <LoadingButton
                                             id={`selection-regenerate-${toAutomationIdSegment(tier.tier_id)}`}
                                             loading={
@@ -248,14 +278,10 @@ export function BookDetailInfoSheet({
                                             variant="ghost"
                                             disabled={pending}
                                             onClick={() =>
-                                                operations.regenerate.mutate({
-                                                    bookId,
-                                                    tier_ids: [tier.tier_id],
-                                                    expected_version:
-                                                        detail.version,
-                                                    idempotency_key:
-                                                        createIdempotencyKey(),
-                                                })
+                                                onRegenerateTier(
+                                                    tier.tier_id,
+                                                    tier.name,
+                                                )
                                             }
                                         >
                                             <RefreshCwIcon aria-hidden="true" />

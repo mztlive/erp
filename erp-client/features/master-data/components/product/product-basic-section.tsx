@@ -41,6 +41,7 @@ type ProductBasicSectionProps = {
     unitOptions: readonly UnitOption[] | undefined
     categoryOptions: React.ComponentProps<typeof CategoryCombobox>["categories"]
     brandOptions: React.ComponentProps<typeof BrandCombobox>["brands"]
+    unitLoading?: boolean
     categoryLoading: boolean
     brandLoading: boolean
     canSelectUnit: boolean
@@ -65,6 +66,7 @@ function ProductBasicSection({
     unitOptions,
     categoryOptions,
     brandOptions,
+    unitLoading = false,
     categoryLoading,
     brandLoading,
     canSelectUnit,
@@ -77,6 +79,7 @@ function ProductBasicSection({
     onOpenMediaTab,
 }: ProductBasicSectionProps) {
     const prefix = idPrefix ?? "master-data-product-basic"
+    const controlsDisabled = !canRevise || disabled
     const kindLabel = fields.productKind
         ? PRODUCT_KIND_LABELS[fields.productKind]
         : "未设置"
@@ -90,7 +93,7 @@ function ProductBasicSection({
             <div className="grid min-w-0 items-start gap-8 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
                 {/* 左主栏：基础属性表单 */}
                 <fieldset
-                    disabled={!canRevise}
+                    disabled={controlsDisabled}
                     className="min-w-0 max-w-4xl space-y-4"
                 >
                     <legend className="sr-only">基础信息</legend>
@@ -117,16 +120,16 @@ function ProductBasicSection({
                             />
                         </div>
                         <div className="space-y-1.5 sm:col-span-4">
-                            <Label htmlFor={`${prefix}-kind-combobox`}>
-                                商品类型
-                                {isCreate ? <RequiredMark /> : null}
-                            </Label>
                             {isCreate ? (
                                 <>
+                                    <Label htmlFor={`${prefix}-kind-combobox`}>
+                                        商品类型
+                                        <RequiredMark />
+                                    </Label>
                                     <OptionCombobox
                                         id={`${prefix}-kind-combobox`}
                                         value={fields.productKind || null}
-                                        disabled={!canRevise}
+                                        disabled={controlsDisabled}
                                         onValueChange={(value) =>
                                             setFields((previous) => ({
                                                 ...previous,
@@ -151,22 +154,27 @@ function ProductBasicSection({
                                     </p>
                                 </>
                             ) : (
-                                <div
-                                    id={`${prefix}-kind-combobox`}
-                                    title="创建后不可修改，也不随分类变化。"
-                                    className="flex h-control items-center justify-between gap-2 rounded-md bg-muted/45 px-2.5 text-body-compact text-foreground/85"
-                                >
-                                    <span className="truncate font-medium">
-                                        {kindLabel}
+                                <>
+                                    <span className="block text-xs font-medium text-foreground/70">
+                                        商品类型
                                     </span>
-                                    <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground/80">
-                                        <LockIcon
-                                            className="size-3"
-                                            aria-hidden="true"
-                                        />
-                                        创建后不可修改
-                                    </span>
-                                </div>
+                                    <div
+                                        id={`${prefix}-kind-combobox`}
+                                        title="创建后不可修改，也不随分类变化。"
+                                        className="flex h-control items-center justify-between gap-2 rounded-md bg-muted/45 px-2.5 text-body-compact text-foreground/85"
+                                    >
+                                        <span className="truncate font-medium">
+                                            {kindLabel}
+                                        </span>
+                                        <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground/80">
+                                            <LockIcon
+                                                className="size-3"
+                                                aria-hidden="true"
+                                            />
+                                            创建后不可修改
+                                        </span>
+                                    </div>
+                                </>
                             )}
                         </div>
 
@@ -179,6 +187,8 @@ function ProductBasicSection({
                                 <OptionCombobox
                                     id={`${prefix}-unit-combobox`}
                                     value={fields.baseUnitId || null}
+                                    disabled={controlsDisabled}
+                                    loading={unitLoading}
                                     onValueChange={(id) => {
                                         const unit = unitOptions?.find(
                                             (item) => item.id === id,
@@ -228,6 +238,7 @@ function ProductBasicSection({
                                     categories={categoryOptions}
                                     onRefresh={onRefreshCategories}
                                     value={fields.categoryId || undefined}
+                                    disabled={controlsDisabled}
                                     onValueChange={(id) => {
                                         const hit = categoryOptions.find(
                                             (c) => c.categoryId === id,
@@ -266,6 +277,7 @@ function ProductBasicSection({
                                     brands={brandOptions}
                                     onRefresh={onRefreshBrands}
                                     value={fields.brandId || undefined}
+                                    disabled={controlsDisabled}
                                     onValueChange={(id) => {
                                         const hit = brandOptions.find(
                                             (b) => b.brandId === id,

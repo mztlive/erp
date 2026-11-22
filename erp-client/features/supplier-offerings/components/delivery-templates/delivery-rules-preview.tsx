@@ -1,6 +1,6 @@
 "use client"
 
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { cn } from "@/lib/utils"
 
 import {
@@ -13,7 +13,7 @@ import {
 
 type Mode = "dropship" | "bulk"
 
-const TERM_VARIANT: Record<DeliveryTerm, "success" | "warning" | "neutral"> = {
+const TERM_TONE: Record<DeliveryTerm, "success" | "warning" | "neutral"> = {
     FREIGHT_INCLUDED: "success",
     FREIGHT_EXTRA: "warning",
     NOT_DELIVERABLE: "neutral",
@@ -33,9 +33,11 @@ function termLabel(mode: Mode, term: DeliveryTerm) {
 
 function TermBadge({ mode, term }: { mode: Mode; term: DeliveryTerm }) {
     return (
-        <Badge variant={TERM_VARIANT[term]} className="shrink-0">
-            {termLabel(mode, term)}
-        </Badge>
+        <StatusBadge
+            tone={TERM_TONE[term]}
+            label={termLabel(mode, term)}
+            className="shrink-0"
+        />
     )
 }
 

@@ -26,7 +26,7 @@ import {
     useMasterDataListQuery,
     useProductUnitOptionsQuery,
 } from "@/features/master-data/hooks/queries"
-import { useProductDirtyGuard } from "@/features/master-data/hooks/use-product-dirty-guard"
+import { productChangeSummary } from "@/features/master-data/lib/product-change-summary"
 import { useProductSectionSpy } from "@/features/master-data/hooks/use-product-section-spy"
 import { useProductUploads } from "@/features/master-data/hooks/use-product-uploads"
 import type { MasterDataMutationResult } from "@/features/master-data/types"
@@ -125,7 +125,6 @@ export function useProductEditor(stableId: string) {
             setActiveSection("basic")
         }
     }, [accountQuery.isPending, activeSection, canWrite, setActiveSection])
-    useProductDirtyGuard(() => form.state.isDirty)
 
     const initialFormValues = React.useMemo(
         () =>
@@ -252,14 +251,17 @@ export function useProductEditor(stableId: string) {
 
     const navigateAway = React.useCallback(
         (href: string) => {
-            if (form.state.isDirty) {
+            if (
+                productChangeSummary(initialFormValues, form.state.values)
+                    .length > 0
+            ) {
                 setPendingNav(href)
                 setDiscardOpen(true)
                 return
             }
             router.push(href)
         },
-        [form.state.isDirty, router],
+        [form, initialFormValues, router],
     )
 
     const openInventoryPreview = React.useCallback(

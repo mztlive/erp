@@ -160,6 +160,7 @@ export function BankAccountRowsSection({
                                                     id={`customers-form-bank-${rowKey}-account-number`}
                                                     label="账号"
                                                     required
+                                                    inputClassName="num"
                                                     disabled={Boolean(
                                                         _row.existingId,
                                                     )}
@@ -187,6 +188,9 @@ export function BankAccountRowsSection({
                                             type="button"
                                             size="sm"
                                             variant="ghost"
+                                            className={
+                                                detailWorkspaceStyles.quietDangerButton
+                                            }
                                             onClick={() =>
                                                 field.removeValue(index)
                                             }

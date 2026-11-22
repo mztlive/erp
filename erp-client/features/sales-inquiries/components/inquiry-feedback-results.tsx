@@ -1,7 +1,6 @@
 "use client"
 
 import { MoneyValue } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -60,7 +59,7 @@ export function InquiryFeedbackResults({
                             <StatusBadge label="已接受" tone="success" />
                         )}
                         {feedback.round !== inquiry.feedback_round && (
-                            <Badge variant="outline">历史轮次</Badge>
+                            <StatusBadge label="历史轮次" tone="neutral" />
                         )}
                     </div>
                     <p className="text-xs text-muted-foreground">

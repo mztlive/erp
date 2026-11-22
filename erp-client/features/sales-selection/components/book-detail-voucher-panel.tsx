@@ -10,9 +10,9 @@ import {
     QuantityValue,
     detailWorkspaceStyles,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { toast } from "@/components/ui/toast"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
@@ -46,6 +46,10 @@ export function BookDetailVoucherPanel({
     const canReadSelections = hasPermission(
         accountProfile.data?.permissions,
         "sales_selection_booklet:get",
+    )
+    const canOpenProposal = hasPermission(
+        accountProfile.data?.permissions,
+        "sales_selection_proposal:get",
     )
     const beforePublication =
         detail.status === "DRAFT" ||
@@ -165,6 +169,8 @@ export function BookDetailVoucherPanel({
                             <LoadingButton
                                 id="sales-selection-detail-export-selection-details"
                                 type="button"
+                                variant="ghost"
+                                className={detailWorkspaceStyles.subtleButton}
                                 size="sm"
                                 loading={exporting === "details"}
                                 disabled={
@@ -244,16 +250,16 @@ export function BookDetailVoucherPanel({
                                 <span className="num break-all text-body-compact">
                                     {voucher.voucher_code}
                                 </span>
-                                <Badge
-                                    variant={
+                                <StatusBadge
+                                    tone={
                                         voucher.submitted
-                                            ? "secondary"
-                                            : "outline"
+                                            ? "success"
+                                            : "neutral"
                                     }
-                                    className="shrink-0"
-                                >
-                                    {voucher.submitted ? "已提交" : "待选品"}
-                                </Badge>
+                                    label={
+                                        voucher.submitted ? "已提交" : "待选品"
+                                    }
+                                />
                             </div>
                         ))}
                     </div>
@@ -299,25 +305,38 @@ export function BookDetailVoucherPanel({
                                     </p>
                                     <p className="text-xs text-muted-foreground">
                                         提货码：
-                                        {selection.voucher_code ?? "—"} ·{" "}
-                                        {formatBookInstant(
-                                            selection.submitted_at,
-                                        )}
+                                        <span className="num">
+                                            {selection.voucher_code ?? "—"}
+                                        </span>{" "}
+                                        ·{" "}
+                                        <span className="num">
+                                            {formatBookInstant(
+                                                selection.submitted_at,
+                                            )}
+                                        </span>
                                     </p>
                                 </div>
-                                <Button
-                                    id={`sales-selection-voucher-open-proposal-${toAutomationIdSegment(selection.voucher_code ?? selection.proposal_no)}`}
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    render={
-                                        <Link
-                                            href={`/sales/selection/proposals/${encodeURIComponent(selection.proposal_id)}`}
-                                        />
-                                    }
-                                >
-                                    查看方案 {selection.proposal_no}
-                                </Button>
+                                {canOpenProposal ? (
+                                    <Button
+                                        id={`sales-selection-voucher-open-proposal-${toAutomationIdSegment(selection.voucher_code ?? selection.proposal_no)}`}
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        className={
+                                            detailWorkspaceStyles.inlineLinkButton
+                                        }
+                                        render={
+                                            <Link
+                                                href={`/sales/selection/proposals/${encodeURIComponent(selection.proposal_id)}`}
+                                            />
+                                        }
+                                    >
+                                        查看方案{" "}
+                                        <span className="num">
+                                            {selection.proposal_no}
+                                        </span>
+                                    </Button>
+                                ) : null}
                             </div>
                             <p className="break-words text-body-compact">
                                 <span className="text-muted-foreground">

@@ -15,7 +15,7 @@ export function ProposalSummary({ proposal }: { proposal: ProposalView }) {
     const countDescription = `共 ${count} 款${isPackage ? "套餐" : "商品"}`
 
     return (
-        <div className="min-w-0 sm:grid sm:grid-cols-2 sm:gap-x-6 xl:block">
+        <div className="min-w-0 sm:grid sm:grid-cols-2 sm:gap-x-6 lg:block">
             <DetailWorkspaceMetricItem
                 emphasis="primary"
                 label={isRange ? "确认内容" : "方案合计"}
@@ -32,7 +32,7 @@ export function ProposalSummary({ proposal }: { proposal: ProposalView }) {
                         : countDescription
                 }
             />
-            <dl className="mt-6 space-y-5 border-t border-border/60 pt-6 text-body-compact sm:mt-0 sm:border-t-0 sm:pt-0 xl:mt-6 xl:border-t xl:pt-6">
+            <dl className="mt-6 space-y-5 border-t border-border/60 pt-6 text-body-compact sm:mt-0 sm:border-t-0 sm:pt-0 lg:mt-6 lg:border-t lg:pt-6">
                 <div className="flex items-baseline justify-between gap-4">
                     <dt className="text-muted-foreground">{countLabel}</dt>
                     <dd className="num font-medium">{count} 款</dd>
@@ -52,14 +52,15 @@ export function ProposalSummary({ proposal }: { proposal: ProposalView }) {
             </dl>
             {proposal.recipient && (
                 <section
-                    className="mt-6 space-y-2 border-t border-border/60 pt-6 text-body-compact"
+                    className="mt-6 space-y-2 border-t border-border/60 pt-6 text-body-compact sm:col-span-2 lg:col-span-1"
                     aria-label="收件信息"
                 >
                     <h2 className="text-section-title font-semibold tracking-tight">
                         收件信息
                     </h2>
                     <p>
-                        {proposal.recipient.name} · {proposal.recipient.phone}
+                        {proposal.recipient.name} ·{" "}
+                        <span className="num">{proposal.recipient.phone}</span>
                     </p>
                     <p className="break-words text-muted-foreground">
                         {[
@@ -67,7 +68,9 @@ export function ProposalSummary({ proposal }: { proposal: ProposalView }) {
                             proposal.recipient.city,
                             proposal.recipient.district,
                             proposal.recipient.address,
-                        ].join(" ")}
+                        ]
+                            .filter(Boolean)
+                            .join(" ")}
                     </p>
                 </section>
             )}

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { InboxIcon } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { useRouter } from "@/lib/navigation"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { Button } from "@/components/ui/button"
 import {

@@ -4,8 +4,9 @@ import { z } from "zod"
 
 import {
     BusinessFailureState,
-    FormalActionConfirmDialog,
     DetailWorkspaceSection,
+    FormalActionConfirmDialog,
+    GuardedBusinessAction,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
@@ -165,15 +166,16 @@ export function ImportExecutionActions({
                 ) : null}
                 <div className="flex flex-wrap gap-2">
                     {canStart ? (
-                        <Button
+                        <GuardedBusinessAction
                             id="operations-import-batch-detail-execution-start-apply"
                             type="button"
                             size="sm"
                             disabled
+                            reason="期初数据正式写入功能暂未开放，当前预检与部门确认记录已保存。"
                             onClick={() => setConfirming("START_APPLY")}
                         >
                             开始正式导入
-                        </Button>
+                        </GuardedBusinessAction>
                     ) : null}
                     {canCancel ? (
                         <Button
@@ -188,15 +190,17 @@ export function ImportExecutionActions({
                         </Button>
                     ) : null}
                     {canRetry ? (
-                        <Button
+                        <GuardedBusinessAction
                             id="operations-import-batch-detail-execution-retry-failed"
                             type="button"
                             size="sm"
+                            variant="outline"
                             disabled
+                            reason="期初数据正式写入功能暂未开放，暂不支持重试失败数据。"
                             onClick={() => setConfirming("RETRY_FAILED")}
                         >
                             重试失败数据
-                        </Button>
+                        </GuardedBusinessAction>
                     ) : null}
                 </div>
             </div>
@@ -204,7 +208,7 @@ export function ImportExecutionActions({
             {confirming === "START_APPLY" ? (
                 <FormalActionConfirmDialog
                     actionVariant="default"
-                    id="operations-import-batch-detail-execution-start-apply"
+                    id="operations-import-batch-detail-execution-start-apply-dialog"
                     open
                     onOpenChange={(open) => {
                         if (!open) setConfirming(undefined)
@@ -227,7 +231,7 @@ export function ImportExecutionActions({
             {confirming === "RETRY_FAILED" ? (
                 <FormalActionConfirmDialog
                     actionVariant="default"
-                    id="operations-import-batch-detail-execution-retry-failed"
+                    id="operations-import-batch-detail-execution-retry-failed-dialog"
                     open
                     onOpenChange={(open) => {
                         if (!open) setConfirming(undefined)

@@ -73,20 +73,29 @@ export function InquiryProductsTable({
             )}
             <div
                 data-slot="detail-inline-table"
-                className="min-h-0 flex-1 border-y border-border/70 [&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:overflow-auto"
+                className="min-w-0 border-y border-border/70"
             >
                 <Table className="min-w-[1200px] table-fixed">
-                    <TableHeader className="sticky top-0 z-10">
+                    <TableHeader>
                         <TableRow>
                             <TableHead className="w-20">图片</TableHead>
                             <TableHead>商品 / 规格</TableHead>
-                            <TableHead className="w-[15%] text-right">
+                            <TableHead
+                                data-align="end"
+                                className="w-[15%] text-right"
+                            >
                                 需求 / 可供
                             </TableHead>
-                            <TableHead className="w-[16%] text-right">
+                            <TableHead
+                                data-align="end"
+                                className="w-[16%] text-right"
+                            >
                                 含税供给单价
                             </TableHead>
-                            <TableHead className="w-[9%] text-right">
+                            <TableHead
+                                data-align="end"
+                                className="w-[9%] text-right"
+                            >
                                 税率
                             </TableHead>
                             <TableHead className="w-[12%]">
@@ -134,7 +143,7 @@ export function InquiryProductsTable({
                         {requirement.lines.length === 0 && (
                             <TableRow>
                                 <TableCell
-                                    colSpan={8}
+                                    colSpan={7}
                                     className="h-24 text-center text-muted-foreground"
                                 >
                                     暂无商品需求

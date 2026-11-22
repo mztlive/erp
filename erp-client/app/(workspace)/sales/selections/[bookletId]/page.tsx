@@ -1,16 +1,27 @@
-import type { Metadata } from "next"
+import { redirect } from "next/navigation"
 
-import { BookDetailPage } from "@/features/sales-selection/pages/book-detail-page"
-
-export const metadata: Metadata = {
-    title: "选品册",
+function serializeSearchParams(
+    raw: Record<string, string | string[] | undefined>,
+): string {
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(raw)) {
+        if (typeof value === "string") params.append(key, value)
+        else if (Array.isArray(value)) {
+            for (const entry of value) params.append(key, entry)
+        }
+    }
+    const qs = params.toString()
+    return qs ? `?${qs}` : ""
 }
 
-export default async function SalesSelectionDetailPage({
+export default async function LegacySalesSelectionDetailRedirectPage({
     params,
+    searchParams,
 }: {
     params: Promise<{ bookletId: string }>
+    searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
     const { bookletId } = await params
-    return <BookDetailPage bookId={bookletId} />
+    const qs = serializeSearchParams(await searchParams)
+    redirect(`/sales/selection/${encodeURIComponent(bookletId)}${qs}`)
 }

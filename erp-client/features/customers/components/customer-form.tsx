@@ -26,6 +26,7 @@ import type {
 import { hasPermission } from "@/lib/permissions"
 import {
     createSchema,
+    editDraftSchema,
     editSchema,
 } from "@/features/customers/lib/customer-form-schemas"
 import {
@@ -46,13 +47,15 @@ import {
     CustomerFormResultPanel,
 } from "@/features/customers/components/customer-form-feedback"
 import { CustomerConflictDialog } from "./customer-conflict-dialog"
+import { CustomerSaveReasonDialog } from "./customer-save-reason-dialog"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
-import { useCustomerFormDirtyGuard } from "@/features/customers/hooks/use-customer-form-dirty-guard"
+import { useWorkspaceDirtyState } from "@/lib/workspace-form-guard"
 
 /**
- * 客户资料表单：创建（对话框内）与编辑（页面内）共用同一套字段、
+ * 客户资料表单：创建（对话框内）与编辑（详情页直出可编辑）共用同一套字段、
  * 校验、敏感值处理、幂等提交与结果状态；外层只决定容器。
  */
 export function CustomerForm({
@@ -63,6 +66,9 @@ export function CustomerForm({
     onSucceeded,
     onDirtyChange,
     shortcutBlocked = false,
+    readonlyContactsFallback,
+    readonlyAddressesFallback,
+    readonlyBanksFallback,
 }: {
     mode: "create" | "edit"
     /** 页面内编辑按详情工作面分区展示；对话框内用紧凑布局。 */
@@ -70,12 +76,16 @@ export function CustomerForm({
     /** mode="edit" 必传。 */
     customer?: CustomerCenterView
     onCancel: () => void
-    /** 成功回调；revisionNo 供页面展示「已保存 · 新版本 vN」反馈。 */
+    /** 成功回调；revisionNo 供页面展示反馈。 */
     onSucceeded: (customerId: string, revisionNo?: number) => void
-    /** 表单是否含未保存输入（详情页用于拦截分区切换）。 */
+    /** 表单是否含未保存输入（详情页用于拦截分区切换与跨页跳转）。 */
     onDirtyChange?: (isDirty: boolean) => void
     shortcutBlocked?: boolean
+    readonlyContactsFallback?: React.ReactNode
+    readonlyAddressesFallback?: React.ReactNode
+    readonlyBanksFallback?: React.ReactNode
 }) {
+    const formRef = React.useRef<HTMLFormElement>(null)
     const createMutation = useCreateCustomerMutation()
     const saveMutation = useSaveCustomerDetailsMutation()
     const queryIdempotency = useQueryCustomerIdempotencyMutation()
@@ -118,6 +128,10 @@ export function CustomerForm({
         null,
     )
     const [conflictOpen, setConflictOpen] = React.useState(false)
+    const [saveReasonOpen, setSaveReasonOpen] = React.useState(false)
+    const [reasonDraft, setReasonDraft] = React.useState("")
+    const [reasonError, setReasonError] = React.useState<string | null>(null)
+    const pendingReasonRef = React.useRef<string | null>(null)
 
     const [baseline, setBaseline] = React.useState(customer)
     const [conflictDraft, setConflictDraft] = React.useState<FormValues | null>(
@@ -128,11 +142,22 @@ export function CustomerForm({
         [baseline, mode],
     )
 
+    const validationSchema =
+        mode === "create"
+            ? createSchema
+            : grouped
+              ? editDraftSchema
+              : editSchema
+
     const form = useAppForm({
         defaultValues: defaults,
-        validators: { onChange: mode === "create" ? createSchema : editSchema },
+        validators: { onChange: validationSchema },
         onSubmit: async ({ value }) => {
-            const input = buildFormSubmission(mode, value, baseline, {
+            const effectiveValue: FormValues =
+                grouped && mode === "edit" && pendingReasonRef.current != null
+                    ? { ...value, changeReason: pendingReasonRef.current }
+                    : value
+            const input = buildFormSubmission(mode, effectiveValue, baseline, {
                 canWriteContacts,
                 canWriteAddresses,
                 canWriteBanks,
@@ -148,6 +173,8 @@ export function CustomerForm({
                           input as SaveCustomerDetailsInput,
                       )
 
+            pendingReasonRef.current = null
+            setSaveReasonOpen(false)
             setResult(response)
             if (response.outcome !== "succeeded" && response.error) {
                 applyApiFormError(form, response.error, {
@@ -157,11 +184,20 @@ export function CustomerForm({
                 })
             }
             if (response.outcome === "conflict") {
-                setConflictDraft(structuredClone(value))
+                setConflictDraft(structuredClone(effectiveValue))
                 setConflictOpen(true)
             }
             if (response.outcome === "succeeded") {
-                form.reset()
+                setReasonDraft("")
+                setReasonError(null)
+                setIdempotencyKey(
+                    newIdempotencyKey(mode === "create" ? "create" : "revise"),
+                )
+                form.reset(
+                    mode === "create"
+                        ? buildDefaults("create", undefined)
+                        : { ...effectiveValue, changeReason: "" },
+                )
                 onSucceeded(response.customerId, response.revisionNo)
             }
         },
@@ -174,24 +210,117 @@ export function CustomerForm({
     const dirty = grouped ? changeCount > 0 : isDirty
     const [discardOpen, setDiscardOpen] = React.useState(false)
 
+    // 详情页最新资料刷新且当前无未保存修改时，自动同步最新基线，避免冻结旧快照。
+    const customerVersionKey = customer
+        ? `${customer.customerId}:${customer.lockVersion}:${customer.partyLockVersion}:${customer.currentRevision.revisionId}`
+        : ""
+    const baselineVersionKey = baseline
+        ? `${baseline.customerId}:${baseline.lockVersion}:${baseline.partyLockVersion}:${baseline.currentRevision.revisionId}`
+        : ""
+    React.useEffect(() => {
+        if (
+            mode !== "edit" ||
+            !customer ||
+            dirty ||
+            customerVersionKey === baselineVersionKey
+        ) {
+            return
+        }
+        setBaseline(customer)
+        form.reset(buildDefaults("edit", customer))
+        setResult(null)
+    }, [baselineVersionKey, customer, customerVersionKey, dirty, form, mode])
+
     React.useEffect(() => {
         onDirtyChange?.(dirty)
     }, [dirty, onDirtyChange])
 
-    useCustomerFormDirtyGuard(dirty)
-
-    const resetSession = () => {
-        setResult(null)
-        setConflictOpen(false)
-        setIdempotencyKey(
-            newIdempotencyKey(mode === "create" ? "create" : "revise"),
-        )
-        form.reset()
-    }
-
     const isSubmitting =
         mode === "create" ? createMutation.isPending : saveMutation.isPending
     const isPending = isSubmitting || queryIdempotency.isPending
+
+    useWorkspaceDirtyState({ dirty, busy: isPending })
+
+    const resetSession = React.useCallback(() => {
+        setResult(null)
+        setConflictOpen(false)
+        setSaveReasonOpen(false)
+        setReasonDraft("")
+        setReasonError(null)
+        pendingReasonRef.current = null
+        setIdempotencyKey(
+            newIdempotencyKey(mode === "create" ? "create" : "revise"),
+        )
+        const latestBaseline =
+            mode === "edit" ? (customer ?? baseline) : undefined
+        if (mode === "edit" && latestBaseline) {
+            setBaseline(latestBaseline)
+        }
+        form.reset(buildDefaults(mode, latestBaseline))
+    }, [baseline, customer, form, mode])
+
+    const focusFirstInvalidField = React.useCallback(() => {
+        requestAnimationFrame(() => {
+            const container = formRef.current
+            if (!container) return
+            const invalidTarget =
+                container.querySelector<HTMLElement>('[aria-invalid="true"]') ??
+                container.querySelector<HTMLElement>(
+                    '[data-invalid="true"] input, [data-invalid="true"] textarea, [data-invalid="true"] button',
+                )
+            if (invalidTarget) {
+                invalidTarget.scrollIntoView({
+                    behavior: "smooth",
+                    block: "center",
+                })
+                invalidTarget.focus({ preventScroll: true })
+            }
+        })
+    }, [])
+
+    const handleRequestGroupedSave = React.useCallback(async () => {
+        if (
+            !dirty ||
+            isPending ||
+            form.state.isSubmitting ||
+            shortcutBlocked ||
+            conflictOpen ||
+            discardOpen ||
+            saveReasonOpen
+        ) {
+            return
+        }
+        await form.validateAllFields("submit")
+        const parsed = editDraftSchema.safeParse(form.state.values)
+        if (!parsed.success) {
+            focusFirstInvalidField()
+            return
+        }
+        setReasonError(null)
+        setSaveReasonOpen(true)
+    }, [
+        conflictOpen,
+        dirty,
+        discardOpen,
+        focusFirstInvalidField,
+        form,
+        isPending,
+        saveReasonOpen,
+        shortcutBlocked,
+    ])
+
+    const handleConfirmSaveWithReason = React.useCallback(() => {
+        const trimmed = reasonDraft.trim()
+        if (trimmed.length < 2) {
+            setReasonError("请填写修改原因（至少 2 个字）")
+            return
+        }
+        setReasonError(null)
+        pendingReasonRef.current = trimmed
+        form.setFieldValue("changeReason", trimmed)
+        void form.handleSubmit()
+    }, [form, reasonDraft])
+
     const submitLabel =
         mode === "create"
             ? createMutation.isPending
@@ -201,80 +330,30 @@ export function CustomerForm({
               ? "保存中…"
               : "保存更新"
 
-    React.useEffect(() => {
-        if (!grouped || !dirty) return
-        const onKeyDown = (event: KeyboardEvent) => {
-            if (
-                event.defaultPrevented ||
-                event.isComposing ||
-                event.altKey ||
-                event.shiftKey ||
-                !(event.metaKey || event.ctrlKey) ||
-                event.key.toLowerCase() !== "s" ||
-                (event.target instanceof Element &&
-                    event.target.closest(
-                        '[role="dialog"], [role="alertdialog"]',
-                    ))
-            )
-                return
-
-            event.preventDefault()
-            if (
-                !event.repeat &&
-                !shortcutBlocked &&
-                !conflictOpen &&
-                !discardOpen &&
-                !isPending &&
-                result?.outcome !== "succeeded" &&
-                form.state.canSubmit &&
-                !form.state.isSubmitting
-            )
-                void form.handleSubmit()
-        }
-        window.addEventListener("keydown", onKeyDown)
-        return () => window.removeEventListener("keydown", onKeyDown)
-    }, [
-        conflictOpen,
-        dirty,
-        discardOpen,
-        form,
-        grouped,
-        isPending,
-        result?.outcome,
-        shortcutBlocked,
-    ])
-
     return (
         <form
+            ref={formRef}
             noValidate
             className={grouped ? "min-w-0" : "flex flex-col gap-4"}
             onSubmit={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                if (grouped && (!dirty || isPending || form.state.isSubmitting))
+                if (grouped && mode === "edit") {
+                    void handleRequestGroupedSave()
                     return
-                void form.handleSubmit()
+                }
+                void form.handleSubmit().then(() => {
+                    if (!form.state.isValid) {
+                        focusFirstInvalidField()
+                    }
+                })
             }}
         >
             {grouped ? (
                 <FormSection
                     grouped={grouped}
                     title="客户基本资料"
-                    description="修改仅对后续新业务生效，不影响已创建的合同和销售单"
-                    action={
-                        !dirty && result?.outcome !== "succeeded" ? (
-                            <Button
-                                id="customers-form-cancel"
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                className={detailWorkspaceStyles.quietButton}
-                                onClick={onCancel}
-                            >
-                                取消
-                            </Button>
-                        ) : undefined
-                    }
+                    description="直接修改字段，底部将浮现保存条；修改仅对后续新业务生效，不影响已创建的合同和销售单"
                 >
                     <FieldGroup
                         data-slot="detail-form-grid"
@@ -305,6 +384,7 @@ export function CustomerForm({
                                 <field.TextField
                                     id="customers-form-credit-code"
                                     label="统一社会信用代码"
+                                    inputClassName="num"
                                     placeholder="可选，18 位字母或数字"
                                 />
                             )}
@@ -334,19 +414,6 @@ export function CustomerForm({
                                 />
                             )}
                         />
-                        <div className="sm:col-span-2">
-                            <form.AppField
-                                name="changeReason"
-                                children={(field) => (
-                                    <field.TextareaField
-                                        id="customers-form-change-reason"
-                                        label="修改原因"
-                                        required
-                                        placeholder="请说明本次修改客户资料的原因"
-                                    />
-                                )}
-                            />
-                        </div>
                     </FieldGroup>
                 </FormSection>
             ) : (
@@ -378,6 +445,7 @@ export function CustomerForm({
                             <field.TextField
                                 id="customers-form-credit-code"
                                 label="统一社会信用代码"
+                                inputClassName="num"
                                 placeholder="可选，18 位字母或数字"
                             />
                         )}
@@ -428,11 +496,15 @@ export function CustomerForm({
 
             {canWriteContacts ? (
                 <ContactRowsSection form={form} mode={mode} grouped={grouped} />
-            ) : null}
+            ) : (
+                (readonlyContactsFallback ?? null)
+            )}
 
             {canWriteAddresses ? (
                 <AddressRowsSection form={form} mode={mode} grouped={grouped} />
-            ) : null}
+            ) : (
+                (readonlyAddressesFallback ?? null)
+            )}
 
             {canWriteBanks ? (
                 <BankAccountRowsSection
@@ -440,25 +512,37 @@ export function CustomerForm({
                     mode={mode}
                     grouped={grouped}
                 />
-            ) : null}
+            ) : (
+                (readonlyBanksFallback ?? null)
+            )}
 
-            <CustomerFormResultPanel
-                result={result}
-                mode={mode}
-                isQueryingIdempotency={queryIdempotency.isPending}
-                onQueryFinalResult={(key) => {
-                    void queryIdempotency.mutateAsync(key).then((final) => {
-                        if (final) setResult(final)
-                    })
-                }}
-            />
+            <div className={grouped ? "max-w-4xl" : undefined}>
+                <CustomerFormResultPanel
+                    result={result}
+                    mode={mode}
+                    isQueryingIdempotency={queryIdempotency.isPending}
+                    onQueryFinalResult={(key) => {
+                        void queryIdempotency.mutateAsync(key).then((final) => {
+                            if (final) setResult(final)
+                        })
+                    }}
+                />
+            </div>
 
-            {grouped && result?.outcome !== "succeeded" ? (
+            {grouped && mode === "edit" ? (
                 <form.AppForm>
                     <FormError className="max-w-4xl pb-3" />
                     <DetailWorkspaceSaveDock
                         open={dirty}
                         changeCount={changeCount}
+                        saving={isPending}
+                        enableSaveShortcut={
+                            !shortcutBlocked &&
+                            !conflictOpen &&
+                            !discardOpen &&
+                            !saveReasonOpen
+                        }
+                        onSave={() => void handleRequestGroupedSave()}
                         actions={
                             <>
                                 {dirty ? (
@@ -473,19 +557,23 @@ export function CustomerForm({
                                         disabled={isPending}
                                         onClick={() => setDiscardOpen(true)}
                                     >
-                                        取消修改
+                                        还原修改
                                     </Button>
                                 ) : null}
-                                <form.SubmitButton
+                                <LoadingButton
                                     id="customers-form-submit"
+                                    type="button"
                                     size="sm"
                                     className="px-3.5"
-                                    label={submitLabel}
-                                    showError={false}
                                     aria-keyshortcuts="Meta+S Control+S"
                                     disabled={!dirty || isPending}
                                     loading={isSubmitting}
-                                />
+                                    onClick={() =>
+                                        void handleRequestGroupedSave()
+                                    }
+                                >
+                                    {submitLabel}
+                                </LoadingButton>
                             </>
                         }
                     />
@@ -519,6 +607,23 @@ export function CustomerForm({
                     核对最新资料
                 </Button>
             ) : null}
+
+            {grouped && mode === "edit" ? (
+                <CustomerSaveReasonDialog
+                    open={saveReasonOpen}
+                    onOpenChange={setSaveReasonOpen}
+                    changeCount={changeCount}
+                    reason={reasonDraft}
+                    onReasonChange={(next) => {
+                        setReasonDraft(next)
+                        if (reasonError) setReasonError(null)
+                    }}
+                    reasonError={reasonError}
+                    pending={isPending}
+                    onConfirm={handleConfirmSaveWithReason}
+                />
+            ) : null}
+
             {mode === "edit" && baseline && conflictDraft ? (
                 <CustomerConflictDialog
                     open={conflictOpen}
@@ -544,6 +649,9 @@ export function CustomerForm({
                 id="customers-form-discard"
                 open={discardOpen}
                 onOpenChange={setDiscardOpen}
+                title="放弃未保存的修改？"
+                description="将还原为最近一次保存的客户资料。"
+                confirmLabel="放弃并还原"
                 onConfirm={() => {
                     setDiscardOpen(false)
                     resetSession()

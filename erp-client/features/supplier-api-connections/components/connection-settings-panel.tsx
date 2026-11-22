@@ -1,16 +1,21 @@
 "use client"
 
-import { PermissionGuard } from "@/features/auth/components/permission-guard"
-
 import * as React from "react"
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import {
+    BusinessStatusBadge,
     DetailWorkspaceBody,
     DetailWorkspaceSection,
+    FormalActionConfirmDialog,
+    OptionCombobox,
     detailWorkspaceStyles,
-} from "@/components/business/detail-workspace"
-import { Badge } from "@/components/ui/badge"
+} from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Label } from "@/components/ui/label"
 import { LoadingButton } from "@/components/ui/loading-button"
+import { RequiredMark } from "@/components/ui/required-mark"
+import { toast } from "@/components/ui/toast"
+import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     useDisableConnectionMutation,
@@ -26,6 +31,47 @@ import { newIdempotencyKey } from "../lib/operations"
 import { HealthRecords } from "./sections/health-records"
 import { JdVopAuthorizationSection } from "./sections/jd-vop-authorization"
 
+type SectionFeedback = {
+    tone: "info" | "success" | "warning" | "destructive"
+    title: string
+    message: string
+}
+
+const DISABLE_REASONS = [
+    { value: "PAUSE_NEW_ORDERS", label: "暂停向供应商发送新订单" },
+    { value: "MAINTENANCE", label: "供应商平台维护或接口升级" },
+    { value: "COST_CHECK", label: "核对价格、库存或对账异常" },
+    { value: "AUTH_ROTATION", label: "轮换账号授权或密钥" },
+] as const
+
+function outcomeFeedback(
+    titlePrefix: string,
+    result: FormalOutcome,
+): SectionFeedback {
+    if (result.status === "failed" || result.status === "rejected") {
+        return {
+            tone: "destructive",
+            title: `${titlePrefix}未完成`,
+            message: result.message,
+        }
+    }
+    if (result.status === "unknown" || result.status === "blocked") {
+        return {
+            tone: "warning",
+            title: `${titlePrefix}待确认`,
+            message: result.message,
+        }
+    }
+    return {
+        tone: result.status === "processing" ? "info" : "success",
+        title:
+            result.status === "processing"
+                ? `${titlePrefix}已提交`
+                : `${titlePrefix}成功`,
+        message: result.message,
+    }
+}
+
 /** 一个供应商连接的 API 设置：自动下单、接口能力与连接测试。 */
 export function ConnectionSettingsPanel({
     conn,
@@ -35,12 +81,16 @@ export function ConnectionSettingsPanel({
     const enable = useEnableConnectionMutation()
     const disable = useDisableConnectionMutation()
     const test = useRunHealthCheckMutation()
-    const [message, setMessage] = React.useState<string | null>(null)
-    const [failed, setFailed] = React.useState(false)
-    const [messageTarget, setMessageTarget] = React.useState<"order" | "test">(
-        "order",
-    )
-    const pending = enable.isPending || disable.isPending || test.isPending
+    const [orderFeedback, setOrderFeedback] =
+        React.useState<SectionFeedback | null>(null)
+    const [testFeedback, setTestFeedback] =
+        React.useState<SectionFeedback | null>(null)
+    const [toggleConfirmOpen, setToggleConfirmOpen] = React.useState(false)
+    const [disableReason, setDisableReason] =
+        React.useState<string>("PAUSE_NEW_ORDERS")
+
+    const orderPending = enable.isPending || disable.isPending
+    const testPending = test.isPending
     const enabled = conn.status === "ENABLED"
     const action = enabled ? "DISABLE" : "ENABLE"
     const canCreateOrders =
@@ -52,38 +102,78 @@ export function ConnectionSettingsPanel({
     const testBlocker = conn.actionBlockers.find(
         (item) => item.action === "RUN_HEALTH_CHECK",
     )
-    const run = async (
-        target: "order" | "test",
-        operation: () => Promise<FormalOutcome>,
-    ) => {
-        setMessageTarget(target)
-        setMessage(null)
-        setFailed(false)
+
+    const handleConfirmToggle = async () => {
+        setOrderFeedback(null)
         try {
-            const result = await operation()
-            setMessage(result.message)
-            setFailed(
-                result.status === "failed" || result.status === "rejected",
+            const result = enabled
+                ? await disable.mutateAsync({
+                      connectionId: conn.connectionId,
+                      expectedVersion: conn.version,
+                      reasonCode: disableReason || "PAUSE_NEW_ORDERS",
+                      idempotencyKey: newIdempotencyKey("disable"),
+                  })
+                : await enable.mutateAsync({
+                      connectionId: conn.connectionId,
+                      expectedVersion: conn.version,
+                      idempotencyKey: newIdempotencyKey("enable"),
+                  })
+            const nextFeedback = outcomeFeedback(
+                enabled ? "关闭自动下单" : "允许自动下单",
+                result,
             )
+            setOrderFeedback(nextFeedback)
+            if (nextFeedback.tone === "success") {
+                toast.add({
+                    type: "success",
+                    title: nextFeedback.title,
+                    description: nextFeedback.message,
+                })
+            } else if (nextFeedback.tone === "destructive") {
+                throw new Error(nextFeedback.message)
+            }
         } catch (error) {
-            setFailed(true)
-            setMessage(
-                error instanceof Error ? error.message : "操作失败，请重试。",
-            )
+            const msg = getErrorMessage(error, "操作失败，请稍后重试。")
+            setOrderFeedback({
+                tone: "destructive",
+                title: enabled ? "关闭自动下单失败" : "允许自动下单失败",
+                message: msg,
+            })
+            throw error
         }
     }
-    const feedback = message ? (
-        <p
-            role={failed ? "alert" : "status"}
-            className={
-                failed
-                    ? "text-body-compact text-destructive"
-                    : "text-xs text-muted-foreground"
+
+    const handleRunTest = async () => {
+        setTestFeedback(null)
+        try {
+            const result = await test.mutateAsync({
+                connectionId: conn.connectionId,
+                expectedVersion: conn.version,
+                checkType: "AUTHENTICATION",
+                idempotencyKey: newIdempotencyKey("health"),
+            })
+            const nextFeedback = outcomeFeedback("连接测试", result)
+            setTestFeedback(nextFeedback)
+            if (
+                nextFeedback.tone === "success" ||
+                nextFeedback.tone === "info"
+            ) {
+                toast.add({
+                    type: nextFeedback.tone,
+                    title: nextFeedback.title,
+                    description: nextFeedback.message,
+                })
             }
-        >
-            {message}
-        </p>
-    ) : null
+        } catch (error) {
+            const msg = getErrorMessage(error, "连接测试提交失败，请重试。")
+            setTestFeedback({
+                tone: "destructive",
+                title: "连接测试失败",
+                message: msg,
+            })
+        }
+    }
+
     return (
         <DetailWorkspaceBody
             alerts={
@@ -119,6 +209,7 @@ export function ConnectionSettingsPanel({
             <DetailWorkspaceSection
                 title="自动下单"
                 ariaLabel="自动下单"
+                width="form"
                 actions={
                     <PermissionGuard
                         permission={[
@@ -135,32 +226,20 @@ export function ConnectionSettingsPanel({
                                     ? detailWorkspaceStyles.quietDangerButton
                                     : undefined
                             }
-                            loading={enable.isPending || disable.isPending}
-                            disabled={!canChange || pending}
-                            onClick={() =>
-                                void run("order", () =>
-                                    enabled
-                                        ? disable.mutateAsync({
-                                              connectionId: conn.connectionId,
-                                              expectedVersion: conn.version,
-                                              reasonCode: "PAUSE_NEW_ORDERS",
-                                              idempotencyKey:
-                                                  newIdempotencyKey("disable"),
-                                          })
-                                        : enable.mutateAsync({
-                                              connectionId: conn.connectionId,
-                                              expectedVersion: conn.version,
-                                              idempotencyKey:
-                                                  newIdempotencyKey("enable"),
-                                          }),
-                                )
-                            }
+                            loading={orderPending}
+                            disabled={!canChange || orderPending}
+                            onClick={() => {
+                                setDisableReason("PAUSE_NEW_ORDERS")
+                                setToggleConfirmOpen(true)
+                            }}
                         >
                             {enable.isPending
                                 ? "正在检查连接并开启…"
-                                : enabled
-                                  ? "关闭自动下单"
-                                  : "允许自动下单"}
+                                : disable.isPending
+                                  ? "正在关闭…"
+                                  : enabled
+                                    ? "关闭自动下单"
+                                    : "允许自动下单"}
                         </LoadingButton>
                     </PermissionGuard>
                 }
@@ -174,7 +253,14 @@ export function ConnectionSettingsPanel({
                     开启前自动验证连接，采购审批与执行条件仍须满足。
                     关闭不影响商品同步、选品、原请求查询、取消处理和已有订单跟踪。
                 </p>
-                {messageTarget === "order" ? feedback : null}
+                {orderFeedback ? (
+                    <Alert variant={orderFeedback.tone}>
+                        <AlertTitle>{orderFeedback.title}</AlertTitle>
+                        <AlertDescription>
+                            {orderFeedback.message}
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
                 {!canChange ? (
                     <PermissionGuard
                         permission={[
@@ -191,15 +277,18 @@ export function ConnectionSettingsPanel({
                     </PermissionGuard>
                 ) : null}
             </DetailWorkspaceSection>
+
             {conn.connectorType?.toLowerCase() === "jd_vop" ? (
                 <JdVopAuthorizationSection
                     connectionId={conn.connectionId}
-                    disabled={pending}
+                    disabled={orderPending}
                 />
             ) : null}
+
             <DetailWorkspaceSection
                 title="连接测试"
                 ariaLabel="连接测试"
+                width="form"
                 actions={
                     <PermissionGuard
                         permission={[
@@ -212,25 +301,15 @@ export function ConnectionSettingsPanel({
                             variant="ghost"
                             size="sm"
                             className={detailWorkspaceStyles.subtleButton}
-                            loading={test.isPending}
+                            loading={testPending}
                             disabled={
                                 !conn.allowedActions.includes(
                                     "RUN_HEALTH_CHECK",
-                                ) || pending
+                                ) || testPending
                             }
-                            onClick={() =>
-                                void run("test", () =>
-                                    test.mutateAsync({
-                                        connectionId: conn.connectionId,
-                                        expectedVersion: conn.version,
-                                        checkType: "AUTHENTICATION",
-                                        idempotencyKey:
-                                            newIdempotencyKey("health"),
-                                    }),
-                                )
-                            }
+                            onClick={() => void handleRunTest()}
                         >
-                            {test.isPending ? "正在提交…" : "测试连接"}
+                            {testPending ? "正在提交…" : "测试连接"}
                         </LoadingButton>
                     </PermissionGuard>
                 }
@@ -238,7 +317,14 @@ export function ConnectionSettingsPanel({
                 <p className="text-xs text-muted-foreground">
                     验证供应商接口访问权限，不会创建订单。
                 </p>
-                {messageTarget === "test" ? feedback : null}
+                {testFeedback ? (
+                    <Alert variant={testFeedback.tone}>
+                        <AlertTitle>{testFeedback.title}</AlertTitle>
+                        <AlertDescription>
+                            {testFeedback.message}
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
                 {!conn.allowedActions.includes("RUN_HEALTH_CHECK") ? (
                     <PermissionGuard
                         permission={[
@@ -257,6 +343,7 @@ export function ConnectionSettingsPanel({
                     idPrefix={`supplier-api-connection-${segment}-health`}
                 />
             </DetailWorkspaceSection>
+
             <DetailWorkspaceSection
                 ariaLabel="接口信息"
                 title={conn.connectorTypeLabel}
@@ -271,9 +358,13 @@ export function ConnectionSettingsPanel({
                     <h3 className="font-medium">支持的功能</h3>
                     <div className="flex flex-wrap gap-2">
                         {conn.declaredCapabilities.map((code) => (
-                            <Badge key={code} variant="outline">
-                                {CAPABILITY_LABEL[code]}
-                            </Badge>
+                            <BusinessStatusBadge
+                                key={code}
+                                context="list"
+                                appearance="quiet"
+                                tone="neutral"
+                                label={CAPABILITY_LABEL[code]}
+                            />
                         ))}
                     </div>
                     {conn.declaredCapabilities.length === 0 ? (
@@ -283,6 +374,80 @@ export function ConnectionSettingsPanel({
                     ) : null}
                 </div>
             </DetailWorkspaceSection>
+
+            <FormalActionConfirmDialog
+                idPrefix={`supplier-api-connection-${segment}-auto-order-confirm`}
+                open={toggleConfirmOpen}
+                onOpenChange={(next) => {
+                    if (!orderPending) setToggleConfirmOpen(next)
+                }}
+                pending={orderPending}
+                actionVariant={enabled ? "destructive" : "default"}
+                title={enabled ? "关闭自动下单" : "允许自动下单"}
+                description={
+                    enabled
+                        ? "关闭后系统将暂停向该供应商平台自动提交新采购订单，请确认并选择暂停原因。"
+                        : "开启前系统会自动验证接口连接；开启后符合审批和预算条件的采购单将自动提交至该供应商平台。"
+                }
+                actionLabel={enabled ? "关闭自动下单" : "允许自动下单"}
+                confirmLabel={enabled ? "确认关闭自动下单" : "确认允许自动下单"}
+                fromStatus={{
+                    label: conn.statusLabel,
+                    tone: conn.statusTone,
+                }}
+                toStatus={
+                    enabled
+                        ? { label: "已暂停自动下单", tone: "neutral" }
+                        : { label: "已启用自动下单", tone: "success" }
+                }
+                summary={[
+                    <span key="supplier">供应商：{conn.supplier.name}</span>,
+                    <span key="code">
+                        连接代码：
+                        <span className="num font-medium text-foreground">
+                            {conn.connectionCode}
+                        </span>
+                    </span>,
+                ]}
+                effects={
+                    enabled
+                        ? [
+                              "停止向该供应商提交新的自动采购订单。",
+                              "不影响商品库同步、选品、原请求查询、取消处理及已有订单跟踪。",
+                          ]
+                        : [
+                              "系统将先验证接口连接健康状态。",
+                              "仅对已完成采购审批且满足预算条件的订单生效。",
+                          ]
+                }
+                formContent={
+                    enabled ? (
+                        <div className="space-y-1.5">
+                            <Label
+                                htmlFor={`supplier-api-connection-${segment}-disable-reason`}
+                            >
+                                暂停原因
+                                <RequiredMark />
+                            </Label>
+                            <OptionCombobox
+                                id={`supplier-api-connection-${segment}-disable-reason`}
+                                value={disableReason}
+                                onValueChange={(next) => {
+                                    if (next) setDisableReason(next)
+                                }}
+                                options={DISABLE_REASONS.map((item) => ({
+                                    value: item.value,
+                                    label: item.label,
+                                }))}
+                                allowClear={false}
+                                disabled={orderPending}
+                            />
+                        </div>
+                    ) : undefined
+                }
+                confirmDisabled={enabled && !disableReason}
+                onConfirm={handleConfirmToggle}
+            />
         </DetailWorkspaceBody>
     )
 }

@@ -15,6 +15,7 @@ import type {
     SupplierRefreshRevealToken,
     SupplierSensitiveInfo,
 } from "@/features/master-data/components/supplier/supplier-editor-section-props"
+import type { SupplierSensitiveFieldKey } from "@/features/master-data/lib/supplier-editor-model"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 
 export function SupplierEditorBasicSection({
@@ -25,20 +26,21 @@ export function SupplierEditorBasicSection({
     addressSensitive,
     canRevealSensitive,
     refreshSensitiveToken,
-    editedSensitiveRef,
+    editedSensitive,
+    markSensitiveEdited,
 }: SupplierEditorSectionProps & {
     phoneSensitive: SupplierSensitiveInfo | undefined
     addressSensitive: SupplierSensitiveInfo | undefined
     canRevealSensitive: boolean
     refreshSensitiveToken: SupplierRefreshRevealToken
-    editedSensitiveRef: React.MutableRefObject<
-        Set<"contactPhone" | "address" | "bankAccount">
-    >
+    editedSensitive: ReadonlySet<SupplierSensitiveFieldKey>
+    markSensitiveEdited: (field: SupplierSensitiveFieldKey) => void
 }) {
     return (
         <SectionPanel
+            id="supplier-section-basic"
             title="基本信息"
-            description="名称与企业主体必填；联系方式便于采购对接。"
+            description="名称与企业主体为必填项；联系方式便于采购对接，保存前请一并完善下方商务合作必填项。"
         >
             <div className="grid gap-4 sm:grid-cols-2">
                 <FieldShell>
@@ -91,6 +93,7 @@ export function SupplierEditorBasicSection({
                     </Label>
                     <Input
                         id="master-data-supplier-basic-credit-code"
+                        className="num"
                         value={values.creditCode}
                         onChange={(event) =>
                             setFieldValue("creditCode", event.target.value)
@@ -106,8 +109,10 @@ export function SupplierEditorBasicSection({
                         value={values.contactPhone}
                         maskedValue={phoneSensitive?.maskedValue}
                         revealToken={phoneSensitive?.revealToken}
+                        edited={editedSensitive.has("contactPhone")}
+                        numeric
                         onChange={(next) => {
-                            editedSensitiveRef.current.add("contactPhone")
+                            markSensitiveEdited("contactPhone")
                             setFieldValue("contactPhone", next)
                         }}
                         disabled={!canEdit}
@@ -125,8 +130,9 @@ export function SupplierEditorBasicSection({
                         value={values.address}
                         maskedValue={addressSensitive?.maskedValue}
                         revealToken={addressSensitive?.revealToken}
+                        edited={editedSensitive.has("address")}
                         onChange={(next) => {
-                            editedSensitiveRef.current.add("address")
+                            markSensitiveEdited("address")
                             setFieldValue("address", next)
                         }}
                         placeholder="注册或经营地址"

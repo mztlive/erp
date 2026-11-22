@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "@/lib/navigation"
+import { useRouter, useSearchParams } from "@/lib/navigation"
 
 import { FormalCommandKeyLedger } from "@/lib/formal-command"
 import { getErrorMessage } from "@/lib/api/errors"
@@ -23,7 +23,10 @@ import {
     useSubmitPurchaseOrderMutation,
     useVoidPurchaseOrderMutation,
 } from "@/features/purchase-orders/hooks/queries"
-import type { PurchaseOrderDetailMode } from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
+import {
+    purchaseOrderDetailHref,
+    type PurchaseOrderDetailMode,
+} from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
 import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
 import {
     draftDeliveryProblem,
@@ -36,16 +39,60 @@ export type PurchaseOrderDetailLineEdits = DraftLineEdits
 type UsePurchaseOrderDetailEditActionsInput = {
     purchaseOrderId: string
     mode: PurchaseOrderDetailMode
+    /** 统一编辑态判定（含 permissions.canEdit）；未传时退回 mode === "edit"。 */
+    isEditing?: boolean
     order: PurchaseOrderCenterView | null | undefined
     refetch: () => Promise<{ data?: PurchaseOrderCenterView | null }>
     commandLedger: FormalCommandKeyLedger
     setResult: React.Dispatch<
         React.SetStateAction<PurchaseOrderDetailResult | null>
     >
-    getPaymentTermCode: () => string
-    setDraftPaymentTermCode: (value: string) => void
+    getPaymentTermCode?: () => string
+    setDraftPaymentTermCode?: (value: string) => void
     /** 嵌入工作台时由调用方收起编辑，不跳转到独立详情页。 */
     onFinished?: () => void
+}
+
+function validateDraftLineEdits(
+    order: PurchaseOrderCenterView,
+    lineEdits: PurchaseOrderDetailLineEdits,
+): string | null {
+    // 行内即时校验：数量/单价为正数，税率为 0-1 小数；依据待更新时商品行数量可填 0
+    const allowZero = order.sourceUpdate?.affected === true
+    const invalidLine = order.currentContent.lines.find((line) => {
+        const edit = lineEdits[line.lineId]
+        if (!edit) return false
+        return (
+            !purchaseQuantityValid(
+                edit.quantity ?? line.quantity,
+                allowZero && line.lineType === "ITEM_SERVICE",
+            ) ||
+            !positiveDecimal(edit.unitCostGross ?? line.unitCostGross) ||
+            !taxRateValid(edit.inputTaxRate ?? line.inputTaxRate)
+        )
+    })
+    if (invalidLine) {
+        return allowZero
+            ? `「${invalidLine.itemName}」数量须为 0 或正数（填 0 表示移除该行），含税单价须为正数，税率须在 0% 到 100% 之间。`
+            : `「${invalidLine.itemName}」数量与含税单价须为正数，税率须在 0% 到 100% 之间。`
+    }
+    const deliveryProblem = draftDeliveryProblem(order, lineEdits)
+    if (deliveryProblem) return deliveryProblem
+    return null
+}
+
+function buildInitialLineEdits(
+    order: PurchaseOrderCenterView,
+): PurchaseOrderDetailLineEdits {
+    const next: PurchaseOrderDetailLineEdits = {}
+    for (const line of order.currentContent.lines) {
+        next[line.lineId] = {
+            quantity: line.quantity,
+            unitCostGross: line.unitCostGross,
+            inputTaxRate: line.inputTaxRate,
+        }
+    }
+    return next
 }
 
 /**
@@ -55,6 +102,7 @@ type UsePurchaseOrderDetailEditActionsInput = {
 export function usePurchaseOrderDetailEditActions({
     purchaseOrderId,
     mode,
+    isEditing: isEditingProp,
     order,
     refetch,
     commandLedger,
@@ -64,15 +112,19 @@ export function usePurchaseOrderDetailEditActions({
     onFinished,
 }: UsePurchaseOrderDetailEditActionsInput) {
     const router = useRouter()
+    const searchParams = useSearchParams()
     const acquireToken = useAcquireDraftTokenMutation()
     const saveMutation = useSavePurchaseOrderDraftMutation()
     const submitMutation = useSubmitPurchaseOrderMutation()
     const voidMutation = useVoidPurchaseOrderMutation()
     const changeMutation = useStartPurchaseChangeMutation()
 
+    const activeEditing = isEditingProp ?? mode === "edit"
+
     const [draftEditToken, setDraftEditToken] = React.useState<string | null>(
         null,
     )
+    const [editLockError, setEditLockError] = React.useState<unknown>(null)
     const [lineEdits, setLineEdits] =
         React.useState<PurchaseOrderDetailLineEdits>({})
     const [submitConfirmOpen, setSubmitConfirmOpen] = React.useState(false)
@@ -81,41 +133,64 @@ export function usePurchaseOrderDetailEditActions({
     const documentReference =
         order?.identity.purchaseNo ?? order?.identity.draftLabel
 
-    React.useEffect(() => {
-        if (!order || mode !== "edit") return
-        if (draftEditToken) return
-        if (!order.allowedActions.includes("EDIT")) return
-        void acquireToken
-            .mutateAsync(purchaseOrderId)
-            .then((res) => {
-                setDraftEditToken(res.draftEditToken)
-            })
-            .catch((error: unknown) => {
-                setResult({
-                    status: "blocked",
-                    title: responsibilityText.cannotEdit,
-                    description: getErrorMessage(
-                        error,
-                        "暂时无法编辑采购单，请刷新后重试。",
-                    ),
+    const requestEditToken = React.useCallback(
+        (targetOrderId: string) => {
+            setEditLockError(null)
+            void acquireToken
+                .mutateAsync(targetOrderId)
+                .then((res) => {
+                    setDraftEditToken(res.draftEditToken)
+                    setEditLockError(null)
                 })
-            })
-        // init line edits
-        const next: PurchaseOrderDetailLineEdits = {}
-        for (const line of order.currentContent.lines) {
-            next[line.lineId] = {
-                quantity: line.quantity,
-                unitCostGross: line.unitCostGross,
-                inputTaxRate: line.inputTaxRate,
-            }
+                .catch((error: unknown) => {
+                    setEditLockError(error)
+                    setResult({
+                        status: "blocked",
+                        title: responsibilityText.cannotEdit,
+                        description: getErrorMessage(
+                            error,
+                            "暂时无法编辑采购单，请刷新后重试。",
+                        ),
+                    })
+                })
+        },
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- mutation handle is stable in practice
+        [setResult],
+    )
+
+    React.useEffect(() => {
+        if (!activeEditing) {
+            setDraftEditToken(null)
+            setEditLockError(null)
+            return
         }
-        setLineEdits(next)
-        setDraftPaymentTermCode(order.header.paymentTermCode)
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- only when entering edit
-    }, [order?.identity.purchaseOrderId, mode])
+        if (!order) return
+        if (!order.allowedActions.includes("EDIT")) return
+        setLineEdits(buildInitialLineEdits(order))
+        setDraftPaymentTermCode?.(order.header.paymentTermCode)
+        if (!draftEditToken) {
+            requestEditToken(purchaseOrderId)
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-initialize when entering edit or switching order
+    }, [order?.identity.purchaseOrderId, activeEditing])
+
+    const retryAcquireEditToken = React.useCallback(() => {
+        if (!order || !activeEditing || acquireToken.isPending) return
+        requestEditToken(purchaseOrderId)
+    }, [
+        acquireToken.isPending,
+        activeEditing,
+        order,
+        purchaseOrderId,
+        requestEditToken,
+    ])
+
+    const viewHref = purchaseOrderDetailHref(purchaseOrderId, searchParams, {
+        mode: null,
+    })
 
     async function handleSave(): Promise<boolean> {
-        if (!order || !draftEditToken) return false
+        if (!order || !activeEditing || !draftEditToken) return false
         if (commandLedger.peek("submit")) {
             setResult({
                 status: "unknown",
@@ -125,40 +200,17 @@ export function usePurchaseOrderDetailEditActions({
             })
             return false
         }
-        // 行内即时校验：数量/单价为正数，税率为 0-1 小数；依据待更新时商品行数量可填 0
-        const allowZero = order.sourceUpdate?.affected === true
-        const invalidLine = order.currentContent.lines.find((line) => {
-            const edit = lineEdits[line.lineId]
-            if (!edit) return false
-            return (
-                !purchaseQuantityValid(
-                    edit.quantity ?? line.quantity,
-                    allowZero && line.lineType === "ITEM_SERVICE",
-                ) ||
-                !positiveDecimal(edit.unitCostGross ?? line.unitCostGross) ||
-                !taxRateValid(edit.inputTaxRate)
-            )
-        })
-        if (invalidLine) {
+        const validationError = validateDraftLineEdits(order, lineEdits)
+        if (validationError) {
             setResult({
                 status: "rejected",
                 title: "保存失败",
-                description: allowZero
-                    ? `「${invalidLine.itemName}」数量须为 0 或正数（填 0 表示移除该行），含税单价须为正数，税率须在 0% 到 100% 之间。`
-                    : `「${invalidLine.itemName}」数量与含税单价须为正数，税率须在 0% 到 100% 之间。`,
+                description: validationError,
             })
             return false
         }
-        const deliveryProblem = draftDeliveryProblem(order, lineEdits)
-        if (deliveryProblem) {
-            setResult({
-                status: "rejected",
-                title: "保存失败",
-                description: deliveryProblem,
-            })
-            return false
-        }
-        const paymentTermCode = getPaymentTermCode()
+        const paymentTermCode =
+            getPaymentTermCode?.() ?? order.header.paymentTermCode
         const paymentTermLabel =
             PAYMENT_TERM_OPTIONS.find(
                 (option) => option.value === paymentTermCode,
@@ -210,20 +262,31 @@ export function usePurchaseOrderDetailEditActions({
 
     async function handleSubmit(resubmissionReason?: string) {
         if (!order) return
-        if (mode === "edit" && !draftEditToken) return
+        if (activeEditing && !draftEditToken) return
         let submitCommand =
             commandLedger.peek<SubmitPurchaseOrderPayload>("submit")
-        const deliveryProblem = submitCommand
-            ? undefined
-            : draftDeliveryProblem(order, lineEdits)
-        if (deliveryProblem) {
-            setSubmitConfirmOpen(false)
-            setResult({
-                status: "rejected",
-                title: "提交失败",
-                description: deliveryProblem,
-            })
-            return
+        if (!submitCommand && activeEditing) {
+            const validationError = validateDraftLineEdits(order, lineEdits)
+            if (validationError) {
+                setSubmitConfirmOpen(false)
+                setResult({
+                    status: "rejected",
+                    title: "提交失败",
+                    description: validationError,
+                })
+                return
+            }
+        } else if (!submitCommand) {
+            const deliveryProblem = draftDeliveryProblem(order, lineEdits)
+            if (deliveryProblem) {
+                setSubmitConfirmOpen(false)
+                setResult({
+                    status: "rejected",
+                    title: "提交失败",
+                    description: deliveryProblem,
+                })
+                return
+            }
         }
         if (!submitCommand) {
             submitCommand = commandLedger.acquire(
@@ -237,10 +300,10 @@ export function usePurchaseOrderDetailEditActions({
                         order.currentContent.subjectHash ??
                         `v${order.currentContent.version}`,
                     draftEditToken: draftEditToken ?? "",
-                    paymentTermCode:
-                        mode === "edit"
-                            ? getPaymentTermCode()
-                            : order.header.paymentTermCode,
+                    paymentTermCode: activeEditing
+                        ? (getPaymentTermCode?.() ??
+                          order.header.paymentTermCode)
+                        : order.header.paymentTermCode,
                     lines: draftLinePayload(order, lineEdits),
                 },
             )
@@ -254,6 +317,7 @@ export function usePurchaseOrderDetailEditActions({
         setSubmitConfirmOpen(false)
         if (response.status === "succeeded") {
             setDraftEditToken(null)
+            setEditLockError(null)
             setResult({
                 status: "succeeded",
                 title: "已提交审批",
@@ -268,7 +332,7 @@ export function usePurchaseOrderDetailEditActions({
                 ],
             })
             if (onFinished) onFinished()
-            else router.replace(`/procurement/orders/${purchaseOrderId}`)
+            else router.replace(viewHref)
         } else if (response.status === "unknown") {
             setResult({
                 status: "unknown",
@@ -305,6 +369,7 @@ export function usePurchaseOrderDetailEditActions({
         setVoidConfirmOpen(false)
         if (response.status === "succeeded") {
             setDraftEditToken(null)
+            setEditLockError(null)
             setResult({
                 status: "succeeded",
                 title: "采购草稿已作废",
@@ -313,7 +378,7 @@ export function usePurchaseOrderDetailEditActions({
                 reference: response.reference,
             })
             if (onFinished) onFinished()
-            else router.replace(`/procurement/orders/${purchaseOrderId}`)
+            else router.replace(viewHref)
             await refetch()
         } else if (response.status === "unknown") {
             setResult({
@@ -355,9 +420,9 @@ export function usePurchaseOrderDetailEditActions({
         if (response.status === "succeeded") {
             setResult({
                 status: "succeeded",
-                title: "请编辑采购改单",
+                title: "改单已创建",
                 description:
-                    "改单已创建。填写调整内容和变更原因后提交审批；生效前采购单仍按当前版本执行。",
+                    "请填写调整内容和变更原因后提交审批；生效前采购单仍按当前版本执行。",
                 reference: response.reference,
             })
             await refetch()
@@ -381,6 +446,9 @@ export function usePurchaseOrderDetailEditActions({
 
     return {
         draftEditToken,
+        editLockPending: acquireToken.isPending,
+        editLockError,
+        retryAcquireEditToken,
         lineEdits,
         setLineEdits,
         submitConfirmOpen,

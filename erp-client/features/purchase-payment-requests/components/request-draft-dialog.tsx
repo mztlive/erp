@@ -166,7 +166,16 @@ function RequestDraftForm({
         request,
         (rows) => {
             onLockChange(false)
-            if (fixedOrder && !request) {
+            if (request) {
+                toast.add({
+                    title: "申请修改已保存",
+                    description: "可在详情页核对后提交财务审核。",
+                    type: "success",
+                })
+                onClose()
+                return
+            }
+            if (fixedOrder) {
                 toast.add({ title: "付款申请已提交", type: "success" })
                 onClose()
                 return

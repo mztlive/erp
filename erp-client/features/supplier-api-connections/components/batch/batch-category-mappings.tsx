@@ -178,13 +178,15 @@ export function BatchCategoryMappings({
                                         list.refresh(list.keyword, status)
                                     }
                                 >
-                                    {label} {count}
+                                    <span className="num">
+                                        {label} {count}
+                                    </span>
                                 </Button>
                             ))}
                         </div>
                     </>
                 ) : (
-                    <span className="ml-auto text-xs text-muted-foreground">
+                    <span className="num ml-auto text-xs text-muted-foreground">
                         共 {rows.length} 类
                     </span>
                 )}
@@ -238,7 +240,7 @@ export function BatchCategoryMappings({
                         <span className="wrap-anywhere">
                             {single.sourceName}
                         </span>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="num text-xs text-muted-foreground">
                             {single.count} 个 SKU
                         </span>
                         <ArrowRightIcon
@@ -278,7 +280,7 @@ export function BatchCategoryMappings({
                         }
                     >
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                            <span className="shrink-0 text-xs text-muted-foreground">
+                            <span className="num shrink-0 text-xs text-muted-foreground">
                                 {list.chosen.length
                                     ? `已选 ${list.chosen.length} 类 · 已设 ${list.mappedCount}`
                                     : `当前 ${list.visible.length} 类`}
@@ -306,7 +308,9 @@ export function BatchCategoryMappings({
                                 }
                                 onClick={apply}
                             >
-                                应用至 {list.applicable.length} 类
+                                <span className="num">
+                                    应用至 {list.applicable.length} 类
+                                </span>
                             </Button>
                             <label
                                 htmlFor="supplier-catalog-batch-category-overwrite"
@@ -426,7 +430,7 @@ export function BatchCategoryMappings({
                                                 {(nameCounts.get(
                                                     row.sourceName,
                                                 ) ?? 0) > 1 ? (
-                                                    <div className="wrap-anywhere text-xs text-muted-foreground">
+                                                    <div className="num wrap-anywhere text-xs text-muted-foreground">
                                                         {row.sourceId
                                                             ? `来源编码：${row.sourceId}`
                                                             : "来源未提供分类编码"}

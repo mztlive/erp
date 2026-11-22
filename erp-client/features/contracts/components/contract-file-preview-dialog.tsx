@@ -69,22 +69,37 @@ export function ContractFilePreviewDialog({
                 ) : query.data ? (
                     <div className="flex h-[65vh] min-h-0 flex-col gap-3">
                         {source?.blob === query.data ? (
-                            <Button
-                                id="sales-contract-original-full"
-                                variant="link"
-                                size="sm"
-                                className="self-end"
-                                render={
-                                    <a
-                                        aria-label="查看完整合同原文（新窗口）"
-                                        href={source.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                    />
-                                }
-                            >
-                                查看完整原文
-                            </Button>
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                                <Button
+                                    id="sales-contract-original-download"
+                                    variant="outline"
+                                    size="sm"
+                                    render={
+                                        <a
+                                            aria-label={`下载 ${fileName}`}
+                                            href={source.url}
+                                            download={fileName}
+                                        />
+                                    }
+                                >
+                                    下载 PDF
+                                </Button>
+                                <Button
+                                    id="sales-contract-original-full"
+                                    variant="link"
+                                    size="sm"
+                                    render={
+                                        <a
+                                            aria-label="查看完整合同原文（新窗口）"
+                                            href={source.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                        />
+                                    }
+                                >
+                                    查看完整原文
+                                </Button>
+                            </div>
                         ) : null}
                         <ContractPdfPages
                             blob={query.data}

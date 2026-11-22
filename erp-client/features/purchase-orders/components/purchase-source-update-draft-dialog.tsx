@@ -36,19 +36,18 @@ export function PurchaseSourceUpdateDraftDialog({
         purchaseOrderId,
         order,
         mode: "edit",
+        isEditing: permissions.canEdit,
         refetch: query.refetch,
         commandLedger,
         setResult,
-        getPaymentTermCode: () => order.header.paymentTermCode,
-        setDraftPaymentTermCode: () => undefined,
         onFinished: onClose,
     })
     const guard = usePurchaseOrderDetailEditGuard({
         mode: "edit",
+        isEditing: permissions.canEdit,
         order,
-        paymentTermCode: order.header.paymentTermCode,
-        note: "",
         lineEdits: actions.lineEdits,
+        busy: actions.savePending || actions.submitPending,
         onSave: actions.handleSave,
     })
     const pending = actions.savePending || actions.submitPending
@@ -118,6 +117,9 @@ export function PurchaseSourceUpdateDraftDialog({
                                 lineEdits={actions.lineEdits}
                                 setLineEdits={actions.setLineEdits}
                                 draftEditToken={actions.draftEditToken}
+                                editLockPending={actions.editLockPending}
+                                editLockError={actions.editLockError}
+                                onRetryEditLock={actions.retryAcquireEditToken}
                                 canSubmit={permissions.canSubmit}
                                 savePending={actions.savePending}
                                 onSave={() => void actions.handleSave()}

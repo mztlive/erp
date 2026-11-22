@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import {
     ArrowRightIcon,
     PlusIcon,
@@ -19,6 +19,7 @@ import {
     DetailWorkspacePage,
     DetailWorkspaceSkeleton,
     DetailWorkspaceTabs,
+    GuardedBusinessAction,
     MoneyValue,
     detailWorkspaceStyles,
     type DetailWorkspaceTabItem,
@@ -27,8 +28,14 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
+import { getErrorMessage } from "@/lib/api/errors"
 import { compareDecimal, subtractFixed, sumFixed } from "@/lib/fixed-decimal"
-import { useParams } from "@/lib/navigation"
+import {
+    useParams,
+    usePathname,
+    useRouter,
+    useSearchParams,
+} from "@/lib/navigation"
 import { hasPermission } from "@/lib/permissions"
 
 import { useDepositAccount } from "../hooks/queries"
@@ -59,7 +66,32 @@ type DepositTab =
     | "reconciliations"
     | "authorizations"
 
+type UsageSubTab = "reservations" | "usages"
+type LedgerSubTab = "ledger" | "batches"
+
+const VALID_TABS: readonly DepositTab[] = [
+    "recharges",
+    "reservations",
+    "ledger",
+    "reconciliations",
+    "authorizations",
+]
+
 const MONEY_OPTIONS = { maxScale: 2, outputScale: 2 } as const
+
+function parseTab(raw: string | null): DepositTab {
+    return raw && (VALID_TABS as readonly string[]).includes(raw)
+        ? (raw as DepositTab)
+        : "recharges"
+}
+
+function parseUsageSub(raw: string | null): UsageSubTab {
+    return raw === "usages" ? "usages" : "reservations"
+}
+
+function parseLedgerSub(raw: string | null): LedgerSubTab {
+    return raw === "batches" ? "batches" : "ledger"
+}
 
 function TabCount({
     count,
@@ -86,17 +118,46 @@ function TabCount({
 
 export function SupplierDepositDetailPage() {
     const params = useParams<{ accountId: string }>()
+    const pathname = usePathname()
+    const router = useRouter()
+    const searchParams = useSearchParams()
     const profile = useAccountProfileQuery()
     const permissions = profile.data?.permissions
     const canDetail = hasPermission(permissions, "supplier_deposit:detail")
     const query = useDepositAccount(params.accountId, canDetail)
     const [dialog, setDialog] = useState<DepositDetailDialogTarget>()
-    const [activeTab, setActiveTab] = useState<DepositTab>("recharges")
-    const [usageSubTab, setUsageSubTab] = useState<"reservations" | "usages">(
-        "reservations",
+
+    const activeTab = parseTab(searchParams.get("section"))
+    const usageSubTab = parseUsageSub(
+        activeTab === "reservations" ? searchParams.get("sub") : null,
     )
-    const [ledgerSubTab, setLedgerSubTab] = useState<"ledger" | "batches">(
-        "ledger",
+    const ledgerSubTab = parseLedgerSub(
+        activeTab === "ledger" ? searchParams.get("sub") : null,
+    )
+
+    const updateUrlSection = useCallback(
+        (nextSection: DepositTab, nextSub?: string) => {
+            const next = new URLSearchParams(searchParams.toString())
+            if (nextSection === "recharges") {
+                next.delete("section")
+            } else {
+                next.set("section", nextSection)
+            }
+            if (
+                nextSub &&
+                ((nextSection === "reservations" && nextSub === "usages") ||
+                    (nextSection === "ledger" && nextSub === "batches"))
+            ) {
+                next.set("sub", nextSub)
+            } else {
+                next.delete("sub")
+            }
+            const qs = next.toString()
+            router.replace(qs ? `${pathname}?${qs}` : pathname, {
+                scroll: false,
+            })
+        },
+        [pathname, router, searchParams],
     )
 
     const permitted = (action: string) =>
@@ -168,7 +229,7 @@ export function SupplierDepositDetailPage() {
         )
     }
 
-    if (query.isError || !data) {
+    if (query.isError && !data) {
         return (
             <DetailWorkspacePage>
                 <DetailWorkspaceChrome
@@ -191,6 +252,20 @@ export function SupplierDepositDetailPage() {
             </DetailWorkspacePage>
         )
     }
+
+    if (!data) {
+        return (
+            <DetailWorkspaceSkeleton
+                title="预存款账户"
+                description="正在读取账户余额与资金记录…"
+                summary
+            />
+        )
+    }
+
+    const accountDisabled = !data.account.enabled
+    const disabledReason =
+        "该预存款账户已停用，无法发起充值申请或新增自动执行授权。"
 
     const pendingRechargeCount = data.recharge_requests.filter((item) =>
         [
@@ -282,11 +357,14 @@ export function SupplierDepositDetailPage() {
         },
     ]
 
-    const primaryStatus = !data.account.enabled
+    const primaryStatus = accountDisabled
         ? { label: "已停用", tone: "neutral" as const }
         : data.account.reconciliation_required
           ? { label: "待核对（已暂停使用）", tone: "destructive" as const }
           : { label: "可使用", tone: "success" as const }
+
+    const hasAlerts =
+        query.isError || data.account.reconciliation_required || accountDisabled
 
     return (
         <DetailWorkspacePage>
@@ -297,6 +375,8 @@ export function SupplierDepositDetailPage() {
                     label: "返回账户列表",
                     href: "/finance/supplier-deposits",
                 }}
+                documentNumber={data.account.identity.external_account_ref}
+                numberLabel="资金账号"
                 primaryStatus={primaryStatus}
                 meta={
                     <DetailWorkspaceMeta
@@ -327,12 +407,16 @@ export function SupplierDepositDetailPage() {
                             刷新账户
                         </LoadingButton>
                         {permitted("authorize") ? (
-                            <Button
+                            <GuardedBusinessAction
                                 id="supplier-deposits-authorize"
                                 type="button"
                                 variant="ghost"
                                 size="sm"
                                 className={detailWorkspaceStyles.quietButton}
+                                disabled={accountDisabled}
+                                reason={
+                                    accountDisabled ? disabledReason : undefined
+                                }
                                 onClick={() =>
                                     setDialog({ action: "authorize" })
                                 }
@@ -342,7 +426,7 @@ export function SupplierDepositDetailPage() {
                                     aria-hidden="true"
                                 />
                                 授权自动余额执行
-                            </Button>
+                            </GuardedBusinessAction>
                         ) : null}
                         {permitted("reconcile") ? (
                             <Button
@@ -366,11 +450,15 @@ export function SupplierDepositDetailPage() {
                 }
                 primaryAction={
                     permitted("recharge_request") ? (
-                        <Button
+                        <GuardedBusinessAction
                             id="supplier-deposits-recharge-request"
                             type="button"
                             size="sm"
                             className="px-3.5"
+                            disabled={accountDisabled}
+                            reason={
+                                accountDisabled ? disabledReason : undefined
+                            }
                             onClick={() =>
                                 setDialog({ action: "recharge_request" })
                             }
@@ -380,14 +468,14 @@ export function SupplierDepositDetailPage() {
                                 aria-hidden="true"
                             />
                             申请充值
-                        </Button>
+                        </GuardedBusinessAction>
                     ) : undefined
                 }
                 tabs={
                     <DetailWorkspaceTabs
                         value={activeTab}
                         onValueChange={(next) =>
-                            setActiveTab(next as DepositTab)
+                            updateUrlSection(next as DepositTab)
                         }
                         items={tabItems}
                         ariaLabel="预存款账户分区"
@@ -399,44 +487,84 @@ export function SupplierDepositDetailPage() {
             <DetailWorkspaceBody
                 summary={<AccountSummaryMetrics data={data} />}
                 alerts={
-                    data.account.reconciliation_required ? (
-                        <Alert variant="destructive">
-                            <AlertTitle>
-                                账户资金待核对，已暂停新增使用
-                            </AlertTitle>
-                            <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-                                <span className="min-w-0 flex-1">
-                                    {balancedReconciliations(
-                                        data.reconciliations,
-                                    ).length
-                                        ? "请前往「资金对账」提交双方余额一致的对账记录与核实凭证；系统确认无待处理扣款后自动恢复账户使用。"
-                                        : "请先「登记资金对账」形成双方余额一致且无未核实交易的最新记录，再上传核实凭证办理结案。"}
-                                </span>
-                                {activeTab !== "reconciliations" ? (
-                                    <Button
-                                        id="supplier-deposits-goto-reconciliations"
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() =>
-                                            setActiveTab("reconciliations")
-                                        }
-                                    >
-                                        前往资金对账处理
-                                        <ArrowRightIcon
-                                            data-icon="inline-end"
-                                            aria-hidden="true"
-                                        />
-                                    </Button>
-                                ) : null}
-                            </AlertDescription>
-                        </Alert>
+                    hasAlerts ? (
+                        <>
+                            {query.isError ? (
+                                <Alert variant="warning">
+                                    <AlertTitle>
+                                        账户数据刷新失败，当前展示最近已加载结果
+                                    </AlertTitle>
+                                    <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                                        <span className="min-w-0 flex-1">
+                                            {getErrorMessage(
+                                                query.error,
+                                                "请重试刷新以获取最新余额和流水。",
+                                            )}
+                                        </span>
+                                        <LoadingButton
+                                            id="supplier-deposits-refresh-error-retry"
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            loading={query.isFetching}
+                                            onClick={() => void query.refetch()}
+                                        >
+                                            重试刷新
+                                        </LoadingButton>
+                                    </AlertDescription>
+                                </Alert>
+                            ) : null}
+                            {accountDisabled ? (
+                                <Alert variant="warning">
+                                    <AlertTitle>预存款账户已停用</AlertTitle>
+                                    <AlertDescription>
+                                        停用期间已禁止新增充值申请与自动余额执行授权；历史对账与占用结清仍可继续核对处理。
+                                    </AlertDescription>
+                                </Alert>
+                            ) : null}
+                            {data.account.reconciliation_required ? (
+                                <Alert variant="destructive">
+                                    <AlertTitle>
+                                        账户资金待核对，已暂停新增使用
+                                    </AlertTitle>
+                                    <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                                        <span className="min-w-0 flex-1">
+                                            {balancedReconciliations(
+                                                data.reconciliations,
+                                            ).length
+                                                ? "请前往「资金对账」提交双方余额一致的对账记录与核实凭证；系统确认无待处理扣款后自动恢复账户使用。"
+                                                : "请先「登记资金对账」形成双方余额一致且无未核实交易的最新记录，再上传核实凭证办理结案。"}
+                                        </span>
+                                        {activeTab !== "reconciliations" ? (
+                                            <Button
+                                                id="supplier-deposits-goto-reconciliations"
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() =>
+                                                    updateUrlSection(
+                                                        "reconciliations",
+                                                    )
+                                                }
+                                            >
+                                                前往资金对账处理
+                                                <ArrowRightIcon
+                                                    data-icon="inline-end"
+                                                    aria-hidden="true"
+                                                />
+                                            </Button>
+                                        ) : null}
+                                    </AlertDescription>
+                                </Alert>
+                            ) : null}
+                        </>
                     ) : null
                 }
             >
                 {activeTab === "recharges" ? (
                     <DepositRechargesSection
                         requests={data.recharge_requests}
+                        batches={data.batches}
                         permitted={permitted}
                         onOpenDialog={setDialog}
                     />
@@ -444,7 +572,9 @@ export function SupplierDepositDetailPage() {
                     <DepositReservationsAndUsagesSection
                         data={data}
                         subTab={usageSubTab}
-                        onSubTabChange={setUsageSubTab}
+                        onSubTabChange={(next) =>
+                            updateUrlSection("reservations", next)
+                        }
                         permitted={permitted}
                         onOpenDialog={setDialog}
                     />
@@ -452,7 +582,9 @@ export function SupplierDepositDetailPage() {
                     <DepositLedgerAndBatchesSection
                         data={data}
                         subTab={ledgerSubTab}
-                        onSubTabChange={setLedgerSubTab}
+                        onSubTabChange={(next) =>
+                            updateUrlSection("ledger", next)
+                        }
                     />
                 ) : activeTab === "reconciliations" ? (
                     <DepositReconciliationsSection

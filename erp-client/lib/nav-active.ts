@@ -33,6 +33,51 @@ function queryConstraintsMatch(
     return true
 }
 
+/**
+ * 将子路由、遗留别名路由归一化到其所属主导航入口路径，
+ * 供侧栏高亮、工作页签初始标题与页签图标统一消费，避免三处各自维护散落补丁。
+ */
+export function normalizeWorkspaceNavPathname(
+    pathname: string,
+    availableHrefs?: readonly string[],
+): string {
+    const hasHref = (target: string) =>
+        !availableHrefs || availableHrefs.includes(target)
+
+    if (pathname === "/system/organization" && hasHref("/system/accounts")) {
+        return "/system/accounts"
+    }
+    if (
+        (pathname === "/system/organization/scopes" ||
+            pathname.startsWith("/system/roles/")) &&
+        hasHref("/system/access-audit")
+    ) {
+        return "/system/access-audit"
+    }
+    if (
+        pathname.startsWith("/supplier-api/catalog") &&
+        hasHref("/supplier-api/connections")
+    ) {
+        return "/supplier-api/connections"
+    }
+    if (
+        (pathname === "/sales/selections" ||
+            pathname.startsWith("/sales/selections/") ||
+            pathname === "/sales/proposals" ||
+            pathname.startsWith("/sales/proposals/")) &&
+        hasHref("/sales/selection")
+    ) {
+        return "/sales/selection"
+    }
+    if (
+        pathname.startsWith("/procurement/supplier-portal/applications") &&
+        hasHref("/procurement/supplier-offerings")
+    ) {
+        return "/procurement/supplier-offerings"
+    }
+    return pathname
+}
+
 export function isNavItemActive(
     pathname: string,
     href: string,
@@ -41,22 +86,7 @@ export function isNavItemActive(
 ): boolean {
     // 系统工作面中的子视图沿用主入口高亮；显式独立入口仍优先。
     if (!allHrefs.some((item) => splitHref(item).path === pathname)) {
-        if (
-            pathname === "/system/organization" &&
-            allHrefs.includes("/system/accounts")
-        )
-            pathname = "/system/accounts"
-        if (
-            pathname === "/system/organization/scopes" ||
-            pathname.startsWith("/system/roles/")
-        )
-            pathname = "/system/access-audit"
-        // 商品库是供应商连接的子页面，侧栏沿用「API 连接」高亮。
-        if (
-            pathname.startsWith("/supplier-api/catalog") &&
-            allHrefs.includes("/supplier-api/connections")
-        )
-            pathname = "/supplier-api/connections"
+        pathname = normalizeWorkspaceNavPathname(pathname, allHrefs)
     }
     const { path: hrefPath, params: hrefParams } = splitHref(href)
     if (!pathMatches(pathname, hrefPath)) return false

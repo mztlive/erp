@@ -7,8 +7,10 @@ import {
     PackageIcon,
     ShieldCheckIcon,
     SlidersHorizontalIcon,
+    TriangleAlertIcon,
     TruckIcon,
 } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -133,7 +135,7 @@ export function BatchPricingPanel({
                             id="supplier-catalog-batch-pricing-title"
                             className="text-section-title font-semibold tracking-tight"
                         >
-                            设置售价
+                            定价规则
                         </h2>
                         <span className="ml-auto text-xs text-muted-foreground">
                             含税
@@ -250,7 +252,7 @@ export function BatchPricingPanel({
                                                 </FieldLabel>
                                                 <Input
                                                     id={`supplier-catalog-batch-${name}-value`}
-                                                    className="bg-background"
+                                                    className="num"
                                                     inputMode="decimal"
                                                     value={field.state.value}
                                                     onChange={(event) =>
@@ -289,7 +291,7 @@ export function BatchPricingPanel({
                                             </FieldLabel>
                                             <Input
                                                 id="supplier-catalog-batch-minimum-quantity"
-                                                className="bg-background"
+                                                className="num"
                                                 inputMode="decimal"
                                                 value={field.state.value}
                                                 onChange={(event) =>
@@ -402,12 +404,16 @@ export function BatchPricingPanel({
                     </div>
                 </section>
                 {values.overwrite && !values.preserveManual ? (
-                    <p
-                        role="status"
-                        className="text-xs leading-relaxed text-warning"
-                    >
-                        保存后将覆盖 {manualCount} 个手动调整项。
-                    </p>
+                    <Alert variant="warning">
+                        <TriangleAlertIcon aria-hidden="true" />
+                        <AlertDescription>
+                            保存后将覆盖{" "}
+                            <span className="num font-medium">
+                                {manualCount}
+                            </span>{" "}
+                            个手动调整项。
+                        </AlertDescription>
+                    </Alert>
                 ) : null}
                 <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
                     <ShieldCheckIcon

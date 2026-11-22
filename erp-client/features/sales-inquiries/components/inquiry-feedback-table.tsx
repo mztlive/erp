@@ -58,7 +58,8 @@ type EditableFeedbackTableProps = {
     validationRequest: number
     onInternalQuote?: (lineId: string) => void
     disabled: boolean
-    selectionActions?: React.ReactNode
+    toolbarActions?: React.ReactNode
+    toolbarSummary?: React.ReactNode
 }
 type ReadonlyFeedbackTableProps = {
     readOnly: true
@@ -69,7 +70,8 @@ type ReadonlyFeedbackTableProps = {
     validationRequest?: never
     onInternalQuote?: never
     disabled?: never
-    selectionActions?: never
+    toolbarActions?: never
+    toolbarSummary?: never
 }
 
 export function InquiryFeedbackTable({
@@ -79,7 +81,8 @@ export function InquiryFeedbackTable({
     validationRequest = 0,
     onInternalQuote,
     disabled = false,
-    selectionActions,
+    toolbarActions,
+    toolbarSummary,
     inquiryId = "",
     taskId = "",
     feedbackRound = 0,
@@ -218,6 +221,7 @@ export function InquiryFeedbackTable({
                     <TableToolbar
                         actions={
                             <>
+                                {toolbarActions}
                                 <InquiryFeedbackCommonTerms
                                     lines={lines}
                                     disabled={disabled}
@@ -244,10 +248,14 @@ export function InquiryFeedbackTable({
                         }
                     >
                         <div className="flex flex-wrap items-center gap-3">
-                            {selectionActions}
+                            {toolbarSummary}
                             {selected.size > 0 && (
-                                <span>
-                                    已选 {selected.size} 件
+                                <span className="inline-flex items-center gap-1 text-body-compact">
+                                    已选{" "}
+                                    <span className="num font-medium">
+                                        {selected.size}
+                                    </span>{" "}
+                                    件
                                     <Button
                                         id="procurement-feedback-clear-selection"
                                         type="button"
@@ -320,16 +328,25 @@ export function InquiryFeedbackTable({
                                     )}
                                 </TableHead>
                                 <TableHead>商品 / 规格</TableHead>
-                                <TableHead className="text-right">
+                                <TableHead
+                                    data-align="end"
+                                    className="text-right"
+                                >
                                     需求 / 配送
                                 </TableHead>
                                 <TableHead className="border-l border-border/60">
                                     供给结论
                                 </TableHead>
-                                <TableHead className="text-right">
+                                <TableHead
+                                    data-align="end"
+                                    className="text-right"
+                                >
                                     含税供给单价
                                 </TableHead>
-                                <TableHead className="text-right">
+                                <TableHead
+                                    data-align="end"
+                                    className="text-right"
+                                >
                                     税率
                                 </TableHead>
                             </TableRow>

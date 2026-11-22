@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { PermissionGuard } from "@/features/auth/components/permission-guard"
 
 import { useRouter } from "@/lib/navigation"
@@ -20,6 +21,8 @@ export function SupplierEditorDialogs({
     setReasonDraft,
     reasonError,
     setReasonError,
+    changes,
+    feedback,
     pending,
     onConfirm,
     discardOpen,
@@ -38,6 +41,8 @@ export function SupplierEditorDialogs({
     setReasonDraft: (reason: string) => void
     reasonError: string | null
     setReasonError: (error: string | null) => void
+    changes: readonly string[]
+    feedback?: React.ReactNode
     pending: boolean
     onConfirm: () => void
     discardOpen: boolean
@@ -74,12 +79,15 @@ export function SupplierEditorDialogs({
                         if (reasonError) setReasonError(null)
                     }}
                     reasonError={reasonError}
+                    changes={changes}
+                    feedback={feedback}
                     pending={pending}
                     onConfirm={onConfirm}
                 />
             </PermissionGuard>
 
             <DiscardConfirmDialog
+                idPrefix="master-data-supplier-discard"
                 open={discardOpen}
                 onOpenChange={setDiscardOpen}
                 title="放弃未保存的更改？"

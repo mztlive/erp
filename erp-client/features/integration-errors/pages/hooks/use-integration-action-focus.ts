@@ -36,10 +36,26 @@ export function useIntegrationActionFocus({
         }, 250)
     }, [])
 
+    const itemId = item?.identity.id
+    const prevItemIdRef = React.useRef<string | undefined>(undefined)
+    const prevResultRef = React.useRef<IntegrationFormalResult | null>(null)
+
     React.useEffect(() => {
-        if (lastResult) resultRef.current?.focus()
-        else if (item) headingRef.current?.focus()
-    }, [item, lastResult])
+        if (lastResult && lastResult !== prevResultRef.current) {
+            prevResultRef.current = lastResult
+            resultRef.current?.focus()
+            return
+        }
+        if (!lastResult) {
+            prevResultRef.current = null
+        }
+        if (itemId && itemId !== prevItemIdRef.current) {
+            prevItemIdRef.current = itemId
+            headingRef.current?.focus()
+        } else if (!itemId) {
+            prevItemIdRef.current = undefined
+        }
+    }, [itemId, lastResult])
 
     return { resultRef, headingRef, actionZoneRef, focusFirstAction }
 }

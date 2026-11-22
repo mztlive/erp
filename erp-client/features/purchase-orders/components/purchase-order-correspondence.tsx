@@ -17,6 +17,7 @@ import { toast } from "@/components/ui/toast"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { getErrorMessage } from "@/lib/api/errors"
+import { formatDateTime, unixSecondsToIsoOrEmpty } from "@/lib/datetime"
 import {
     usePurchasePaper,
     useSendPurchaseEmail,
@@ -27,10 +28,12 @@ import type { PurchaseOrderCenterView } from "../types"
 export function PurchaseOrderCorrespondence({
     order,
     menuItem = false,
+    onActionSelect,
 }: {
     order: PurchaseOrderCenterView
     /** 放入「更多」菜单时使用左对齐整行按钮样式。 */
     menuItem?: boolean
+    onActionSelect?: () => void
 }) {
     const [open, setOpen] = useState(false)
     const paper = usePurchasePaper(
@@ -58,6 +61,7 @@ export function PurchaseOrderCorrespondence({
                 className={buttonClassName}
                 disabled={paper.isPending}
                 onClick={async () => {
+                    onActionSelect?.()
                     try {
                         await paper.mutateAsync()
                         toast.add({
@@ -86,7 +90,10 @@ export function PurchaseOrderCorrespondence({
                     className={buttonClassName}
                     disabled={!effective}
                     title={!effective ? "审批生效后可发送给供应商" : undefined}
-                    onClick={() => setOpen(true)}
+                    onClick={() => {
+                        onActionSelect?.()
+                        setOpen(true)
+                    }}
                 >
                     <MailIcon data-icon="inline-start" aria-hidden="true" />
                     发送采购单邮件
@@ -212,9 +219,14 @@ function PurchaseEmailDialog({
                             <ul className="max-h-40 space-y-2 overflow-auto">
                                 {history.data.map((row) => (
                                     <li key={row.id}>
-                                        {new Date(
-                                            row.created_at * 1000,
-                                        ).toLocaleString("zh-CN")}{" "}
+                                        <span className="num">
+                                            {formatDateTime(
+                                                unixSecondsToIsoOrEmpty(
+                                                    row.created_at,
+                                                ),
+                                                "default",
+                                            )}
+                                        </span>{" "}
                                         · {row.recipient} ·{" "}
                                         {
                                             {

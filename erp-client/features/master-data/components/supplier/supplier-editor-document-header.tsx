@@ -60,7 +60,7 @@ export function SupplierEditorDocumentHeader({
                       }
                     : {
                           label: "待创建",
-                          tone: "neutral",
+                          tone: "info",
                       }
             }
             version={
@@ -95,7 +95,7 @@ export function SupplierEditorDocumentHeader({
                             size="sm"
                             variant="ghost"
                             className={detailWorkspaceStyles.quietDangerButton}
-                            disabled={!canDisable}
+                            disabled={!canDisable || pending}
                             title={disableBlocker?.message}
                             onClick={onDisable}
                         >

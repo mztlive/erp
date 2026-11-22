@@ -52,6 +52,7 @@ export type RechargeRequest = {
         | "REVERSED"
     approval_reference?: string | null
     bank_reference?: string | null
+    bank_receipt_asset_id?: string | null
     supplier_payment_id?: string | null
 }
 export type DepositAuthorization = {
@@ -92,6 +93,9 @@ export type DepositUsage = {
     reversed_settlement_amount: string
     reservation_id: string
     ledger_entry_id: string
+    occurred_at?: number | null
+    external_order_id?: string | null
+    purchase_order_no?: string | null
 }
 export type DepositLedgerEntry = {
     id: string
@@ -129,6 +133,7 @@ export type DepositBatch = {
     reversed_amount: string
     evidence: {
         bank_reference: string
+        bank_receipt_asset_id?: string | null
         external_transaction_id: string
         external_evidence_reference: string
         received_at: number

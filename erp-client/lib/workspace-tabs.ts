@@ -1,4 +1,5 @@
 import { WORKSPACE_NAV_GROUPS } from "@/lib/workspace-registry"
+import { normalizeWorkspaceNavPathname } from "@/lib/nav-active"
 import type { NavDeliveryRequest } from "@/lib/nav-delivery"
 
 export type WorkspaceFrameState = {
@@ -120,6 +121,36 @@ export function tabHref(url: URL): string {
 
 /** Filters belong to a tab; separately named fulfillment lanes belong to different tabs. */
 export function workspaceTabKey(url: URL): string {
+    // 归一化遗留双路由与查询挂靠详情，防止同一业务对象重复开出两个工作页签。
+    const legacySelection = url.pathname.match(/^\/sales\/selections\/([^/]+)$/)
+    if (legacySelection) {
+        return `/sales/selection/${legacySelection[1]}`
+    }
+    if (url.pathname === "/sales/selections") {
+        return "/sales/selection"
+    }
+    const legacyProposal = url.pathname.match(/^\/sales\/proposals\/([^/]+)$/)
+    if (legacyProposal) {
+        return `/sales/selection/proposals/${legacyProposal[1]}`
+    }
+    if (url.pathname === "/supplier-api/settlements") {
+        const statementId = url.searchParams.get("statementId")?.trim()
+        if (statementId) {
+            return `/supplier-api/settlements/${encodeURIComponent(statementId)}`
+        }
+    }
+    if (url.pathname === "/governance/imports") {
+        const batchId = url.searchParams.get("batchId")?.trim()
+        if (batchId) {
+            return `/governance/imports/${encodeURIComponent(batchId)}`
+        }
+    }
+    if (url.pathname === "/supplier-api/catalog") {
+        const connectionId = url.searchParams.get("connectionId")?.trim()
+        if (connectionId) {
+            return `${url.pathname}?connectionId=${encodeURIComponent(connectionId)}`
+        }
+    }
     if (url.pathname === "/finance/customer-accounts/receipts/new")
         return `${url.pathname}?${new URLSearchParams({ sessionId: url.searchParams.get("sessionId") ?? "" })}`
     if (url.pathname === "/finance/supplier-accounts/invoices/new") {
@@ -169,6 +200,37 @@ export function workspaceTabKey(url: URL): string {
 }
 
 export function workspaceTabTitle(url: URL): string {
+    if (/^\/master-data\/products\/(?!new$)[^/]+$/.test(url.pathname))
+        return "商品详情"
+    if (
+        /^\/sales\/selection\/proposals\/[^/]+$/.test(url.pathname) ||
+        /^\/sales\/proposals\/[^/]+$/.test(url.pathname)
+    )
+        return "销售方案"
+    if (/^\/sales\/selections\/[^/]+$/.test(url.pathname)) return "选品册"
+    if (
+        /^\/procurement\/supplier-portal\/applications\/[^/]+$/.test(
+            url.pathname,
+        )
+    )
+        return "供应商申请审核"
+    if (/^\/governance\/imports\/[^/]+$/.test(url.pathname))
+        return "导入批次详情"
+    if (
+        url.pathname === "/governance/imports" &&
+        Boolean(url.searchParams.get("batchId")?.trim())
+    )
+        return "导入批次详情"
+    if (/^\/governance\/integration-errors\/errors\/[^/]+$/.test(url.pathname))
+        return "外部同步异常"
+    if (
+        /^\/governance\/integration-errors\/differences\/[^/]+$/.test(
+            url.pathname,
+        )
+    )
+        return "对账差异"
+    if (/^\/system\/roles\/[^/]+(?:\/edit)?$/.test(url.pathname))
+        return "角色权限"
     if (/^\/supplier-api\/catalog\/adoptions\/[^/]+$/.test(url.pathname))
         return "批量选品入库"
     if (url.pathname === "/finance/customer-accounts/receipts/new")
@@ -194,13 +256,14 @@ export function workspaceTabTitle(url: URL): string {
         return url.searchParams.has("invoiceId")
             ? "继续核销进项发票"
             : "登记进项发票"
+    const normalizedPath = normalizeWorkspaceNavPathname(url.pathname)
     const items = WORKSPACE_NAV_GROUPS.flatMap((group) => group.items)
     const match = items
         .filter((item) => {
             const candidate = new URL(item.href, url.origin)
             return (
-                (url.pathname === candidate.pathname ||
-                    url.pathname.startsWith(`${candidate.pathname}/`)) &&
+                (normalizedPath === candidate.pathname ||
+                    normalizedPath.startsWith(`${candidate.pathname}/`)) &&
                 [...candidate.searchParams].every(
                     ([key, value]) => url.searchParams.get(key) === value,
                 )

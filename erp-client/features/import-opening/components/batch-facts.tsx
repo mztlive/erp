@@ -1,6 +1,6 @@
 import * as React from "react"
 
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 
 export function Fact({
     label,
@@ -30,9 +30,10 @@ export function Fact({
 export function GateRow({ ok, label }: { ok: boolean; label: string }) {
     return (
         <div className="flex items-start gap-2 text-body-compact">
-            <Badge variant={ok ? "secondary" : "destructive"}>
-                {ok ? "已满足" : "未满足"}
-            </Badge>
+            <StatusBadge
+                tone={ok ? "success" : "destructive"}
+                label={ok ? "已满足" : "未满足"}
+            />
             <span className={ok ? "text-foreground" : "text-muted-foreground"}>
                 {label}
             </span>

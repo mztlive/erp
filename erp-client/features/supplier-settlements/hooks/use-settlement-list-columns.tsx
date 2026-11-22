@@ -13,7 +13,6 @@ import {
     TableRowActions,
     TableTextCell,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { SettlementListRow } from "@/features/supplier-settlements/types"
 
@@ -130,9 +129,12 @@ export function useSettlementListColumns(
                             />
                         ) : null}
                         {row.original.unresolvedDifferenceCount > 0 ? (
-                            <Badge variant="outline" className="mt-0.5 text-xs">
-                                未决 {row.original.unresolvedDifferenceCount}
-                            </Badge>
+                            <BusinessStatusBadge
+                                context="list"
+                                tone="warning"
+                                label={`未决 ${row.original.unresolvedDifferenceCount}`}
+                                className="mt-0.5"
+                            />
                         ) : null}
                     </div>
                 ),

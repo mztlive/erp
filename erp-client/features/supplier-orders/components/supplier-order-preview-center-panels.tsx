@@ -10,8 +10,6 @@ import {
     BusinessStatusBadge,
     FormalActionResult,
     SequentialProcessBar,
-    StatusTrackSummary,
-    DetailWorkspaceSection,
 } from "@/components/business"
 import type { ResponsibilityStatus } from "@/components/business/workflow-actions"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -108,61 +106,34 @@ export function StatusAlertsPanel({
     trackingError?: string
 }) {
     const isResultUnknown = order.fulfillmentStatus === "RESULT_UNKNOWN"
+    const isCompletedPartialRefund =
+        order.fulfillmentStatus === "COMPLETED" &&
+        order.refundStatus === "PARTIAL"
+
+    if (!trackingError && !isResultUnknown && !isCompletedPartialRefund) {
+        return null
+    }
 
     return (
         <>
-            <StatusTrackSummary
-                variant="table"
-                className="sm:grid-cols-3"
-                aria-label="三轨进度"
-                tracks={[
-                    {
-                        id: "ff",
-                        label: "履约",
-                        status: {
-                            label: order.fulfillmentLabel,
-                            tone: order.fulfillmentTone,
-                        },
-                    },
-                    {
-                        id: "cancel",
-                        label: "取消",
-                        status: {
-                            label: order.cancelLabel,
-                            tone: order.cancelTone,
-                        },
-                    },
-                    {
-                        id: "refund",
-                        label: "退款",
-                        status: {
-                            label: order.refundLabel,
-                            tone: order.refundTone,
-                        },
-                    },
-                ]}
-            />
-
-            <Alert variant="info">
-                <AlertTitle>供应商接口履约</AlertTitle>
-                <AlertDescription>{order.executionNotice}</AlertDescription>
-            </Alert>
-            <SystemFeedback
-                problemId={`supplier-order-tracking-${order.id}`}
-                error={trackingError}
-                title="供应商履约跟踪暂未完成"
-                description="当前订单和物流状态保留最近已确认的结果，请刷新执行状态或联系管理员。"
-            />
             {trackingError ? (
-                <p role="status" className="text-xs text-muted-foreground">
-                    当前显示最近已确认的订单和物流状态。
-                </p>
+                <>
+                    <SystemFeedback
+                        problemId={`supplier-order-tracking-${order.id}`}
+                        error={trackingError}
+                        title="供应商履约跟踪暂未完成"
+                        description="当前订单和物流状态保留最近已确认的结果，请刷新执行状态或联系管理员。"
+                    />
+                    <p role="status" className="text-xs text-muted-foreground">
+                        当前显示最近已确认的订单和物流状态。
+                    </p>
+                </>
             ) : null}
 
             {isResultUnknown ? (
                 <Alert variant="warning" aria-live="polite">
                     <TriangleAlertIcon />
-                    <AlertTitle>结果未知 — 请先查询原结果</AlertTitle>
+                    <AlertTitle>结果未知 — 请先查询原下单结果</AlertTitle>
                     <AlertDescription>
                         不得把结果未知直接改成成功，也不得在未查询前直接再次下单。
                         {lastInvestigation ? (
@@ -180,19 +151,18 @@ export function StatusAlertsPanel({
                             </span>
                         ) : (
                             <span className="mt-1 block">
-                                尚未查询。先执行「查询原结果」，确认无结果且系统允许后再重发。
+                                尚未查询。先执行「查询原下单结果」，确认无结果且系统允许后再重发。
                             </span>
                         )}
                     </AlertDescription>
                 </Alert>
             ) : null}
 
-            {order.fulfillmentStatus === "COMPLETED" &&
-            order.refundStatus === "PARTIAL" ? (
+            {isCompletedPartialRefund ? (
                 <Alert variant="info">
                     <AlertTitle>已完成 + 部分退款</AlertTitle>
                     <AlertDescription>
-                        履约与退款状态独立记录，互不覆盖
+                        履约与退款状态独立记录，互不覆盖。
                     </AlertDescription>
                 </Alert>
             ) : null}
@@ -208,30 +178,34 @@ export function WorkItemCard({
     orderNo: string
 }) {
     return (
-        <DetailWorkspaceSection
-            title={WORK_ITEM_TYPE_LABEL[workItem.workItemType]}
-            subtitle={`关联订单 ${orderNo}${workItem.ownerUser ? ` · 当前处理人 ${workItem.ownerUser.displayName}` : ""}`}
-            className="py-3 first:pt-3 last:pb-3"
-            contentClassName="space-y-2"
+        <section
+            className="space-y-2 border-t border-border/60 pt-4 first:border-t-0 first:pt-0"
+            aria-label="关联待办任务"
         >
-            <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                <span>
-                    状态{" "}
-                    <BusinessStatusBadge
-                        context="detail"
-                        label={WORK_ITEM_STATUS_LABEL[workItem.workItemStatus]}
-                        tone={
-                            workItem.workItemStatus === "COMPLETED"
-                                ? "success"
-                                : "info"
-                        }
-                    />
-                </span>
-                <span>
-                    查询原结果和再次提交不会完成任务；只有确认处理结果才会完成
-                </span>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-body-compact font-semibold text-foreground">
+                    {WORK_ITEM_TYPE_LABEL[workItem.workItemType]}
+                </h2>
+                <BusinessStatusBadge
+                    context="list"
+                    label={WORK_ITEM_STATUS_LABEL[workItem.workItemStatus]}
+                    tone={
+                        workItem.workItemStatus === "COMPLETED"
+                            ? "success"
+                            : "info"
+                    }
+                />
             </div>
-        </DetailWorkspaceSection>
+            <p className="text-xs text-muted-foreground">
+                关联订单 <span className="num">{orderNo}</span>
+                {workItem.ownerUser
+                    ? ` · 当前处理人 ${workItem.ownerUser.displayName}`
+                    : ""}
+            </p>
+            <p className="text-xs leading-5 text-muted-foreground">
+                查询原下单结果和再次提交不会完成任务；只有确认处理结果后才会完成待办。
+            </p>
+        </section>
     )
 }
 
@@ -246,6 +220,12 @@ export function ResultPanel({
     costs: SupplierOrderDetailView["costs"]
     onClose: () => void
 }) {
+    const settlementHref = costs.settlementId
+        ? `/supplier-api/settlements/${encodeURIComponent(costs.settlementId)}`
+        : costs.settlementNo
+          ? `/supplier-api/settlements?q=${encodeURIComponent(costs.settlementNo)}`
+          : "/supplier-api/settlements"
+
     return (
         <FormalActionResult
             status={result.status}
@@ -270,17 +250,11 @@ export function ResultPanel({
                             type="button"
                             size="sm"
                             variant="outline"
-                            render={
-                                <Link
-                                    href={
-                                        costs.settlementId
-                                            ? `/supplier-api/settlements?q=${encodeURIComponent(costs.settlementNo ?? "")}`
-                                            : "/supplier-api/settlements"
-                                    }
-                                />
-                            }
+                            render={<Link href={settlementHref} />}
                         >
-                            打开 API 结算
+                            {costs.settlementId
+                                ? "查看所属结算单"
+                                : "打开 API 结算"}
                         </Button>
                     ) : null}
                 </div>

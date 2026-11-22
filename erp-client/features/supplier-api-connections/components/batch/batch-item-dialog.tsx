@@ -2,12 +2,22 @@
 
 import * as React from "react"
 import { useStore } from "@tanstack/react-form"
-import { PackageIcon } from "lucide-react"
+import {
+    AlertCircleIcon,
+    ChevronDownIcon,
+    PackageIcon,
+    TriangleAlertIcon,
+} from "lucide-react"
 import { z } from "zod"
-import { MoneyValue } from "@/components/business"
+import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import { useAppForm } from "@/components/form"
-import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import {
     Dialog,
     DialogContent,
@@ -28,6 +38,7 @@ import { DeliveryTemplateField } from "@/features/supplier-offerings/components/
 import { SupplierTaxRateField } from "@/features/supplier-offerings/components/supplier-tax-rate-field"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { compareDecimal, parseDecimal } from "@/lib/fixed-decimal"
+import { cn } from "@/lib/utils"
 import type { BatchFieldEdit } from "../../api/batch"
 import type { CatalogItem } from "../../api/catalog"
 import { catalogUnitLabel } from "../../api/catalog"
@@ -74,6 +85,14 @@ const priceLabels = {
     minimumQuantity: "公司集采起订量",
     marketPrice: "市场价（含税）",
 } as const
+
+const MORE_DETAIL_FIELDS = [
+    "description",
+    "inputTaxPercentage",
+    "validFrom",
+    "validTo",
+    "deliveryTemplateId",
+] as const
 
 function draftSchema(existing: boolean, bulkLinked: boolean) {
     return z
@@ -205,10 +224,18 @@ function BatchItemEditor({
     const [saveError, setSaveError] = React.useState<string | null>(null)
     const [restoring, setRestoring] = React.useState(false)
     const [confirmDiscard, setConfirmDiscard] = React.useState(false)
+    const [moreOpen, setMoreOpen] = React.useState(false)
     const existing = resolution === "EXISTING"
     const productPreserved = existing || resolution === "CREATE_SKU"
     const sourceUnitKnown = Boolean(item.suggested_unit || item.unit)
     const prefix = `supplier-catalog-batch-item-${toAutomationIdSegment(item.id)}`
+    const moreFieldIds: Record<(typeof MORE_DETAIL_FIELDS)[number], string> = {
+        description: `${prefix}-description`,
+        inputTaxPercentage: `${prefix}-tax`,
+        validFrom: `${prefix}-validFrom`,
+        validTo: `${prefix}-validTo`,
+        deliveryTemplateId: `${prefix}-delivery`,
+    }
     const form = useAppForm({
         defaultValues: {
             ...draft,
@@ -266,8 +293,12 @@ function BatchItemEditor({
         },
     })
     const values = useStore(form.store, (state) => state.values)
+    const fieldMeta = useStore(form.store, (state) => state.fieldMeta)
     const submitting = useStore(form.store, (state) => state.isSubmitting)
     const dirty = useStore(form.store, (state) => !state.isDefaultValue)
+    const moreErrorFields = MORE_DETAIL_FIELDS.filter(
+        (name) => (fieldMeta[name]?.errors?.length ?? 0) > 0,
+    )
     const busy = submitting || restoring
     const requestClose = () => {
         if (busy) return
@@ -317,10 +348,30 @@ function BatchItemEditor({
                 <form
                     id={`${prefix}-form`}
                     className="flex min-h-0 flex-1 flex-col"
-                    onSubmit={(event) => {
+                    onSubmit={async (event) => {
                         event.preventDefault()
                         event.stopPropagation()
-                        void form.handleSubmit()
+                        await form.handleSubmit()
+                        const firstMoreError = MORE_DETAIL_FIELDS.find(
+                            (name) =>
+                                (form.getFieldMeta(name)?.errors?.length ?? 0) >
+                                0,
+                        )
+                        if (firstMoreError) {
+                            setMoreOpen(true)
+                            window.requestAnimationFrame(() => {
+                                const target = document.getElementById(
+                                    moreFieldIds[firstMoreError],
+                                )
+                                target?.scrollIntoView({
+                                    behavior: "smooth",
+                                    block: "center",
+                                })
+                                if (target instanceof HTMLElement) {
+                                    target.focus({ preventScroll: true })
+                                }
+                            })
+                        }
                     }}
                 >
                     <fieldset
@@ -349,29 +400,35 @@ function BatchItemEditor({
                                 <p className="font-medium">
                                     {item.name} · {item.specification}
                                 </p>
-                                <span className="text-muted-foreground">
-                                    来源 SKU：{item.spec_id}
-                                </span>
-                                <Badge
-                                    variant={
-                                        !resolution
-                                            ? "warning"
-                                            : existing
-                                              ? "secondary"
-                                              : "success"
-                                    }
-                                >
-                                    {!resolution
-                                        ? "待自动核对"
-                                        : existing
-                                          ? "关联已有 SKU · 保留原资料"
-                                          : resolution === "CREATE_SKU"
-                                            ? "已有商品新增规格"
-                                            : "新建 SKU"}
-                                </Badge>
-                                {manuallyAdjusted ? (
-                                    <Badge variant="warning">已单独调整</Badge>
-                                ) : null}
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span className="num text-muted-foreground">
+                                        来源 SKU：{item.spec_id}
+                                    </span>
+                                    <BusinessStatusBadge
+                                        tone={
+                                            !resolution
+                                                ? "warning"
+                                                : existing
+                                                  ? "neutral"
+                                                  : "success"
+                                        }
+                                        label={
+                                            !resolution
+                                                ? "待自动核对"
+                                                : existing
+                                                  ? "关联已有 SKU · 保留原资料"
+                                                  : resolution === "CREATE_SKU"
+                                                    ? "已有商品新增规格"
+                                                    : "新建 SKU"
+                                        }
+                                    />
+                                    {manuallyAdjusted ? (
+                                        <BusinessStatusBadge
+                                            tone="warning"
+                                            label="已单独调整"
+                                        />
+                                    ) : null}
+                                </div>
                             </div>
                         </div>
                         <dl className="grid grid-cols-1 gap-4 rounded-lg bg-muted/40 px-4 py-3 sm:grid-cols-3">
@@ -626,105 +683,142 @@ function BatchItemEditor({
                                     )}
                                 </form.AppField>
                             </div>
-                            <details className="rounded-lg border border-grid px-4 py-3">
-                                <summary
+                            <Collapsible
+                                open={moreOpen}
+                                onOpenChange={setMoreOpen}
+                                className="rounded-lg border border-grid"
+                            >
+                                <CollapsibleTrigger
                                     id={`${prefix}-more-details`}
-                                    className="cursor-pointer text-body-compact"
+                                    type="button"
+                                    className="flex w-full cursor-pointer items-center justify-between gap-2 px-4 py-3 text-left text-body-compact font-medium hover:bg-muted/40"
                                 >
-                                    更多资料与供给条件
-                                </summary>
-                                <div className="mt-4 space-y-4">
-                                    <form.AppField name="description">
-                                        {(field) => (
-                                            <field.TextareaField
-                                                id={`${prefix}-description`}
-                                                label="公司商品介绍"
-                                                disabled={productPreserved}
+                                    <span className="flex flex-wrap items-center gap-2">
+                                        <span>更多资料与供给条件</span>
+                                        {moreErrorFields.length > 0 ? (
+                                            <BusinessStatusBadge
+                                                className="num"
+                                                tone="destructive"
+                                                label={`${moreErrorFields.length} 项待修正`}
                                             />
+                                        ) : null}
+                                    </span>
+                                    <ChevronDownIcon
+                                        aria-hidden="true"
+                                        className={cn(
+                                            "size-4 shrink-0 text-muted-foreground transition-transform",
+                                            moreOpen && "rotate-180",
                                         )}
-                                    </form.AppField>
-                                    <div className="grid gap-4 sm:grid-cols-3">
-                                        <form.AppField name="inputTaxPercentage">
+                                    />
+                                </CollapsibleTrigger>
+                                <CollapsibleContent className="border-t border-grid px-4 py-4">
+                                    <div className="space-y-4">
+                                        <form.AppField name="description">
                                             {(field) => (
-                                                <SupplierTaxRateField
-                                                    id={`${prefix}-tax`}
+                                                <field.TextareaField
+                                                    id={`${prefix}-description`}
+                                                    label="公司商品介绍"
+                                                    disabled={productPreserved}
+                                                />
+                                            )}
+                                        </form.AppField>
+                                        <div className="grid gap-4 sm:grid-cols-3">
+                                            <form.AppField name="inputTaxPercentage">
+                                                {(field) => (
+                                                    <SupplierTaxRateField
+                                                        id={`${prefix}-tax`}
+                                                        supplierId={supplierId}
+                                                        value={
+                                                            field.state.value
+                                                        }
+                                                        onChange={
+                                                            field.handleChange
+                                                        }
+                                                        onBlur={
+                                                            field.handleBlur
+                                                        }
+                                                        errors={
+                                                            field.state.meta
+                                                                .errors
+                                                        }
+                                                    />
+                                                )}
+                                            </form.AppField>
+                                            <form.AppField name="validFrom">
+                                                {(field) => (
+                                                    <field.DateField
+                                                        id={`${prefix}-validFrom`}
+                                                        label="供给生效日期"
+                                                    />
+                                                )}
+                                            </form.AppField>
+                                            <form.AppField name="validTo">
+                                                {(field) => (
+                                                    <field.DateField
+                                                        id={`${prefix}-validTo`}
+                                                        label="供给失效日期"
+                                                        description="留空表示不设失效日期。"
+                                                    />
+                                                )}
+                                            </form.AppField>
+                                        </div>
+                                        <form.AppField name="deliveryTemplateId">
+                                            {(field) => (
+                                                <DeliveryTemplateField
+                                                    id={`${prefix}-delivery`}
                                                     supplierId={supplierId}
                                                     value={field.state.value}
                                                     onChange={
                                                         field.handleChange
                                                     }
-                                                    onBlur={field.handleBlur}
-                                                    errors={
-                                                        field.state.meta.errors
-                                                    }
-                                                />
-                                            )}
-                                        </form.AppField>
-                                        <form.AppField name="validFrom">
-                                            {(field) => (
-                                                <field.DateField
-                                                    id={`${prefix}-validFrom`}
-                                                    label="供给生效日期"
-                                                />
-                                            )}
-                                        </form.AppField>
-                                        <form.AppField name="validTo">
-                                            {(field) => (
-                                                <field.DateField
-                                                    id={`${prefix}-validTo`}
-                                                    label="供给失效日期"
-                                                    description="留空表示不设失效日期。"
                                                 />
                                             )}
                                         </form.AppField>
                                     </div>
-                                    <form.AppField name="deliveryTemplateId">
-                                        {(field) => (
-                                            <DeliveryTemplateField
-                                                id={`${prefix}-delivery`}
-                                                supplierId={supplierId}
-                                                value={field.state.value}
-                                                onChange={field.handleChange}
-                                            />
-                                        )}
-                                    </form.AppField>
-                                </div>
-                            </details>
+                                </CollapsibleContent>
+                            </Collapsible>
                         </section>
                     </fieldset>
                     {saveError ? (
-                        <p
-                            role="alert"
-                            className="border-t border-grid px-6 py-3 text-body-compact text-destructive"
-                        >
-                            {saveError}
-                        </p>
+                        <div className="border-t border-grid px-6 py-3">
+                            <Alert variant="destructive">
+                                <AlertCircleIcon aria-hidden="true" />
+                                <AlertDescription>{saveError}</AlertDescription>
+                            </Alert>
+                        </div>
                     ) : null}
                     {confirmDiscard ? (
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-grid bg-warning-soft px-6 py-3 text-body-compact">
-                            <span>尚有未保存调整，确认放弃？</span>
-                            <div className="flex gap-2">
-                                <Button
-                                    id={`${prefix}-keep-editing`}
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setConfirmDiscard(false)}
-                                >
-                                    继续调整
-                                </Button>
-                                <Button
-                                    id={`${prefix}-discard`}
-                                    type="button"
-                                    size="sm"
-                                    onClick={() => {
-                                        form.reset()
-                                        onOpenChange(false)
-                                    }}
-                                >
-                                    放弃调整
-                                </Button>
-                            </div>
+                        <div className="border-t border-grid px-6 py-3">
+                            <Alert variant="warning">
+                                <TriangleAlertIcon aria-hidden="true" />
+                                <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+                                    <span>尚有未保存调整，确认放弃？</span>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            id={`${prefix}-keep-editing`}
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                setConfirmDiscard(false)
+                                            }
+                                        >
+                                            继续调整
+                                        </Button>
+                                        <Button
+                                            id={`${prefix}-discard`}
+                                            type="button"
+                                            size="sm"
+                                            onClick={() => {
+                                                form.reset()
+                                                onOpenChange(false)
+                                            }}
+                                        >
+                                            放弃调整
+                                        </Button>
+                                    </div>
+                                </AlertDescription>
+                            </Alert>
                         </div>
                     ) : null}
                     <DialogFooter className="shrink-0 items-center border-t border-grid px-6 py-4 sm:justify-between">

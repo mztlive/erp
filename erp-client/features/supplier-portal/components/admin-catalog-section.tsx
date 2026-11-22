@@ -2,13 +2,21 @@
 import { useCallback, useMemo, useRef, useState } from "react"
 import { z } from "zod"
 import type { ColumnDef } from "@tanstack/react-table"
+import { PlusIcon } from "lucide-react"
 import { toFieldErrors, useAppForm } from "@/components/form"
-import { BusinessEmptyState, DataTable } from "@/components/business"
-import { ListWorkSurface } from "@/components/business/list-workspace"
+import {
+    BusinessEmptyState,
+    DataTable,
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { CompanySkuSearchCombobox } from "@/features/entity-selectors"
 import { Button } from "@/components/ui/button"
-import { PlusIcon } from "lucide-react"
 import { FieldError } from "@/components/ui/field"
+import { Label } from "@/components/ui/label"
+import { RequiredMark } from "@/components/ui/required-mark"
+import { StatusBadge } from "@/components/ui/status-badge"
+import { toast } from "@/components/ui/toast"
 import {
     Dialog,
     DialogContent,
@@ -47,7 +55,6 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
         access.can("supplier_portal_catalog:list") && !!supplierId,
     )
     const [error, setError] = useState<unknown>(null)
-    const [saved, setSaved] = useState(false)
     const [failure, setFailure] = useState<CommandFailureDisposition | null>(
         null,
     )
@@ -65,7 +72,6 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
         async (body: Record<string, unknown>) => {
             if (failure === "conflict") return
             setError(null)
-            setSaved(false)
             if (
                 intent.current &&
                 JSON.stringify(intent.current.body) !== JSON.stringify(body)
@@ -82,10 +88,17 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                     ...intent.current.body,
                     idempotency_key: intent.current.key,
                 })
+                const wasActive = Boolean(intent.current.body.active)
                 intent.current = null
                 setFailure(null)
-                setSaved(true)
                 setCreating(false)
+                toast.add({
+                    title: wasActive
+                        ? "SKU 报价资格已开放"
+                        : "SKU 报价资格已撤销",
+                    type: "success",
+                    timeout: 4000,
+                })
             } catch (cause) {
                 const disposition = commandFailureDisposition(cause)
                 if (disposition === "rejected") intent.current = null
@@ -120,12 +133,23 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                 header: "商品",
                 cell: ({ row }) => row.original.name ?? "已开放公司规格",
             },
-            { accessorKey: "sku_no", header: "公司SKU编号" },
+            {
+                accessorKey: "sku_no",
+                header: "公司SKU编号",
+                cell: ({ row }) => (
+                    <span className="num">{row.original.sku_no}</span>
+                ),
+            },
             { accessorKey: "specification", header: "规格" },
             {
                 accessorKey: "active",
                 header: "报价资格",
-                cell: ({ row }) => (row.original.active ? "已开放" : "已撤销"),
+                cell: ({ row }) => (
+                    <StatusBadge
+                        label={row.original.active ? "已开放" : "已撤销"}
+                        tone={row.original.active ? "success" : "neutral"}
+                    />
+                ),
             },
             ...(canUpdate
                 ? [
@@ -136,8 +160,9 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                           cell: ({ row }) => (
                               <Button
                                   id={`supplier-portal-grant-change-${toAutomationIdSegment(row.original.id)}`}
-                                  variant="outline"
+                                  variant="ghost"
                                   size="sm"
+                                  className={detailWorkspaceStyles.quietButton}
                                   disabled={
                                       mutation.isPending || !!intent.current
                                   }
@@ -170,6 +195,7 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                     id="supplier-portal-grant-retry-original"
                     type="button"
                     variant="outline"
+                    size="sm"
                     disabled={mutation.isPending}
                     onClick={() => {
                         if (intent.current) void change(intent.current.body)
@@ -223,7 +249,7 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                 />
             )}
             {canUpdate && reviewedBody && (
-                <div className="space-y-2 rounded-lg border p-4">
+                <div className="space-y-2 rounded-lg border border-border/70 p-4">
                     <p className="text-body-compact">
                         已核对最新目录，原填写的目标仍为
                         {reviewedBody.active
@@ -234,6 +260,7 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                     <Button
                         id="supplier-portal-grant-save-reviewed"
                         type="button"
+                        size="sm"
                         disabled={mutation.isPending || !!intent.current}
                         onClick={() => void change(reviewedBody)}
                     >
@@ -241,28 +268,27 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                     </Button>
                 </div>
             )}
-            {saved && <p role="status">报价资格配置已保存。</p>}
         </>
     )
     const locked = mutation.isPending || !!intent.current
     return (
-        <section className="space-y-4" aria-labelledby="supplier-catalog-title">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-1">
-                    <h2
-                        id="supplier-catalog-title"
-                        className="text-section-title font-semibold tracking-tight"
-                    >
-                        SKU 定向开放
-                    </h2>
-                    <p className="text-xs text-muted-foreground">
-                        选择允许当前供应商报价的公司规格，开放报价不改变商品上架状态。
-                    </p>
-                </div>
-                {canAdd && (
+        <DetailWorkspaceSection
+            headingId="supplier-catalog-title"
+            title="SKU 定向开放"
+            width="full"
+            divider={false}
+            badge={
+                <span className="num rounded-sm bg-muted/80 px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+                    共 {query.data?.total ?? 0} 项配置
+                </span>
+            }
+            subtitle="选择允许当前供应商报价的公司规格，开放报价不改变商品上架状态。"
+            actions={
+                canAdd ? (
                     <Button
                         id="supplier-portal-grant-create"
                         type="button"
+                        size="sm"
                         disabled={locked}
                         onClick={() => {
                             form.reset()
@@ -272,8 +298,9 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                         <PlusIcon data-icon="inline-start" aria-hidden />
                         开放 SKU
                     </Button>
-                )}
-            </div>
+                ) : undefined
+            }
+        >
             {!creating && feedback}
             {query.isSuccess && query.data.total === 0 ? (
                 <BusinessEmptyState
@@ -283,41 +310,35 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                     className="py-12"
                 />
             ) : (
-                <ListWorkSurface
-                    ariaLabel="SKU定向开放"
-                    selectionBar={
-                        <span className="text-xs text-muted-foreground">
-                            共 {query.data?.total ?? 0} 项配置
-                        </span>
-                    }
-                    table={
-                        <DataTable
-                            id="supplier-portal-admin-grants-table"
-                            data={query.data?.items ?? []}
-                            columns={columns}
-                            getRowId={(row) => row.id}
-                            pagination={pagination}
-                            onPaginationChange={setPagination}
-                            rowCount={query.data?.total ?? 0}
-                            loading={query.isFetching}
-                            errorState={
-                                query.isError ? (
-                                    <PortalError
-                                        error={query.error}
-                                        retry={() => void query.refetch()}
-                                        id="supplier-portal-admin-grants-retry"
-                                    />
-                                ) : undefined
-                            }
-                            emptyTitle="此供应商暂无定向开放配置。"
-                            showPagination={
-                                (query.data?.total ?? 0) >
-                                    pagination.pageSize ||
-                                pagination.pageIndex > 0
-                            }
-                        />
-                    }
-                />
+                <div
+                    data-slot="detail-inline-table"
+                    className={detailWorkspaceStyles.dataTableWrapper}
+                >
+                    <DataTable
+                        id="supplier-portal-admin-grants-table"
+                        data={query.data?.items ?? []}
+                        columns={columns}
+                        getRowId={(row) => row.id}
+                        pagination={pagination}
+                        onPaginationChange={setPagination}
+                        rowCount={query.data?.total ?? 0}
+                        loading={query.isFetching}
+                        errorState={
+                            query.isError ? (
+                                <PortalError
+                                    error={query.error}
+                                    retry={() => void query.refetch()}
+                                    id="supplier-portal-admin-grants-retry"
+                                />
+                            ) : undefined
+                        }
+                        emptyTitle="此供应商暂无定向开放配置。"
+                        showPagination={
+                            (query.data?.total ?? 0) > pagination.pageSize ||
+                            pagination.pageIndex > 0
+                        }
+                    />
+                </div>
             )}
             {canAdd && (
                 <Dialog
@@ -349,12 +370,10 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                             <form.AppField name="skuId">
                                 {(field) => (
                                     <div className="space-y-2">
-                                        <label
-                                            className="text-xs"
-                                            htmlFor="supplier-portal-grant-sku"
-                                        >
+                                        <Label htmlFor="supplier-portal-grant-sku">
                                             精确公司SKU
-                                        </label>
+                                            <RequiredMark />
+                                        </Label>
                                         <CompanySkuSearchCombobox
                                             id="supplier-portal-grant-sku"
                                             label="精确公司SKU"
@@ -407,6 +426,6 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                     </DialogContent>
                 </Dialog>
             )}
-        </section>
+        </DetailWorkspaceSection>
     )
 }

@@ -185,7 +185,6 @@ export function countCustomerFormChanges(
         "unifiedCreditCode",
         "defaultPaymentTerm",
         "status",
-        "changeReason",
     ] as const
     return (
         fields.filter((field) => before[field] !== after[field]).length +

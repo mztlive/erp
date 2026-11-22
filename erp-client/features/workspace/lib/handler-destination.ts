@@ -495,9 +495,11 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
             )
             if (!confirmationScope) return null
             params.set("section", "confirm")
-            params.set("batchId", businessObjectId)
             params.set("confirmationScope", confirmationScope)
-            return withParams(registration.baseHref, params)
+            return withParams(
+                `${registration.baseHref}/${encodeURIComponent(businessObjectId)}`,
+                params,
+            )
         }
         default:
             params.set("currentWorkItemId", workItemId)

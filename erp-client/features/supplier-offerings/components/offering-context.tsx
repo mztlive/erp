@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { ArrowUpRightIcon } from "lucide-react"
 import { QuantityValue } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
@@ -21,19 +21,20 @@ export function OfferingAvailability({
             <h3 className="font-medium">当前可供</h3>
             <dl className="space-y-3">
                 <OfferingField label="可供状态">
-                    <Badge
-                        variant={
+                    <StatusBadge
+                        tone={
                             offering.availability_status === "AVAILABLE"
                                 ? "success"
-                                : "outline"
+                                : "neutral"
                         }
-                    >
-                        {offering.availability_status
-                            ? AVAILABILITY_STATUS_LABELS[
-                                  offering.availability_status
-                              ]
-                            : "未更新"}
-                    </Badge>
+                        label={
+                            offering.availability_status
+                                ? AVAILABILITY_STATUS_LABELS[
+                                      offering.availability_status
+                                  ]
+                                : "未更新"
+                        }
+                    />
                 </OfferingField>
                 <OfferingField label="可供数量">
                     {offering.available_quantity != null ? (

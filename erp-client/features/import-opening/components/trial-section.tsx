@@ -1,7 +1,10 @@
 "use client"
 
-import { ImportIssueTable, OptionCombobox } from "@/components/business"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+    DetailWorkspaceSection,
+    ImportIssueTable,
+    OptionCombobox,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { useImportIssuesQuery } from "@/features/import-opening/hooks/queries"
@@ -30,19 +33,22 @@ export function TrialSection({
     issueQuery: ReturnType<typeof useImportIssuesQuery>
 }) {
     const issues = issueQuery.data?.rows ?? []
+    const totalCount = issueQuery.data?.totalCount ?? 0
+    const totalPages = Math.max(1, Math.ceil(totalCount / 20))
 
     return (
-        <div className="space-y-4">
-            <Alert>
-                <AlertTitle>仅显示异常与待核对数据</AlertTitle>
-                <AlertDescription>
-                    此处仅列出校验失败、冲突、跳过及待匹配的数据行，正常通过的数据不在此处展示。
-                </AlertDescription>
-            </Alert>
-
+        <DetailWorkspaceSection
+            title="预检问题明细"
+            subtitle="仅列出校验失败、冲突、跳过及待匹配的数据行，正常通过的数据不在此处展示。"
+        >
             <div className="flex flex-wrap items-end gap-2">
                 <div className="space-y-1">
-                    <Label className="text-xs">错误码</Label>
+                    <Label
+                        className="text-xs"
+                        htmlFor="operations-import-batch-detail-trial-filter-issue-code"
+                    >
+                        错误码
+                    </Label>
                     <OptionCombobox
                         id="operations-import-batch-detail-trial-filter-issue-code"
                         value={urlState.issueCode ?? "all"}
@@ -54,6 +60,7 @@ export function TrialSection({
                                         ? undefined
                                         : (v as ImportIssueCode),
                                 section: "trial",
+                                page: 1,
                             })
                         }}
                         options={[
@@ -73,7 +80,12 @@ export function TrialSection({
                     />
                 </div>
                 <div className="space-y-1">
-                    <Label className="text-xs">数据类型</Label>
+                    <Label
+                        className="text-xs"
+                        htmlFor="operations-import-batch-detail-trial-filter-object-type"
+                    >
+                        数据类型
+                    </Label>
                     <OptionCombobox
                         id="operations-import-batch-detail-trial-filter-object-type"
                         value={urlState.issueObjectType ?? "all"}
@@ -85,6 +97,7 @@ export function TrialSection({
                                         ? undefined
                                         : (v as ImportObjectCode),
                                 section: "trial",
+                                page: 1,
                             })
                         }}
                         options={[
@@ -100,7 +113,12 @@ export function TrialSection({
                     />
                 </div>
                 <div className="space-y-1">
-                    <Label className="text-xs">处理状态</Label>
+                    <Label
+                        className="text-xs"
+                        htmlFor="operations-import-batch-detail-trial-filter-row-status"
+                    >
+                        处理状态
+                    </Label>
                     <OptionCombobox
                         id="operations-import-batch-detail-trial-filter-row-status"
                         value={urlState.rowStatus ?? "all"}
@@ -112,6 +130,7 @@ export function TrialSection({
                                         ? undefined
                                         : (v as IssueRowStatus),
                                 section: "trial",
+                                page: 1,
                             })
                         }}
                         options={[
@@ -141,6 +160,7 @@ export function TrialSection({
                             issueObjectType: undefined,
                             rowStatus: undefined,
                             section: "trial",
+                            page: 1,
                         })
                     }
                 >
@@ -173,46 +193,47 @@ export function TrialSection({
                     repairable: issue.repairable,
                 }))}
             />
-            <p className="text-xs text-muted-foreground">
-                共 {issueQuery.data?.totalCount ?? 0} 条问题
-            </p>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Button
-                    id="operations-import-batch-detail-trial-prev-page"
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={urlState.page <= 1 || issueQuery.isFetching}
-                    onClick={() =>
-                        patchUrl({ page: urlState.page - 1, section: "trial" })
-                    }
-                >
-                    上一页
-                </Button>
-                <span>
-                    第 {urlState.page} /{" "}
-                    {Math.max(
-                        1,
-                        Math.ceil((issueQuery.data?.totalCount ?? 0) / 20),
-                    )}{" "}
-                    页
-                </span>
-                <Button
-                    id="operations-import-batch-detail-trial-next-page"
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={
-                        issueQuery.isFetching ||
-                        urlState.page * 20 >= (issueQuery.data?.totalCount ?? 0)
-                    }
-                    onClick={() =>
-                        patchUrl({ page: urlState.page + 1, section: "trial" })
-                    }
-                >
-                    下一页
-                </Button>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                <p className="num">共 {totalCount} 条问题</p>
+                <div className="flex items-center gap-2">
+                    <Button
+                        id="operations-import-batch-detail-trial-prev-page"
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={urlState.page <= 1 || issueQuery.isFetching}
+                        onClick={() =>
+                            patchUrl({
+                                page: urlState.page - 1,
+                                section: "trial",
+                            })
+                        }
+                    >
+                        上一页
+                    </Button>
+                    <span className="num">
+                        第 {urlState.page} / {totalPages} 页
+                    </span>
+                    <Button
+                        id="operations-import-batch-detail-trial-next-page"
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={
+                            issueQuery.isFetching ||
+                            urlState.page * 20 >= totalCount
+                        }
+                        onClick={() =>
+                            patchUrl({
+                                page: urlState.page + 1,
+                                section: "trial",
+                            })
+                        }
+                    >
+                        下一页
+                    </Button>
+                </div>
             </div>
-        </div>
+        </DetailWorkspaceSection>
     )
 }

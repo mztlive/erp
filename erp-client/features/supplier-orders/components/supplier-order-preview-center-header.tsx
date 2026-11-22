@@ -6,12 +6,14 @@ import { ExternalLinkIcon } from "lucide-react"
 
 import {
     DetailWorkspaceChrome,
+    DetailWorkspaceMeta,
     detailWorkspaceStyles,
     GuardedBusinessAction,
 } from "@/components/business"
 import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { Button } from "@/components/ui/button"
 import type { SupplierOrderDetailView } from "@/features/supplier-orders/types"
+import { formatDateTime } from "@/lib/datetime"
 
 export function SupplierOrderCenterHeader({
     order,
@@ -24,6 +26,7 @@ export function SupplierOrderCenterHeader({
     replayPending,
     onQueryResult,
     onReplayClick,
+    embedded = false,
     tabs,
 }: {
     order: SupplierOrderDetailView["order"]
@@ -36,16 +39,21 @@ export function SupplierOrderCenterHeader({
     replayPending: boolean
     onQueryResult: () => void
     onReplayClick: () => void
+    embedded?: boolean
     tabs: ReactNode
 }) {
     return (
         <DetailWorkspaceChrome
             tabs={tabs}
-            back={{
-                id: "supplier-order-center-header-back-list",
-                label: "供应商订单列表",
-                href: "/supplier-api/orders",
-            }}
+            back={
+                embedded
+                    ? undefined
+                    : {
+                          id: "supplier-order-center-header-back-list",
+                          label: "返回供应商订单列表",
+                          href: "/supplier-api/orders",
+                      }
+            }
             title={order.supplierName}
             documentNumber={order.orderNo}
             primaryStatus={{
@@ -53,22 +61,52 @@ export function SupplierOrderCenterHeader({
                 tone: order.fulfillmentTone,
             }}
             meta={
-                <span className="text-muted-foreground">
-                    供应商单号 {order.externalOrderNo ?? "尚未返回"}
-                </span>
+                <DetailWorkspaceMeta
+                    items={[
+                        <span key="external" className="num">
+                            供应商单号 {order.externalOrderNo ?? "尚未返回"}
+                        </span>,
+                        order.connectionCode ? (
+                            <span key="conn" className="num">
+                                连接 {order.connectionCode}
+                            </span>
+                        ) : null,
+                        order.createdAt ? (
+                            <span key="created" className="num">
+                                创建于{" "}
+                                {formatDateTime(
+                                    order.createdAt,
+                                    "fullIntl",
+                                    "passthrough",
+                                )}
+                            </span>
+                        ) : null,
+                    ]}
+                />
             }
             statuses={[
                 {
-                    id: "supplier",
-                    label: "供应商",
-                    status: { label: order.supplierName, tone: "neutral" },
+                    id: "fulfillment",
+                    label: "履约",
+                    status: {
+                        label: order.fulfillmentLabel,
+                        tone: order.fulfillmentTone,
+                    },
                 },
                 {
-                    id: "external",
-                    label: "外部单号",
+                    id: "cancel",
+                    label: "取消",
                     status: {
-                        label: order.externalOrderNo ?? "尚未返回",
-                        tone: order.externalOrderNo ? "info" : "neutral",
+                        label: order.cancelLabel,
+                        tone: order.cancelTone,
+                    },
+                },
+                {
+                    id: "refund",
+                    label: "退款",
+                    status: {
+                        label: order.refundLabel,
+                        tone: order.refundTone,
                     },
                 },
             ]}
@@ -90,7 +128,7 @@ export function SupplierOrderCenterHeader({
                             }
                             onClick={onQueryResult}
                         >
-                            {queryPending ? "查询中…" : "查询原结果"}
+                            {queryPending ? "查询中…" : "查询原下单结果"}
                         </GuardedBusinessAction>
                     </PermissionGuard>
                 ) : undefined

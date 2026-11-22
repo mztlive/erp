@@ -4,6 +4,7 @@ import {
     BackgroundJobProgress,
     BatchOperationResult,
     BusinessEmptyState,
+    DetailWorkspaceSection,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -20,16 +21,19 @@ export function ResultSection({
 
     if (!partitions && batch.stage !== "RESULT") {
         return (
-            <BusinessEmptyState
-                kind="no-data"
-                title="结果尚未形成"
-                description="导入完成后，此处将列出成功、跳过与失败项，失败的记录可在此重新处理。"
-            />
+            <DetailWorkspaceSection title="导入结果" width="form">
+                <BusinessEmptyState
+                    kind="no-data"
+                    title="结果尚未形成"
+                    description="导入完成后，此处将列出成功、跳过与失败项，失败的记录可在此重新处理。"
+                    className="rounded-lg border-0 bg-transparent shadow-none ring-0"
+                />
+            </DetailWorkspaceSection>
         )
     }
 
     return (
-        <div className="space-y-4">
+        <DetailWorkspaceSection title="导入结果">
             {partitions ? (
                 <BatchOperationResult
                     title="导入结果明细"
@@ -90,6 +94,6 @@ export function ResultSection({
                     已导入成功的数据不会因取消、重试或上传新文件而被覆盖或删除；重新处理仅针对失败项。
                 </AlertDescription>
             </Alert>
-        </div>
+        </DetailWorkspaceSection>
     )
 }

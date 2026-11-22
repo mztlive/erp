@@ -11,6 +11,19 @@ import {
 import type { HealthRecordView } from "@/features/supplier-api-connections/types"
 import { formatDateTime } from "@/lib/datetime"
 
+const CHECK_TYPE_LABEL: Record<string, string> = {
+    AUTHENTICATION: "鉴权验证",
+    CONNECTIVITY: "连通性检查",
+    FULL: "完整检查",
+    CATALOG: "商品同步检查",
+    ORDER: "下单能力检查",
+    HEALTH: "健康检查",
+}
+
+function checkTypeLabel(raw: string): string {
+    return CHECK_TYPE_LABEL[raw.toUpperCase()] ?? "接口验证"
+}
+
 function CheckResult({ record }: { record: HealthRecordView }) {
     return (
         <div className="min-w-0 space-y-2 text-body-compact">
@@ -20,11 +33,11 @@ function CheckResult({ record }: { record: HealthRecordView }) {
                     label={record.resultLabel}
                     tone={record.resultTone}
                 />
-                <span className="text-muted-foreground">
+                <span className="num text-muted-foreground">
                     {formatDateTime(record.at, "default")}
                 </span>
                 <span className="text-muted-foreground">
-                    {record.checkType}
+                    {checkTypeLabel(record.checkType)}
                 </span>
                 {record.latencyMs != null ? (
                     <span className="num text-xs text-muted-foreground">
@@ -44,7 +57,7 @@ function CheckResult({ record }: { record: HealthRecordView }) {
             ) : null}
             {record.result === "UNKNOWN" ? (
                 <p className="text-muted-foreground">
-                    结果待确认，页面将自动更新。
+                    结果待确认，页面将在检测窗口内自动更新。
                 </p>
             ) : null}
         </div>
@@ -65,7 +78,7 @@ export function HealthRecords({
     }
 
     return (
-        <div className="space-y-3 border-t pt-4">
+        <div className="space-y-3 border-t border-border/60 pt-4">
             <div className="space-y-2" aria-live="polite">
                 <p className="text-xs text-muted-foreground">最近检查</p>
                 <CheckResult record={latest} />
@@ -77,7 +90,8 @@ export function HealthRecords({
                         render={<Button variant="ghost" size="sm" />}
                         className="group text-muted-foreground"
                     >
-                        历史检查（{history.length}）
+                        历史检查（<span className="num">{history.length}</span>
+                        ）
                         <ChevronDownIcon
                             className="size-4 transition-transform group-data-panel-open:rotate-180"
                             aria-hidden="true"

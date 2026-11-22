@@ -176,7 +176,11 @@ export function ExecutionHistory({
     )
     if (presentation === "timeline") return content
     return (
-        <Card size="sm" className="border border-border shadow-sm">
+        <Card
+            size="sm"
+            data-slot="approval-surface"
+            className="border border-border shadow-sm"
+        >
             <CardHeader className="border-b">
                 <ApprovalSectionHeading compact={compact}>
                     审批历史

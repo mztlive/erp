@@ -1,7 +1,10 @@
 "use client"
 
-import { QuantityValue } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import {
+    BusinessStatusBadge,
+    DetailWorkspaceSection,
+    QuantityValue,
+} from "@/components/business"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
@@ -58,50 +61,60 @@ export function SupplierOrderExecutionTree({
         (node) => node.role === "PARENT" || node.role === "UNRESOLVED",
     )
     const prefix = `supplier-order-tree-${toAutomationIdSegment(orderId)}`
+
     return (
-        <section
-            className="space-y-4 rounded-xl border bg-card p-5"
-            aria-label="供应商父子订单"
-        >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-1">
-                    <h3 className="font-semibold">供应商订单</h3>
-                    <p className="text-xs text-muted-foreground">
-                        主订单号：
-                        <span className="num">{tree.root_order_no}</span>
-                    </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
+        <DetailWorkspaceSection
+            title="供应商父子订单"
+            width="full"
+            subtitle={
+                <span>
+                    主订单号：<span className="num">{tree.root_order_no}</span>
+                </span>
+            }
+            actions={
+                <div className="flex flex-wrap gap-1.5">
                     {leaves.length > 0 || !reservations.length ? (
-                        <Badge variant="outline">
-                            {leaves.length} 个拆分后子订单
-                        </Badge>
+                        <BusinessStatusBadge
+                            context="list"
+                            appearance="quiet"
+                            tone="neutral"
+                            label={`${leaves.length} 个拆分后子订单`}
+                        />
                     ) : null}
                     {reservations.length > 0 ? (
-                        <Badge variant="warning">
-                            {reservations.length} 个待确认锁库单
-                        </Badge>
+                        <BusinessStatusBadge
+                            context="list"
+                            tone="warning"
+                            label={`${reservations.length} 个待确认锁库单`}
+                        />
                     ) : null}
                     {confirmed > 0 ? (
-                        <Badge
-                            variant={
+                        <BusinessStatusBadge
+                            context="list"
+                            tone={
                                 confirmed === leaves.length ? "success" : "info"
                             }
-                        >
-                            {confirmed === leaves.length
-                                ? "全部已确认"
-                                : "部分确认"}
-                        </Badge>
+                            label={
+                                confirmed === leaves.length
+                                    ? "全部已确认"
+                                    : "部分确认"
+                            }
+                        />
                     ) : null}
                     {canceled > 0 ? (
-                        <Badge variant="warning">
-                            {canceled === leaves.length
-                                ? "全部已取消"
-                                : "部分取消"}
-                        </Badge>
+                        <BusinessStatusBadge
+                            context="list"
+                            tone="warning"
+                            label={
+                                canceled === leaves.length
+                                    ? "全部已取消"
+                                    : "部分取消"
+                            }
+                        />
                     ) : null}
                 </div>
-            </div>
+            }
+        >
             {tree.pending ? (
                 <Alert variant="warning">
                     <AlertDescription>
@@ -111,7 +124,7 @@ export function SupplierOrderExecutionTree({
             ) : null}
             {confirmationUnknown ? (
                 <p className="text-xs text-warning-soft-foreground">
-                    存在确认结果待核实的子订单，请点击「查询原结果」核对，请勿重复确认。
+                    存在确认结果待核实的子订单，请先核验执行结果，请勿重复确认。
                 </p>
             ) : null}
             {reservations.length > 0 ? (
@@ -124,69 +137,76 @@ export function SupplierOrderExecutionTree({
                     暂未获取到供应商拆分后的子订单明细。
                 </p>
             ) : (
-                <div className="divide-y">
+                <div className="divide-y divide-border/60 border-y border-border/60">
                     {current.map((node) => (
                         <article
                             key={node.external_order_no}
-                            className="space-y-3 py-4 first:pt-0 last:pb-0"
+                            className="space-y-3 py-4"
                         >
                             <div className="flex flex-wrap items-center justify-between gap-3">
-                                <h4 className="text-body-compact font-medium">
+                                <h3 className="text-body-compact font-medium">
                                     {node.role === "RESERVATION_ROOT"
                                         ? "锁库单"
                                         : "子订单"}{" "}
                                     <span className="num">
                                         {node.external_order_no}
                                     </span>
-                                </h4>
+                                </h3>
                                 <div className="flex flex-wrap gap-1.5">
                                     {node.role === "RESERVATION_ROOT" ? (
-                                        <Badge variant="warning">
-                                            {NODE_ROLE_LABEL[node.role]}
-                                        </Badge>
+                                        <BusinessStatusBadge
+                                            context="list"
+                                            tone="warning"
+                                            label={NODE_ROLE_LABEL[node.role]}
+                                        />
                                     ) : null}
-                                    <Badge
-                                        variant={
+                                    <BusinessStatusBadge
+                                        context="list"
+                                        tone={
                                             node.confirmation === "CONFIRMED"
                                                 ? "success"
-                                                : "warning"
+                                                : node.confirmation ===
+                                                    "REJECTED"
+                                                  ? "destructive"
+                                                  : "warning"
                                         }
-                                    >
-                                        {node.confirmation
-                                            ? CONFIRMATION_LABEL[
-                                                  node.confirmation
-                                              ]
-                                            : "确认状态待核实"}
-                                    </Badge>
+                                        label={
+                                            node.confirmation
+                                                ? CONFIRMATION_LABEL[
+                                                      node.confirmation
+                                                  ]
+                                                : "确认状态待核实"
+                                        }
+                                    />
                                     {node.role === "LEAF" &&
                                     node.fulfillment ? (
-                                        <Badge variant="outline">
-                                            {statusLabel(
+                                        <BusinessStatusBadge
+                                            context="list"
+                                            appearance="quiet"
+                                            tone="info"
+                                            label={statusLabel(
                                                 FULFILLMENT_STATUS_LABEL,
                                                 node.fulfillment,
                                             )}
-                                        </Badge>
+                                        />
                                     ) : null}
                                     {node.cancellation &&
                                     node.cancellation.toUpperCase() !==
                                         "NONE" ? (
-                                        <Badge variant="warning">
-                                            取消：
-                                            {statusLabel(
-                                                CANCEL_STATUS_LABEL,
-                                                node.cancellation,
-                                            )}
-                                        </Badge>
+                                        <BusinessStatusBadge
+                                            context="list"
+                                            tone="warning"
+                                            label={`取消：${statusLabel(CANCEL_STATUS_LABEL, node.cancellation)}`}
+                                        />
                                     ) : null}
                                     {node.refund &&
                                     node.refund.toUpperCase() !== "NONE" ? (
-                                        <Badge variant="outline">
-                                            返款：
-                                            {statusLabel(
-                                                REFUND_STATUS_LABEL,
-                                                node.refund,
-                                            )}
-                                        </Badge>
+                                        <BusinessStatusBadge
+                                            context="list"
+                                            appearance="quiet"
+                                            tone="neutral"
+                                            label={`返款：${statusLabel(REFUND_STATUS_LABEL, node.refund)}`}
+                                        />
                                     ) : null}
                                 </div>
                             </div>
@@ -207,7 +227,7 @@ export function SupplierOrderExecutionTree({
                                         <span>
                                             {line.product_name ||
                                                 "商品名称待核验"}
-                                            <span className="ml-2 text-xs text-muted-foreground num">
+                                            <span className="num ml-2 text-xs text-muted-foreground">
                                                 供应商 SKU：{line.sku_code}
                                             </span>
                                         </span>
@@ -223,7 +243,7 @@ export function SupplierOrderExecutionTree({
                 </div>
             )}
             {history.length > 0 ? (
-                <details className="border-t pt-3">
+                <details className="pt-2">
                     <summary
                         id={`${prefix}-history`}
                         className="cursor-pointer text-xs text-muted-foreground"
@@ -254,6 +274,6 @@ export function SupplierOrderExecutionTree({
             <p className="text-xs text-muted-foreground">
                 历史主单仅作关联追溯；实际发货数量以系统确认的交付记录为准。
             </p>
-        </section>
+        </DetailWorkspaceSection>
     )
 }

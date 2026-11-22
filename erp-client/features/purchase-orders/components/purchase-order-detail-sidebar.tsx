@@ -191,6 +191,11 @@ export function PurchaseOrderDetailSidebar({
                         id="purchase-order-sidebar-invoice"
                         icon={<FileTextIcon aria-hidden="true" />}
                         title="进项票"
+                        onClick={
+                            onSelectSection
+                                ? () => onSelectSection("payable")
+                                : undefined
+                        }
                     >
                         <StatusBadge
                             tone={invoice.tone}

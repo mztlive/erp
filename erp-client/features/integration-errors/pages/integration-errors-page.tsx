@@ -9,8 +9,11 @@ import {
     workspaceEmbeddedScaffoldClassName,
 } from "@/components/business"
 import { listWorkspaceStyles as styles } from "@/components/business/list-workspace"
+import { useRouter } from "@/lib/navigation"
+import { isWorkspaceFrame, workspaceHost } from "@/lib/workspace-tabs"
 
 import { useAccountProfileQuery } from "@/features/auth/queries"
+import { IntegrationEvidencePanel } from "../components/integration-evidence-panel"
 import {
     useIntegrationItemQuery,
     useIntegrationQueueQuery,
@@ -50,6 +53,7 @@ export function IntegrationErrorsPage({
     embedded?: boolean
     onTaskCompleted?: (workItemId: string) => void
 } = {}) {
+    const router = useRouter()
     const {
         urlState,
         currentTaskId,
@@ -58,13 +62,18 @@ export function IntegrationErrorsPage({
         query,
         replaceUrl,
         autoNext,
+        returnTo,
+        currentQueueHref,
     } = useIntegrationPageUrl({ forcedTaskId, forcedDifferenceId })
 
     const profileQuery = useAccountProfileQuery()
-    const queueQuery = useIntegrationQueueQuery({
-        ...query,
-        currentUserId: profileQuery.data?.userid,
-    })
+    const queueQuery = useIntegrationQueueQuery(
+        {
+            ...query,
+            currentUserId: profileQuery.data?.userid,
+        },
+        !focusMode,
+    )
 
     const view = queueQuery.data
     const queueItems = React.useMemo(() => view?.items ?? [], [view?.items])
@@ -132,7 +141,7 @@ export function IntegrationErrorsPage({
 
     // refetch 保持与页面原实现一致：普通函数，每次渲染重建，调用时才读取当前查询引用
     const refetch = () => {
-        void queueQuery.refetch()
+        if (!focusMode) void queueQuery.refetch()
         if (detailTarget) void detailItemQuery.refetch()
     }
 
@@ -179,6 +188,32 @@ export function IntegrationErrorsPage({
         autoNext,
     })
 
+    const defaultItemType = forcedDifferenceId
+        ? "RECONCILIATION_DIFFERENCE"
+        : "ERROR_TASK"
+    const defaultDetailTitle = forcedDifferenceId ? "对账差异" : "外部同步异常"
+    const backToQueueHref =
+        returnTo ??
+        `/governance/integration-errors?view=${urlState.view}&queueContextId=${encodeURIComponent(urlState.queueContextId)}`
+
+    const handleBackToQueue = React.useCallback(() => {
+        const host = workspaceHost()
+        if (host) {
+            host.closeCurrent(
+                isWorkspaceFrame() ? window : null,
+                backToQueueHref,
+            )
+            return
+        }
+        router.push(backToQueueHref)
+    }, [backToQueueHref, router])
+
+    const detailUpdatedAt =
+        item?.freshness.updatedAt ||
+        (detailItemQuery.dataUpdatedAt > 0
+            ? new Date(detailItemQuery.dataUpdatedAt).toISOString()
+            : undefined)
+
     const panelErrorClass =
         item && isPanelErrorClass(item.classification.errorClass)
             ? item.classification.errorClass
@@ -199,7 +234,7 @@ export function IntegrationErrorsPage({
         return embedded ? (
             <IntegrationPageSkeleton focus />
         ) : (
-            <DetailWorkspaceSkeleton title="外部同步异常与对账" />
+            <DetailWorkspaceSkeleton title={defaultDetailTitle} sidebar />
         )
     }
 
@@ -217,9 +252,13 @@ export function IntegrationErrorsPage({
     if (focusMode && detailItemQuery.isError) {
         return (
             <IntegrationPageFailure
-                title="外部同步异常与对账"
-                description="任务加载失败"
+                title={defaultDetailTitle}
+                description={
+                    forcedDifferenceId ? "对账差异加载失败" : "异常任务加载失败"
+                }
                 detail={!embedded}
+                backHref={backToQueueHref}
+                backAlways={Boolean(returnTo)}
                 error={detailItemQuery.error}
                 onRetry={() => void detailItemQuery.refetch()}
             />
@@ -229,25 +268,34 @@ export function IntegrationErrorsPage({
     if (focusError) {
         return (
             <IntegrationNotFound
+                title={defaultDetailTitle}
                 detail={!embedded}
                 view={urlState.view}
                 queueContextId={urlState.queueContextId}
+                backHref={backToQueueHref}
+                backAlways={Boolean(returnTo)}
                 onRetry={() => void detailItemQuery.refetch()}
             />
         )
     }
+
+    const hasNext = !focusMode && Boolean(neighbor(1))
 
     const actionResult = (
         <IntegrationActionResult
             lastResult={lastResult}
             actionError={actionError}
             autoNext={autoNext}
+            hasNext={hasNext}
             resultRef={actions.resultRef}
             detailWorkspace={focusMode && !embedded}
             onNext={() => {
                 const next = neighbor(1)
                 if (next) goToItem(next)
             }}
+            onBackToQueue={
+                focusMode && !embedded ? handleBackToQueue : undefined
+            }
         />
     )
     const workspace = (
@@ -257,6 +305,7 @@ export function IntegrationErrorsPage({
             focusMode={focusMode}
             detailWorkspace={focusMode && !embedded}
             urlState={urlState}
+            currentQueueHref={currentQueueHref}
             positionIndex={positionIndex}
             positionTotal={positionTotal}
             panelErrorClass={panelErrorClass}
@@ -265,7 +314,7 @@ export function IntegrationErrorsPage({
             neighbor={neighbor}
             replaceUrl={replaceUrl}
             onClearFilters={clearQueueFilters}
-            emptyReason={view?.emptyReason}
+            emptyReason={focusMode ? undefined : view?.emptyReason}
         />
     )
 
@@ -274,13 +323,22 @@ export function IntegrationErrorsPage({
             <DetailWorkspacePage>
                 <IntegrationDetailNav
                     item={item}
-                    updatedAt={view?.context.updatedAt}
+                    defaultItemType={defaultItemType}
+                    updatedAt={detailUpdatedAt}
                     view={urlState.view}
                     queueContextId={urlState.queueContextId}
+                    returnTo={returnTo}
+                    headingRef={actions.headingRef}
                     onRefresh={actions.refresh}
                 />
                 <DetailWorkspaceBody
                     alerts={lastResult || actionError ? actionResult : null}
+                    sidebar={
+                        item ? (
+                            <IntegrationEvidencePanel item={item} sidebar />
+                        ) : undefined
+                    }
+                    sidebarLabel="执行尝试、关联证据与处理审计"
                 >
                     {workspace}
                 </DetailWorkspaceBody>

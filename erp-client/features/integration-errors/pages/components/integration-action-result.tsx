@@ -9,17 +9,45 @@ export function IntegrationActionResult({
     lastResult,
     actionError,
     autoNext,
+    hasNext,
     resultRef,
     onNext,
+    onBackToQueue,
     detailWorkspace,
 }: {
     lastResult: IntegrationFormalResult | null
     actionError: string | null
     autoNext: boolean
+    hasNext?: boolean
     resultRef: React.Ref<HTMLDivElement>
     onNext: () => void
+    onBackToQueue?: () => void
     detailWorkspace?: boolean
 }) {
+    const terminalAction =
+        lastResult?.terminal && !autoNext ? (
+            hasNext ? (
+                <Button
+                    id="integration-action-result-next"
+                    type="button"
+                    size="sm"
+                    onClick={onNext}
+                >
+                    下一项
+                </Button>
+            ) : onBackToQueue ? (
+                <Button
+                    id="integration-action-result-back-to-queue"
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={onBackToQueue}
+                >
+                    返回队列
+                </Button>
+            ) : null
+        ) : null
+
     return (
         <>
             {lastResult ? (
@@ -37,18 +65,7 @@ export function IntegrationActionResult({
                         title={lastResult.title}
                         description={lastResult.description}
                         facts={lastResult.facts}
-                        actions={
-                            lastResult.terminal && !autoNext ? (
-                                <Button
-                                    id="integration-action-result-next"
-                                    type="button"
-                                    size="sm"
-                                    onClick={onNext}
-                                >
-                                    下一项
-                                </Button>
-                            ) : null
-                        }
+                        actions={terminalAction}
                     />
                 </div>
             ) : null}

@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { RouteLoading } from "@/components/layout/route-loading"
+import { DetailWorkspaceSkeleton } from "@/components/business"
 import { PurchaseOrderDetailPage } from "@/features/purchase-orders/pages/purchase-order-detail-page"
 
 export const metadata: Metadata = {
@@ -31,7 +31,11 @@ export default async function PurchaseOrderObjectPage({
     const { purchaseOrderId } = await params
     const { section, mode, workItemId, changeOrderId } = await searchParams
     return (
-        <Suspense fallback={<RouteLoading label="正在加载采购单…" />}>
+        <Suspense
+            fallback={
+                <DetailWorkspaceSkeleton title="采购单" summary sidebar />
+            }
+        >
             <PurchaseOrderDetailPage
                 key={`${purchaseOrderId}-${workItemId ?? ""}-${changeOrderId ?? ""}`}
                 purchaseOrderId={purchaseOrderId}

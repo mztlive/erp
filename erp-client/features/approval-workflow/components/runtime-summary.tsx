@@ -51,19 +51,28 @@ export function RuntimeSummary({
     instance,
     className,
     compact = false,
+    variant = "card",
 }: {
     instance?: ApprovalRuntimeInstance
     className?: string
     /** 对象中心 tab 内使用：标题与概览 text-sm 对齐，避免 CardTitle 偏大。 */
     compact?: boolean
+    /** `flat` 用于详情工作面零边框通栏；位于 `.erp-detail-workspace-page` 内时也会自动扁平化。 */
+    variant?: "card" | "flat"
 }) {
     if (!instance) {
         return (
             <Card
                 size="sm"
-                className={cn("border border-border shadow-sm", className)}
+                data-slot="approval-surface"
+                className={cn(
+                    variant === "flat"
+                        ? "border-0 bg-transparent shadow-none ring-0"
+                        : "border border-border shadow-sm",
+                    className,
+                )}
             >
-                <CardHeader className="border-b">
+                <CardHeader className={cn(variant !== "flat" && "border-b")}>
                     <ApprovalSectionHeading compact={compact}>
                         审批摘要
                     </ApprovalSectionHeading>
@@ -96,14 +105,19 @@ export function RuntimeSummary({
     return (
         <Card
             size="sm"
+            data-slot="approval-surface"
             className={cn(
-                "border border-border shadow-sm",
+                variant === "flat" && !blocked
+                    ? "border-0 bg-transparent shadow-none ring-0"
+                    : "border border-border shadow-sm",
                 blocked && "border-destructive-border bg-destructive/5",
                 className,
             )}
             data-blocked={blocked ? "true" : "false"}
         >
-            <CardHeader className="border-b">
+            <CardHeader
+                className={cn((variant !== "flat" || blocked) && "border-b")}
+            >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <ApprovalSectionHeading compact={compact}>
                         {processLabel}

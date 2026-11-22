@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { RouteLoading } from "@/components/layout/route-loading"
+import { DetailWorkspaceSkeleton } from "@/components/business"
 import { ProposalDetailPage } from "@/features/sales-selection/pages/proposal-detail-page"
 
 export const metadata: Metadata = {
@@ -13,13 +13,28 @@ export const metadata: Metadata = {
  */
 export default async function SalesSelectionProposalPage({
     params,
+    searchParams,
 }: {
     params: Promise<{ proposalId: string }>
+    searchParams: Promise<{ returnTo?: string }>
 }) {
     const { proposalId } = await params
+    const { returnTo } = await searchParams
     return (
-        <Suspense fallback={<RouteLoading label="正在加载销售方案…" />}>
-            <ProposalDetailPage key={proposalId} proposalId={proposalId} />
+        <Suspense
+            fallback={
+                <DetailWorkspaceSkeleton
+                    title="销售方案"
+                    description="正在加载销售方案…"
+                    sidebar
+                />
+            }
+        >
+            <ProposalDetailPage
+                key={proposalId}
+                proposalId={proposalId}
+                returnTo={returnTo}
+            />
         </Suspense>
     )
 }

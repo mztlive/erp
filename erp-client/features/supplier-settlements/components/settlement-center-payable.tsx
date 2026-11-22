@@ -32,20 +32,27 @@ function SettlementCenterPayable({
                         含税金额{" "}
                         <MoneyValue
                             value={payable.grossAmount}
-                            taxBasis="gross"
+                            display="exact"
                             className={taxAmountToneClass("含税金额")}
                         />{" "}
-                        · 到期 {payable.dueDate} · {payable.statusLabel}
+                        · 到期 <span className="num">{payable.dueDate}</span> ·{" "}
+                        {payable.statusLabel}
                     </p>
-                    <Button
-                        id="supplier-settlements-center-payable-open-w12"
-                        type="button"
-                        size="sm"
-                        render={<Link href={payable.w12Href} />}
-                    >
-                        {openWorkspaceLabel("W12")}
-                        <ExternalLinkIcon className="size-3.5" />
-                    </Button>
+                    <div>
+                        <Button
+                            id="supplier-settlements-center-payable-open-w12"
+                            type="button"
+                            size="sm"
+                            render={<Link href={payable.w12Href} />}
+                        >
+                            {openWorkspaceLabel("W12")}
+                            <ExternalLinkIcon
+                                data-icon="inline-end"
+                                className="size-3.5"
+                                aria-hidden="true"
+                            />
+                        </Button>
+                    </div>
                 </>
             ) : (
                 <p className="text-xs text-muted-foreground">

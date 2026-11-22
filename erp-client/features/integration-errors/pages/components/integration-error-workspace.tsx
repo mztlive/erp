@@ -28,6 +28,7 @@ export function IntegrationErrorWorkspace({
     focusMode,
     detailWorkspace,
     urlState,
+    currentQueueHref,
     positionIndex,
     positionTotal,
     panelErrorClass,
@@ -43,6 +44,7 @@ export function IntegrationErrorWorkspace({
     focusMode: boolean
     detailWorkspace?: boolean
     urlState: IntegrationUrlState
+    currentQueueHref?: string
     positionIndex: number
     positionTotal: number
     panelErrorClass: InterfaceErrorClass | null
@@ -61,13 +63,13 @@ export function IntegrationErrorWorkspace({
         if (next) goToItem(next)
     }
 
-    if (emptyReason === "no_scope" || items.length === 0) {
-        const empty =
-            emptyReason === "no_scope" ? (
-                <IntegrationEmptyScope />
-            ) : (
-                <IntegrationEmptyQueue onClearFilters={onClearFilters} />
-            )
+    const showNoScope = !focusMode && emptyReason === "no_scope"
+    if (showNoScope || items.length === 0) {
+        const empty = showNoScope ? (
+            <IntegrationEmptyScope />
+        ) : (
+            <IntegrationEmptyQueue onClearFilters={onClearFilters} />
+        )
         return detailWorkspace ? (
             <DetailWorkspaceSection>{empty}</DetailWorkspaceSection>
         ) : (
@@ -128,13 +130,7 @@ export function IntegrationErrorWorkspace({
                 actionZoneRef={actions.actionZoneRef}
                 detailWorkspace={detailWorkspace}
             />
-            {detailWorkspace ? (
-                <DetailWorkspaceSection>
-                    <IntegrationEvidencePanel item={item} flat />
-                </DetailWorkspaceSection>
-            ) : (
-                <IntegrationEvidencePanel item={item} />
-            )}
+            {!detailWorkspace ? <IntegrationEvidencePanel item={item} /> : null}
 
             {actions.terminalConfirm ? (
                 <IntegrationTerminalConfirmation
@@ -173,6 +169,7 @@ export function IntegrationErrorWorkspace({
                 <IntegrationQueuePanel
                     items={items}
                     selectedId={item?.identity.id}
+                    returnTo={currentQueueHref}
                     onSelect={goToItem}
                 />
             ) : null}

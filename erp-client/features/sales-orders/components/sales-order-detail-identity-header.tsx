@@ -1,10 +1,10 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 
 import {
     DetailWorkspaceChrome,
-    DetailWorkspaceDirtyBadge,
     DetailWorkspaceMeta,
     DetailWorkspaceMetricItem,
     DetailWorkspaceMetrics,
@@ -49,7 +49,7 @@ export function SalesOrderIdentityHeader({
                         {NATURE_LABEL[order.nature]}
                     </Badge>
                     {!identityOnly && order.activeChangeOrder ? (
-                        <DetailWorkspaceDirtyBadge label="改单中" />
+                        <StatusBadge tone="warning" label="改单中" />
                     ) : null}
                 </>
             }
@@ -63,6 +63,18 @@ export function SalesOrderIdentityHeader({
                 identityOnly ? undefined : (
                     <DetailWorkspaceMeta
                         items={[
+                            order.customerId ? (
+                                <span key="customer">
+                                    客户{" "}
+                                    <Link
+                                        id="sales-orders-detail-header-customer-link"
+                                        href={`/sales/customers/${encodeURIComponent(order.customerId)}`}
+                                        className="font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
+                                    >
+                                        {order.customerName}
+                                    </Link>
+                                </span>
+                            ) : null,
                             order.currentRevisionNo == null ? "尚未生效" : null,
                             <span key="owner">
                                 销售负责人{" "}

@@ -11,9 +11,11 @@ import { Button } from "@/components/ui/button"
 function SettlementCenterResultPanel({
     result,
     resultRef,
+    onClose,
 }: {
     result: ResultState
     resultRef: React.RefObject<HTMLDivElement | null>
+    onClose?: () => void
 }) {
     return (
         <div ref={resultRef} tabIndex={-1} className="outline-none">
@@ -28,6 +30,17 @@ function SettlementCenterResultPanel({
                     facts={result.facts}
                     actions={
                         <div className="flex flex-wrap gap-2">
+                            {onClose ? (
+                                <Button
+                                    id="supplier-settlements-center-result-close"
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={onClose}
+                                >
+                                    关闭结果
+                                </Button>
+                            ) : null}
                             {result.w12Href ? (
                                 <Button
                                     id="supplier-settlements-center-result-w12"
@@ -35,8 +48,12 @@ function SettlementCenterResultPanel({
                                     size="sm"
                                     render={<Link href={result.w12Href} />}
                                 >
-                                    去供应商往来 处理应付
-                                    <ExternalLinkIcon className="size-3.5" />
+                                    去供应商往来处理应付
+                                    <ExternalLinkIcon
+                                        data-icon="inline-end"
+                                        className="size-3.5"
+                                        aria-hidden="true"
+                                    />
                                 </Button>
                             ) : null}
                         </div>

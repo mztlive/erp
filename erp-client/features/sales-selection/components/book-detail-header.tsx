@@ -1,9 +1,10 @@
 "use client"
 
+import * as React from "react"
 import Link from "next/link"
-import { hasPermission } from "@/lib/permissions"
 import {
     BanIcon,
+    ChevronDownIcon,
     CopyIcon,
     FileTextIcon,
     Link2Icon,
@@ -16,56 +17,74 @@ import {
 
 import {
     DetailWorkspaceChrome,
+    DetailWorkspaceMeta,
     detailWorkspaceStyles,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
+import {
+    Popover,
+    PopoverContent,
+    PopoverTitle,
+    PopoverTrigger,
+} from "@/components/ui/popover"
+import { hasPermission } from "@/lib/permissions"
 import { useBookOperations } from "@/features/sales-selection/hooks/queries"
 import {
     bookIdentity,
     bookletStatusTone,
     prepareFailure,
 } from "@/features/sales-selection/lib/presentation"
-import { createIdempotencyKey } from "@/features/sales-selection/lib/validation"
 import type { SelectionBookDetail } from "@/features/sales-selection/types"
 import {
     BOOKLET_STATUS_LABEL,
+    POOL_SOURCE_LABEL,
     SELECTION_FORM_LABEL,
     SUBMIT_MODE_LABEL,
 } from "@/features/sales-selection/types"
 
 type Operations = ReturnType<typeof useBookOperations>
 
-function withKey(version: number) {
-    return {
-        expected_version: version,
-        idempotency_key: createIdempotencyKey(),
-    }
-}
-
 /**
  * 选品册详情页头：返回列表、对象身份与当前状态可执行动作。
+ * 所有高风险与写命令统一经页面级 FormalCommandKeyLedger 与确认弹窗执行。
  */
 export function BookDetailHeader({
     detail,
     pending,
     permissions,
     operations,
+    tabs,
     onEdit,
     onCopy,
     onOpenInfo,
+    onPrepare,
+    onPublish,
+    onRegenerateAll,
+    onReplaceLink,
+    onClose,
+    onRevoke,
+    onVoid,
 }: {
     detail: SelectionBookDetail
     pending: boolean
     permissions: readonly string[] | undefined
     operations: Operations
+    tabs?: React.ReactNode
     onEdit: () => void
     onCopy?: () => void
     onOpenInfo: () => void
+    onPrepare: () => void
+    onPublish: () => void
+    onRegenerateAll: () => void
+    onReplaceLink: () => void
+    onClose: () => void
+    onRevoke: () => void
+    onVoid: () => void
 }) {
+    const [moreOpen, setMoreOpen] = React.useState(false)
     const bookId = bookIdentity(detail)
-    const key = withKey(detail.version)
     const formLabel = SELECTION_FORM_LABEL[detail.selection_form]
     const modeLabel = SUBMIT_MODE_LABEL[detail.submit_mode]
     const failure = prepareFailure(detail)
@@ -76,6 +95,12 @@ export function BookDetailHeader({
         permissions,
         "sales_selection_proposal:get",
     )
+
+    const runAndCloseMore = (action: () => void) => {
+        setMoreOpen(false)
+        action()
+    }
+
     const primaryAction = (() => {
         if (detail.status === "DRAFT" && can("prepare")) {
             return (
@@ -90,11 +115,7 @@ export function BookDetailHeader({
                             onEdit()
                             return
                         }
-                        operations.prepare.mutate({
-                            bookId,
-                            kind: "FIRST_PREPARE",
-                            ...key,
-                        })
+                        onPrepare()
                     }}
                 >
                     <SparklesIcon data-icon="inline-start" aria-hidden="true" />
@@ -116,13 +137,7 @@ export function BookDetailHeader({
                     type="button"
                     size="sm"
                     disabled={pending}
-                    onClick={() =>
-                        void operations.publish.mutateAsync({
-                            bookId,
-                            batch_id: detail.batch_id ?? undefined,
-                            ...key,
-                        })
-                    }
+                    onClick={onPublish}
                 >
                     <SendIcon data-icon="inline-start" aria-hidden="true" />
                     发布
@@ -156,7 +171,7 @@ export function BookDetailHeader({
                     size="sm"
                     render={
                         <Link
-                            href={`/sales/selection/proposals/${detail.proposal_id}`}
+                            href={`/sales/selection/proposals/${encodeURIComponent(detail.proposal_id)}`}
                         />
                     }
                 >
@@ -167,6 +182,26 @@ export function BookDetailHeader({
         }
         return null
     })()
+
+    const showCopy = Boolean(onCopy)
+    const showRegenerateAll =
+        detail.status === "PENDING_PUBLISH" &&
+        detail.selection_form === "PACKAGE" &&
+        can("prepare")
+    const showReplaceLink = detail.status === "PUBLISHED" && can("rotate_link")
+    const showClose = detail.status === "PUBLISHED" && can("close")
+    const showRevoke = detail.status === "SUBMITTED" && can("revoke")
+    const showVoid =
+        (detail.status === "DRAFT" || detail.status === "PENDING_PUBLISH") &&
+        can("void")
+
+    const hasMoreActions =
+        showCopy ||
+        showRegenerateAll ||
+        showReplaceLink ||
+        showClose ||
+        showRevoke ||
+        showVoid
 
     const secondaryActions = (
         <>
@@ -182,202 +217,33 @@ export function BookDetailHeader({
                 <FileTextIcon data-icon="inline-start" aria-hidden="true" />
                 选品册资料
             </Button>
-            {onCopy ? (
+            {detail.status === "DRAFT" && can("prepare") ? (
                 <Button
-                    id="sales-selection-detail-copy"
+                    id="selection-draft-edit"
                     type="button"
                     size="sm"
                     variant="ghost"
                     className={detailWorkspaceStyles.quietButton}
-                    disabled={pending || detail.status === "PREPARING"}
-                    title={
-                        detail.status === "PREPARING"
-                            ? "请准备完成后再复制"
-                            : undefined
-                    }
-                    onClick={onCopy}
+                    disabled={pending}
+                    onClick={onEdit}
                 >
-                    <CopyIcon data-icon="inline-start" aria-hidden="true" />
-                    复制选品册
+                    <PencilIcon data-icon="inline-start" aria-hidden="true" />
+                    调整来源与档位
                 </Button>
             ) : null}
-            {detail.status === "DRAFT" ? (
-                <>
-                    {can("prepare") && (
-                        <Button
-                            id="selection-draft-edit"
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className={detailWorkspaceStyles.quietButton}
-                            disabled={pending}
-                            onClick={onEdit}
-                        >
-                            <PencilIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            调整来源与档位
-                        </Button>
-                    )}
-                    {can("void") && (
-                        <LoadingButton
-                            id="sales-selection-detail-void"
-                            loading={operations.void.isPending}
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className={detailWorkspaceStyles.quietDangerButton}
-                            disabled={pending}
-                            onClick={() =>
-                                void operations.void.mutateAsync({
-                                    bookId,
-                                    ...key,
-                                })
-                            }
-                        >
-                            <BanIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            作废
-                        </LoadingButton>
-                    )}
-                </>
-            ) : null}
-            {detail.status === "PENDING_PUBLISH" ? (
-                <>
-                    {detail.selection_form === "PACKAGE" && can("prepare") ? (
-                        <LoadingButton
-                            id="sales-selection-detail-regenerate"
-                            loading={
-                                operations.regenerate.isPending &&
-                                !operations.regenerate.variables?.tier_ids
-                                    ?.length
-                            }
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className={detailWorkspaceStyles.quietButton}
-                            disabled={pending}
-                            onClick={() =>
-                                void operations.regenerate.mutateAsync({
-                                    bookId,
-                                    ...key,
-                                })
-                            }
-                        >
-                            <RefreshCwIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            重新生成整册
-                        </LoadingButton>
-                    ) : null}
-                    {can("prepare") && (
-                        <Button
-                            id="sales-selection-detail-reprepare"
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className={detailWorkspaceStyles.quietButton}
-                            disabled={pending}
-                            onClick={onEdit}
-                        >
-                            <PencilIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            调整来源与档位
-                        </Button>
-                    )}
-                    {can("void") && (
-                        <LoadingButton
-                            id="sales-selection-detail-void"
-                            loading={operations.void.isPending}
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className={detailWorkspaceStyles.quietButton}
-                            disabled={pending}
-                            onClick={() =>
-                                void operations.void.mutateAsync({
-                                    bookId,
-                                    ...key,
-                                })
-                            }
-                        >
-                            <BanIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            作废
-                        </LoadingButton>
-                    )}
-                </>
-            ) : null}
-            {detail.status === "PUBLISHED" ? (
-                <>
-                    {can("rotate_link") && (
-                        <LoadingButton
-                            id="sales-selection-detail-replace-link"
-                            loading={operations.replaceLink.isPending}
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className={detailWorkspaceStyles.quietButton}
-                            disabled={pending}
-                            onClick={() =>
-                                void operations.replaceLink.mutateAsync({
-                                    bookId,
-                                    ...key,
-                                })
-                            }
-                        >
-                            <Link2Icon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            更换链接
-                        </LoadingButton>
-                    )}
-                    {can("close") && (
-                        <LoadingButton
-                            id="sales-selection-detail-close"
-                            loading={operations.close.isPending}
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className={detailWorkspaceStyles.quietDangerButton}
-                            disabled={pending}
-                            onClick={() =>
-                                void operations.close.mutateAsync({
-                                    bookId,
-                                    ...key,
-                                })
-                            }
-                        >
-                            关闭
-                        </LoadingButton>
-                    )}
-                </>
-            ) : null}
-            {detail.status === "SUBMITTED" && can("revoke") ? (
-                <LoadingButton
-                    id="sales-selection-detail-revoke"
-                    loading={operations.revoke.isPending}
+            {detail.status === "PENDING_PUBLISH" && can("prepare") ? (
+                <Button
+                    id="sales-selection-detail-reprepare"
                     type="button"
                     size="sm"
                     variant="ghost"
-                    className={detailWorkspaceStyles.quietDangerButton}
+                    className={detailWorkspaceStyles.quietButton}
                     disabled={pending}
-                    onClick={() =>
-                        void operations.revoke.mutateAsync({ bookId, ...key })
-                    }
+                    onClick={onEdit}
                 >
-                    <Link2OffIcon data-icon="inline-start" aria-hidden="true" />
-                    撤销链接访问
-                </LoadingButton>
+                    <PencilIcon data-icon="inline-start" aria-hidden="true" />
+                    调整来源与档位
+                </Button>
             ) : null}
             {canOpenProposal &&
             detail.proposal_id &&
@@ -391,12 +257,166 @@ export function BookDetailHeader({
                     className={detailWorkspaceStyles.quietButton}
                     render={
                         <Link
-                            href={`/sales/selection/proposals/${detail.proposal_id}`}
+                            href={`/sales/selection/proposals/${encodeURIComponent(detail.proposal_id)}`}
                         />
                     }
                 >
                     查看销售方案 {detail.proposal_no}
                 </Button>
+            ) : null}
+            {hasMoreActions ? (
+                <Popover open={moreOpen} onOpenChange={setMoreOpen}>
+                    <PopoverTrigger
+                        id="sales-selection-detail-more-actions"
+                        render={
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className={detailWorkspaceStyles.quietButton}
+                            />
+                        }
+                    >
+                        更多
+                        <ChevronDownIcon
+                            aria-hidden="true"
+                            data-icon="inline-end"
+                        />
+                    </PopoverTrigger>
+                    <PopoverContent
+                        align="end"
+                        keepMounted
+                        className="w-48 gap-1.5 p-2"
+                    >
+                        <PopoverTitle className="px-2 pt-1 text-xs font-medium text-muted-foreground">
+                            选品册操作
+                        </PopoverTitle>
+                        <div className="flex flex-col gap-0.5">
+                            {showCopy && onCopy ? (
+                                <Button
+                                    id="sales-selection-detail-copy"
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className={`w-full justify-start ${detailWorkspaceStyles.quietButton}`}
+                                    disabled={
+                                        pending || detail.status === "PREPARING"
+                                    }
+                                    title={
+                                        detail.status === "PREPARING"
+                                            ? "请准备完成后再复制"
+                                            : undefined
+                                    }
+                                    onClick={() => runAndCloseMore(onCopy)}
+                                >
+                                    <CopyIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
+                                    复制选品册
+                                </Button>
+                            ) : null}
+                            {showRegenerateAll ? (
+                                <LoadingButton
+                                    id="sales-selection-detail-regenerate"
+                                    loading={
+                                        operations.regenerate.isPending &&
+                                        !operations.regenerate.variables
+                                            ?.tier_ids?.length
+                                    }
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className={`w-full justify-start ${detailWorkspaceStyles.quietButton}`}
+                                    disabled={pending}
+                                    onClick={() =>
+                                        runAndCloseMore(onRegenerateAll)
+                                    }
+                                >
+                                    <RefreshCwIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
+                                    重新生成整册
+                                </LoadingButton>
+                            ) : null}
+                            {showReplaceLink ? (
+                                <LoadingButton
+                                    id="sales-selection-detail-replace-link"
+                                    loading={operations.replaceLink.isPending}
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className={`w-full justify-start ${detailWorkspaceStyles.quietButton}`}
+                                    disabled={pending}
+                                    onClick={() =>
+                                        runAndCloseMore(onReplaceLink)
+                                    }
+                                >
+                                    <Link2Icon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
+                                    更换链接
+                                </LoadingButton>
+                            ) : null}
+                            {showClose ? (
+                                <LoadingButton
+                                    id="sales-selection-detail-close"
+                                    loading={operations.close.isPending}
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className={`w-full justify-start ${detailWorkspaceStyles.quietDangerButton}`}
+                                    disabled={pending}
+                                    onClick={() => runAndCloseMore(onClose)}
+                                >
+                                    <BanIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
+                                    关闭
+                                </LoadingButton>
+                            ) : null}
+                            {showRevoke ? (
+                                <LoadingButton
+                                    id="sales-selection-detail-revoke"
+                                    loading={operations.revoke.isPending}
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className={`w-full justify-start ${detailWorkspaceStyles.quietDangerButton}`}
+                                    disabled={pending}
+                                    onClick={() => runAndCloseMore(onRevoke)}
+                                >
+                                    <Link2OffIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
+                                    撤销链接访问
+                                </LoadingButton>
+                            ) : null}
+                            {showVoid ? (
+                                <LoadingButton
+                                    id="sales-selection-detail-void"
+                                    loading={operations.void.isPending}
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className={`w-full justify-start ${detailWorkspaceStyles.quietDangerButton}`}
+                                    disabled={pending}
+                                    onClick={() => runAndCloseMore(onVoid)}
+                                >
+                                    <BanIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
+                                    作废
+                                </LoadingButton>
+                            ) : null}
+                        </div>
+                    </PopoverContent>
+                </Popover>
             ) : null}
         </>
     )
@@ -422,6 +442,35 @@ export function BookDetailHeader({
                     <Badge variant="secondary">{modeLabel}</Badge>
                 </span>
             }
+            meta={
+                <DetailWorkspaceMeta
+                    items={[
+                        <span key="customer">
+                            客户{" "}
+                            <Link
+                                id="sales-selection-detail-customer-link"
+                                href={`/sales/customers/${encodeURIComponent(detail.customer_id)}`}
+                                className="font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
+                            >
+                                {detail.customer_name}
+                            </Link>
+                        </span>,
+                        <span key="owner">
+                            负责人{" "}
+                            <span className="font-medium text-foreground">
+                                {detail.sales_owner_name || "未指定"}
+                            </span>
+                        </span>,
+                        <span key="source">
+                            来源{" "}
+                            <span className="font-medium text-foreground">
+                                {POOL_SOURCE_LABEL[detail.source_kind]}
+                            </span>
+                        </span>,
+                    ]}
+                />
+            }
+            tabs={tabs}
             primaryAction={primaryAction}
             secondaryActions={secondaryActions}
         />

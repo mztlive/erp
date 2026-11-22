@@ -20,6 +20,7 @@ import {
     DropdownMenuShortcut,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { normalizeWorkspaceNavPathname } from "@/lib/nav-active"
 import { WORKSPACE_NAV_GROUPS } from "@/lib/workspace-registry"
 import { WORKSPACE_CLOSE_SHORTCUT } from "@/lib/workspace-tabs"
 import { cn } from "@/lib/utils"
@@ -31,9 +32,7 @@ const navigationItems = WORKSPACE_NAV_GROUPS.flatMap(
 
 function tabIcon(href: string) {
     const pathname = href.split(/[?#]/)[0]
-    const navPathname = pathname.startsWith("/supplier-api/catalog")
-        ? "/supplier-api/connections"
-        : pathname
+    const navPathname = normalizeWorkspaceNavPathname(pathname)
     return (
         navigationItems.find((item) => {
             const path = item.href.split("?")[0]

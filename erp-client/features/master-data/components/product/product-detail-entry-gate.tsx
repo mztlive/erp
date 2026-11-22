@@ -168,19 +168,7 @@ function ProductDetailEntryGate({
         )
     }
 
-    return (
-        <>
-            {detailQuery.data?.loadWarnings?.map((message) => (
-                <BusinessFailureState
-                    key={message}
-                    kind="business"
-                    title="部分资料读取失败"
-                    description={message}
-                />
-            ))}
-            {children}
-        </>
-    )
+    return <>{children}</>
 }
 
 export { ProductDetailEntryGate }

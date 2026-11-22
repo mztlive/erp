@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import { detailWorkspaceStyles } from "@/components/business/detail-workspace"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
@@ -236,13 +237,15 @@ export function PortalReviewMappingBatch({
     const category = categories.find((item) => item.id === mapping.categoryId)
     const prefix = `supplier-portal-review-mapping-batch-${toAutomationIdSegment(application.id)}`
     return (
-        <section className="space-y-3 rounded-lg border p-4">
-            <h3 className="font-medium">同批申请映射核对</h3>
+        <section className="space-y-3 border-t border-border/60 pt-5">
+            <h4 className="text-body-compact font-semibold">
+                同批申请映射核对
+            </h4>
             <p className="text-xs text-muted-foreground">
                 先核对本张申请的映射，再勾选同供应商、同类型及原文口径一致的申请。保存后仍须逐张采用、核对和审核。
             </p>
             {(saved.plan || saved.issue) && (
-                <div className="space-y-2 rounded-md border p-3">
+                <div className="space-y-2 border-l-2 border-border/80 pl-3.5">
                     <p className="text-body-compact">
                         {saved.plan
                             ? `本申请已有来自“${saved.plan.sourceName}”的映射方案。`
@@ -257,7 +260,9 @@ export function PortalReviewMappingBatch({
                             <Button
                                 id={`${prefix}-adopt`}
                                 type="button"
-                                variant="outline"
+                                size="sm"
+                                variant="ghost"
+                                className={detailWorkspaceStyles.subtleButton}
                                 disabled={
                                     !canPrepare ||
                                     !canReadDetails ||
@@ -273,6 +278,7 @@ export function PortalReviewMappingBatch({
                         <Button
                             id={`${prefix}-discard`}
                             type="button"
+                            size="sm"
                             variant="ghost"
                             disabled={saving || !actorId}
                             onClick={() => {
@@ -312,7 +318,8 @@ export function PortalReviewMappingBatch({
                     )
                     return (
                         <p key={sku.row_id}>
-                            {sku.name} · {sku.ordering_code}：
+                            {sku.name} ·{" "}
+                            <span className="num">{sku.ordering_code}</span>：
                             {sku.unit.raw_name} → {unit?.name ?? "待确认"}
                             {sku.packaging
                                 ? `；包装：${sku.packaging.original_unit}含${sku.packaging.units_per_package}${sku.packaging.base_unit}，原单位价格${sku.packaging.original_unit_price}`
@@ -359,7 +366,9 @@ export function PortalReviewMappingBatch({
                 <Button
                     id={`${prefix}-load`}
                     type="button"
-                    variant="outline"
+                    size="sm"
+                    variant="ghost"
+                    className={detailWorkspaceStyles.subtleButton}
                     disabled={
                         !canPrepare || !canList || !canReadDetails || saving
                     }
@@ -383,7 +392,7 @@ export function PortalReviewMappingBatch({
                             <>
                                 <form.Field name="selectedIds">
                                     {(field) => (
-                                        <div className="space-y-2">
+                                        <div className="divide-y divide-border/60 border-y border-border/60">
                                             {candidates.map((target) => {
                                                 const result =
                                                     applicableMapping(
@@ -403,7 +412,7 @@ export function PortalReviewMappingBatch({
                                                 return (
                                                     <div
                                                         key={target.id}
-                                                        className="flex items-start gap-2 rounded-md border p-3 text-body-compact"
+                                                        className="flex items-start gap-2.5 py-2.5 text-body-compact"
                                                     >
                                                         <NativeCheckbox
                                                             id={id}
@@ -450,13 +459,19 @@ export function PortalReviewMappingBatch({
                                                                 {input?.name ??
                                                                     target.title ??
                                                                     "新品申请"}
-                                                                {target.application_no
-                                                                    ? ` · ${target.application_no}`
-                                                                    : ""}
+                                                                {target.application_no ? (
+                                                                    <span className="num">
+                                                                        {" "}
+                                                                        ·{" "}
+                                                                        {
+                                                                            target.application_no
+                                                                        }
+                                                                    </span>
+                                                                ) : null}
                                                             </label>
                                                             <p
                                                                 id={`${id}-meaning`}
-                                                                className="mt-1 text-muted-foreground"
+                                                                className="mt-1 text-xs text-muted-foreground"
                                                             >
                                                                 {result.issue ??
                                                                     (value.confirmedSource !==
@@ -470,7 +485,7 @@ export function PortalReviewMappingBatch({
                                             })}
                                             {!applications.isFetching &&
                                                 !candidates.length && (
-                                                    <p className="text-xs text-muted-foreground">
+                                                    <p className="py-3 text-xs text-muted-foreground">
                                                         本页没有其他可核对的新品申请。
                                                     </p>
                                                 )}
@@ -480,7 +495,11 @@ export function PortalReviewMappingBatch({
                                 <Button
                                     id={`${prefix}-save`}
                                     type="button"
-                                    variant="outline"
+                                    size="sm"
+                                    variant="ghost"
+                                    className={
+                                        detailWorkspaceStyles.subtleButton
+                                    }
                                     disabled={
                                         !canPrepare ||
                                         saving ||
@@ -494,7 +513,10 @@ export function PortalReviewMappingBatch({
                                     onClick={() => void form.handleSubmit()}
                                 >
                                     保存所选申请的映射方案（
-                                    {value.selectedIds.length}）
+                                    <span className="num">
+                                        {value.selectedIds.length}
+                                    </span>
+                                    ）
                                 </Button>
                             </>
                         )}
@@ -503,6 +525,7 @@ export function PortalReviewMappingBatch({
                         <Button
                             id={`${prefix}-previous`}
                             type="button"
+                            size="sm"
                             variant="ghost"
                             disabled={
                                 saving || page <= 1 || applications.isFetching
@@ -514,13 +537,14 @@ export function PortalReviewMappingBatch({
                         >
                             上一页
                         </Button>
-                        <span>
+                        <span className="num text-xs text-muted-foreground">
                             第 {page} 页 · 共 {applications.data?.total ?? 0}{" "}
                             张申请
                         </span>
                         <Button
                             id={`${prefix}-next`}
                             type="button"
+                            size="sm"
                             variant="ghost"
                             disabled={
                                 saving ||
@@ -544,7 +568,7 @@ export function PortalReviewMappingBatch({
                         <Link
                             key={target.id}
                             id={`${prefix}-open-${toAutomationIdSegment(target.id)}`}
-                            className="text-body-compact text-primary"
+                            className="text-body-compact text-primary underline-offset-4 hover:underline"
                             href={`/procurement/supplier-portal/applications/${encodeURIComponent(target.id)}`}
                         >
                             打开 {target.name} 核对

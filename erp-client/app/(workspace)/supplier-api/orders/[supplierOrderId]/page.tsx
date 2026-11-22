@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { PageScaffold } from "@/components/business"
+import { DetailWorkspaceSkeleton } from "@/components/business"
 import { SupplierOrderCenterPage } from "@/features/supplier-orders/pages/supplier-order-center-page"
 
 export const metadata: Metadata = {
@@ -24,10 +24,11 @@ export default async function Page({
     return (
         <Suspense
             fallback={
-                <PageScaffold>
-                    <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
-                    <div className="h-40 animate-pulse rounded-lg bg-muted" />
-                </PageScaffold>
+                <DetailWorkspaceSkeleton
+                    title="供应商订单详情"
+                    description="正在读取履约进度、商品明细与结算信息…"
+                    sidebar
+                />
             }
         >
             <SupplierOrderCenterPage

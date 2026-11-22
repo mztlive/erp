@@ -2,10 +2,12 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
-    executeDepositCommand,
+    downloadDepositBankReceipt,
     downloadDepositResolutionEvidence,
+    executeDepositCommand,
     fetchDepositAccount,
     fetchDepositAccounts,
+    previewDepositBankReceipt,
 } from "../api"
 
 import type { DepositAccountListFilters } from "../types"
@@ -49,4 +51,21 @@ export function useDepositResolutionEvidence(assetId: string) {
         mutationFn: () => downloadDepositResolutionEvidence(assetId),
         retry: false,
     })
+}
+
+export function useDepositBankReceipt(assetId: string) {
+    const download = useMutation({
+        mutationFn: () => downloadDepositBankReceipt(assetId),
+        retry: false,
+    })
+    const preview = useMutation({
+        mutationFn: async () => {
+            const blob = await previewDepositBankReceipt(assetId)
+            const url = URL.createObjectURL(blob)
+            window.open(url, "_blank", "noopener,noreferrer")
+            window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+        },
+        retry: false,
+    })
+    return { download, preview }
 }

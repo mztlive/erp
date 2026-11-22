@@ -1,6 +1,7 @@
 "use client"
 
 import { useRef, useState, type ReactNode } from "react"
+import { useStore } from "@tanstack/react-form"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
 import {
@@ -10,15 +11,9 @@ import {
     WorkspaceTaskFooter,
     detailWorkspaceStyles,
 } from "@/components/business"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
+import { toast } from "@/components/ui/toast"
 import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 import { ApprovalReadonly } from "@/features/approval-workflow/components/approval-readonly"
@@ -27,15 +22,15 @@ import {
     mapDocumentApprovalViewDto,
     type ApprovalCommandView,
 } from "@/features/approval-workflow/types"
-import { getErrorMessage } from "@/lib/api"
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import { hasPermission } from "@/lib/permissions"
+import { getErrorMessage } from "@/lib/api"
 import { classifyFormalCommandError } from "@/lib/formal-command"
+import { hasPermission } from "@/lib/permissions"
 import {
     useAccountRevealMutation,
     useRequestCommandMutation,
 } from "../hooks/queries"
-import { requestStatusLabel } from "../lib/display"
+import { requestStatusLabel, requestStatusTone } from "../lib/display"
 import type {
     PaymentRequest,
     PaymentTaskContext,
@@ -54,6 +49,8 @@ type RequestDetailChrome = (slots: {
     primaryAction?: ReactNode
 }) => ReactNode
 
+type DestructiveActionKind = "withdraw" | "close"
+
 export function RequestDetail({
     request,
     task,
@@ -70,13 +67,17 @@ export function RequestDetail({
     const [editOpen, setEditOpen] = useState(false)
     const [submitOpen, setSubmitOpen] = useState(false)
     const [submitUnknown, setSubmitUnknown] = useState(false)
-    const [reasonAction, setReasonAction] = useState<
-        "withdraw" | "close" | null
-    >(null)
+    const [reasonAction, setReasonAction] =
+        useState<DestructiveActionKind | null>(null)
+    const [unknownReasonAction, setUnknownReasonAction] =
+        useState<DestructiveActionKind | null>(null)
     const command = useRequestCommandMutation()
     const reveal = useAccountRevealMutation()
     const profile = useAccountProfileQuery()
     const submitIdentity = useRef<RequestCommand | null>(null)
+    const reasonIdentities = useRef<
+        Partial<Record<DestructiveActionKind, RequestCommand>>
+    >({})
     const approval = request.approval
         ? mapDocumentApprovalViewDto(request.approval)
         : undefined
@@ -98,9 +99,13 @@ export function RequestDetail({
         id: "ppr-submit-resubmission-reason",
         disabled: command.isPending || submitUnknown,
     })
-    const submitUnsettled = command.isPending || submitUnknown
+    const hasUnknownCommand = submitUnknown || unknownReasonAction !== null
+    const submitUnsettled = command.isPending || hasUnknownCommand
     const closeLabel =
         request.status === "paid" ? "终止付款授权" : "关闭未付部分"
+    const labelForAction = (kind: DestructiveActionKind) =>
+        kind === "close" ? closeLabel : "撤回申请"
+
     if (isPaymentTask && task) {
         return (
             <RequestPaymentExecution
@@ -111,6 +116,7 @@ export function RequestDetail({
             />
         )
     }
+
     const account =
         request.execution_method.type === "bank_transfer" &&
         request.payment_recipient &&
@@ -168,10 +174,16 @@ export function RequestDetail({
                             ? detailWorkspaceStyles.quietDangerButton
                             : undefined
                     }
-                    disabled={submitUnsettled}
+                    disabled={
+                        command.isPending ||
+                        (hasUnknownCommand &&
+                            unknownReasonAction !== "withdraw")
+                    }
                     onClick={() => setReasonAction("withdraw")}
                 >
-                    撤回申请
+                    {unknownReasonAction === "withdraw"
+                        ? "查询撤回结果"
+                        : "撤回申请"}
                 </Button>
             )}
             {actions.has("CLOSE") && (
@@ -184,10 +196,15 @@ export function RequestDetail({
                             ? detailWorkspaceStyles.quietDangerButton
                             : undefined
                     }
-                    disabled={submitUnsettled}
+                    disabled={
+                        command.isPending ||
+                        (hasUnknownCommand && unknownReasonAction !== "close")
+                    }
                     onClick={() => setReasonAction("close")}
                 >
-                    {closeLabel}
+                    {unknownReasonAction === "close"
+                        ? "查询关闭结果"
+                        : closeLabel}
                 </Button>
             )}
         </>
@@ -197,23 +214,68 @@ export function RequestDetail({
             id="ppr-detail-submit"
             size={renderChrome ? "sm" : undefined}
             className={renderChrome ? "px-3.5" : undefined}
-            disabled={command.isPending}
+            disabled={command.isPending || unknownReasonAction !== null}
             onClick={() => setSubmitOpen(true)}
         >
             {submitUnknown ? "查询本次提交结果" : "提交财务审核"}
         </Button>
     )
-    const submitStatus = submitUnknown && (
-        <p role="status" className="text-xs text-muted-foreground">
-            提交结果暂无法确认，请再次确认本次提交以查询上次提交结果。
-        </p>
-    )
+    const unknownAlerts =
+        submitUnknown || unknownReasonAction ? (
+            <div className="space-y-2.5">
+                {submitUnknown ? (
+                    <Alert variant="warning">
+                        <AlertTitle>提交财务审核结果待确认</AlertTitle>
+                        <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                            <span>
+                                提交结果暂无法确认，请勿重复操作；点击右侧按钮使用原提交信息查询结果。
+                            </span>
+                            <Button
+                                id="ppr-submit-query-result"
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={command.isPending}
+                                onClick={() => setSubmitOpen(true)}
+                            >
+                                查询本次提交结果
+                            </Button>
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
+                {unknownReasonAction ? (
+                    <Alert variant="warning">
+                        <AlertTitle>
+                            {labelForAction(unknownReasonAction)}结果待确认
+                        </AlertTitle>
+                        <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                            <span>
+                                本次操作结果暂无法确认，请勿重复发起其他变更；点击右侧按钮查询原提交结果。
+                            </span>
+                            <Button
+                                id={`ppr-${unknownReasonAction}-query-result`}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={command.isPending}
+                                onClick={() =>
+                                    setReasonAction(unknownReasonAction)
+                                }
+                            >
+                                查询本次提交结果
+                            </Button>
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
+            </div>
+        ) : null
+
     const content = renderChrome ? (
         <RequestDetailWorkspaceContent
             request={request}
             account={account}
             approval={approvalHistory}
-            alerts={submitStatus}
+            alerts={unknownAlerts}
             renderChrome={(tabs) =>
                 renderChrome({ tabs, secondaryActions, primaryAction })
             }
@@ -230,6 +292,7 @@ export function RequestDetail({
     )
     const details = (
         <>
+            {!renderChrome && unknownAlerts}
             {content}
             {isApprovalTask && task && approval && (
                 <WorkspaceTaskFooter>
@@ -285,7 +348,7 @@ export function RequestDetail({
                 cancelLabel={submitUnknown ? "暂时关闭" : "返回修改"}
                 fromStatus={{
                     label: requestStatusLabel[request.status],
-                    tone: "neutral",
+                    tone: requestStatusTone[request.status],
                 }}
                 toStatus={{ label: "待审核", tone: "info" }}
                 summary={[
@@ -297,7 +360,10 @@ export function RequestDetail({
                         我方付款主体：{request.our_company_name}
                     </span>,
                     <span key="date">
-                        希望付款日：{request.desired_payment_date}
+                        希望付款日：
+                        <span className="num">
+                            {request.desired_payment_date}
+                        </span>
                     </span>,
                 ]}
                 confirmDisabled={!submitUnknown && !resubmission.valid}
@@ -329,6 +395,11 @@ export function RequestDetail({
                         submitIdentity.current = null
                         setSubmitUnknown(false)
                         setSubmitOpen(false)
+                        toast.add({
+                            title: "已提交财务审核",
+                            description: `${request.request_no} 已进入财务审核流程。`,
+                            type: "success",
+                        })
                     } catch (error) {
                         const unknown =
                             classifyFormalCommandError(error) === "unknown"
@@ -338,11 +409,20 @@ export function RequestDetail({
                     }
                 }}
             />
-            {!renderChrome && submitStatus}
             {reasonAction && (
-                <ReasonCommandDialog
+                <DestructiveReasonConfirmDialog
+                    key={reasonAction}
                     request={request}
                     action={reasonAction}
+                    unknown={unknownReasonAction === reasonAction}
+                    storedIdentity={reasonIdentities.current[reasonAction]}
+                    onIdentityChange={(next) => {
+                        if (next) reasonIdentities.current[reasonAction] = next
+                        else delete reasonIdentities.current[reasonAction]
+                    }}
+                    onUnknownChange={(isUnknown) => {
+                        setUnknownReasonAction(isUnknown ? reasonAction : null)
+                    }}
                     onClose={() => setReasonAction(null)}
                 />
             )}
@@ -350,18 +430,26 @@ export function RequestDetail({
     )
     return renderChrome ? details : <div className="space-y-6">{details}</div>
 }
-function ReasonCommandDialog({
+
+function DestructiveReasonConfirmDialog({
     request,
     action,
+    unknown,
+    storedIdentity,
+    onIdentityChange,
+    onUnknownChange,
     onClose,
 }: {
     request: PaymentRequest
-    action: "withdraw" | "close"
+    action: DestructiveActionKind
+    unknown: boolean
+    storedIdentity?: RequestCommand
+    onIdentityChange: (next: RequestCommand | null) => void
+    onUnknownChange: (unknown: boolean) => void
     onClose: () => void
 }) {
     const command = useRequestCommandMutation()
-    const identity = useRef<RequestCommand | null>(null)
-    const [unknown, setUnknown] = useState(false)
+    const [confirmError, setConfirmError] = useState<string | null>(null)
     const terminatePaidAuthorization =
         action === "close" && request.status === "paid"
     const label =
@@ -371,9 +459,9 @@ function ReasonCommandDialog({
                 : "关闭未付部分"
             : "撤回申请"
     const form = useAppForm({
-        defaultValues: { reason: "" },
+        defaultValues: { reason: storedIdentity?.reason ?? "" },
         validators: {
-            onSubmit: z.object({
+            onChange: z.object({
                 reason: z
                     .string()
                     .trim()
@@ -381,105 +469,145 @@ function ReasonCommandDialog({
                     .max(2000, "原因最多 2000 字"),
             }),
         },
-        onSubmit: async ({ value }) => {
-            identity.current ??= {
-                expected_version: request.version,
-                reason: value.reason.trim(),
-                idempotency_key: `ppr-${action}:${crypto.randomUUID()}`,
-            }
-            try {
-                await command.mutateAsync({
-                    id: request.id,
-                    action,
-                    command: identity.current,
-                })
-                identity.current = null
-                onClose()
-            } catch (error) {
-                setUnknown(classifyFormalCommandError(error) === "unknown")
-                if (classifyFormalCommandError(error) !== "unknown")
-                    identity.current = null
-            }
-        },
+        onSubmit: async () => undefined,
     })
+    const reason = useStore(form.store, (state) => state.values.reason)
+
+    const summary: ReactNode[] = [
+        <span key="no" className="num">
+            申请单号：{request.request_no}
+        </span>,
+        <span key="supplier">供应商：{request.supplier_name}</span>,
+        terminatePaidAuthorization ? (
+            <span key="paid">
+                申请金额：
+                <MoneyValue value={request.total_amount} />
+            </span>
+        ) : (
+            <span key="unpaid">
+                本次释放未付金额：
+                <MoneyValue value={request.unpaid_amount} />
+            </span>
+        ),
+    ]
+
+    const irreversibleEffects =
+        action === "close"
+            ? terminatePaidAuthorization
+                ? [
+                      "终止本申请的付款授权，已付记录和原审核记录继续保留。",
+                      "后续即使发生付款冲正也不会恢复原付款授权，如需再次付款须重新申请并审核。",
+                  ]
+                : [
+                      "释放本申请剩余待付金额并终止后续付款资格，已付记录和原审核记录继续保留。",
+                      "后续付款冲正不恢复原付款授权，无法撤销本次关闭。",
+                  ]
+            : [
+                  "立即结束本次财务审核并释放未付金额占用。",
+                  "再次提交审核时将重新校验采购单余额与审核流程。",
+              ]
+
     return (
-        <Dialog
+        <FormalActionConfirmDialog
+            idPrefix={`ppr-${action}`}
             open
             onOpenChange={(open) => {
-                if (!open && !command.isPending && !unknown) onClose()
+                if (!open && !command.isPending) onClose()
             }}
-        >
-            <DialogContent
-                id={`ppr-${action}-dialog`}
-                closeButtonId={`ppr-${action}-dialog-close`}
-            >
-                <DialogHeader>
-                    <DialogTitle>{label}</DialogTitle>
-                    <DialogDescription>
-                        {action === "close"
-                            ? terminatePaidAuthorization
-                                ? "终止本申请的付款授权，已付记录和原审核记录保留；后续付款冲正不恢复原付款授权，需重新申请并审核后才能再次付款。"
-                                : "释放本申请剩余待付金额，并终止相应付款资格；已付记录和原审核记录保留，付款冲正后不恢复原付款授权。"
-                            : "结束本次审核并释放未付金额，重新提交须重新核对余额和财务审核。"}
-                    </DialogDescription>
-                </DialogHeader>
-                <form
-                    id={`ppr-${action}-form`}
-                    className="space-y-5"
-                    onSubmit={(event) => {
-                        event.preventDefault()
-                        void form.handleSubmit()
-                    }}
-                >
+            pending={command.isPending}
+            title={label}
+            description={
+                action === "close"
+                    ? terminatePaidAuthorization
+                        ? "请核对影响并填写终止付款授权的原因。"
+                        : "请核对释放金额与业务影响，填写关闭原因后确认。"
+                    : "撤回后可修改申请并重新提交财务审核，请填写撤回原因。"
+            }
+            actionLabel={label}
+            confirmLabel={unknown ? "查询本次提交结果" : `确认${label}`}
+            cancelLabel={unknown ? "暂时关闭" : "返回修改"}
+            actionVariant="destructive"
+            fromStatus={{
+                label: requestStatusLabel[request.status],
+                tone: requestStatusTone[request.status],
+            }}
+            toStatus={
+                action === "close"
+                    ? { label: "已关闭", tone: "neutral" }
+                    : { label: "已撤回", tone: "neutral" }
+            }
+            summary={summary}
+            irreversibleEffects={irreversibleEffects}
+            confirmDisabled={
+                !unknown && (!reason.trim() || reason.trim().length > 2000)
+            }
+            onConfirm={async () => {
+                setConfirmError(null)
+                const trimmedReason = reason.trim()
+                if (
+                    !unknown &&
+                    (!trimmedReason || trimmedReason.length > 2000)
+                ) {
+                    throw new Error("请填写原因（最多 2000 字）")
+                }
+                const identity: RequestCommand = storedIdentity ?? {
+                    expected_version: request.version,
+                    reason: trimmedReason,
+                    idempotency_key: `ppr-${action}:${crypto.randomUUID()}`,
+                }
+                onIdentityChange(identity)
+                try {
+                    await command.mutateAsync({
+                        id: request.id,
+                        action,
+                        command: identity,
+                    })
+                    onIdentityChange(null)
+                    onUnknownChange(false)
+                    toast.add({
+                        title: `${label}已完成`,
+                        description: `${request.request_no} 状态已更新。`,
+                        type: "success",
+                    })
+                    onClose()
+                } catch (error) {
+                    const isUnknown =
+                        classifyFormalCommandError(error) === "unknown"
+                    onUnknownChange(isUnknown)
+                    if (!isUnknown) onIdentityChange(null)
+                    setConfirmError(
+                        getErrorMessage(error, `${label}未完成，请核对后重试`),
+                    )
+                    throw error
+                }
+            }}
+            onConfirmError={() => undefined}
+            formContent={
+                <div className="space-y-3">
                     <form.AppField name="reason">
                         {(field) => (
                             <field.TextareaField
                                 id={`ppr-${action}-reason`}
-                                label="原因"
+                                label="操作原因"
                                 required
                                 disabled={command.isPending || unknown}
                             />
                         )}
                     </form.AppField>
-                    {!terminatePaidAuthorization && (
-                        <p className="text-body-compact">
-                            本次释放未付金额{" "}
-                            <MoneyValue value={request.unpaid_amount} />
-                        </p>
-                    )}
-                    {command.isError && (
-                        <p
-                            role="alert"
-                            className="text-body-compact text-destructive"
-                        >
-                            {getErrorMessage(command.error, "操作失败，请重试")}
-                        </p>
-                    )}
-                    {unknown && (
-                        <p className="text-body-compact">
-                            操作结果暂无法确认，请重新点击确认以查看上次提交结果。
-                        </p>
-                    )}
-                    <DialogFooter>
-                        <Button
-                            id={`ppr-${action}-cancel`}
-                            variant="outline"
-                            type="button"
-                            disabled={command.isPending || unknown}
-                            onClick={onClose}
-                        >
-                            取消
-                        </Button>
-                        <Button
-                            id={`ppr-${action}-confirm`}
-                            type="submit"
-                            disabled={command.isPending}
-                        >
-                            {unknown ? "查询本次结果" : `确认${label}`}
-                        </Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
+                    {unknown ? (
+                        <Alert variant="warning">
+                            <AlertDescription>
+                                操作结果暂无法确认，可点击「查询本次提交结果」核对，或点击「暂时关闭」稍后在页面顶部继续查询。
+                            </AlertDescription>
+                        </Alert>
+                    ) : null}
+                    {confirmError ? (
+                        <Alert variant="destructive">
+                            <AlertDescription>{confirmError}</AlertDescription>
+                        </Alert>
+                    ) : null}
+                </div>
+            }
+        />
     )
 }

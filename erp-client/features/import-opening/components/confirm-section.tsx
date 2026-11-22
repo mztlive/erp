@@ -5,20 +5,13 @@ import { z } from "zod"
 import {
     BusinessFailureState,
     BusinessStatusBadge,
+    DetailWorkspaceSection,
     FormalActionConfirmDialog,
     FormalActionResult,
-    surfacePanelClassName,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import {
     Dialog,
     DialogClose,
@@ -36,6 +29,7 @@ import type {
 import { CONFIRMATION_SCOPE_LABEL } from "@/features/import-opening/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
+import { cn } from "@/lib/utils"
 
 const RETURN_REASON_OPTIONS = [
     { value: "DATA_MISMATCH", label: "预检数据与实际业务不一致" },
@@ -167,7 +161,10 @@ export function ConfirmSection({
     } = useConfirmationActions(batch, onTaskCompleted)
 
     return (
-        <div className="space-y-4">
+        <DetailWorkspaceSection
+            title="部门责任确认"
+            subtitle="各业务部门按职责范围核对最新预检结果并登记确认结论。"
+        >
             {workItemTypeMissing ? (
                 <FormalActionResult
                     status="blocked"
@@ -180,7 +177,7 @@ export function ConfirmSection({
                 <BusinessFailureState title="责任确认未完成" error={error} />
             ) : null}
 
-            <div className="grid gap-3 md:grid-cols-2">
+            <ul className="divide-y divide-border/60">
                 {batch.confirmations.map((confirmation) => {
                     const task = confirmation.workItem
                     const actions = task?.allowedActions ?? []
@@ -190,71 +187,64 @@ export function ConfirmSection({
                         actions.includes("CONFIRM_SCOPE") &&
                         actions.includes("RETURN_FOR_FIX")
                     return (
-                        <Card
+                        <li
                             key={confirmation.confirmationId}
-                            size="sm"
-                            className={`${surfacePanelClassName} ${confirmation.focused ? "ring-2 ring-primary/40" : ""}`}
+                            className={cn(
+                                "space-y-3 py-4 text-body-compact first:pt-0 last:pb-0",
+                                confirmation.focused &&
+                                    "border-l-2 border-primary pl-4",
+                            )}
                         >
-                            <CardHeader className="border-b border-grid">
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <CardTitle className="text-section-title font-semibold tracking-tight">
-                                        {
-                                            CONFIRMATION_SCOPE_LABEL[
-                                                confirmation.scope
-                                            ]
-                                        }
-                                    </CardTitle>
-                                    <BusinessStatusBadge
-                                        context="detail"
-                                        label={
-                                            confirmation.result === "CONFIRMED"
-                                                ? "已确认"
-                                                : confirmation.result ===
-                                                    "REJECTED"
-                                                  ? "已退回"
-                                                  : confirmation.result ===
-                                                      "INVALIDATED"
-                                                    ? "已失效"
-                                                    : "待确认"
-                                        }
-                                        tone={
-                                            confirmation.result === "CONFIRMED"
-                                                ? "success"
-                                                : confirmation.result ===
-                                                        "REJECTED" ||
-                                                    confirmation.result ===
-                                                        "INVALIDATED"
-                                                  ? "destructive"
-                                                  : "warning"
-                                        }
-                                    />
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div className="min-w-0 space-y-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <h3 className="text-body-compact font-semibold text-foreground">
+                                            {
+                                                CONFIRMATION_SCOPE_LABEL[
+                                                    confirmation.scope
+                                                ]
+                                            }
+                                        </h3>
+                                        <BusinessStatusBadge
+                                            context="detail"
+                                            label={
+                                                confirmation.result ===
+                                                "CONFIRMED"
+                                                    ? "已确认"
+                                                    : confirmation.result ===
+                                                        "REJECTED"
+                                                      ? "已退回"
+                                                      : confirmation.result ===
+                                                          "INVALIDATED"
+                                                        ? "已失效"
+                                                        : "待确认"
+                                            }
+                                            tone={
+                                                confirmation.result ===
+                                                "CONFIRMED"
+                                                    ? "success"
+                                                    : confirmation.result ===
+                                                            "REJECTED" ||
+                                                        confirmation.result ===
+                                                            "INVALIDATED"
+                                                      ? "destructive"
+                                                      : "warning"
+                                            }
+                                        />
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                        预检版本{" "}
+                                        <span className="num">
+                                            {confirmation.trialVersion}
+                                        </span>
+                                        {confirmation.focused
+                                            ? " · 当前待处理入口"
+                                            : confirmation.inViewerResponsibility
+                                              ? " · 由本人负责"
+                                              : " · 只读"}
+                                    </p>
                                 </div>
-                                <CardDescription>
-                                    预检版本{" "}
-                                    <span className="num font-mono">
-                                        {confirmation.trialVersion}
-                                    </span>
-                                    {confirmation.focused
-                                        ? " · 当前待处理入口"
-                                        : confirmation.inViewerResponsibility
-                                          ? " · 由本人负责"
-                                          : " · 只读"}
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-3 pt-4 text-body-compact">
-                                {confirmation.confirmedByLabel ? (
-                                    <p>
-                                        确认人 {confirmation.confirmedByLabel}
-                                        {confirmation.confirmedAt
-                                            ? ` · ${formatDateTime(confirmation.confirmedAt, "dateStyle", "passthrough")}`
-                                            : ""}
-                                    </p>
-                                ) : null}
-                                {confirmation.comment ? (
-                                    <p className="text-muted-foreground">
-                                        {confirmation.comment}
-                                    </p>
-                                ) : null}
+
                                 <WorkspaceTaskFooter
                                     inline={!confirmation.focused}
                                 >
@@ -292,21 +282,44 @@ export function ConfirmSection({
                                         ) : null}
                                     </div>
                                 </WorkspaceTaskFooter>
-                                {!canConfirm ? (
-                                    <p className="text-xs text-muted-foreground">
-                                        {workItemTypeMissing
-                                            ? "当前确认任务不完整，入口已阻断"
-                                            : confirmation.result !== "PENDING"
-                                              ? "本范围已有核对结论或已失效"
-                                              : (task?.actionBlockers[0] ??
-                                                "当前范围不由本人处理")}
-                                    </p>
-                                ) : null}
-                            </CardContent>
-                        </Card>
+                            </div>
+
+                            {confirmation.confirmedByLabel ? (
+                                <p>
+                                    确认人 {confirmation.confirmedByLabel}
+                                    {confirmation.confirmedAt ? (
+                                        <>
+                                            {" · "}
+                                            <span className="num">
+                                                {formatDateTime(
+                                                    confirmation.confirmedAt,
+                                                    "dateStyle",
+                                                    "passthrough",
+                                                )}
+                                            </span>
+                                        </>
+                                    ) : null}
+                                </p>
+                            ) : null}
+                            {confirmation.comment ? (
+                                <p className="text-muted-foreground">
+                                    {confirmation.comment}
+                                </p>
+                            ) : null}
+                            {!canConfirm ? (
+                                <p className="text-xs text-muted-foreground">
+                                    {workItemTypeMissing
+                                        ? "当前确认任务不完整，入口已阻断"
+                                        : confirmation.result !== "PENDING"
+                                          ? "本范围已有核对结论或已失效"
+                                          : (task?.actionBlockers[0] ??
+                                            "当前范围不由本人处理")}
+                                </p>
+                            ) : null}
+                        </li>
                     )
                 })}
-            </div>
+            </ul>
 
             {confirmBlocked.length > 0 ? (
                 <ul className="space-y-1 text-body-compact text-muted-foreground">
@@ -355,6 +368,6 @@ export function ConfirmSection({
                     }}
                 />
             ) : null}
-        </div>
+        </DetailWorkspaceSection>
     )
 }

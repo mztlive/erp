@@ -9,7 +9,6 @@ import {
 } from "lucide-react"
 
 import { MoneyValue } from "@/components/business"
-import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import type { SalesOrderDetailView } from "../api/sales-orders"
 import { getProcurementAttention } from "../lib/procurement-attention"
@@ -96,9 +95,17 @@ export function SalesOrderDetailSidebar({
                         )}
                         <p className="mt-1 text-xs text-muted-foreground">
                             {order.collection.label}
-                            {order.receivableDueDate
-                                ? ` · ${order.receivableDueDate} 到期`
-                                : " · 到期安排见应收"}
+                            {order.receivableDueDate ? (
+                                <>
+                                    {" · "}
+                                    <span className="num">
+                                        {order.receivableDueDate}
+                                    </span>{" "}
+                                    到期
+                                </>
+                            ) : (
+                                " · 到期安排见应收"
+                            )}
                         </p>
                     </FollowUp>
                     <FollowUp
@@ -181,25 +188,26 @@ function FollowUp({
     onClick: () => void
 }) {
     return (
-        <div className="group -mx-2 flex items-start gap-2.5 rounded-lg px-2 py-3.5 transition-colors hover:bg-muted/40">
+        <button
+            id={id}
+            type="button"
+            aria-label={`查看${title}`}
+            onClick={onClick}
+            className="group -mx-2 flex w-[calc(100%+1rem)] cursor-pointer items-start gap-2.5 rounded-lg px-2 py-3.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+        >
             <span className="mt-0.5 shrink-0 text-muted-foreground [&>svg]:size-4">
                 {icon}
             </span>
-            <div className="min-w-0 flex-1 space-y-1">
-                <h3 className="font-medium text-foreground">{title}</h3>
-                <div>{children}</div>
-            </div>
-            <Button
-                id={id}
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                className="shrink-0 text-muted-foreground group-hover:text-foreground"
-                aria-label={`查看${title}`}
-                onClick={onClick}
-            >
-                <ChevronRightIcon aria-hidden="true" />
-            </Button>
-        </div>
+            <span className="min-w-0 flex-1 space-y-1">
+                <span className="block font-medium text-foreground">
+                    {title}
+                </span>
+                <span className="block">{children}</span>
+            </span>
+            <ChevronRightIcon
+                aria-hidden="true"
+                className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground"
+            />
+        </button>
     )
 }

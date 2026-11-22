@@ -18,10 +18,17 @@ import type {
     ProductSkuFields,
 } from "@/features/master-data/types"
 
+export type BatchReferencePriceDraft = Readonly<{
+    salePrice: string
+    bulkPriceGross: string
+    bulkMinQuantity: string
+    marketPrice: string
+}>
+
 /**
  * 商品详情编辑表单的值绑定：标题、库存预览 SKU、字段/规格/价格的
- * setFieldValue 封装与批量参考价格应用，供 ProductDetailPage 的
- * form.Subscribe 渲染函数使用。纯派生函数，无自身状态。
+ * setFieldValue 封装与批量参考价格应用，供 ProductDetailPage 使用。
+ * 纯派生函数，无自身状态。
  */
 export function createProductFormBindings(
     form: ProductEditor["form"],
@@ -134,7 +141,7 @@ export function createProductFormBindings(
         (spec) => spec.name.trim() && spec.values.some((value) => value.trim()),
     )
 
-    const applyBatchReferencePrices = () => {
+    const applyBatchReferencePrices = (draft: BatchReferencePriceDraft) => {
         const entries: Array<{
             key:
                 | "salePrice"
@@ -147,22 +154,22 @@ export function createProductFormBindings(
             {
                 key: "salePrice",
                 label: "一件代发价",
-                value: values.batchSalePrice.trim(),
+                value: draft.salePrice.trim(),
             },
             {
                 key: "bulkPriceGross",
                 label: "集采价",
-                value: values.batchBulkPrice.trim(),
+                value: draft.bulkPriceGross.trim(),
             },
             {
                 key: "bulkMinQuantity",
                 label: "集采起订量",
-                value: values.batchBulkMinQuantity.trim(),
+                value: draft.bulkMinQuantity.trim(),
             },
             {
                 key: "marketPrice",
                 label: "市场价",
-                value: values.batchMarketPrice.trim(),
+                value: draft.marketPrice.trim(),
             },
         ]
         const applied = entries.filter((entry) => entry.value)

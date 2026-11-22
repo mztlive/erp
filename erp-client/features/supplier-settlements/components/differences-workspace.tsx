@@ -6,7 +6,6 @@ import {
     surfaceInsetClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DetailWorkspaceSection } from "@/components/business/detail-workspace"
 import { Separator } from "@/components/ui/separator"
@@ -32,12 +31,13 @@ export function DifferencesWorkspace({
 }) {
     if (differences.length === 0) {
         return (
-            <BusinessEmptyState
-                kind="no-data"
-                className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                title="无差异"
-                description="当前结算单没有差异记录，明细金额核对一致时可直接进入复核。"
-            />
+            <DetailWorkspaceSection width="form">
+                <BusinessEmptyState
+                    kind="no-data"
+                    title="无差异"
+                    description="当前结算单没有差异记录，明细金额核对一致时可直接进入复核。"
+                />
+            </DetailWorkspaceSection>
         )
     }
 
@@ -70,6 +70,7 @@ export function DifferencesWorkspace({
                                 <span className="mt-0.5">
                                     <MoneyValue
                                         value={d.amountGross}
+                                        display="exact"
                                         className="num text-xs font-semibold text-warning-soft-foreground"
                                     />
                                 </span>
@@ -85,20 +86,27 @@ export function DifferencesWorkspace({
                         className="border-t border-border/60 xl:border-t-0 xl:border-l xl:pl-5"
                         title={activeDiff.typeLabel}
                         actions={
-                            <>
-                                {" "}
+                            <div className="flex flex-wrap items-center gap-1.5">
                                 <BusinessStatusBadge
                                     context="list"
                                     label={activeDiff.statusLabel}
                                     tone={activeDiff.statusTone}
                                 />
                                 {activeDiff.requiresProcurementEvidence ? (
-                                    <Badge variant="outline">需采购举证</Badge>
+                                    <BusinessStatusBadge
+                                        context="list"
+                                        tone="warning"
+                                        label="需采购举证"
+                                    />
                                 ) : null}
                                 {activeDiff.blocking ? (
-                                    <Badge variant="destructive">阻塞</Badge>
+                                    <BusinessStatusBadge
+                                        context="list"
+                                        tone="destructive"
+                                        label="阻塞"
+                                    />
                                 ) : null}
-                            </>
+                            </div>
                         }
                         subtitle={activeDiff.amountDirectionLabel}
                     >
@@ -106,32 +114,32 @@ export function DifferencesWorkspace({
                             <MoneyValue
                                 className="text-warning-soft-foreground"
                                 value={activeDiff.amountGross}
-                                taxBasis="gross"
+                                display="exact"
                             />
                         ) : null}
 
-                        <div className="grid gap-2 sm:grid-cols-2 text-body-compact">
+                        <div className="grid gap-2 text-body-compact sm:grid-cols-2">
                             <div className={cn(surfaceInsetClassName, "p-3")}>
                                 <div className="text-xs text-muted-foreground">
-                                    ERP 侧
+                                    ERP 侧（含税）
                                 </div>
                                 <div>{activeDiff.erpSideLabel}</div>
                                 {activeDiff.erpSideAmount ? (
                                     <MoneyValue
                                         value={activeDiff.erpSideAmount}
-                                        taxBasis="gross"
+                                        display="exact"
                                     />
                                 ) : null}
                             </div>
                             <div className={cn(surfaceInsetClassName, "p-3")}>
                                 <div className="text-xs text-muted-foreground">
-                                    供应商侧
+                                    供应商侧（含税）
                                 </div>
                                 <div>{activeDiff.supplierSideLabel}</div>
                                 {activeDiff.supplierSideAmount ? (
                                     <MoneyValue
                                         value={activeDiff.supplierSideAmount}
-                                        taxBasis="gross"
+                                        display="exact"
                                     />
                                 ) : null}
                             </div>
@@ -176,7 +184,7 @@ export function DifferencesWorkspace({
                                             <div className="text-muted-foreground">
                                                 {e.comment}
                                             </div>
-                                            <div className="text-xs text-muted-foreground">
+                                            <div className="num text-xs text-muted-foreground">
                                                 {formatDateTime(
                                                     e.at,
                                                     "default",
@@ -196,29 +204,32 @@ export function DifferencesWorkspace({
                                 </AlertTitle>
                                 <AlertDescription>
                                     {activeDiff.resolution.by.displayName} ·{" "}
-                                    {formatDateTime(
-                                        activeDiff.resolution.at,
-                                        "default",
-                                    )}{" "}
+                                    <span className="num">
+                                        {formatDateTime(
+                                            activeDiff.resolution.at,
+                                            "default",
+                                        )}
+                                    </span>{" "}
                                     · 成本预览{" "}
                                     <MoneyValue
                                         value={
                                             activeDiff.resolution
                                                 .costImpactPreview ?? "0.00"
                                         }
-                                        taxBasis="gross"
+                                        display="exact"
                                     />
                                 </AlertDescription>
                             </Alert>
                         ) : null}
 
                         <Separator />
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                             {allowed.has("APPEND_EVIDENCE") ? (
                                 <Button
                                     id="supplier-settlements-differences-append-evidence"
                                     type="button"
                                     size="sm"
+                                    variant="outline"
                                     onClick={onEvidence}
                                 >
                                     追加采购证据

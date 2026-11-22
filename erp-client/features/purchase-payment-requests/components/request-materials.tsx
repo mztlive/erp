@@ -7,6 +7,7 @@ import {
     MoneyValue,
     PaperDocument,
     QuantityValue,
+    detailWorkspaceStyles,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
@@ -95,7 +96,13 @@ export function RequestMaterials({
                     </p>
                     <Button
                         id={`${idPrefix}-materials-retry`}
-                        variant="outline"
+                        variant={detailWorkspace ? "ghost" : "outline"}
+                        size="sm"
+                        className={
+                            detailWorkspace
+                                ? detailWorkspaceStyles.subtleButton
+                                : undefined
+                        }
                         onClick={() => void query.refetch()}
                     >
                         重试
@@ -108,9 +115,13 @@ export function RequestMaterials({
                             <Button
                                 key={purchase.purchase_order_id}
                                 id={`${idPrefix}-purchase-preview-${toAutomationIdSegment(purchase.purchase_order_id)}`}
-                                variant="outline"
+                                variant={detailWorkspace ? "ghost" : "outline"}
                                 size="sm"
-                                className="max-w-full"
+                                className={
+                                    detailWorkspace
+                                        ? `${detailWorkspaceStyles.subtleButton} max-w-full`
+                                        : "max-w-full"
+                                }
                                 onClick={() =>
                                     setPreview({
                                         kind: "purchase",
@@ -120,7 +131,7 @@ export function RequestMaterials({
                                     })
                                 }
                             >
-                                <span className="min-w-0 truncate">
+                                <span className="num min-w-0 truncate">
                                     采购 {purchase.purchase_order_no} · V
                                     {purchase.version}
                                 </span>
@@ -132,9 +143,13 @@ export function RequestMaterials({
                             <Button
                                 key={sales.revision_id}
                                 id={`${idPrefix}-sales-preview-${toAutomationIdSegment(sales.revision_id)}`}
-                                variant="outline"
+                                variant={detailWorkspace ? "ghost" : "outline"}
                                 size="sm"
-                                className="max-w-full"
+                                className={
+                                    detailWorkspace
+                                        ? `${detailWorkspaceStyles.subtleButton} max-w-full`
+                                        : "max-w-full"
+                                }
                                 onClick={() =>
                                     setPreview({
                                         kind: "sales",
@@ -142,7 +157,7 @@ export function RequestMaterials({
                                     })
                                 }
                             >
-                                <span className="min-w-0 truncate">
+                                <span className="num min-w-0 truncate">
                                     销售 {sales.sales_order_no} · V
                                     {sales.revision_no}
                                 </span>
@@ -171,9 +186,13 @@ export function RequestMaterials({
                             </div>
                             <Button
                                 id={`${idPrefix}-attachment-${toAutomationIdSegment(file.file_asset_id)}-download`}
-                                variant="outline"
+                                variant={detailWorkspace ? "ghost" : "outline"}
                                 size="sm"
-                                className="shrink-0"
+                                className={
+                                    detailWorkspace
+                                        ? `${detailWorkspaceStyles.subtleButton} shrink-0`
+                                        : "shrink-0"
+                                }
                                 disabled={download.isPending}
                                 onClick={() =>
                                     download.mutate({
@@ -248,6 +267,8 @@ export function RequestMaterials({
     )
     return detailWorkspace ? (
         <DetailWorkspaceSection
+            width="form"
+            divider={false}
             title={title}
             ariaLabel={ariaLabel}
             actions={action}

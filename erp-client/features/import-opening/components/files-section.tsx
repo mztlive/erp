@@ -1,15 +1,14 @@
 "use client"
 
-import * as React from "react"
-
-import { DetailWorkspaceSection } from "@/components/business"
-import { Button } from "@/components/ui/button"
+import {
+    DetailWorkspaceFact,
+    DetailWorkspaceFacts,
+    DetailWorkspaceSection,
+} from "@/components/business"
 import { Separator } from "@/components/ui/separator"
-import { Fact } from "@/features/import-opening/components/batch-facts"
 import type { ImportBatchView } from "@/features/import-opening/types"
 import { RETENTION_LABEL } from "@/features/import-opening/types"
 import { formatDateTime } from "@/lib/datetime"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import { versionText } from "@/lib/ui-text"
 
 function formatBytes(n: number) {
@@ -19,26 +18,25 @@ function formatBytes(n: number) {
 }
 
 export function FilesSection({ batch }: { batch: ImportBatchView }) {
-    const [previewAsset, setPreviewAsset] = React.useState<string | null>(null)
     return (
-        <div className="min-w-0">
+        <>
             <DetailWorkspaceSection
                 title="导入源文件"
                 subtitle="展示本次上传的期初数据文件基本信息与检查状态。"
             >
-                <div className="space-y-3 text-body-compact">
+                <div className="space-y-4">
                     {batch.inputAsset ? (
-                        <>
-                            <Fact
+                        <DetailWorkspaceFacts columns={3}>
+                            <DetailWorkspaceFact
                                 label="文件名"
                                 value={batch.inputAsset.fileName}
                             />
-                            <Fact
+                            <DetailWorkspaceFact
                                 label="大小"
                                 value={formatBytes(batch.inputAsset.byteSize)}
-                                mono
+                                numeric
                             />
-                            <Fact
+                            <DetailWorkspaceFact
                                 label="安全检查"
                                 value={
                                     batch.inputAsset.securityScanStatus ===
@@ -56,13 +54,13 @@ export function FilesSection({ batch }: { batch: ImportBatchView }) {
                                 }
                             />
                             {batch.inputAsset.contentHmacShort ? (
-                                <Fact
+                                <DetailWorkspaceFact
                                     label={versionText.checksumShort}
                                     value={batch.inputAsset.contentHmacShort}
-                                    mono
+                                    numeric
                                 />
                             ) : null}
-                            <Fact
+                            <DetailWorkspaceFact
                                 label="保留策略"
                                 value={
                                     RETENTION_LABEL[
@@ -70,9 +68,9 @@ export function FilesSection({ batch }: { batch: ImportBatchView }) {
                                     ]
                                 }
                             />
-                        </>
+                        </DetailWorkspaceFacts>
                     ) : (
-                        <p className="text-muted-foreground">
+                        <p className="text-body-compact text-muted-foreground">
                             暂未上传导入文件。
                         </p>
                     )}
@@ -87,46 +85,46 @@ export function FilesSection({ batch }: { batch: ImportBatchView }) {
                 title="导入结果与异常报告"
                 subtitle="导入成功记录长期保存；失败明细保留 30 天，导出文件保留 7 天。"
             >
-                <div className="space-y-3">
-                    {batch.resultAssets.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">
-                            暂无结果文件。
-                        </p>
-                    ) : (
-                        batch.resultAssets.map((a) => (
-                            <div
+                {batch.resultAssets.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                        暂无结果文件。
+                    </p>
+                ) : (
+                    <ul className="divide-y divide-border/60">
+                        {batch.resultAssets.map((a) => (
+                            <li
                                 key={a.assetId}
-                                className="rounded-lg border px-3 py-2 text-body-compact"
+                                className="py-3 text-body-compact first:pt-0 last:pb-0"
                             >
-                                <div className="font-medium">{a.fileName}</div>
+                                <div className="font-medium text-foreground">
+                                    {a.fileName}
+                                </div>
                                 <div className="mt-1 text-xs text-muted-foreground">
                                     {RETENTION_LABEL[a.retentionClass]}
-                                    {a.expiresAt
-                                        ? ` · 到期 ${formatDateTime(a.expiresAt, "dateStyle", "passthrough")}`
-                                        : " · 无到期"}
+                                    {a.expiresAt ? (
+                                        <>
+                                            {" · 到期 "}
+                                            <span className="num">
+                                                {formatDateTime(
+                                                    a.expiresAt,
+                                                    "dateStyle",
+                                                    "passthrough",
+                                                )}
+                                            </span>
+                                        </>
+                                    ) : (
+                                        " · 无到期"
+                                    )}
                                     {" · "}
-                                    {formatBytes(a.byteSize)}
+                                    <span className="num">
+                                        {formatBytes(a.byteSize)}
+                                    </span>
                                 </div>
-                                <Button
-                                    id={`operations-import-batch-detail-files-asset-${toAutomationIdSegment(a.assetId)}-preview`}
-                                    type="button"
-                                    size="xs"
-                                    variant="outline"
-                                    className="mt-2"
-                                    onClick={() => setPreviewAsset(a.fileName)}
-                                >
-                                    查看（示例）
-                                </Button>
-                                {previewAsset === a.fileName ? (
-                                    <p className="mt-2 text-xs text-muted-foreground">
-                                        当前仅展示文件基本信息与保存期限，不直接预览文件正文。
-                                    </p>
-                                ) : null}
-                            </div>
-                        ))
-                    )}
-                </div>
+                            </li>
+                        ))}
+                    </ul>
+                )}
             </DetailWorkspaceSection>
-        </div>
+        </>
     )
 }

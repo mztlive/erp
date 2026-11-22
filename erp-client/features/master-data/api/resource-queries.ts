@@ -139,6 +139,8 @@ export async function fetchMasterDataCenter(
         categories?: boolean
         brands?: boolean
         skus?: boolean
+        revisions?: boolean
+        handlerOptions?: boolean
     },
 ): Promise<MasterDataCenterView | null> {
     switch (resource) {
@@ -155,7 +157,11 @@ export async function fetchMasterDataCenter(
         case "voucher-categories":
             return centerVoucher(stableId, extraAccess?.skus)
         case "warehouses":
-            return centerWarehouse(stableId)
+            return centerWarehouse(
+                stableId,
+                extraAccess?.revisions,
+                extraAccess?.handlerOptions,
+            )
         case "suppliers":
             return centerSupplier(stableId, extraAccess?.assets)
         default:

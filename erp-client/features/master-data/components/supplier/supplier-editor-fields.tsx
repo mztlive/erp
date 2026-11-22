@@ -16,19 +16,37 @@ import { cn } from "@/lib/utils"
 const CAPABILITY_SEPARATOR = "、"
 
 export const SUPPLIER_SECTIONS: ReadonlyArray<{
-    id: string
+    id: "profile" | "delivery" | "portal" | "history"
     label: string
 }> = [
-    { id: "basic", label: "基本信息" },
-    { id: "commercial", label: "商务合作" },
-    { id: "contract", label: "合同资质" },
-    { id: "invoice", label: "开票信息" },
+    { id: "profile", label: "供应商资料" },
     { id: "delivery", label: "配送模板" },
+    { id: "portal", label: "供应商门户" },
+    { id: "history", label: "变更记录" },
+]
+
+export type SupplierPrimarySectionId = (typeof SUPPLIER_SECTIONS)[number]["id"]
+
+export const SUPPLIER_PORTAL_SUB_TABS: ReadonlyArray<{
+    id: "portal-accounts" | "portal-catalog" | "portal-applications"
+    label: string
+}> = [
     { id: "portal-accounts", label: "门户账号" },
     { id: "portal-catalog", label: "SKU 开放" },
     { id: "portal-applications", label: "供应商申请" },
-    { id: "history", label: "历史引用" },
 ]
+
+export type SupplierPortalSubTabId =
+    (typeof SUPPLIER_PORTAL_SUB_TABS)[number]["id"]
+
+function maskEditedSensitiveValue(raw: string): string {
+    const trimmed = raw.trim()
+    if (!trimmed) return "已清空（待保存）"
+    if (trimmed.length >= 7) {
+        return `${trimmed.slice(0, 3)}****${trimmed.slice(-4)}`
+    }
+    return "已修改（待保存）"
+}
 
 function parseCapabilities(value: string): string[] {
     return value
@@ -37,7 +55,7 @@ function parseCapabilities(value: string): string[] {
         .filter(Boolean)
 }
 
-/** 有揭示令牌时默认打码，查看 15 秒后自动隐藏。 */
+/** 有揭示令牌时默认打码，查看 15 秒后自动隐藏；本地已修改后失焦保留新值脱敏提示而不回退旧值。 */
 export function SensitiveEditableField({
     label,
     id,
@@ -47,6 +65,8 @@ export function SensitiveEditableField({
     onChange,
     disabled,
     canReveal = false,
+    edited = false,
+    numeric = false,
     getRevealToken,
     placeholder,
 }: {
@@ -58,6 +78,8 @@ export function SensitiveEditableField({
     onChange: (next: string) => void
     disabled?: boolean
     canReveal?: boolean
+    edited?: boolean
+    numeric?: boolean
     getRevealToken?: () => Promise<string | undefined>
     placeholder?: string
 }) {
@@ -66,6 +88,7 @@ export function SensitiveEditableField({
         null,
     )
     const [revealError, setRevealError] = React.useState<string | null>(null)
+    const hasLocalEdit = edited || Boolean(value)
 
     React.useEffect(() => {
         if (!canReveal) {
@@ -92,12 +115,19 @@ export function SensitiveEditableField({
                     onChange={(event) => onChange(event.target.value)}
                     disabled={disabled}
                     placeholder={placeholder}
+                    className={numeric ? "num" : undefined}
                 />
             </div>
         )
     }
 
     const reveal = async () => {
+        if (hasLocalEdit) {
+            setRevealedValue(value)
+            setRevealError(null)
+            setRevealed(true)
+            return
+        }
         try {
             const activeToken = (await getRevealToken?.()) ?? revealToken
             if (!activeToken) {
@@ -116,10 +146,21 @@ export function SensitiveEditableField({
     if (!revealed || !canReveal) {
         return (
             <div className="space-y-1.5">
-                <Label htmlFor={id}>{label}</Label>
+                <Label htmlFor={canReveal ? `${id}-reveal` : undefined}>
+                    {label}
+                </Label>
                 <div className="flex flex-wrap items-center gap-2">
-                    <code className="num rounded-md bg-muted px-2 py-1.5 text-body-compact">
-                        {maskedValue || "****"}
+                    <code
+                        className={cn(
+                            "num rounded-md px-2 py-1.5 text-body-compact",
+                            hasLocalEdit
+                                ? "bg-warning-soft text-warning-soft-foreground"
+                                : "bg-muted",
+                        )}
+                    >
+                        {hasLocalEdit
+                            ? maskEditedSensitiveValue(value)
+                            : maskedValue || "****"}
                     </code>
                     {canReveal && (
                         <Button
@@ -127,15 +168,20 @@ export function SensitiveEditableField({
                             type="button"
                             size="sm"
                             variant="outline"
+                            disabled={disabled && hasLocalEdit}
                             onClick={() => void reveal()}
                         >
-                            查看完整信息
+                            {hasLocalEdit ? "继续编辑" : "查看完整信息"}
                         </Button>
                     )}
                 </div>
                 {canReveal && revealError ? (
                     <p className="text-xs text-destructive" role="alert">
                         {revealError}
+                    </p>
+                ) : hasLocalEdit ? (
+                    <p className="text-xs text-warning-soft-foreground">
+                        已修改（待保存，点击继续编辑）。
                     </p>
                 ) : canReveal ? (
                     <p className="text-xs text-muted-foreground">
@@ -162,9 +208,10 @@ export function SensitiveEditableField({
                 }}
                 disabled={disabled}
                 placeholder={placeholder}
+                className={numeric ? "num" : undefined}
             />
             <p className="text-xs text-muted-foreground">
-                已显示明文；离开输入框后自动打码。
+                已显示明文；离开输入框后自动打码，未保存修改将保留。
             </p>
         </div>
     )
@@ -219,16 +266,19 @@ export function FieldShell({
 }
 
 export function SectionPanel({
+    id,
     title,
     description,
     children,
 }: {
+    id?: string
     title: string
     description?: string
     children: React.ReactNode
 }) {
     return (
         <DetailWorkspaceSection
+            id={id}
             title={title}
             subtitle={description}
             width="form"

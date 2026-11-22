@@ -2,7 +2,6 @@
 
 import type { ReactNode } from "react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -18,14 +17,12 @@ export function SalesInquiryProducts({
     onRoundChange,
     demand,
     revision,
-    footer,
 }: {
     inquiry: SalesInquiry
     chosenRound: number | null
     onRoundChange: (round: number | null) => void
     demand: ReactNode
     revision?: ReactNode
-    footer: ReactNode
 }) {
     const editing = ["draft", "awaiting_sales_supplement"].includes(
         inquiry.status,
@@ -59,15 +56,19 @@ export function SalesInquiryProducts({
         )
     if (revision) return revision
     return (
-        <div className="flex h-full min-h-0 min-w-0 flex-col gap-3">
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-body-compact">
                     <span className="font-medium">
-                        {feedback
-                            ? `第 ${feedback.round} 轮反馈`
-                            : "当前商品需求"}
+                        {feedback ? (
+                            <span className="num">
+                                第 {feedback.round} 轮反馈
+                            </span>
+                        ) : (
+                            "当前商品需求"
+                        )}
                     </span>
-                    <span className="text-muted-foreground">
+                    <span className="num text-muted-foreground">
                         {feedback
                             ? `对应需求第 ${feedback.requirement_version} 版 · 发布于 ${inquiryDate(feedback.published_at)}`
                             : `需求第 ${inquiry.requirement_version} 版`}
@@ -126,7 +127,7 @@ export function SalesInquiryProducts({
                     )}
                 <div className="flex flex-wrap items-center gap-2">
                     {feedback && (
-                        <p className="text-xs text-muted-foreground">
+                        <p className="num text-xs text-muted-foreground">
                             可供{" "}
                             {
                                 feedback.data.lines.filter(
@@ -151,14 +152,15 @@ export function SalesInquiryProducts({
                         </p>
                     )}
                     {deliveryAttentionCount > 0 && (
-                        <Badge variant="warning">
-                            配送待核对 {deliveryAttentionCount} 项
-                        </Badge>
+                        <StatusBadge
+                            tone="warning"
+                            label={`配送待核对 ${deliveryAttentionCount} 项`}
+                        />
                     )}
                 </div>
             </div>
             {waiting && !feedback && (
-                <Alert variant="info" className="shrink-0">
+                <Alert variant="info">
                     <AlertDescription>
                         {rounds.length
                             ? "当前需求正在重新询价，等待采购发布新反馈。上一轮报价可通过“查看轮次”查阅。"
@@ -167,7 +169,7 @@ export function SalesInquiryProducts({
                 </Alert>
             )}
             {historical && (
-                <p className="shrink-0 text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     正在查看第 {feedback.requirement_version}{" "}
                     版需求及其报价；最新需求为第 {inquiry.requirement_version}{" "}
                     版。
@@ -177,7 +179,7 @@ export function SalesInquiryProducts({
                 </p>
             )}
             {editing ? (
-                <div className="min-h-0 flex-1 overflow-auto">{demand}</div>
+                demand
             ) : requirement ? (
                 <InquiryProductsTable
                     key={feedback ? `round-${feedback.round}` : "current"}
@@ -193,12 +195,9 @@ export function SalesInquiryProducts({
                 </Alert>
             )}
             {!editing && (
-                <div className="shrink-0 space-y-2 border-t pt-3">
-                    <p className="text-xs text-muted-foreground">
-                        交付日期与配送范围沿用对应需求，可在“配送地址”或“交付要求”中核对。
-                    </p>
-                    {footer}
-                </div>
+                <p className="text-xs text-muted-foreground">
+                    交付日期与配送范围沿用对应需求，可在“配送地址”或“交付要求”中核对。
+                </p>
             )}
         </div>
     )

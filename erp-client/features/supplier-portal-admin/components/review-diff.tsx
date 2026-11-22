@@ -6,6 +6,7 @@ import {
 } from "@/components/business/detail-workspace"
 import type { ReactNode } from "react"
 import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Table,
     TableBody,
@@ -223,34 +224,45 @@ function normalized(value: unknown, kind: FieldKind): string {
         )
     return text(value).trim()
 }
-function changeLabel(
+const NUMERIC_KINDS = new Set<FieldKind>(["money", "rate", "quantity"])
+
+function changeInfo(
     before: unknown,
     after: unknown,
     kind: FieldKind,
     existing: boolean,
-): string {
-    if (after === undefined) return "不在本次修改范围"
-    if (before === undefined) return existing ? "当前值待核对" : "本次新增"
-    if (
-        ["money", "rate", "quantity"].includes(kind) &&
-        text(before) &&
-        text(after)
-    ) {
+): {
+    label: string
+    tone: "neutral" | "info" | "success" | "warning"
+} {
+    if (after === undefined) {
+        return { label: "不在本次修改范围", tone: "neutral" }
+    }
+    if (before === undefined) {
+        return existing
+            ? { label: "当前值待核对", tone: "warning" }
+            : { label: "本次新增", tone: "info" }
+    }
+    if (NUMERIC_KINDS.has(kind) && text(before) && text(after)) {
         try {
             const compared = compareDecimal(
                 text(after),
                 text(before),
                 kind === "money" ? 4 : 6,
             )
-            return compared === 0 ? "保持不变" : compared > 0 ? "提高" : "降低"
+            if (compared === 0) return { label: "保持不变", tone: "neutral" }
+            return compared > 0
+                ? { label: "提高", tone: "warning" }
+                : { label: "降低", tone: "success" }
         } catch {
-            return "需要核对"
+            return { label: "需要核对", tone: "warning" }
         }
     }
     return normalized(before, kind) === normalized(after, kind)
-        ? "保持不变"
-        : "调整"
+        ? { label: "保持不变", tone: "neutral" }
+        : { label: "调整", tone: "info" }
 }
+
 function comparison(
     title: string,
     before: Fields,
@@ -273,35 +285,66 @@ function comparison(
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {fields.map((item) => (
-                            <TableRow key={item.key}>
-                                <TableCell className="font-medium">
-                                    {item.label}
-                                </TableCell>
-                                <TableCell className="min-w-36 whitespace-normal">
-                                    {valueContent(
-                                        before[item.key],
-                                        item.kind,
-                                        unit,
-                                    )}
-                                </TableCell>
-                                <TableCell className="min-w-36 whitespace-normal">
-                                    {valueContent(
-                                        after[item.key],
-                                        item.kind,
-                                        unit,
-                                    )}
-                                </TableCell>
-                                <TableCell className="whitespace-normal">
-                                    {changeLabel(
-                                        before[item.key],
-                                        after[item.key],
-                                        item.kind,
-                                        existing,
-                                    )}
-                                </TableCell>
-                            </TableRow>
-                        ))}
+                        {fields.map((item) => {
+                            const isNumeric = NUMERIC_KINDS.has(item.kind)
+                            const isCodeOrDate =
+                                item.kind === "date" ||
+                                item.kind === "end_date" ||
+                                item.key === "ordering_code" ||
+                                item.key === "supplier_sku_code" ||
+                                item.key === "barcode"
+                            const change = changeInfo(
+                                before[item.key],
+                                after[item.key],
+                                item.kind,
+                                existing,
+                            )
+                            return (
+                                <TableRow key={item.key}>
+                                    <TableCell className="font-medium">
+                                        {item.label}
+                                    </TableCell>
+                                    <TableCell
+                                        data-align={
+                                            isNumeric ? "end" : undefined
+                                        }
+                                        className={
+                                            isNumeric || isCodeOrDate
+                                                ? "num min-w-36 whitespace-normal"
+                                                : "min-w-36 whitespace-normal"
+                                        }
+                                    >
+                                        {valueContent(
+                                            before[item.key],
+                                            item.kind,
+                                            unit,
+                                        )}
+                                    </TableCell>
+                                    <TableCell
+                                        data-align={
+                                            isNumeric ? "end" : undefined
+                                        }
+                                        className={
+                                            isNumeric || isCodeOrDate
+                                                ? "num min-w-36 whitespace-normal"
+                                                : "min-w-36 whitespace-normal"
+                                        }
+                                    >
+                                        {valueContent(
+                                            after[item.key],
+                                            item.kind,
+                                            unit,
+                                        )}
+                                    </TableCell>
+                                    <TableCell className="whitespace-normal">
+                                        <StatusBadge
+                                            tone={change.tone}
+                                            label={change.label}
+                                        />
+                                    </TableCell>
+                                </TableRow>
+                            )
+                        })}
                     </TableBody>
                 </Table>
             </div>
@@ -349,7 +392,7 @@ export function PortalReviewDiff({
                 (application.kind === "terms" ||
                     application.kind === "cooperation" ||
                     application.kind === "stop") && (
-                    <p className="rounded-lg border p-3 text-body-compact text-warning-soft-foreground">
+                    <p className="border-l-2 border-warning-soft-foreground/60 bg-warning-soft/25 px-3.5 py-2.5 text-body-compact text-warning-soft-foreground">
                         当前生效资料尚未读取，请重新读取申请并核对当前资料后再确认；不能据此认定条款没有变化。
                     </p>
                 )}
@@ -451,7 +494,7 @@ export function PortalReviewDiff({
                     })}
                 </>
             )}
-            <div className="space-y-2 rounded-lg border bg-muted/30 p-4 text-body-compact">
+            <div className="space-y-1.5 border-l-2 border-border/80 pl-3.5 text-xs text-muted-foreground">
                 {(application.kind === "quote" || newProduct) && (
                     <p>
                         复用已上架的公司商品规格并增加有效供货后，可能立即参与或恢复销售及采购供应选择；须确认目标规格、基础单位及供货资格。

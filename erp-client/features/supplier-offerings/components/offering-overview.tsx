@@ -8,18 +8,9 @@ import {
     DetailWorkspaceMetrics,
     DetailWorkspaceMetricItem,
     DetailWorkspaceSection,
-    detailWorkspaceStyles,
 } from "@/components/business/detail-workspace"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 
@@ -32,7 +23,7 @@ import {
 } from "../types"
 import { capabilityLabel, OfferingField } from "./offering-terms"
 
-/** 供给资料页顶部：两种供给价、税率和当前可供，先回答「多少钱、现在能不能供」。 */
+/** 供给资料页顶部：有成本权限时展示供给价、税率与当前可供；无成本权限时展示可供、起订与有效期。 */
 export function OfferingSummary({
     offering,
     canViewCosts,
@@ -41,168 +32,156 @@ export function OfferingSummary({
     canViewCosts: boolean
 }) {
     const available = offering.availability_status === "AVAILABLE"
-    return (
-        <DetailWorkspaceMetrics
-            ariaLabel="供给摘要"
-            columns={canViewCosts ? 4 : 2}
-        >
-            {canViewCosts && (
-                <>
-                    <DetailWorkspaceMetricItem
-                        label="一件代发价（含税）"
-                        value={
-                            <MoneyValue
-                                value={offering.dropship_supply_price_gross}
-                            />
-                        }
-                        detail={
-                            <>
-                                不含税{" "}
-                                <MoneyValue
-                                    value={offering.dropship_supply_price_net}
-                                />
-                            </>
-                        }
-                    />
-                    <DetailWorkspaceMetricItem
-                        label="集采价（含税）"
-                        value={
-                            <MoneyValue
-                                value={offering.bulk_supply_price_gross}
-                            />
-                        }
-                        detail={
-                            <>
-                                起订{" "}
-                                {offering.bulk_minimum_order_quantity !=
-                                null ? (
-                                    <QuantityValue
-                                        value={
-                                            offering.bulk_minimum_order_quantity
-                                        }
-                                        unit=""
-                                    />
-                                ) : (
-                                    "未提供"
-                                )}
-                                {" · 不含税 "}
-                                <MoneyValue
-                                    value={offering.bulk_supply_price_net}
-                                />
-                            </>
+    const availabilityMetric = (
+        <DetailWorkspaceMetricItem
+            label="当前可供"
+            emphasis={!canViewCosts ? "primary" : undefined}
+            value={
+                <span className="inline-flex items-center gap-2">
+                    {offering.available_quantity != null ? (
+                        <QuantityValue
+                            value={offering.available_quantity}
+                            unit=""
+                        />
+                    ) : (
+                        <span className="text-body-compact font-medium text-muted-foreground">
+                            数量未提供
+                        </span>
+                    )}
+                    <StatusBadge
+                        tone={available ? "success" : "neutral"}
+                        label={
+                            offering.availability_status
+                                ? AVAILABILITY_STATUS_LABELS[
+                                      offering.availability_status
+                                  ]
+                                : "未更新"
                         }
                     />
-                    <DetailWorkspaceMetricItem
-                        label="进项税率"
-                        value={
-                            offering.input_tax_rate != null ? (
-                                <RateValue
-                                    value={percentageFromRate(
-                                        offering.input_tax_rate,
-                                    )}
-                                    precision={2}
-                                />
-                            ) : (
-                                "—"
-                            )
-                        }
-                        detail="不含税价按此税率换算"
-                    />
-                </>
-            )}
-            <DetailWorkspaceMetricItem
-                label="当前可供"
-                value={
-                    <span className="inline-flex items-center gap-2">
-                        {offering.available_quantity != null ? (
+                </span>
+            }
+            detail={
+                <span className="num">
+                    更新于{" "}
+                    {offeringTime(offering.availability_source_updated_at)}
+                </span>
+            }
+        />
+    )
+    if (!canViewCosts) {
+        return (
+            <DetailWorkspaceMetrics ariaLabel="供给摘要" columns={3}>
+                {availabilityMetric}
+                <DetailWorkspaceMetricItem
+                    label="集采起订量"
+                    value={
+                        offering.bulk_minimum_order_quantity != null ? (
                             <QuantityValue
-                                value={offering.available_quantity}
+                                value={offering.bulk_minimum_order_quantity}
                                 unit=""
                             />
                         ) : (
                             <span className="text-body-compact font-medium text-muted-foreground">
-                                数量未提供
+                                未提供
                             </span>
-                        )}
-                        <StatusBadge
-                            tone={available ? "success" : "neutral"}
-                            label={
-                                offering.availability_status
-                                    ? AVAILABILITY_STATUS_LABELS[
-                                          offering.availability_status
-                                      ]
-                                    : "未更新"
-                            }
-                        />
-                    </span>
+                        )
+                    }
+                    detail={
+                        <span className="num">
+                            当前条款第 {offering.current_revision_no ?? "—"} 版
+                        </span>
+                    }
+                />
+                <DetailWorkspaceMetricItem
+                    label="条款有效期"
+                    value={
+                        <span className="num text-body-compact font-semibold">
+                            {offeringValidity(offering)}
+                        </span>
+                    }
+                    detail={`登记来源 · ${SOURCE_TYPE_LABELS[offering.source_type]}`}
+                />
+            </DetailWorkspaceMetrics>
+        )
+    }
+    return (
+        <DetailWorkspaceMetrics ariaLabel="供给摘要" columns={4}>
+            <DetailWorkspaceMetricItem
+                label="一件代发价（含税）"
+                emphasis="primary"
+                value={
+                    <MoneyValue value={offering.dropship_supply_price_gross} />
                 }
-                detail={`更新于 ${offeringTime(offering.availability_source_updated_at)}`}
+                detail={
+                    <>
+                        不含税{" "}
+                        <MoneyValue
+                            value={offering.dropship_supply_price_net}
+                        />
+                    </>
+                }
             />
+            <DetailWorkspaceMetricItem
+                label="集采价（含税）"
+                value={<MoneyValue value={offering.bulk_supply_price_gross} />}
+                detail={
+                    <>
+                        起订{" "}
+                        {offering.bulk_minimum_order_quantity != null ? (
+                            <QuantityValue
+                                value={offering.bulk_minimum_order_quantity}
+                                unit=""
+                            />
+                        ) : (
+                            "未提供"
+                        )}
+                        {" · 不含税 "}
+                        <MoneyValue value={offering.bulk_supply_price_net} />
+                    </>
+                }
+            />
+            <DetailWorkspaceMetricItem
+                label="进项税率"
+                value={
+                    offering.input_tax_rate != null ? (
+                        <RateValue
+                            value={percentageFromRate(offering.input_tax_rate)}
+                            precision={2}
+                        />
+                    ) : (
+                        "—"
+                    )
+                }
+                detail="不含税价按此税率换算"
+            />
+            {availabilityMetric}
         </DetailWorkspaceMetrics>
     )
 }
 
-/** 当前条款：价格对照表、起订量、有效期与商品能力。 */
+/** 当前条款：起订量、有效期、版次与商品能力（价格已在顶部摘要展示，不再重复列表）。 */
 export function OfferingTermsSection({
     offering,
-    canViewCosts,
 }: {
     offering: SupplierOfferingView
-    canViewCosts: boolean
 }) {
-    const rows = [
-        {
-            key: "dropship",
-            label: "一件代发",
-            gross: offering.dropship_supply_price_gross,
-            net: offering.dropship_supply_price_net,
-        },
-        {
-            key: "bulk",
-            label: "集采",
-            gross: offering.bulk_supply_price_gross,
-            net: offering.bulk_supply_price_net,
-        },
-    ]
     return (
         <DetailWorkspaceSection
             headingId="offering-terms-title"
             title="商业条款"
-            subtitle={`当前第 ${offering.current_revision_no ?? "—"} 版`}
+            subtitle={
+                <span className="num">
+                    当前第 {offering.current_revision_no ?? "—"} 版
+                </span>
+            }
+            width="form"
         >
-            {canViewCosts && (
-                <div className={detailWorkspaceStyles.dataTableWrapper}>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>价格方式</TableHead>
-                                <TableHead className="text-right">
-                                    含税价
-                                </TableHead>
-                                <TableHead className="text-right">
-                                    不含税价
-                                </TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {rows.map((row) => (
-                                <TableRow key={row.key}>
-                                    <TableCell className="font-medium">
-                                        {row.label}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <MoneyValue value={row.gross} />
-                                    </TableCell>
-                                    <TableCell className="text-right text-muted-foreground">
-                                        <MoneyValue value={row.net} />
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
-            )}
             <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+                <OfferingField label="条款版次">
+                    <span className="num">
+                        第 {offering.current_revision_no ?? "—"} 版
+                    </span>
+                </OfferingField>
                 <OfferingField label="集采起订量">
                     {offering.bulk_minimum_order_quantity != null ? (
                         <QuantityValue
@@ -216,13 +195,13 @@ export function OfferingTermsSection({
                 <OfferingField label="条款有效期">
                     <span className="num">{offeringValidity(offering)}</span>
                 </OfferingField>
-                {offering.product_capabilities.length > 0 ? (
-                    <OfferingField label="商品能力">
-                        {offering.product_capabilities
-                            .map(capabilityLabel)
-                            .join("、")}
-                    </OfferingField>
-                ) : null}
+                <OfferingField label="商品能力">
+                    {offering.product_capabilities.length > 0
+                        ? offering.product_capabilities
+                              .map(capabilityLabel)
+                              .join("、")
+                        : "未标注"}
+                </OfferingField>
             </dl>
         </DetailWorkspaceSection>
     )
@@ -244,11 +223,16 @@ export function OfferingIdentitySection({
         ? `/master-data/suppliers/${encodeURIComponent(offering.supplier_id)}`
         : null
     return (
-        <DetailWorkspaceSection
-            headingId="offering-identity-title"
-            title="供给资料"
-            className="py-0 first:pt-0 last:pb-0"
+        <div
+            aria-labelledby="offering-identity-title"
+            className="min-w-0 space-y-5"
         >
+            <h2
+                id="offering-identity-title"
+                className="text-section-title font-semibold tracking-tight text-foreground"
+            >
+                供给资料
+            </h2>
             <section className="space-y-3">
                 <h3 className="text-xs font-medium text-muted-foreground">
                     公司商品
@@ -295,7 +279,9 @@ export function OfferingIdentitySection({
                         </span>
                     </OfferingField>
                     <OfferingField label="商品编码">
-                        {offering.supplier_product_code || "未标注"}
+                        <span className="num">
+                            {offering.supplier_product_code || "未标注"}
+                        </span>
                     </OfferingField>
                 </dl>
                 {supplierHref ? (
@@ -324,6 +310,6 @@ export function OfferingIdentitySection({
                     </OfferingField>
                 </dl>
             </section>
-        </DetailWorkspaceSection>
+        </div>
     )
 }

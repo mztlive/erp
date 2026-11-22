@@ -134,6 +134,20 @@ export function useIntegrationPageUrl({
 
     const autoNext = urlState.autoNext
 
+    const rawReturnTo = searchParams.get("returnTo")
+    const returnTo =
+        rawReturnTo?.startsWith("/") && !rawReturnTo.startsWith("//")
+            ? rawReturnTo
+            : undefined
+
+    const currentQueueHref = React.useMemo(() => {
+        if (focusMode) return undefined
+        const params = new URLSearchParams(searchParams.toString())
+        params.delete("returnTo")
+        const qs = params.toString()
+        return qs ? `${pathname}?${qs}` : pathname
+    }, [focusMode, pathname, searchParams])
+
     const hasQueueFilters = Boolean(
         urlState.mode !== "all" ||
         urlState.environment !== "all" ||
@@ -151,6 +165,8 @@ export function useIntegrationPageUrl({
         query,
         replaceUrl,
         autoNext,
+        returnTo,
+        currentQueueHref,
         hasQueueFilters,
     }
 }

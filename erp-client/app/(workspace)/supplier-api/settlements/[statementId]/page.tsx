@@ -1,33 +1,34 @@
-import { PagePulseBars } from "@/components/layout/page-pulse"
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { SupplierSettlementsPage } from "@/features/supplier-settlements/pages/supplier-settlements-page"
+import { DetailWorkspaceSkeleton } from "@/components/business"
+import { SupplierSettlementDetailPage } from "@/features/supplier-settlements/pages/supplier-settlement-detail-page"
 
 export const metadata: Metadata = {
     title: "结算单详情",
 }
 
-function CenterFallback() {
-    return (
-        <PagePulseBars
-            bars={[
-                "h-10 w-40 animate-pulse rounded-lg bg-muted",
-                "h-24 animate-pulse rounded-xl bg-muted",
-                "h-64 animate-pulse rounded-lg bg-muted",
-            ]}
-        />
-    )
-}
-
 /**
- * 路径 `/supplier-api/settlements/:statementId` 与列表查询参数 statementId 等价。
- * 页签身份：supplier-settlement:{statementId}，同结算单不复制。
+ * 独立结算单详情路由 `/supplier-api/settlements/:statementId`。
+ * 保留 section / diff / returnTo / workItemId / queueContextId / from 全部参数。
  */
-export default function Page() {
+export default async function Page({
+    params,
+}: {
+    params: Promise<{ statementId: string }>
+}) {
+    const { statementId } = await params
     return (
-        <Suspense fallback={<CenterFallback />}>
-            <SupplierSettlementsPage />
+        <Suspense
+            fallback={
+                <DetailWorkspaceSkeleton
+                    title="供应商结算单"
+                    description="正在加载结算单，请稍候…"
+                    summary
+                />
+            }
+        >
+            <SupplierSettlementDetailPage statementId={statementId} />
         </Suspense>
     )
 }

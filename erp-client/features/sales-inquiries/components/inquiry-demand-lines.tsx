@@ -10,10 +10,11 @@ import { TableRowActions } from "@/components/business/table-row-actions"
 import { TableToolbarScope } from "@/components/business/table-toolbar"
 import { NativeCheckbox } from "@/components/ui/checkbox"
 import { toast } from "@/components/ui/toast"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DatePicker } from "@/components/ui/date-picker"
+import { RequiredMark } from "@/components/ui/required-mark"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Sheet,
     SheetContent,
@@ -175,9 +176,12 @@ export const InquiryDemandLines = withForm({
                                     </p>
                                 </div>
                             ) : (
-                                <div className="min-w-0 overflow-hidden rounded-lg border [&>[data-slot=table-container]]:max-h-[65vh]">
+                                <div
+                                    data-slot="detail-inline-table"
+                                    className="min-w-0 border-y border-border/70"
+                                >
                                     <Table className="min-w-[1360px] table-fixed">
-                                        <TableHeader className="sticky top-0 z-10">
+                                        <TableHeader>
                                             <TableRow>
                                                 <TableHead className="w-12">
                                                     <NativeCheckbox
@@ -217,13 +221,17 @@ export const InquiryDemandLines = withForm({
                                                 <TableHead>
                                                     商品 / 规格
                                                 </TableHead>
-                                                <TableHead className="w-36">
-                                                    需求数量{" "}
-                                                    <span className="text-destructive">
-                                                        *
-                                                    </span>
+                                                <TableHead
+                                                    data-align="end"
+                                                    className="w-36"
+                                                >
+                                                    需求数量
+                                                    <RequiredMark />
                                                 </TableHead>
-                                                <TableHead className="w-40 text-right">
+                                                <TableHead
+                                                    data-align="end"
+                                                    className="w-40 text-right"
+                                                >
                                                     销售价（选填）
                                                 </TableHead>
                                                 <TableHead className="w-52">
@@ -404,19 +412,18 @@ export const InquiryDemandLines = withForm({
                                                         </TableCell>
                                                         <TableCell>
                                                             <div className="min-w-0 max-w-full space-y-1.5 whitespace-normal">
-                                                                <Badge
+                                                                <StatusBadge
                                                                     className="h-auto min-h-5 max-w-full justify-start text-left leading-5 whitespace-normal wrap-anywhere"
-                                                                    variant={
+                                                                    tone={
                                                                         progress.complete &&
                                                                         !progress.overAllocated
-                                                                            ? "secondary"
+                                                                            ? "neutral"
                                                                             : "warning"
                                                                     }
-                                                                >
-                                                                    {
+                                                                    label={
                                                                         progress.label
                                                                     }
-                                                                </Badge>
+                                                                />
                                                                 {line.delivery_terms && (
                                                                     <p
                                                                         className="text-xs text-muted-foreground wrap-anywhere"

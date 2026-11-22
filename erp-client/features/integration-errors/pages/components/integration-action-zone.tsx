@@ -87,7 +87,15 @@ export function IntegrationActionZone({
 
     if (terminal) return null
 
-    const content = (
+    const canResolve =
+        can("RESOLVE") &&
+        Boolean(item.workItem) &&
+        Boolean(item.resolutionEvidencePolicy)
+    const canQueryOriginal =
+        can("QUERY_ORIGINAL_RESULT") && Boolean(item.workItem)
+    const headingText = can("RESOLVE") ? "确认处理" : "处理异常"
+
+    const body = (
         <div
             ref={actionZoneRef}
             role="region"
@@ -98,23 +106,21 @@ export function IntegrationActionZone({
                     : "space-y-4 border-t border-grid pt-5"
             }
         >
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h3
-                    id="integration-action-heading"
-                    className={
-                        detailWorkspace
-                            ? "text-section-title font-semibold tracking-tight"
-                            : "font-semibold"
-                    }
-                >
-                    {can("RESOLVE") ? "确认处理" : "处理异常"}
-                </h3>
-                {can("RESOLVE") ? (
-                    <p className="text-xs text-muted-foreground">
-                        确认后移出待处理队列
-                    </p>
-                ) : null}
-            </div>
+            {!detailWorkspace ? (
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <h3
+                        id="integration-action-heading"
+                        className="font-semibold"
+                    >
+                        {headingText}
+                    </h3>
+                    {can("RESOLVE") ? (
+                        <p className="text-xs text-muted-foreground">
+                            确认后移出待处理队列
+                        </p>
+                    ) : null}
+                </div>
+            ) : null}
             {!hasTaskActions &&
             !canClose &&
             !direct &&
@@ -127,6 +133,14 @@ export function IntegrationActionZone({
                             : "当前任务仅供查看。请由具备处理权限的责任人完成核验。"}
                     </p>
                 </div>
+            ) : null}
+            {detailWorkspace &&
+            responsibilityStatus === "assigned_to_other" &&
+            (hasTaskActions || canClose) ? (
+                <p className="text-xs text-muted-foreground">
+                    当前任务由 {item.ownerUser ?? item.ownerRole}{" "}
+                    负责处理，您当前仅供查看。
+                </p>
             ) : null}
             {item.actionBlockers.length > 0 ? (
                 <ul className="space-y-1 text-xs text-muted-foreground">
@@ -142,47 +156,34 @@ export function IntegrationActionZone({
             ) : null}
 
             {hasTaskActions || canClose || direct ? (
-                <details className="group">
-                    <summary
-                        id="integration-action-comment-toggle"
-                        className="inline-flex cursor-pointer list-none items-center gap-1 rounded-sm text-body-compact text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                        添加处理说明（可选）
-                        <ChevronDownIcon
-                            className="size-3.5 transition-transform group-open:rotate-180"
-                            aria-hidden
-                        />
-                    </summary>
-                    <div
-                        data-slot={
-                            detailWorkspace ? "detail-form-grid" : undefined
-                        }
-                        className="mt-3 max-w-2xl space-y-2"
-                    >
-                        <Label htmlFor="integration-action-comment">
-                            处理说明
-                        </Label>
-                        <Textarea
-                            id="integration-action-comment"
-                            rows={2}
-                            value={comment}
-                            onChange={(e) => onCommentChange(e.target.value)}
-                            placeholder="补充本次处理情况"
-                            disabled={formalPending}
-                        />
-                    </div>
-                </details>
+                <div
+                    data-slot={detailWorkspace ? "detail-form-grid" : undefined}
+                    className="max-w-2xl space-y-2"
+                >
+                    <Label htmlFor="integration-action-comment">
+                        处理说明（可选）
+                    </Label>
+                    <Textarea
+                        id="integration-action-comment"
+                        rows={2}
+                        value={comment}
+                        onChange={(e) => onCommentChange(e.target.value)}
+                        placeholder="补充本次处理情况"
+                        disabled={formalPending}
+                    />
+                </div>
             ) : null}
 
             <div className="flex flex-wrap gap-2">
                 <WorkspaceTaskFooter>
-                    {can("QUERY_ORIGINAL_RESULT") && item.workItem ? (
+                    {canQueryOriginal ? (
                         <LoadingButton
                             id="integration-action-query-original-result"
                             loading={
                                 pendingTaskAction === "QUERY_ORIGINAL_RESULT"
                             }
                             type="button"
+                            variant={canResolve ? "outline" : "default"}
                             disabled={assignedDisabled}
                             onClick={() =>
                                 void onTaskAction("QUERY_ORIGINAL_RESULT")
@@ -241,12 +242,11 @@ export function IntegrationActionZone({
                             重新匹配归属
                         </LoadingButton>
                     ) : null}
-                    {can("RESOLVE") &&
-                    item.workItem &&
-                    item.resolutionEvidencePolicy ? (
+                    {canResolve ? (
                         <LoadingButton
                             id="integration-action-resolve"
                             type="button"
+                            variant="default"
                             loading={resolvePending}
                             disabled={assignedDisabled}
                             onClick={onResolve}
@@ -256,7 +256,7 @@ export function IntegrationActionZone({
                     ) : null}
                 </WorkspaceTaskFooter>
                 {canClose ? (
-                    <details className="group w-full">
+                    <details className="group w-full pt-1">
                         <summary
                             id="integration-action-other-options"
                             className="inline-flex cursor-pointer list-none items-center gap-1 rounded-sm text-xs text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -267,7 +267,7 @@ export function IntegrationActionZone({
                                 aria-hidden
                             />
                         </summary>
-                        <div className="mt-3 flex flex-wrap items-end gap-3 rounded-lg border border-border/60 p-3">
+                        <div className="mt-3 flex flex-wrap items-end gap-3 border-l-2 border-border py-1 pl-4">
                             <div className="space-y-1">
                                 <Label
                                     className="text-xs"
@@ -293,6 +293,7 @@ export function IntegrationActionZone({
                                 id="integration-action-close-duplicate"
                                 type="button"
                                 size="sm"
+                                variant="outline"
                                 disabled={formalPending || !replacementTaskId}
                                 onClick={() =>
                                     onRequestTerminal({
@@ -339,8 +340,15 @@ export function IntegrationActionZone({
         </div>
     )
     return detailWorkspace ? (
-        <DetailWorkspaceSection>{content}</DetailWorkspaceSection>
+        <DetailWorkspaceSection
+            title={headingText}
+            headingId="integration-action-heading"
+            subtitle={can("RESOLVE") ? "确认后移出待处理队列" : undefined}
+            width="form"
+        >
+            {body}
+        </DetailWorkspaceSection>
     ) : (
-        content
+        body
     )
 }

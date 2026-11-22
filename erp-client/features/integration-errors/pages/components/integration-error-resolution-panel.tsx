@@ -20,7 +20,7 @@ export function IntegrationErrorResolutionPanel({
             errorClass={errorClass}
             className={
                 flat
-                    ? "rounded-none border-x-0 border-border/60 py-4 shadow-none [--card-spacing:0px]"
+                    ? "rounded-none border-0 border-t border-border/60 bg-transparent pt-5 pb-0 shadow-none [--card-spacing:0px] [&>[data-slot=card-content]]:px-0 [&>[data-slot=card-content]]:pt-4 [&>[data-slot=card-footer]]:border-border/60 [&>[data-slot=card-footer]]:px-0 [&>[data-slot=card-footer]]:pt-3 [&>[data-slot=card-header]]:border-border/60 [&>[data-slot=card-header]]:px-0 [&>[data-slot=card-header]]:pb-3"
                     : undefined
             }
             status={mapPanelStatus(item)}

@@ -3,6 +3,7 @@
 import * as React from "react"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
+import { Spinner } from "@/components/ui/spinner"
 import { isApiError } from "@/lib/api/errors"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import { positiveDecimal } from "../lib/price-validation"
@@ -17,20 +18,22 @@ export type InlinePriceEditorContext = {
     onSubmit: (input: UpdateSelectionPricesInput) => Promise<unknown>
 }
 
-/** 表格内售价在回车或失焦时保存；结果未知时固定原请求主动确认。 */
+/** 表格内售价在回车或失焦时保存；结果未知时固定原请求主动确认，按 SKU 局部 loading。 */
 export function InlinePriceEditor({
     id,
     skuId,
     name,
     price,
-    pending,
+    disabled = false,
+    saving = false,
     context,
 }: {
     id: string
     skuId: string
     name: string
     price: string
-    pending: boolean
+    disabled?: boolean
+    saving?: boolean
     context: InlinePriceEditorContext
 }) {
     const [error, setError] = React.useState("")
@@ -41,11 +44,12 @@ export function InlinePriceEditor({
         version: context.version,
     })
     const savedPrice = React.useRef(price)
+    const locked = disabled || saving
     const form = useAppForm({
         defaultValues: { price },
         validators: { onChange: schema },
         onSubmit: async ({ value }) => {
-            if (pending) return
+            if (locked) return
             const parsed = schema.parse(value)
             if (
                 !request.current &&
@@ -96,19 +100,19 @@ export function InlinePriceEditor({
             savedPrice.current = price
             form.reset({ price })
         }
-    }, [context.batchId, context.version, price, pending, form])
+    }, [context.batchId, context.version, price, locked, form])
 
     return (
         <form
-            className="grid min-w-40 gap-1 text-left"
+            className="grid min-w-36 gap-1 text-left"
             onSubmit={(event) => {
                 event.preventDefault()
                 event.stopPropagation()
-                if (!pending && !form.state.isSubmitting)
+                if (!locked && !form.state.isSubmitting)
                     void form.handleSubmit()
             }}
         >
-            <div className="flex items-start gap-1">
+            <div className="flex items-center gap-1.5">
                 <form.AppField
                     name="price"
                     children={(field) => (
@@ -118,12 +122,12 @@ export function InlinePriceEditor({
                             hideLabel
                             type="text"
                             inputMode="decimal"
-                            disabled={pending || uncertain}
+                            disabled={locked || uncertain}
                             inputClassName="text-right num"
                             aria-describedby={`${id}-save-hint`}
                             onBlur={() => {
                                 if (
-                                    !pending &&
+                                    !locked &&
                                     !uncertain &&
                                     !form.state.isSubmitting
                                 ) {
@@ -133,6 +137,12 @@ export function InlinePriceEditor({
                         />
                     )}
                 />
+                {saving && !uncertain ? (
+                    <Spinner
+                        className="size-3.5 shrink-0 text-muted-foreground"
+                        aria-label="正在保存客户售价"
+                    />
+                ) : null}
                 {uncertain ? (
                     <form.AppForm>
                         <form.SubmitButton
@@ -141,8 +151,8 @@ export function InlinePriceEditor({
                             variant="outline"
                             label="确认结果"
                             pendingLabel="确认中…"
-                            loading={pending}
-                            disabled={pending}
+                            loading={saving}
+                            disabled={locked}
                         />
                     </form.AppForm>
                 ) : null}

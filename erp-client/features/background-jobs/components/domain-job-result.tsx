@@ -84,7 +84,7 @@ function domainJobPresentation(job: BackgroundJobView): DomainJobPresentation {
                 description:
                     "请前往期初导入批次详情页，查看预检结果、部门核对进度及导入明细。",
                 href: job.domain_job_id
-                    ? `/governance/imports?batchId=${encodeURIComponent(job.domain_job_id)}&section=result`
+                    ? `/governance/imports/${encodeURIComponent(job.domain_job_id)}?section=result`
                     : "/governance/imports",
                 actionLabel: job.domain_job_id
                     ? "查看导入批次结果"

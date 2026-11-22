@@ -12,6 +12,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { toast } from "@/components/ui/toast"
 import {
     commandFailureDisposition,
     type CommandFailureDisposition,
@@ -268,6 +269,11 @@ export function SupplierAccountEditDialog({
                 })
                 intent.current = null
                 setFailure(null)
+                toast.add({
+                    title: "账号配置已保存",
+                    type: "success",
+                    timeout: 4000,
+                })
                 onClose()
             } catch (cause) {
                 const disposition = commandFailureDisposition(cause)

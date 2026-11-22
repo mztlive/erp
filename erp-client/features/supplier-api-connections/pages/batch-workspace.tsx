@@ -2,23 +2,28 @@
 
 import * as React from "react"
 import {
-    ArrowLeftIcon,
+    AlertCircleIcon,
     ArrowRightIcon,
     CheckIcon,
+    InfoIcon,
+    RefreshCwIcon,
     SaveIcon,
+    TriangleAlertIcon,
 } from "lucide-react"
 import { useRouter } from "@/lib/navigation"
 import {
     DetailWorkspaceBody,
     DetailWorkspaceChrome,
+    DetailWorkspaceDirtyBadge,
     DetailWorkspaceMeta,
+    DetailWorkspaceMetricItem,
+    DetailWorkspaceMetrics,
     DetailWorkspacePage,
     DetailWorkspaceSection,
-    detailWorkspaceStyles,
     DraftSaveIndicator,
-    MetricItem,
-    MetricStrip,
+    FormalActionConfirmDialog,
 } from "@/components/business"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -28,6 +33,8 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { LoadingButton } from "@/components/ui/loading-button"
+import { toast } from "@/components/ui/toast"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useMasterDataListQuery } from "@/features/master-data/hooks/queries"
 import {
@@ -35,10 +42,11 @@ import {
     flattenCategoryForest,
 } from "@/features/master-data/lib/category-tree-model"
 import { useUnitOptionsQuery } from "@/hooks/use-options"
-import { isApiError } from "@/lib/api/errors"
+import { getErrorMessage, isApiError } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 import { divideFixed, multiplyFixed } from "@/lib/fixed-decimal"
+import { useWorkspaceDirtyState } from "@/lib/workspace-form-guard"
 import {
     usePreviewAdoptionBatchMutation,
     useReconcileAdoptionBatchMutation,
@@ -194,11 +202,15 @@ export function BatchWorkspace({
     view,
     reviewedVersion,
     actorId,
+    refreshError,
+    refreshing = false,
     onRefresh,
 }: {
     view: BatchView
     reviewedVersion: number | null
     actorId: string
+    refreshError?: unknown
+    refreshing?: boolean
     onRefresh: () => Promise<unknown>
 }) {
     const router = useRouter()
@@ -249,6 +261,10 @@ export function BatchWorkspace({
     const [editingId, setEditingId] = React.useState<string | null>(null)
     const [selectedIds, setSelectedIds] = React.useState<string[]>([])
     const [leaveOpen, setLeaveOpen] = React.useState(false)
+    const [confirmSubmitOpen, setConfirmSubmitOpen] = React.useState(false)
+    const [pendingAction, setPendingAction] = React.useState<string | null>(
+        null,
+    )
     const categoryListRef = React.useRef<CategoryMappingListHandle>(null)
     const missingCategoryCount = workspace.values.categoryMappings.filter(
         (row) => !row.categoryId,
@@ -279,16 +295,33 @@ export function BatchWorkspace({
         submit.isPending ||
         reconcile.isPending ||
         querySubmission.isPending
+    useWorkspaceDirtyState({ dirty: workspace.dirty, busy })
     const processing = view.rows.filter(
         (row) =>
             row.status === "PROCESSING" ||
             (row.status === "READY" && row.operation_id),
     ).length
+    const [nowSec, setNowSec] = React.useState(() =>
+        Math.floor(Date.now() / 1000),
+    )
+    const hasDraftOperation = Boolean(view.batch.draft_operation)
+    const draftStartedAt = view.batch.draft_started_at
+    React.useEffect(() => {
+        if (!hasDraftOperation || draftStartedAt == null) return
+        const currentSec = Math.floor(Date.now() / 1000)
+        setNowSec(currentSec)
+        const remainingMs = (draftStartedAt + 300 - currentSec) * 1000
+        if (remainingMs <= 0) return
+        const timer = window.setTimeout(() => {
+            setNowSec(Math.floor(Date.now() / 1000))
+        }, remainingMs + 250)
+        return () => window.clearTimeout(timer)
+    }, [hasDraftOperation, draftStartedAt])
     const draftActive =
-        Boolean(view.batch.draft_operation) &&
-        view.batch.draft_started_at != null &&
-        Math.floor(Date.now() / 1000) - view.batch.draft_started_at < 300
-    const draftInterrupted = Boolean(view.batch.draft_operation) && !draftActive
+        hasDraftOperation &&
+        draftStartedAt != null &&
+        nowSec - draftStartedAt < 300
+    const draftInterrupted = hasDraftOperation && !draftActive
     const preparing = view.batch.confirmations.some(
         (entry) =>
             !view.batch.published_operations.includes(entry.operation_id),
@@ -306,6 +339,24 @@ export function BatchWorkspace({
         )
         .map((row) => row.source.id)
     const selectedReady = selectedIds.filter((id) => readyIds.includes(id))
+    const selectedReadySet = new Set(selectedReady)
+    const selectedSummaryCounts = {
+        createProduct: view.rows.filter(
+            (row) =>
+                selectedReadySet.has(row.source.id) &&
+                row.resolution?.kind === "CREATE_PRODUCT",
+        ).length,
+        createSku: view.rows.filter(
+            (row) =>
+                selectedReadySet.has(row.source.id) &&
+                row.resolution?.kind === "CREATE_SKU",
+        ).length,
+        existing: view.rows.filter(
+            (row) =>
+                selectedReadySet.has(row.source.id) &&
+                row.resolution?.kind === "EXISTING",
+        ).length,
+    }
     const needsRecheck =
         workspace.dirty ||
         !workspace.hasCurrentReview ||
@@ -336,15 +387,47 @@ export function BatchWorkspace({
                 current.filter((id) => selectable.includes(id)),
             )
     }, [view.batch.preview_version, tableMode, view.rows])
-    const updateStep = async (next: BatchStep) => {
+    const runAction = async (action: string, task: () => Promise<unknown>) => {
+        setPendingAction(action)
         try {
-            const saved = await save.mutateAsync({
-                ...identity,
-                request: { expected_version: view.batch.version, step: next },
-            })
-            workspace.acceptSaved(saved)
-        } catch {
-            /* 页面显示错误，保留当前内容。 */
+            return await task()
+        } finally {
+            setPendingAction((current) => (current === action ? null : current))
+        }
+    }
+    const updateStep = async (next: BatchStep, actionKey = "step") => {
+        await runAction(actionKey, async () => {
+            try {
+                const saved = await save.mutateAsync({
+                    ...identity,
+                    request: {
+                        expected_version: view.batch.version,
+                        step: next,
+                    },
+                })
+                workspace.acceptSaved(saved)
+            } catch {
+                /* 页面显示错误，保留当前内容。 */
+            }
+        })
+    }
+    const persistWithAction = async (
+        actionKey: string,
+        next?: BatchStep,
+        check = false,
+    ) => {
+        let ok = false
+        await runAction(actionKey, async () => {
+            ok = await workspace.persist(next, check)
+        })
+        return ok
+    }
+    const handleStepJump = async (target: BatchStep) => {
+        if (!canWrite || !editable || busy || step === "RESULT") return
+        if (step === "PRICING" || step === "DETAILS") {
+            await persistWithAction(`step-${target}`, target)
+        } else {
+            await updateStep(target, `step-${target}`)
         }
     }
     const saveItem = async (patch: BatchItemEdit) => {
@@ -354,33 +437,60 @@ export function BatchWorkspace({
         })
         workspace.acceptSaved(saved)
     }
-    const verifyOriginal = async () => {
-        try {
-            const original = requestIdentity.current
-            if (original) {
-                const result = await querySubmission.mutateAsync(original)
-                submit.reset()
-                workspace.acceptSaved(result.view)
-                if (result.status === "NOT_ACCEPTED") workspace.requireReview()
-                window.sessionStorage.removeItem(storageKey)
-                setUncertainSubmission(false)
-                requestIdentity.current = null
-                setSubmissionNotice(
-                    result.status === "NOT_ACCEPTED"
-                        ? "原确认未受理，已停止接收该次请求。请重新核对后确认入库。"
-                        : "原确认已受理，请查看本批实际处理结果。",
-                )
-            } else {
-                const checked = await reconcile.mutateAsync({
-                    ...identity,
+    const handleExcludeSelected = async (ids: string[]) => {
+        if (!ids.length) return
+        await runAction("exclude", async () => {
+            const nextExcluded = Array.from(
+                new Set([...view.batch.excluded_ids, ...ids]),
+            )
+            const saved = await save.mutateAsync({
+                ...identity,
+                request: {
                     expected_version: view.batch.version,
-                })
-                workspace.acceptSaved(checked)
+                    excluded_ids: nextExcluded,
+                },
+            })
+            workspace.acceptSaved(saved)
+            const removed = new Set(ids)
+            setSelectedIds((current) =>
+                current.filter((id) => !removed.has(id)),
+            )
+            toast.add({
+                type: "success",
+                title: `已从本批排除 ${ids.length} 个 SKU`,
+            })
+        })
+    }
+    const verifyOriginal = async () => {
+        await runAction("reconcile", async () => {
+            try {
+                const original = requestIdentity.current
+                if (original) {
+                    const result = await querySubmission.mutateAsync(original)
+                    submit.reset()
+                    workspace.acceptSaved(result.view)
+                    if (result.status === "NOT_ACCEPTED")
+                        workspace.requireReview()
+                    window.sessionStorage.removeItem(storageKey)
+                    setUncertainSubmission(false)
+                    requestIdentity.current = null
+                    setSubmissionNotice(
+                        result.status === "NOT_ACCEPTED"
+                            ? "原确认未受理，已停止接收该次请求。请重新核对后确认入库。"
+                            : "原确认已受理，请查看本批实际处理结果。",
+                    )
+                } else {
+                    const checked = await reconcile.mutateAsync({
+                        ...identity,
+                        expected_version: view.batch.version,
+                    })
+                    workspace.acceptSaved(checked)
+                }
+                await onRefresh()
+            } catch {
+                /* 保持原操作待核实，禁止发起新操作。 */
             }
-            await onRefresh()
-        } catch {
-            /* 保持原操作待核实，禁止发起新操作。 */
-        }
+        })
     }
     const confirm = async () => {
         if (
@@ -411,6 +521,10 @@ export function BatchWorkspace({
             requestIdentity.current = null
             window.sessionStorage.removeItem(storageKey)
             setUncertainSubmission(false)
+            toast.add({
+                type: "success",
+                title: `已提交 ${selectedReady.length} 个 SKU 入库`,
+            })
         } catch (error) {
             if (
                 isApiError(error) &&
@@ -424,17 +538,19 @@ export function BatchWorkspace({
             /* 网络或提交结果不明时保留原请求，只查询原结果。 */
         }
     }
-    const recheck = async () => {
-        try {
-            const checked = await preview.mutateAsync({
-                ...identity,
-                expected_version: view.batch.version,
-                item_ids: step === "RECOVERY" ? selectedIds : undefined,
-            })
-            workspace.acceptPreview(checked)
-        } catch {
-            /* 服务端失败原因显示在当前页面。 */
-        }
+    const recheck = async (actionKey = "recheck") => {
+        await runAction(actionKey, async () => {
+            try {
+                const checked = await preview.mutateAsync({
+                    ...identity,
+                    expected_version: view.batch.version,
+                    item_ids: step === "RECOVERY" ? selectedIds : undefined,
+                })
+                workspace.acceptPreview(checked)
+            } catch {
+                /* 服务端失败原因显示在当前页面。 */
+            }
+        })
     }
     const returnToCatalog = () =>
         router.push(
@@ -453,11 +569,36 @@ export function BatchWorkspace({
     const activeStepIndex = STEPS.findIndex(
         (entry) => entry.step === (step === "RECOVERY" ? "DETAILS" : step),
     )
+    const primaryStatus =
+        processing > 0 || preparing || view.batch.execution_pending
+            ? { label: "正在入库", tone: "info" as const }
+            : uncertainSubmission || view.counts.unknown > 0
+              ? { label: "结果待核实", tone: "warning" as const }
+              : step === "RESULT"
+                ? view.counts.failed + view.counts.draft + unsubmittedReady > 0
+                    ? {
+                          label: completed > 0 ? "部分完成" : "入库未完成",
+                          tone: "warning" as const,
+                      }
+                    : { label: "入库完成", tone: "success" as const }
+                : step === "RECOVERY"
+                  ? { label: "待处理恢复", tone: "warning" as const }
+                  : step === "REVIEW"
+                    ? needsRecheck
+                        ? { label: "待重新核对", tone: "warning" as const }
+                        : { label: "已核对可入库", tone: "success" as const }
+                    : step === "DETAILS"
+                      ? { label: "补齐资料", tone: "info" as const }
+                      : { label: "设置售价", tone: "info" as const }
     return (
         <DetailWorkspacePage>
             <DetailWorkspaceChrome
                 documentNumber={view.batch.batch_no}
                 numberLabel="批次编号"
+                primaryStatus={primaryStatus}
+                titleExtra={
+                    workspace.dirty ? <DetailWorkspaceDirtyBadge /> : undefined
+                }
                 title={
                     step === "PRICING"
                         ? "设置售价"
@@ -469,6 +610,15 @@ export function BatchWorkspace({
                               ? "入库结果"
                               : "批量选品入库"
                 }
+                back={{
+                    id: "supplier-catalog-batch-return-catalog",
+                    label: "返回商品库",
+                    visibility: "always",
+                    onClick: () =>
+                        workspace.dirty
+                            ? setLeaveOpen(true)
+                            : returnToCatalog(),
+                }}
                 meta={
                     <DetailWorkspaceMeta
                         items={[
@@ -482,38 +632,6 @@ export function BatchWorkspace({
                         ]}
                     />
                 }
-                secondaryActions={
-                    <div className="flex flex-wrap items-center gap-4">
-                        <details className="text-xs text-muted-foreground">
-                            <summary
-                                id="supplier-catalog-batch-information"
-                                className="cursor-pointer"
-                            >
-                                批次信息
-                            </summary>
-                            <p className="num pt-2">
-                                入库批次：{view.batch.batch_no}
-                            </p>
-                        </details>
-                        {step !== "RESULT" ? (
-                            <Button
-                                id="supplier-catalog-batch-return-catalog"
-                                className={detailWorkspaceStyles.quietButton}
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() =>
-                                    workspace.dirty
-                                        ? setLeaveOpen(true)
-                                        : returnToCatalog()
-                                }
-                            >
-                                <ArrowLeftIcon aria-hidden />
-                                返回商品库
-                            </Button>
-                        ) : null}
-                    </div>
-                }
             >
                 {step !== "RESULT" ? (
                     <ol
@@ -523,6 +641,50 @@ export function BatchWorkspace({
                         {STEPS.map((entry, index) => {
                             const isCurrent = index === activeStepIndex
                             const isComplete = index < activeStepIndex
+                            const canJump =
+                                isComplete &&
+                                canWrite &&
+                                editable &&
+                                !busy &&
+                                entry.step !== "RESULT"
+                            const stepBadge = (
+                                <>
+                                    <span
+                                        className={cn(
+                                            "num flex size-7 shrink-0 items-center justify-center rounded-full text-body-compact",
+                                            isCurrent || isComplete
+                                                ? "bg-primary text-primary-foreground"
+                                                : "bg-muted text-muted-foreground",
+                                        )}
+                                    >
+                                        {isComplete ? (
+                                            <>
+                                                <CheckIcon
+                                                    className="size-4"
+                                                    aria-hidden
+                                                />
+                                                <span className="sr-only">
+                                                    已完成
+                                                </span>
+                                            </>
+                                        ) : (
+                                            index + 1
+                                        )}
+                                    </span>
+                                    <span
+                                        className={cn(
+                                            "whitespace-nowrap text-xs sm:text-body-compact",
+                                            isCurrent
+                                                ? "font-medium text-foreground"
+                                                : canJump
+                                                  ? "text-foreground group-hover:text-primary"
+                                                  : "text-muted-foreground",
+                                        )}
+                                    >
+                                        {entry.label}
+                                    </span>
+                                </>
+                            )
                             return (
                                 <li
                                     key={entry.step}
@@ -531,40 +693,22 @@ export function BatchWorkspace({
                                     }
                                     className="flex min-w-0 flex-1 items-center last:flex-none"
                                 >
-                                    <div className="flex shrink-0 flex-col items-center gap-2 sm:flex-row">
-                                        <span
-                                            className={cn(
-                                                "num flex size-7 shrink-0 items-center justify-center rounded-full text-body-compact",
-                                                isCurrent || isComplete
-                                                    ? "bg-primary text-primary-foreground"
-                                                    : "bg-muted text-muted-foreground",
-                                            )}
+                                    {canJump ? (
+                                        <button
+                                            id={`supplier-catalog-batch-step-${entry.step.toLowerCase()}`}
+                                            type="button"
+                                            className="group flex shrink-0 cursor-pointer flex-col items-center gap-2 rounded-md px-1 py-0.5 transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex-row"
+                                            onClick={() =>
+                                                void handleStepJump(entry.step)
+                                            }
                                         >
-                                            {isComplete ? (
-                                                <>
-                                                    <CheckIcon
-                                                        className="size-4"
-                                                        aria-hidden
-                                                    />
-                                                    <span className="sr-only">
-                                                        已完成
-                                                    </span>
-                                                </>
-                                            ) : (
-                                                index + 1
-                                            )}
-                                        </span>
-                                        <span
-                                            className={cn(
-                                                "whitespace-nowrap text-xs sm:text-body-compact",
-                                                isCurrent
-                                                    ? "font-medium"
-                                                    : "text-muted-foreground",
-                                            )}
-                                        >
-                                            {entry.label}
-                                        </span>
-                                    </div>
+                                            {stepBadge}
+                                        </button>
+                                    ) : (
+                                        <div className="flex shrink-0 flex-col items-center gap-2 sm:flex-row">
+                                            {stepBadge}
+                                        </div>
+                                    )}
                                     {index < STEPS.length - 1 ? (
                                         <span
                                             aria-hidden
@@ -585,79 +729,131 @@ export function BatchWorkspace({
             <DetailWorkspaceBody
                 alerts={
                     <>
+                        {refreshError ? (
+                            <Alert variant="warning">
+                                <TriangleAlertIcon aria-hidden="true" />
+                                <AlertTitle>批次状态自动刷新失败</AlertTitle>
+                                <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+                                    <span>
+                                        {getErrorMessage(
+                                            refreshError,
+                                            "网络波动导致刷新失败，当前草稿与数据已保留。",
+                                        )}
+                                    </span>
+                                    <LoadingButton
+                                        id="supplier-catalog-batch-refresh-retry"
+                                        type="button"
+                                        variant="outline"
+                                        size="xs"
+                                        loading={refreshing}
+                                        onClick={() => void onRefresh()}
+                                    >
+                                        <RefreshCwIcon aria-hidden="true" />
+                                        重新读取
+                                    </LoadingButton>
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
                         {!canWrite ? (
-                            <p
-                                role="status"
-                                className="rounded-lg border p-3 text-xs text-muted-foreground"
-                            >
-                                当前账号没有入库或接口成本权限，可查看已获授权的批次内容。
-                            </p>
+                            <Alert variant="info">
+                                <InfoIcon aria-hidden="true" />
+                                <AlertDescription>
+                                    当前账号没有入库或接口成本权限，可查看已获授权的批次内容。
+                                </AlertDescription>
+                            </Alert>
                         ) : null}
                         {view.batch.draft_operation ? (
-                            <div
-                                role="status"
-                                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 text-body-compact"
+                            <Alert
+                                variant={draftInterrupted ? "warning" : "info"}
                             >
-                                <p>
+                                {draftInterrupted ? (
+                                    <TriangleAlertIcon aria-hidden="true" />
+                                ) : (
+                                    <InfoIcon aria-hidden="true" />
+                                )}
+                                <AlertTitle>
                                     {draftActive
-                                        ? "正在保存或核对本批商品，处理进度会自动恢复。"
-                                        : "上次保存或核对已中断，请重新读取后继续核对。"}
-                                </p>
-                                <Button
-                                    id="supplier-catalog-batch-refresh-draft"
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => void onRefresh()}
-                                >
-                                    重新读取批次
-                                </Button>
-                                {draftInterrupted && canWrite ? (
-                                    <Button
-                                        id="supplier-catalog-batch-resume-draft"
-                                        type="button"
-                                        disabled={busy || !canWrite}
-                                        onClick={() => void recheck()}
-                                    >
-                                        继续核对
-                                    </Button>
-                                ) : null}
-                            </div>
+                                        ? "正在同步草稿与核对"
+                                        : "上次保存或核对已中断"}
+                                </AlertTitle>
+                                <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                                    <span>
+                                        {draftActive
+                                            ? "正在保存或核对本批商品，处理进度会自动恢复。"
+                                            : "上次保存或核对已超时中断，请重新读取后继续核对。"}
+                                    </span>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <LoadingButton
+                                            id="supplier-catalog-batch-refresh-draft"
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            loading={refreshing}
+                                            onClick={() => void onRefresh()}
+                                        >
+                                            重新读取批次
+                                        </LoadingButton>
+                                        {draftInterrupted && canWrite ? (
+                                            <LoadingButton
+                                                id="supplier-catalog-batch-resume-draft"
+                                                type="button"
+                                                size="sm"
+                                                loading={
+                                                    pendingAction ===
+                                                    "resume-draft"
+                                                }
+                                                disabled={busy || !canWrite}
+                                                onClick={() =>
+                                                    void recheck("resume-draft")
+                                                }
+                                            >
+                                                继续核对
+                                            </LoadingButton>
+                                        ) : null}
+                                    </div>
+                                </AlertDescription>
+                            </Alert>
                         ) : null}
                         {errors.map((error, index) => (
-                            <p
+                            <Alert
                                 key={`${index}-${error?.message}`}
-                                role="alert"
-                                className="text-body-compact text-destructive"
+                                variant="destructive"
                             >
-                                {error?.message}
-                            </p>
+                                <AlertCircleIcon aria-hidden="true" />
+                                <AlertDescription>
+                                    {error?.message}
+                                </AlertDescription>
+                            </Alert>
                         ))}
                         {submissionNotice ? (
-                            <p
-                                role="status"
-                                className="rounded-lg border p-3 text-body-compact"
-                            >
-                                {submissionNotice}
-                            </p>
+                            <Alert variant="info">
+                                <InfoIcon aria-hidden="true" />
+                                <AlertDescription>
+                                    {submissionNotice}
+                                </AlertDescription>
+                            </Alert>
                         ) : null}
                         {canWrite && uncertainSubmission ? (
-                            <div
-                                role="alert"
-                                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 text-body-compact"
-                            >
-                                <p>
-                                    本次确认结果待核实。请先查询原操作，不能直接重新提交。
-                                </p>
-                                <Button
-                                    id="supplier-catalog-batch-query-submission"
-                                    type="button"
-                                    variant="outline"
-                                    disabled={busy}
-                                    onClick={() => void verifyOriginal()}
-                                >
-                                    查询原操作结果
-                                </Button>
-                            </div>
+                            <Alert variant="warning">
+                                <TriangleAlertIcon aria-hidden="true" />
+                                <AlertTitle>本次确认结果待核实</AlertTitle>
+                                <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                                    <span>
+                                        请先查询原操作结果，查明前不能直接重新提交。
+                                    </span>
+                                    <LoadingButton
+                                        id="supplier-catalog-batch-query-submission"
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        loading={pendingAction === "reconcile"}
+                                        disabled={busy}
+                                        onClick={() => void verifyOriginal()}
+                                    >
+                                        查询原操作结果
+                                    </LoadingButton>
+                                </AlertDescription>
+                            </Alert>
                         ) : null}
                     </>
                 }
@@ -670,7 +866,7 @@ export function BatchWorkspace({
                                 onSubmit={(event) => {
                                     event.preventDefault()
                                     event.stopPropagation()
-                                    void workspace.persist()
+                                    void persistWithAction("save")
                                 }}
                             >
                                 {step === "PRICING" ? (
@@ -710,10 +906,18 @@ export function BatchWorkspace({
                                     preparing={preparing}
                                     unsubmittedReady={unsubmittedReady}
                                     busy={busy}
+                                    refreshing={refreshing}
+                                    recovering={
+                                        pendingAction === "open-recovery"
+                                    }
+                                    reconciling={pendingAction === "reconcile"}
                                     canWrite={canWrite}
                                     onRefresh={() => void onRefresh()}
                                     onRecovery={() =>
-                                        void updateStep("RECOVERY")
+                                        void updateStep(
+                                            "RECOVERY",
+                                            "open-recovery",
+                                        )
                                     }
                                     onReconcile={() => void verifyOriginal()}
                                     onReturn={() =>
@@ -723,85 +927,130 @@ export function BatchWorkspace({
                                     }
                                 />
                             ) : (
-                                <MetricStrip columns={5}>
-                                    <MetricItem
+                                <DetailWorkspaceMetrics
+                                    variant="inline"
+                                    columns={4}
+                                    ariaLabel="待处理商品统计"
+                                    className="xl:grid-cols-5"
+                                >
+                                    <DetailWorkspaceMetricItem
                                         label="本批 SKU"
                                         value={
                                             view.counts.total -
                                             view.counts.excluded
                                         }
                                     />
-                                    <MetricItem
+                                    <DetailWorkspaceMetricItem
                                         label="待重新核对"
                                         value={unsubmittedReady}
                                     />
-                                    <MetricItem
+                                    <DetailWorkspaceMetricItem
                                         label="结果待核实"
                                         value={view.counts.unknown}
                                     />
-                                    <MetricItem
+                                    <DetailWorkspaceMetricItem
                                         label="待补齐"
                                         value={view.counts.draft}
                                     />
-                                    <MetricItem
+                                    <DetailWorkspaceMetricItem
                                         label="已完成跳过"
                                         value={completed}
                                     />
-                                </MetricStrip>
+                                </DetailWorkspaceMetrics>
                             )}
                             {step !== "RESULT" && preparing && !processing ? (
-                                <p role="status" className="text-body-compact">
-                                    本次确认范围已保存，后台正在准备入库。可以离开页面后继续查看。
-                                </p>
+                                <Alert variant="info">
+                                    <InfoIcon aria-hidden="true" />
+                                    <AlertDescription>
+                                        本次确认范围已保存，后台正在准备入库。可以离开页面后继续查看。
+                                    </AlertDescription>
+                                </Alert>
                             ) : null}
                             {step !== "RESULT" && processing ? (
-                                <p role="status" className="text-body-compact">
-                                    后台正在处理 {processing} 个 SKU；已完成{" "}
-                                    {completed} 个，可离开页面后继续查看。
-                                </p>
+                                <Alert variant="info">
+                                    <InfoIcon aria-hidden="true" />
+                                    <AlertDescription>
+                                        后台正在处理{" "}
+                                        <span className="num font-medium">
+                                            {processing}
+                                        </span>{" "}
+                                        个 SKU；已完成{" "}
+                                        <span className="num font-medium">
+                                            {completed}
+                                        </span>{" "}
+                                        个，可离开页面后继续查看。
+                                    </AlertDescription>
+                                </Alert>
                             ) : null}
                             {canWrite &&
                             step !== "RESULT" &&
                             warningRows.length ? (
-                                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/10 p-3">
-                                    <p className="text-body-compact">
-                                        {warningRows.length}{" "}
-                                        项存在价格提示。请查看逐项说明后确认。
-                                    </p>
-                                    <Button
-                                        id="supplier-catalog-batch-confirm-price-warnings"
-                                        type="button"
-                                        variant="outline"
-                                        disabled={!editable || busy}
-                                        onClick={async () => {
-                                            try {
-                                                const saved =
-                                                    await save.mutateAsync({
-                                                        ...identity,
-                                                        request: {
-                                                            expected_version:
-                                                                view.batch
-                                                                    .version,
-                                                            items: warningRows.map(
-                                                                (row) => ({
-                                                                    item_id:
-                                                                        row
-                                                                            .source
-                                                                            .id,
-                                                                    warnings_confirmed: true,
-                                                                }),
-                                                            ),
-                                                        },
-                                                    })
-                                                workspace.acceptSaved(saved)
-                                            } catch {
-                                                /* 保持未确认 */
+                                <Alert variant="warning">
+                                    <TriangleAlertIcon aria-hidden="true" />
+                                    <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                                        <span>
+                                            <span className="num font-medium">
+                                                {warningRows.length}
+                                            </span>{" "}
+                                            项存在价格提示。请查看逐项说明后确认。
+                                        </span>
+                                        <LoadingButton
+                                            id="supplier-catalog-batch-confirm-price-warnings"
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            loading={
+                                                pendingAction ===
+                                                "confirm-warnings"
                                             }
-                                        }}
-                                    >
-                                        已核对并确认这些价格提示
-                                    </Button>
-                                </div>
+                                            disabled={!editable || busy}
+                                            onClick={() =>
+                                                void runAction(
+                                                    "confirm-warnings",
+                                                    async () => {
+                                                        try {
+                                                            const saved =
+                                                                await save.mutateAsync(
+                                                                    {
+                                                                        ...identity,
+                                                                        request:
+                                                                            {
+                                                                                expected_version:
+                                                                                    view
+                                                                                        .batch
+                                                                                        .version,
+                                                                                items: warningRows.map(
+                                                                                    (
+                                                                                        row,
+                                                                                    ) => ({
+                                                                                        item_id:
+                                                                                            row
+                                                                                                .source
+                                                                                                .id,
+                                                                                        warnings_confirmed: true,
+                                                                                    }),
+                                                                                ),
+                                                                            },
+                                                                    },
+                                                                )
+                                                            workspace.acceptSaved(
+                                                                saved,
+                                                            )
+                                                            toast.add({
+                                                                type: "success",
+                                                                title: "已确认价格提示",
+                                                            })
+                                                        } catch {
+                                                            /* 保持未确认 */
+                                                        }
+                                                    },
+                                                )
+                                            }
+                                        >
+                                            已核对并确认这些价格提示
+                                        </LoadingButton>
+                                    </AlertDescription>
+                                </Alert>
                             ) : null}
                             <BatchReviewTable
                                 key={tableMode}
@@ -812,6 +1061,13 @@ export function BatchWorkspace({
                                 onSelectionChange={setSelectedIds}
                                 onEdit={(row) => setEditingId(row.source.id)}
                                 onReconcile={() => void verifyOriginal()}
+                                onExcludeSelected={
+                                    canWrite && editable
+                                        ? handleExcludeSelected
+                                        : undefined
+                                }
+                                excluding={pendingAction === "exclude"}
+                                reconciling={pendingAction === "reconcile"}
                                 busy={busy}
                                 canWrite={canWrite}
                                 canReadCost={canReadCost}
@@ -821,7 +1077,7 @@ export function BatchWorkspace({
                 </DetailWorkspaceSection>
             </DetailWorkspaceBody>
             {canWrite && step !== "RESULT" ? (
-                <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 bg-card py-3">
+                <div className="sticky bottom-0 z-10 -mx-(--scaffold-px) flex flex-wrap items-center justify-between gap-3 border-t border-border/60 bg-card px-(--scaffold-px) py-3">
                     <div className="flex flex-wrap items-center gap-3">
                         <DraftSaveIndicator
                             idPrefix="supplier-catalog-batch-draft-status"
@@ -851,7 +1107,9 @@ export function BatchWorkspace({
                                     categoryListRef.current?.showMissing()
                                 }
                             >
-                                {missingCategoryCount} 类未设置映射
+                                <span className="num">
+                                    {missingCategoryCount} 类未设置映射
+                                </span>
                             </Button>
                         ) : null}
                     </div>
@@ -859,28 +1117,33 @@ export function BatchWorkspace({
                         {step === "PRICING" ||
                         step === "DETAILS" ||
                         step === "REVIEW" ? (
-                            <Button
+                            <LoadingButton
                                 id="supplier-catalog-batch-save-draft"
                                 type="button"
                                 variant="outline"
+                                loading={pendingAction === "save"}
                                 disabled={!editable || busy}
                                 onClick={() =>
                                     step === "REVIEW"
-                                        ? void updateStep("REVIEW")
-                                        : void workspace.persist()
+                                        ? void updateStep("REVIEW", "save")
+                                        : void persistWithAction("save")
                                 }
                             >
                                 <SaveIcon aria-hidden />
                                 保存草稿
-                            </Button>
+                            </LoadingButton>
                         ) : null}
                         {step === "PRICING" ? (
-                            <Button
+                            <LoadingButton
                                 id="supplier-catalog-batch-next-details"
                                 type="button"
+                                loading={pendingAction === "next-details"}
                                 disabled={!editable || busy}
                                 onClick={() =>
-                                    void workspace.persist("DETAILS")
+                                    void persistWithAction(
+                                        "next-details",
+                                        "DETAILS",
+                                    )
                                 }
                             >
                                 下一步：补齐资料
@@ -888,34 +1151,43 @@ export function BatchWorkspace({
                                     data-icon="inline-end"
                                     aria-hidden
                                 />
-                            </Button>
+                            </LoadingButton>
                         ) : step === "DETAILS" ? (
                             <>
-                                <Button
+                                <LoadingButton
                                     id="supplier-catalog-batch-back-pricing"
                                     type="button"
                                     variant="outline"
+                                    loading={pendingAction === "back-pricing"}
                                     disabled={!editable || busy}
                                     onClick={() =>
-                                        void workspace.persist("PRICING")
+                                        void persistWithAction(
+                                            "back-pricing",
+                                            "PRICING",
+                                        )
                                     }
                                 >
                                     上一步
-                                </Button>
-                                <Button
+                                </LoadingButton>
+                                <LoadingButton
                                     id="supplier-catalog-batch-next-review"
                                     type="button"
+                                    loading={pendingAction === "next-review"}
                                     disabled={!editable || busy}
                                     onClick={() =>
-                                        void workspace.persist("REVIEW", true)
+                                        void persistWithAction(
+                                            "next-review",
+                                            "REVIEW",
+                                            true,
+                                        )
                                     }
                                 >
                                     下一步：核对入库
-                                </Button>
+                                </LoadingButton>
                             </>
                         ) : step === "REVIEW" ? (
                             <>
-                                <Button
+                                <LoadingButton
                                     id={
                                         view.batch.submitted
                                             ? "supplier-catalog-batch-back-recovery"
@@ -923,36 +1195,40 @@ export function BatchWorkspace({
                                     }
                                     type="button"
                                     variant="outline"
+                                    loading={pendingAction === "back-review"}
                                     disabled={!editable || busy}
                                     onClick={() =>
                                         void updateStep(
                                             view.batch.submitted
                                                 ? "RECOVERY"
                                                 : "DETAILS",
+                                            "back-review",
                                         )
                                     }
                                 >
                                     {view.batch.submitted
                                         ? "返回待处理"
                                         : "上一步"}
-                                </Button>
-                                <Button
+                                </LoadingButton>
+                                <LoadingButton
                                     id="supplier-catalog-batch-recheck"
                                     type="button"
                                     variant={
                                         needsRecheck ? "default" : "outline"
                                     }
+                                    loading={pendingAction === "recheck"}
                                     disabled={!editable || busy}
-                                    onClick={() => void recheck()}
+                                    onClick={() => void recheck("recheck")}
                                 >
                                     重新核对
-                                </Button>
-                                <Button
+                                </LoadingButton>
+                                <LoadingButton
                                     id="supplier-catalog-batch-submit"
                                     type="button"
                                     variant={
                                         needsRecheck ? "outline" : "default"
                                     }
+                                    loading={submit.isPending}
                                     disabled={
                                         !editable ||
                                         busy ||
@@ -962,37 +1238,107 @@ export function BatchWorkspace({
                                         view.batch.preview_version == null ||
                                         !selectedReady.length
                                     }
-                                    onClick={() => void confirm()}
+                                    onClick={() => setConfirmSubmitOpen(true)}
                                 >
-                                    确认入库 {selectedReady.length} 个 SKU
-                                </Button>
+                                    确认入库{" "}
+                                    <span className="num">
+                                        {selectedReady.length}
+                                    </span>{" "}
+                                    个 SKU
+                                </LoadingButton>
                             </>
                         ) : step === "RECOVERY" ? (
                             <>
-                                <Button
+                                <LoadingButton
                                     id="supplier-catalog-batch-back-result"
                                     type="button"
                                     variant="outline"
+                                    loading={pendingAction === "back-result"}
                                     disabled={busy}
-                                    onClick={() => void updateStep("RESULT")}
+                                    onClick={() =>
+                                        void updateStep("RESULT", "back-result")
+                                    }
                                 >
                                     返回入库结果
-                                </Button>
-                                <Button
+                                </LoadingButton>
+                                <LoadingButton
                                     id="supplier-catalog-batch-recovery-preview"
                                     type="button"
+                                    loading={
+                                        pendingAction === "recovery-recheck"
+                                    }
                                     disabled={
                                         !editable || busy || !selectedIds.length
                                     }
-                                    onClick={() => void recheck()}
+                                    onClick={() =>
+                                        void recheck("recovery-recheck")
+                                    }
                                 >
-                                    重新核对 {selectedIds.length} 项
-                                </Button>
+                                    重新核对{" "}
+                                    <span className="num">
+                                        {selectedIds.length}
+                                    </span>{" "}
+                                    项
+                                </LoadingButton>
                             </>
                         ) : null}
                     </div>
                 </div>
             ) : null}
+            <FormalActionConfirmDialog
+                idPrefix="supplier-catalog-batch-confirm-submit"
+                open={confirmSubmitOpen}
+                onOpenChange={setConfirmSubmitOpen}
+                actionLabel="批量入库"
+                title="确认提交批量入库"
+                description="请核对本次入库范围与匹配方式，确认后将提交后台创建商品、规格及供应关系。"
+                confirmLabel={`确认入库 ${selectedReady.length} 个 SKU`}
+                fromStatus={{ label: "已核对可入库", tone: "info" }}
+                toStatus={{ label: "提交入库处理", tone: "success" }}
+                summary={[
+                    <span key="total">
+                        本次提交入库：
+                        <span className="num font-semibold">
+                            {selectedReady.length}
+                        </span>{" "}
+                        个 SKU
+                    </span>,
+                    <span key="create-product">
+                        新建商品与 SKU：
+                        <span className="num font-semibold">
+                            {selectedSummaryCounts.createProduct}
+                        </span>{" "}
+                        个
+                    </span>,
+                    <span key="create-sku">
+                        已有商品新增规格：
+                        <span className="num font-semibold">
+                            {selectedSummaryCounts.createSku}
+                        </span>{" "}
+                        个
+                    </span>,
+                    <span key="existing">
+                        关联已有 SKU：
+                        <span className="num font-semibold">
+                            {selectedSummaryCounts.existing}
+                        </span>{" "}
+                        个
+                    </span>,
+                    <span key="excluded">
+                        本批已排除：
+                        <span className="num font-semibold">
+                            {view.counts.excluded}
+                        </span>{" "}
+                        个
+                    </span>,
+                ]}
+                effects={[
+                    "新建商品与新增规格将写入公司商品主数据并建立供应商供给关系。",
+                    "关联已有 SKU 仅建立或更新供应商供给，保留原销售价与展示资料。",
+                ]}
+                pending={submit.isPending}
+                onConfirm={confirm}
+            />
             {canWrite && editing ? (
                 <BatchItemDialog
                     key={`${editing.source.id}-${view.batch.version}`}
@@ -1041,7 +1387,7 @@ export function BatchWorkspace({
                     <DialogHeader>
                         <DialogTitle>尚有未保存修改</DialogTitle>
                         <DialogDescription>
-                            离开后仅恢复服务端已保存内容。请先保存草稿，或确认放弃当前修改。
+                            离开后仅恢复服务端已保存内容。请先保存草稿并离开，或确认放弃当前修改。
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
@@ -1061,18 +1407,21 @@ export function BatchWorkspace({
                         >
                             放弃修改并离开
                         </Button>
-                        <Button
+                        <LoadingButton
                             id="supplier-catalog-batch-leave-save"
                             type="button"
+                            loading={pendingAction === "leave-save"}
                             disabled={busy}
                             onClick={async () => {
-                                if (await workspace.persist())
+                                if (await persistWithAction("leave-save")) {
                                     setLeaveOpen(false)
+                                    returnToCatalog()
+                                }
                             }}
                         >
                             <SaveIcon aria-hidden />
-                            保存草稿
-                        </Button>
+                            保存草稿并离开
+                        </LoadingButton>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

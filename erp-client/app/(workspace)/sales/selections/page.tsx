@@ -1,20 +1,24 @@
-import type { Metadata } from "next"
-import { Suspense } from "react"
+import { redirect } from "next/navigation"
 
-import { RouteLoading } from "@/components/layout/route-loading"
-import { BooksListPage } from "@/features/sales-selection/pages/books-list-page"
-
-export const metadata: Metadata = {
-    title: "选品册",
+function serializeSearchParams(
+    raw: Record<string, string | string[] | undefined>,
+): string {
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(raw)) {
+        if (typeof value === "string") params.append(key, value)
+        else if (Array.isArray(value)) {
+            for (const entry of value) params.append(key, entry)
+        }
+    }
+    const qs = params.toString()
+    return qs ? `?${qs}` : ""
 }
 
-/**
- * SPA 壳：选品册列表由客户端取数。
- */
-export default function SalesSelectionsPage() {
-    return (
-        <Suspense fallback={<RouteLoading label="正在加载选品册…" />}>
-            <BooksListPage />
-        </Suspense>
-    )
+export default async function LegacySalesSelectionsRedirectPage({
+    searchParams,
+}: {
+    searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+    const qs = serializeSearchParams(await searchParams)
+    redirect(`/sales/selection${qs}`)
 }

@@ -1,10 +1,13 @@
 "use client"
 
-import { PermissionGuard } from "@/features/auth/components/permission-guard"
-
+import * as React from "react"
 import Link from "next/link"
+import { ArrowUpRightIcon } from "lucide-react"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import {
+    DetailWorkspaceFact,
+    DetailWorkspaceFacts,
     DetailWorkspaceSection,
     detailWorkspaceStyles,
     RevisionTimeline,
@@ -12,76 +15,86 @@ import {
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { revealMasterDataSensitive } from "@/features/master-data/api"
+import { MasterDataAuditList } from "@/features/master-data/components/shared/audit-event-list"
 import { masterDataRevisionEntry } from "@/features/master-data/components/shared/revision-timeline-item"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { formatEffectiveRange } from "@/features/master-data/lib/filter"
 import type { MasterDataCenterView } from "@/features/master-data/types"
-import { formatDateTime } from "@/lib/datetime"
+
+const DUPLICATE_CODE_LABELS = new Set<string>(["仓库代码", "分类代码"])
 
 /** 概览：编号、版本、变更原因与各资源字段；敏感字段按权限短时查看。 */
 export function ObjectCenterOverviewSection({
     data,
     canRevealSensitive,
+    extra,
 }: {
     data: MasterDataCenterView
     canRevealSensitive: boolean
+    extra?: React.ReactNode
 }) {
+    const sensitiveLabels = new Set(
+        data.sensitiveFields.map((sensitive) => sensitive.label),
+    )
+    const seenLabels = new Set<string>([
+        masterDataCopy.colStableNo,
+        masterDataCopy.centerCurrentVersion,
+        masterDataCopy.centerChangeReason,
+        masterDataCopy.centerActor,
+    ])
+    const overviewFields: Array<{ label: string; value: string }> = []
+    for (const field of [
+        ...data.currentRevision.fields,
+        ...data.resourceFacts,
+    ]) {
+        if (sensitiveLabels.has(field.label)) continue
+        if (seenLabels.has(field.label)) continue
+        if (
+            DUPLICATE_CODE_LABELS.has(field.label) &&
+            field.value === data.stableNo
+        ) {
+            continue
+        }
+        seenLabels.add(field.label)
+        overviewFields.push(field)
+    }
+
     return (
         <DetailWorkspaceSection
             id="md-section-overview"
             title={masterDataCopy.centerOverview}
             width="form"
-            subtitle={masterDataCopy.centerOverviewDesc}
+            subtitle={masterDataCopy.centerOverviewDescFor(data.resource)}
         >
-            <dl className="grid gap-x-8 gap-y-6 text-body-compact sm:grid-cols-2 [&>div]:min-w-0 [&_dd]:mt-1 [&_dd]:break-words [&_dd]:leading-6">
-                <div>
-                    <dt className="text-xs text-muted-foreground">
-                        {masterDataCopy.colStableNo}
-                    </dt>
-                    <dd className="num">{data.stableNo}</dd>
-                </div>
-                <div>
-                    <dt className="text-xs text-muted-foreground">
-                        {masterDataCopy.centerCurrentVersion}
-                    </dt>
-                    <dd className="num">v{data.currentRevision.revisionNo}</dd>
-                </div>
-                <div>
-                    <dt className="text-xs text-muted-foreground">
-                        {masterDataCopy.centerChangeReason}
-                    </dt>
-                    <dd>{data.currentRevision.changeReason}</dd>
-                </div>
-                <div>
-                    <dt className="text-xs text-muted-foreground">
-                        {masterDataCopy.centerActor}
-                    </dt>
-                    <dd>{data.currentRevision.actor}</dd>
-                </div>
-                {data.currentRevision.fields
-                    .filter(
-                        (field) =>
-                            !data.sensitiveFields.some(
-                                (sensitive) => sensitive.label === field.label,
-                            ),
-                    )
-                    .map((field) => (
-                        <div key={field.label}>
-                            <dt className="text-xs text-muted-foreground">
-                                {field.label}
-                            </dt>
-                            <dd>{field.value}</dd>
-                        </div>
-                    ))}
-                {data.resourceFacts.map((field) => (
-                    <div key={field.label}>
-                        <dt className="text-xs text-muted-foreground">
-                            {field.label}
-                        </dt>
-                        <dd>{field.value}</dd>
-                    </div>
+            <DetailWorkspaceFacts columns={2}>
+                <DetailWorkspaceFact
+                    label={masterDataCopy.colStableNo}
+                    value={data.stableNo}
+                    numeric
+                />
+                <DetailWorkspaceFact
+                    label={masterDataCopy.centerCurrentVersion}
+                    value={`v${data.currentRevision.revisionNo}`}
+                    numeric
+                />
+                <DetailWorkspaceFact
+                    label={masterDataCopy.centerChangeReason}
+                    value={data.currentRevision.changeReason}
+                />
+                <DetailWorkspaceFact
+                    label={masterDataCopy.centerActor}
+                    value={data.currentRevision.actor}
+                />
+                {overviewFields.map((field) => (
+                    <DetailWorkspaceFact
+                        key={field.label}
+                        label={field.label}
+                        value={field.value}
+                    />
                 ))}
-            </dl>
+            </DetailWorkspaceFacts>
+
+            {extra}
 
             {data.sensitiveFields.length > 0 ? (
                 <div className="mt-4 space-y-2">
@@ -118,20 +131,15 @@ export function ObjectCenterOverviewSection({
 
             <PermissionGuard permission="stock_balance:list">
                 {data.warehouseStockSummary ? (
-                    <div className="flex flex-col items-start gap-2 border-t border-border/60 pt-4">
-                        <p className="text-xs text-muted-foreground">
-                            {data.warehouseStockSummary.policyNote}
-                        </p>
-                        <p>
-                            在库{" "}
-                            <span className="num">
-                                {data.warehouseStockSummary.onHandQty}
-                            </span>
-                            {" · 预占 "}
-                            <span className="num">
-                                {data.warehouseStockSummary.reservedQty}
-                            </span>
-                        </p>
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
+                        <div className="space-y-0.5">
+                            <p className="text-body-compact font-medium text-foreground">
+                                库存台账
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                                {data.warehouseStockSummary.policyNote}
+                            </p>
+                        </div>
                         <Button
                             id="master-data-shared-object-center-sections-button-1"
                             size="sm"
@@ -144,6 +152,11 @@ export function ObjectCenterOverviewSection({
                             }
                         >
                             打开库存台账
+                            <ArrowUpRightIcon
+                                data-icon="inline-end"
+                                className="size-3.5"
+                                aria-hidden="true"
+                            />
                         </Button>
                     </div>
                 ) : null}
@@ -193,34 +206,7 @@ export function ObjectCenterAuditSection({
             width="form"
             subtitle={masterDataCopy.centerAuditDesc}
         >
-            {data.auditEvents.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                    {masterDataCopy.centerNoAudit}
-                </p>
-            ) : (
-                <ul className="divide-y divide-border/60">
-                    {data.auditEvents.map((event) => (
-                        <li key={event.id} className="py-2 first:pt-0">
-                            <div className="flex flex-wrap gap-2">
-                                <span className="num text-xs text-muted-foreground">
-                                    {formatDateTime(
-                                        event.at,
-                                        "full",
-                                        "passthrough",
-                                    )}
-                                </span>
-                                <span>{event.actor}</span>
-                                <span className="text-xs text-muted-foreground">
-                                    {event.action}
-                                </span>
-                            </div>
-                            <div className="mt-1 text-muted-foreground">
-                                {event.detail}
-                            </div>
-                        </li>
-                    ))}
-                </ul>
-            )}
+            <MasterDataAuditList events={data.auditEvents} />
         </DetailWorkspaceSection>
     )
 }

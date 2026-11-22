@@ -234,9 +234,20 @@ export function useMasterDataCenterQuery(
               }
             : resource === "voucher-categories"
               ? { skus: hasPermission(permissions, "sku:list") }
-              : resource === "suppliers" || resource === "brands"
-                ? { assets: hasPermission(permissions, "file_asset:detail") }
-                : undefined
+              : resource === "warehouses"
+                ? {
+                      revisions: hasPermission(
+                          permissions,
+                          "warehouse_revision:list",
+                      ),
+                      handlerOptions: hasPermission(
+                          permissions,
+                          "warehouse:update",
+                      ),
+                  }
+                : resource === "suppliers" || resource === "brands"
+                  ? { assets: hasPermission(permissions, "file_asset:detail") }
+                  : undefined
     return useQuery({
         queryKey: extraAccess
             ? [...masterDataKeys.detail(resource, stableId), extraAccess]

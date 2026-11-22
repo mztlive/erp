@@ -43,12 +43,13 @@ export function useSettlementListQuery(input: ListQueryInput) {
 export function useSettlementDetailQuery(
     statementId: string | undefined,
     workItemId?: string,
+    enabled = true,
 ) {
     return useQuery({
         queryKey: settlementKeys.detail(statementId ?? "", workItemId),
         queryFn: () =>
             fetchSettlementDetail({ statementId: statementId!, workItemId }),
-        enabled: Boolean(statementId),
+        enabled: enabled && Boolean(statementId),
         placeholderData: keepPreviousData,
     })
 }

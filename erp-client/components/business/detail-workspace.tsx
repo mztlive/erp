@@ -21,7 +21,27 @@ const styles = detailWorkspaceStyles
 export type DetailWorkspaceBackLink = {
     id: string
     label: string
+    /**
+     * `standalone-only`（默认）：仅独立打开时展示，在多页签工作台内自动隐藏；
+     * `always`：即使在工作页签内也保留展示（适用于带明确 `returnTo` 上下文或深链返回）。
+     */
+    visibility?: "standalone-only" | "always"
 } & ({ href: string; onClick?: never } | { href?: never; onClick: () => void })
+
+function findScrollContainer(node: HTMLElement | null): HTMLElement | null {
+    let current = node?.parentElement ?? null
+    while (current) {
+        const overflowY = window.getComputedStyle(current).overflowY
+        if (
+            (overflowY === "auto" || overflowY === "scroll") &&
+            current.scrollHeight > current.clientHeight
+        ) {
+            return current
+        }
+        current = current.parentElement
+    }
+    return null
+}
 
 export type DetailWorkspaceTabItem = Readonly<{
     id: string
@@ -199,21 +219,51 @@ export function DetailWorkspaceChrome({
     className,
 }: DetailWorkspaceChromeProps) {
     const inWorkspaceTab = useWorkspaceTab()
-    const back = inWorkspaceTab ? undefined : backNavigation
+    const back =
+        inWorkspaceTab && backNavigation?.visibility !== "always"
+            ? undefined
+            : backNavigation
     const sentinelRef = React.useRef<HTMLDivElement>(null)
+    const headerRef = React.useRef<HTMLElement>(null)
     const [scrolled, setScrolled] = React.useState(false)
 
     React.useEffect(() => {
         const sentinel = sentinelRef.current
         if (!sentinel || typeof IntersectionObserver === "undefined") return
+        const root = findScrollContainer(sentinel)
         const observer = new IntersectionObserver(
             ([entry]) => {
                 setScrolled(!entry.isIntersecting)
             },
-            { threshold: [0, 1] },
+            { root, threshold: [0, 1] },
         )
         observer.observe(sentinel)
         return () => observer.disconnect()
+    }, [])
+
+    React.useEffect(() => {
+        const header = headerRef.current
+        if (!header || typeof ResizeObserver === "undefined") return
+        const target =
+            header.closest<HTMLElement>('[data-slot="page-scaffold"]') ??
+            header.parentElement
+        if (!target) return
+        const syncHeight = () => {
+            const height = Math.ceil(header.getBoundingClientRect().height)
+            if (height > 0) {
+                target.style.setProperty(
+                    "--detail-chrome-height",
+                    `${height + 12}px`,
+                )
+            }
+        }
+        syncHeight()
+        const observer = new ResizeObserver(syncHeight)
+        observer.observe(header)
+        return () => {
+            observer.disconnect()
+            target.style.removeProperty("--detail-chrome-height")
+        }
     }, [])
 
     const hasInlineMeta =
@@ -224,9 +274,10 @@ export function DetailWorkspaceChrome({
             <div
                 ref={sentinelRef}
                 aria-hidden="true"
-                className="pointer-events-none h-px w-full shrink-0"
+                className="pointer-events-none -mt-px h-px w-full shrink-0"
             />
             <header
+                ref={headerRef}
                 data-slot="detail-workspace-chrome"
                 data-scrolled={scrolled ? "true" : undefined}
                 className={cn(styles.chrome, className)}
@@ -405,6 +456,7 @@ export function DetailWorkspaceSection({
     subtitle,
     actions,
     width = "full",
+    divider,
     children,
     className,
     contentClassName,
@@ -417,6 +469,8 @@ export function DetailWorkspaceSection({
     subtitle?: React.ReactNode
     actions?: React.ReactNode
     width?: "form" | "full"
+    /** 显式控制顶部分隔线：`true` 强制显示（跨包裹容器时）；`false` 强制隐藏。 */
+    divider?: boolean
     children: React.ReactNode
     className?: string
     contentClassName?: string
@@ -426,9 +480,21 @@ export function DetailWorkspaceSection({
         <section
             id={id}
             data-slot="detail-workspace-section"
+            data-divider={
+                divider === true
+                    ? "true"
+                    : divider === false
+                      ? "false"
+                      : undefined
+            }
             aria-label={headingId ? undefined : ariaLabel}
             aria-labelledby={headingId}
-            className={cn(styles.section, "scroll-mt-28", className)}
+            className={cn(
+                styles.section,
+                divider === true && "border-t border-border/60",
+                divider === false && "border-t-0!",
+                className,
+            )}
         >
             <div
                 className={cn(
@@ -495,7 +561,11 @@ export function DetailWorkspaceBody({
     return (
         <div
             data-slot="detail-workspace-body"
-            className={cn(styles.body, saveDockOpen && "pb-20", className)}
+            className={cn(
+                styles.body,
+                saveDockOpen && "pb-28 sm:pb-20",
+                className,
+            )}
         >
             {summary != null ? (
                 <div
@@ -507,7 +577,7 @@ export function DetailWorkspaceBody({
             ) : null}
 
             {sidebar != null ? (
-                <div className="grid items-start gap-x-8 gap-y-0 xl:grid-cols-[minmax(0,1fr)_320px] 2xl:grid-cols-[minmax(0,1fr)_360px]">
+                <div className="grid items-start gap-x-8 gap-y-0 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_320px] 2xl:grid-cols-[minmax(0,1fr)_360px]">
                     <div className="min-w-0">
                         {alerts ? (
                             <div
@@ -521,7 +591,7 @@ export function DetailWorkspaceBody({
                     </div>
                     <aside
                         aria-label={sidebarLabel}
-                        className="min-w-0 border-t border-border/60 py-5 xl:self-stretch xl:border-t-0 xl:border-l xl:border-border/60 xl:pl-6"
+                        className="min-w-0 border-t border-border/60 py-5 lg:self-stretch lg:border-t-0 lg:border-l lg:border-border/60 lg:pl-6"
                     >
                         {sidebar}
                     </aside>
@@ -544,9 +614,86 @@ export function DetailWorkspaceBody({
 }
 
 const metricsColumnsClass: Record<2 | 3 | 4, string> = {
-    2: "grid-cols-1 sm:grid-cols-2 sm:[&>*+*]:border-l sm:[&>*+*]:border-border/60 sm:[&>*+*]:pl-6",
-    3: "grid-cols-1 sm:grid-cols-3 sm:[&>*+*]:border-l sm:[&>*+*]:border-border/60 sm:[&>*+*]:pl-6",
-    4: "grid-cols-2 lg:grid-cols-4 lg:[&>*+*]:border-l lg:[&>*+*]:border-border/60 lg:[&>*+*]:pl-6",
+    2: "grid-cols-1 sm:grid-cols-2 sm:[&>*:not(:nth-child(2n+1))]:border-l sm:[&>*:not(:nth-child(2n+1))]:border-border/60 sm:[&>*:not(:nth-child(2n+1))]:pl-6",
+    3: "grid-cols-1 md:grid-cols-3 md:[&>*:not(:nth-child(3n+1))]:border-l md:[&>*:not(:nth-child(3n+1))]:border-border/60 md:[&>*:not(:nth-child(3n+1))]:pl-6",
+    4: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 sm:max-lg:[&>*:nth-child(even)]:border-l sm:max-lg:[&>*:nth-child(even)]:border-border/60 sm:max-lg:[&>*:nth-child(even)]:pl-6 lg:[&>*:not(:nth-child(4n+1))]:border-l lg:[&>*:not(:nth-child(4n+1))]:border-border/60 lg:[&>*:not(:nth-child(4n+1))]:pl-6",
+}
+
+const factsColumnsClass: Record<2 | 3 | 4, string> = {
+    2: "grid-cols-1 sm:grid-cols-2",
+    3: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
+    4: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
+}
+
+/**
+ * 详情工作面纯白通栏只读信息栅格：统一 12px 柔灰标签与 13px 正文值，
+ * 消除全站上百处手写 `<dl>` / `Fact` 的字号、间距与缺省值差异。
+ */
+export function DetailWorkspaceFacts({
+    columns = 3,
+    ariaLabel,
+    children,
+    className,
+}: {
+    columns?: 2 | 3 | 4
+    ariaLabel?: string
+    children: React.ReactNode
+    className?: string
+}) {
+    return (
+        <dl
+            data-slot="detail-workspace-facts"
+            aria-label={ariaLabel}
+            className={cn(
+                "grid gap-x-6 gap-y-4",
+                factsColumnsClass[columns],
+                className,
+            )}
+        >
+            {children}
+        </dl>
+    )
+}
+
+/** 详情工作面只读信息单项：支持数字 `.num`、跨列与统一 `—` 空值占位。 */
+export function DetailWorkspaceFact({
+    label,
+    value,
+    numeric = false,
+    span = 1,
+    className,
+}: {
+    label: React.ReactNode
+    value: React.ReactNode
+    numeric?: boolean
+    span?: 1 | 2 | "full"
+    className?: string
+}) {
+    const empty = value === null || value === undefined || value === ""
+    return (
+        <div
+            data-slot="detail-workspace-fact"
+            className={cn(
+                "min-w-0 space-y-1",
+                span === 2 && "sm:col-span-2",
+                span === "full" && "col-span-full",
+                className,
+            )}
+        >
+            <dt className="text-xs font-medium text-muted-foreground">
+                {label}
+            </dt>
+            <dd
+                className={cn(
+                    "min-w-0 wrap-anywhere text-body-compact text-foreground",
+                    numeric && "num",
+                    empty && "text-muted-foreground",
+                )}
+            >
+                {empty ? "—" : value}
+            </dd>
+        </div>
+    )
 }
 
 /**
@@ -696,6 +843,9 @@ export function DetailWorkspaceSaveDock({
     summary,
     description,
     actions,
+    onSave,
+    saving = false,
+    enableSaveShortcut = true,
     className,
 }: {
     open: boolean
@@ -703,20 +853,43 @@ export function DetailWorkspaceSaveDock({
     summary?: string
     description?: string
     actions: React.ReactNode
+    /** 传入时自动挂载 `Cmd/Ctrl + S` 快捷保存（自动避开输入法与打开中的弹窗）。 */
+    onSave?: () => void
+    saving?: boolean
+    enableSaveShortcut?: boolean
     className?: string
 }) {
-    const [frozen, setFrozen] = React.useState({
-        changeCount,
-        summary,
-        description,
-    })
-    React.useEffect(() => {
-        if (open) {
-            setFrozen({ changeCount, summary, description })
-        }
-    }, [open, changeCount, summary, description])
+    const frozenRef = React.useRef({ changeCount, summary, description })
+    if (open) {
+        frozenRef.current = { changeCount, summary, description }
+    }
+    const display = open
+        ? { changeCount, summary, description }
+        : frozenRef.current
 
-    const display = open ? { changeCount, summary, description } : frozen
+    React.useEffect(() => {
+        if (!open || !onSave || !enableSaveShortcut) return
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (
+                event.defaultPrevented ||
+                event.isComposing ||
+                event.repeat ||
+                event.altKey ||
+                event.shiftKey ||
+                !(event.metaKey || event.ctrlKey) ||
+                event.key.toLowerCase() !== "s" ||
+                (event.target instanceof Element &&
+                    event.target.closest(
+                        '[role="dialog"], [role="alertdialog"]',
+                    ))
+            )
+                return
+            event.preventDefault()
+            if (!saving) onSave()
+        }
+        window.addEventListener("keydown", onKeyDown)
+        return () => window.removeEventListener("keydown", onKeyDown)
+    }, [enableSaveShortcut, onSave, open, saving])
 
     return (
         <div

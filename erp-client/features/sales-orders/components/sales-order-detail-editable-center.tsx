@@ -1,16 +1,26 @@
 "use client"
 
+import * as React from "react"
+import { TriangleAlertIcon } from "lucide-react"
+
 import {
     BusinessFailureState,
     DetailWorkspaceBody,
     DetailWorkspacePage,
+    DetailWorkspaceSection,
+    DetailWorkspaceSkeleton,
+    DiscardConfirmDialog,
 } from "@/components/business"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { displayActorName } from "@/features/approval-workflow/display"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { SalesOrderCreateForm } from "@/features/sales-orders/components/sales-order-create-form"
 import { SalesOrderIdentityHeader } from "@/features/sales-orders/components/sales-order-detail-panels"
 import { useSalesOrderDraftResumeQuery } from "@/features/sales-orders/hooks/queries"
 import type { FormalCommandKeyLedger } from "@/lib/formal-command"
+import { useRouter } from "@/lib/navigation"
+import { useWorkspaceDirtyState } from "@/lib/workspace-form-guard"
 
 export function SalesOrderEditableCenter({
     order,
@@ -27,7 +37,48 @@ export function SalesOrderEditableCenter({
     fromWorkspace: string | null
     commandLedger: FormalCommandKeyLedger
 }) {
+    const router = useRouter()
     const resumeQuery = useSalesOrderDraftResumeQuery(order.id)
+    const [editorState, setEditorState] = React.useState({
+        dirty: false,
+        busy: false,
+    })
+    const [leaveConfirmOpen, setLeaveConfirmOpen] = React.useState(false)
+
+    useWorkspaceDirtyState({
+        dirty: editorState.dirty,
+        busy: editorState.busy,
+    })
+
+    const handleDirtyStateChange = React.useCallback(
+        (next: { dirty: boolean; busy: boolean }) => {
+            setEditorState((prev) =>
+                prev.dirty === next.dirty && prev.busy === next.busy
+                    ? prev
+                    : next,
+            )
+        },
+        [],
+    )
+
+    if (resumeQuery.isPending) {
+        return (
+            <DetailWorkspaceSkeleton
+                title={order.customerName}
+                description="正在加载可编辑内容…"
+            />
+        )
+    }
+
+    const isRejected = order.primaryStatus.code === "rejected"
+    const rejectionInstance = order.approval?.instance
+    const rejectorName = rejectionInstance
+        ? displayActorName(
+              rejectionInstance.latestRejectionByName,
+              rejectionInstance.latestRejectionBy,
+          )
+        : undefined
+    const rejectionReason = rejectionInstance?.latestRejection?.trim()
 
     return (
         <DetailWorkspacePage>
@@ -37,7 +88,13 @@ export function SalesOrderEditableCenter({
                 back={{
                     id: "sales-orders-detail-editable-back",
                     label: backLabel,
-                    href: backHref,
+                    onClick: () => {
+                        if (editorState.dirty) {
+                            setLeaveConfirmOpen(true)
+                            return
+                        }
+                        router.push(backHref)
+                    },
                 }}
                 navigationMeta={
                     fromQueue
@@ -50,23 +107,27 @@ export function SalesOrderEditableCenter({
                 }
             />
 
-            <DetailWorkspaceBody>
-                {resumeQuery.isPending ? (
-                    <div
-                        className="max-w-4xl space-y-4 py-6"
-                        aria-busy="true"
-                        aria-label="正在加载可编辑内容"
-                    >
-                        <div className="h-5 w-28 animate-pulse rounded bg-muted" />
-                        <div className="grid gap-4 sm:grid-cols-3">
-                            <div className="h-9 animate-pulse rounded-md bg-muted" />
-                            <div className="h-9 animate-pulse rounded-md bg-muted" />
-                            <div className="h-9 animate-pulse rounded-md bg-muted" />
-                        </div>
-                        <div className="h-44 animate-pulse rounded-md bg-muted/70" />
-                    </div>
-                ) : resumeQuery.isError || !resumeQuery.data ? (
-                    <div className="max-w-3xl py-6">
+            <DetailWorkspaceBody
+                alerts={
+                    isRejected ? (
+                        <Alert variant="destructive">
+                            <TriangleAlertIcon aria-hidden="true" />
+                            <AlertTitle>
+                                上次审批已驳回
+                                {rejectorName
+                                    ? `（驳回人：${rejectorName}）`
+                                    : ""}
+                            </AlertTitle>
+                            <AlertDescription className="whitespace-pre-wrap break-words">
+                                {rejectionReason ||
+                                    "请根据审批意见修改销售单内容后重新提交审批。"}
+                            </AlertDescription>
+                        </Alert>
+                    ) : undefined
+                }
+            >
+                {resumeQuery.isError || !resumeQuery.data ? (
+                    <DetailWorkspaceSection width="form">
                         <BusinessFailureState
                             title="可编辑内容加载失败"
                             error={resumeQuery.error}
@@ -84,20 +145,30 @@ export function SalesOrderEditableCenter({
                                 </Button>
                             }
                         />
-                    </div>
+                    </DetailWorkspaceSection>
                 ) : (
-                    <div className="flex min-w-0 flex-1 flex-col py-5">
-                        <SalesOrderCreateForm
-                            chrome="none"
-                            purpose="draft"
-                            initialDraft={resumeQuery.data}
-                            initialNature={resumeQuery.data.nature}
-                            initialContractId={resumeQuery.data.contractId}
-                            commandLedger={commandLedger}
-                        />
-                    </div>
+                    <SalesOrderCreateForm
+                        chrome="none"
+                        purpose="draft"
+                        initialDraft={resumeQuery.data}
+                        initialNature={resumeQuery.data.nature}
+                        initialContractId={resumeQuery.data.contractId}
+                        commandLedger={commandLedger}
+                        onDirtyStateChange={handleDirtyStateChange}
+                    />
                 )}
             </DetailWorkspaceBody>
+
+            <DiscardConfirmDialog
+                id="sales-orders-detail-editable-leave"
+                open={leaveConfirmOpen}
+                onOpenChange={setLeaveConfirmOpen}
+                confirmLabel="放弃更改并返回"
+                onConfirm={() => {
+                    setLeaveConfirmOpen(false)
+                    router.push(backHref)
+                }}
+            />
         </DetailWorkspacePage>
     )
 }

@@ -8,6 +8,8 @@ import { settlementLabel } from "@/features/master-data/api/presentation"
 import { reconciliationCycleLabel } from "@/lib/supplier-payment-terms"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import {
+    supplierChangeSummary,
+    supplierSectionForValidationError,
     validateSupplierEditorFields,
     type SupplierFieldKey,
 } from "@/features/master-data/lib/supplier-editor-model"
@@ -25,10 +27,13 @@ export function useSupplierSaveFlow(editor: SupplierEditor) {
         form,
         setFormError,
         setFormErrorTitle,
+        setResult,
         setSaveReasonOpen,
         setReasonDraft,
         setReasonError,
+        focusProfileSection,
         pendingChangeReasonRef,
+        editedSensitive,
         sensitiveByLabel,
         initialFormValues,
         reasonDraft,
@@ -43,9 +48,40 @@ export function useSupplierSaveFlow(editor: SupplierEditor) {
         [form],
     )
 
+    const phoneSensitive =
+        sensitiveByLabel.get("联系电话") ?? sensitiveByLabel.get("联系人")
+    const addressSensitive = sensitiveByLabel.get("经营地址")
+    const bankSensitive = sensitiveByLabel.get("银行账号")
+
+    const changes = React.useMemo(
+        () =>
+            supplierChangeSummary(initialFormValues, values, {
+                editedSensitive,
+                hasStoredSensitive: {
+                    contactPhone: Boolean(phoneSensitive),
+                    address: Boolean(addressSensitive),
+                    bankAccount: Boolean(bankSensitive),
+                },
+            }),
+        [
+            addressSensitive,
+            bankSensitive,
+            editedSensitive,
+            initialFormValues,
+            phoneSensitive,
+            values,
+        ],
+    )
+
+    const changeDescription =
+        changes.length > 0
+            ? changes.slice(0, 3).join("、") + (changes.length > 3 ? " 等" : "")
+            : undefined
+
     const requestSave = React.useCallback(
         (event?: React.FormEvent) => {
             event?.preventDefault()
+            setResult(null)
             const validation = validateSupplierEditorFields(values, {
                 hasStoredContactPhone: data?.sensitiveFields.some(
                     (field) =>
@@ -60,6 +96,9 @@ export function useSupplierSaveFlow(editor: SupplierEditor) {
             if (validation) {
                 setFormErrorTitle("填写不完整")
                 setFormError(validation)
+                focusProfileSection(
+                    supplierSectionForValidationError(validation),
+                )
                 return
             }
             setFormError(null)
@@ -73,6 +112,7 @@ export function useSupplierSaveFlow(editor: SupplierEditor) {
         },
         [
             data?.sensitiveFields,
+            focusProfileSection,
             initialFormValues.bankName,
             initialFormValues.contactName,
             isCreate,
@@ -80,6 +120,7 @@ export function useSupplierSaveFlow(editor: SupplierEditor) {
             setFormErrorTitle,
             setReasonDraft,
             setReasonError,
+            setResult,
             setSaveReasonOpen,
             values,
         ],
@@ -94,20 +135,8 @@ export function useSupplierSaveFlow(editor: SupplierEditor) {
         setReasonError(null)
         pendingChangeReasonRef.current = reason
         form.setFieldValue("changeReason", reason)
-        setSaveReasonOpen(false)
         void form.handleSubmit()
-    }, [
-        form,
-        pendingChangeReasonRef,
-        reasonDraft,
-        setReasonError,
-        setSaveReasonOpen,
-    ])
-
-    const phoneSensitive =
-        sensitiveByLabel.get("联系电话") ?? sensitiveByLabel.get("联系人")
-    const addressSensitive = sensitiveByLabel.get("经营地址")
-    const bankSensitive = sensitiveByLabel.get("银行账号")
+    }, [form, pendingChangeReasonRef, reasonDraft, setReasonError])
 
     const refreshSensitiveToken = React.useCallback(
         async (labels: readonly string[]): Promise<string | undefined> => {
@@ -161,6 +190,8 @@ export function useSupplierSaveFlow(editor: SupplierEditor) {
 
     return {
         values,
+        changes,
+        changeDescription,
         setFieldValue,
         requestSave,
         confirmSaveWithReason,

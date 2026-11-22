@@ -24,6 +24,7 @@ import { responsibilityOf } from "@/features/supplier-settlements/lib/settlement
 import type { SettlementsUrlState } from "@/features/supplier-settlements/lib/url-state"
 import type { DifferenceResolution } from "@/features/supplier-settlements/types"
 import { getErrorMessage } from "@/lib/api/errors"
+import { classifyFormalCommandError } from "@/lib/formal-command"
 
 type CommandIdentity = {
     operationId: string
@@ -48,6 +49,7 @@ const submitReviewSchema = z.object({
 })
 const rejectSchema = z.object({
     reasonCode: z.string().trim().min(1, "请选择驳回原因"),
+    comment: z.string(),
 })
 
 /**
@@ -60,14 +62,20 @@ function useSettlementCenterActions({
     urlState,
     patchUrl,
     onTaskCompleted,
+    detailEnabled = true,
 }: {
     statementId: string
     workItemId?: string
     urlState: SettlementsUrlState
     patchUrl: (patch: Partial<SettlementsUrlState>) => void
     onTaskCompleted?: (workItemId: string) => void
+    detailEnabled?: boolean
 }) {
-    const detailQuery = useSettlementDetailQuery(statementId, workItemId)
+    const detailQuery = useSettlementDetailQuery(
+        statementId,
+        workItemId,
+        detailEnabled,
+    )
     const refreshMutation = useRefreshTrialMutation()
     const resolveMutation = useResolveDifferenceMutation()
     const evidenceMutation = useAppendEvidenceMutation()
@@ -117,7 +125,7 @@ function useSettlementCenterActions({
         onSubmit: ({ value }) => executeSubmitReview(value),
     })
     const rejectForm = useAppForm({
-        defaultValues: { reasonCode: "" },
+        defaultValues: { reasonCode: "", comment: "" },
         validators: { onChange: rejectSchema },
         onSubmit: ({ value }) => executeReject(value),
     })
@@ -133,10 +141,7 @@ function useSettlementCenterActions({
         submitReviewForm.store,
         (state) => state.values.reviewerUserId,
     )
-    const rejectReason = useSelector(
-        rejectForm.store,
-        (state) => state.values.reasonCode,
-    )
+    const rejectValues = useSelector(rejectForm.store, (state) => state.values)
 
     function idempotencyIdentity(kind: string, objectId: string) {
         const key = `${kind}:${objectId}`
@@ -208,10 +213,16 @@ function useSettlementCenterActions({
             setResult(outcomeToResult(outcome))
             if (outcome.status === "succeeded") setResolveOpen(false)
         } catch (error) {
+            const isUnknown = classifyFormalCommandError(error) === "unknown"
+            if (!isUnknown) {
+                commandIdentities.current.delete(identity.key)
+            }
             setResult({
-                status: "rejected",
-                title: "结论登记未完成",
-                description: getErrorMessage(error, "提交失败，请稍后重试"),
+                status: isUnknown ? "unknown" : "rejected",
+                title: isUnknown ? "结论登记结果待确认" : "结论登记未完成",
+                description: isUnknown
+                    ? "网络超时或响应异常，原请求可能已生效。请先刷新结算单核对；再次提交将复用原请求号避免重复登记。"
+                    : getErrorMessage(error, "提交失败，请稍后重试"),
             })
         }
     }
@@ -277,26 +288,41 @@ function useSettlementCenterActions({
             return
         }
         const identity = idempotencyIdentity("submit-review", st.id)
-        const outcome = await submitMutation.mutateAsync({
-            statementId: st.id,
-            expectedLockVersion: st.lockVersion,
-            subjectHash: st.subjectHash,
-            refreshCutoffPolicyId:
-                data.reviewSubmissionPolicy.refreshCutoffPolicyId,
-            expectedRefreshCutoffPolicyVersion:
-                data.reviewSubmissionPolicy.version,
-            reviewerUserId: normalizedReviewerUserId,
-            operationId: identity.operationId,
-            idempotencyKey: identity.idempotencyKey,
-        })
-        if (outcome.status !== "unknown") {
-            commandIdentities.current.delete(identity.key)
-        }
-        setResult(outcomeToResult(outcome))
-        if (outcome.status === "succeeded") {
-            setSubmitOpen(false)
-            submitReviewForm.reset()
-            patchUrl({ section: "review" })
+        try {
+            const outcome = await submitMutation.mutateAsync({
+                statementId: st.id,
+                expectedLockVersion: st.lockVersion,
+                subjectHash: st.subjectHash,
+                refreshCutoffPolicyId:
+                    data.reviewSubmissionPolicy.refreshCutoffPolicyId,
+                expectedRefreshCutoffPolicyVersion:
+                    data.reviewSubmissionPolicy.version,
+                reviewerUserId: normalizedReviewerUserId,
+                operationId: identity.operationId,
+                idempotencyKey: identity.idempotencyKey,
+            })
+            if (outcome.status !== "unknown") {
+                commandIdentities.current.delete(identity.key)
+            }
+            setResult(outcomeToResult(outcome))
+            if (outcome.status === "succeeded") {
+                setSubmitOpen(false)
+                submitReviewForm.reset()
+                patchUrl({ section: "review" })
+            }
+        } catch (error) {
+            const isUnknown = classifyFormalCommandError(error) === "unknown"
+            if (!isUnknown) {
+                commandIdentities.current.delete(identity.key)
+            }
+            setResult({
+                status: isUnknown ? "unknown" : "rejected",
+                title: isUnknown ? "提交复核结果待确认" : "提交复核未完成",
+                description: isUnknown
+                    ? "网络连接中断或响应超时，提交复核结果尚未确认。请先刷新核对当前状态；再次提交将沿用原请求避免重复提交。"
+                    : getErrorMessage(error, "提交复核失败，请稍后重试"),
+            })
+            throw error
         }
     }
 
@@ -317,28 +343,46 @@ function useSettlementCenterActions({
             "confirm-review",
             workItem.workItemId,
         )
-        const outcome = await decisionMutation.mutateAsync({
-            statementId: data.statement.id,
-            workItemId: workItem.workItemId,
-            expectedTaskVersion: workItem.taskVersion,
-            expectedSubjectVersion: workItem.subjectVersion,
-            expectedLockVersion: data.statement.lockVersion,
-            action: "CONFIRM",
-            operationId: identity.operationId,
-            idempotencyKey: identity.idempotencyKey,
-        })
-        if (outcome.status !== "unknown") {
-            commandIdentities.current.delete(identity.key)
-        }
-        setResult(outcomeToResult(outcome))
-        if (outcome.status === "succeeded") {
-            setConfirmOpen(false)
-            patchUrl({ section: "payable" })
-            onTaskCompleted?.(workItem.workItemId)
+        try {
+            const outcome = await decisionMutation.mutateAsync({
+                statementId: data.statement.id,
+                workItemId: workItem.workItemId,
+                expectedTaskVersion: workItem.taskVersion,
+                expectedSubjectVersion: workItem.subjectVersion,
+                expectedLockVersion: data.statement.lockVersion,
+                action: "CONFIRM",
+                operationId: identity.operationId,
+                idempotencyKey: identity.idempotencyKey,
+            })
+            if (outcome.status !== "unknown") {
+                commandIdentities.current.delete(identity.key)
+            }
+            setResult(outcomeToResult(outcome))
+            if (outcome.status === "succeeded") {
+                setConfirmOpen(false)
+                patchUrl({ section: "payable" })
+                onTaskCompleted?.(workItem.workItemId)
+            }
+        } catch (error) {
+            const isUnknown = classifyFormalCommandError(error) === "unknown"
+            if (!isUnknown) {
+                commandIdentities.current.delete(identity.key)
+            }
+            setResult({
+                status: isUnknown ? "unknown" : "rejected",
+                title: isUnknown ? "确认结算结果待确认" : "确认结算未完成",
+                description: isUnknown
+                    ? "确认结算响应超时，系统可能已入账并生成应付。请先刷新结算单核对；再次提交将沿用原请求避免重复入账。"
+                    : getErrorMessage(error, "确认结算失败，请稍后重试"),
+            })
+            throw error
         }
     }
 
-    async function executeReject(value: { reasonCode: string }) {
+    async function executeReject(value: {
+        reasonCode: string
+        comment: string
+    }) {
         if (!data) return
         const workItem = data.workItem
         if (!workItem || responsibilityStatus !== "assigned_to_me") return
@@ -346,25 +390,43 @@ function useSettlementCenterActions({
             "reject-review",
             workItem.workItemId,
         )
-        const outcome = await decisionMutation.mutateAsync({
-            statementId: data.statement.id,
-            workItemId: workItem.workItemId,
-            expectedTaskVersion: workItem.taskVersion,
-            expectedSubjectVersion: workItem.subjectVersion,
-            expectedLockVersion: data.statement.lockVersion,
-            action: "REJECT",
-            operationId: identity.operationId,
-            idempotencyKey: identity.idempotencyKey,
-            reasonCode: value.reasonCode,
-        })
-        if (outcome.status !== "unknown") {
-            commandIdentities.current.delete(identity.key)
-        }
-        setResult(outcomeToResult(outcome))
-        if (outcome.status === "rejected" || outcome.status === "succeeded") {
-            setRejectOpen(false)
-            rejectForm.reset()
-            onTaskCompleted?.(workItem.workItemId)
+        try {
+            const outcome = await decisionMutation.mutateAsync({
+                statementId: data.statement.id,
+                workItemId: workItem.workItemId,
+                expectedTaskVersion: workItem.taskVersion,
+                expectedSubjectVersion: workItem.subjectVersion,
+                expectedLockVersion: data.statement.lockVersion,
+                action: "REJECT",
+                operationId: identity.operationId,
+                idempotencyKey: identity.idempotencyKey,
+                reasonCode: value.reasonCode,
+                comment: value.comment.trim() || undefined,
+            })
+            if (outcome.status !== "unknown") {
+                commandIdentities.current.delete(identity.key)
+            }
+            setResult(outcomeToResult(outcome))
+            if (
+                outcome.status === "rejected" ||
+                outcome.status === "succeeded"
+            ) {
+                setRejectOpen(false)
+                rejectForm.reset()
+                onTaskCompleted?.(workItem.workItemId)
+            }
+        } catch (error) {
+            const isUnknown = classifyFormalCommandError(error) === "unknown"
+            if (!isUnknown) {
+                commandIdentities.current.delete(identity.key)
+            }
+            setResult({
+                status: isUnknown ? "unknown" : "rejected",
+                title: isUnknown ? "驳回复核结果待确认" : "驳回复核未完成",
+                description: isUnknown
+                    ? "驳回请求响应超时，结果尚未确认。请先刷新核对当前状态；再次提交将沿用原请求避免重复提交。"
+                    : getErrorMessage(error, "驳回复核失败，请稍后重试"),
+            })
         }
     }
 
@@ -398,6 +460,7 @@ function useSettlementCenterActions({
         submitMutation,
         decisionMutation,
         result,
+        clearResult: () => setResult(null),
         resultRef,
         resolveOpen,
         setResolveOpen,
@@ -421,9 +484,12 @@ function useSettlementCenterActions({
         evidenceReferenceId: evidenceValues.referenceId,
         setEvidenceReferenceId: (referenceId: string) =>
             evidenceForm.setFieldValue("referenceId", referenceId),
-        rejectReason,
+        rejectReason: rejectValues.reasonCode,
         setRejectReason: (reasonCode: string) =>
             rejectForm.setFieldValue("reasonCode", reasonCode),
+        rejectComment: rejectValues.comment,
+        setRejectComment: (comment: string) =>
+            rejectForm.setFieldValue("comment", comment),
         reviewerUserId,
         setReviewerUserId: (userId: string) =>
             submitReviewForm.setFieldValue("reviewerUserId", userId),

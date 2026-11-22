@@ -2,7 +2,11 @@
 
 import * as React from "react"
 import { useRouter, useSearchParams } from "@/lib/navigation"
-import { SUPPLIER_SECTIONS } from "@/features/master-data/components/supplier/supplier-editor-fields"
+import {
+    SUPPLIER_PORTAL_SUB_TABS,
+    type SupplierPortalSubTabId,
+    type SupplierPrimarySectionId,
+} from "@/features/master-data/components/supplier/supplier-editor-fields"
 
 import { useAppForm, applyApiFormError } from "@/components/form"
 import { toast } from "@/components/ui/toast"
@@ -27,6 +31,9 @@ import { newIdempotencyKey } from "@/lib/idempotency-key"
 import {
     createSupplierEditorDefaults,
     hydrateSupplierEditor,
+    supplierSectionForValidationError,
+    type SupplierProfileSectionKey,
+    type SupplierSensitiveFieldKey,
     validateSupplierEditorFields,
 } from "@/features/master-data/lib/supplier-editor-model"
 import { getErrorPresentation } from "@/lib/api/errors"
@@ -39,6 +46,62 @@ const supplierFieldAliases = {
     "address.address": "address",
     "bank_account.bank_name": "bankName",
     "bank_account.account_number": "bankAccount",
+}
+
+const PROFILE_LEGACY_SECTIONS = new Set<string>([
+    "profile",
+    "basic",
+    "commercial",
+    "contract",
+    "invoice",
+])
+
+function resolvePrimarySectionParam(
+    raw: string | null,
+): SupplierPrimarySectionId {
+    if (!raw || PROFILE_LEGACY_SECTIONS.has(raw)) return "profile"
+    if (raw === "delivery") return "delivery"
+    if (
+        raw === "portal" ||
+        raw === "portal-accounts" ||
+        raw === "portal-catalog" ||
+        raw === "portal-applications"
+    ) {
+        return "portal"
+    }
+    if (raw === "history") return "history"
+    return "profile"
+}
+
+function resolvePortalSubTabParam(raw: string | null): SupplierPortalSubTabId {
+    if (
+        raw === "portal-accounts" ||
+        raw === "portal-catalog" ||
+        raw === "portal-applications"
+    ) {
+        return raw
+    }
+    return "portal-accounts"
+}
+
+function resolveLegacyAnchorParam(
+    raw: string | null,
+): SupplierProfileSectionKey | null {
+    if (raw === "commercial" || raw === "contract" || raw === "invoice") {
+        return raw
+    }
+    return null
+}
+
+function replaceSectionUrl(section: string | null) {
+    const url = new URL(window.location.href)
+    if (!section || section === "profile") url.searchParams.delete("section")
+    else url.searchParams.set("section", section)
+    window.history.replaceState(
+        window.history.state,
+        "",
+        `${url.pathname}${url.search}${url.hash}`,
+    )
 }
 
 export function useSupplierEditor(stableId: string) {
@@ -73,10 +136,27 @@ export function useSupplierEditor(stableId: string) {
         mediaAssetIdsFor,
         preparePendingMedia,
     } = useSupplierMediaAssets(data)
-    /** 已实际编辑过的敏感字段；用于区分“保留打码值”和“明确清空”。 */
+    /** 已实际编辑过的敏感字段；用于区分“保留打码值”和“明确清空”，并实时驱动脏计数与回显。 */
     const editedSensitiveRef = React.useRef(
-        new Set<"contactPhone" | "address" | "bankAccount">(),
+        new Set<SupplierSensitiveFieldKey>(),
     )
+    const [editedSensitive, setEditedSensitive] = React.useState<
+        ReadonlySet<SupplierSensitiveFieldKey>
+    >(() => new Set())
+    const markSensitiveEdited = React.useCallback(
+        (field: SupplierSensitiveFieldKey) => {
+            if (editedSensitiveRef.current.has(field)) return
+            editedSensitiveRef.current.add(field)
+            setEditedSensitive(new Set(editedSensitiveRef.current))
+        },
+        [],
+    )
+    const clearEditedSensitive = React.useCallback(() => {
+        if (editedSensitiveRef.current.size === 0) return
+        editedSensitiveRef.current.clear()
+        setEditedSensitive(new Set())
+    }, [])
+
     const [disableOpen, setDisableOpen] = React.useState(false)
     const [discardOpen, setDiscardOpen] = React.useState(false)
     const [saveReasonOpen, setSaveReasonOpen] = React.useState(false)
@@ -84,7 +164,7 @@ export function useSupplierEditor(stableId: string) {
     const [reasonError, setReasonError] = React.useState<string | null>(null)
     const [pendingNav, setPendingNav] = React.useState<string | null>(null)
     const searchParams = useSearchParams()
-    const requestedSection = searchParams.get("section") ?? "basic"
+    const requestedSection = searchParams.get("section")
     const canReadDeliveryTemplates = hasPermission(
         granted,
         "supplier_offering:list",
@@ -105,37 +185,115 @@ export function useSupplierEditor(stableId: string) {
         granted,
         "supplier_portal_request:list",
     )
-    const activeSection =
-        SUPPLIER_SECTIONS.some((section) => section.id === requestedSection) &&
-        (!isCreate ||
-            ![
-                "history",
-                "delivery",
-                "portal-accounts",
-                "portal-catalog",
-                "portal-applications",
-            ].includes(requestedSection)) &&
-        (requestedSection !== "delivery" || canReadDeliveryTemplates) &&
-        (requestedSection !== "portal-accounts" || canReadPortalAccounts) &&
-        (requestedSection !== "portal-catalog" || canReadPortalCatalog) &&
-        (requestedSection !== "portal-applications" ||
-            canReadPortalApplications)
-            ? requestedSection
-            : "basic"
-    const setActiveSection = (section: string) => {
-        const url = new URL(window.location.href)
-        if (section === "basic") url.searchParams.delete("section")
-        else url.searchParams.set("section", section)
-        window.history.replaceState(
-            null,
-            "",
-            `${url.pathname}${url.search}${url.hash}`,
+    const allowedPortalSubTabs = React.useMemo(
+        () =>
+            SUPPLIER_PORTAL_SUB_TABS.filter((item) => {
+                if (item.id === "portal-accounts") return canReadPortalAccounts
+                if (item.id === "portal-catalog") return canReadPortalCatalog
+                if (item.id === "portal-applications")
+                    return canReadPortalApplications
+                return false
+            }),
+        [
+            canReadPortalAccounts,
+            canReadPortalCatalog,
+            canReadPortalApplications,
+        ],
+    )
+    const canReadPortal = allowedPortalSubTabs.length > 0
+
+    const [sectionState, setSectionState] =
+        React.useState<SupplierPrimarySectionId>(() =>
+            resolvePrimarySectionParam(requestedSection),
         )
-    }
+    const [portalSubTabState, setPortalSubTabState] =
+        React.useState<SupplierPortalSubTabId>(() =>
+            resolvePortalSubTabParam(requestedSection),
+        )
+    const [pendingAnchor, setPendingAnchor] =
+        React.useState<SupplierProfileSectionKey | null>(() =>
+            resolveLegacyAnchorParam(requestedSection),
+        )
+
+    React.useEffect(() => {
+        setSectionState(resolvePrimarySectionParam(requestedSection))
+        const subTab = resolvePortalSubTabParam(requestedSection)
+        if (
+            requestedSection === "portal-accounts" ||
+            requestedSection === "portal-catalog" ||
+            requestedSection === "portal-applications"
+        ) {
+            setPortalSubTabState(subTab)
+        }
+        const anchor = resolveLegacyAnchorParam(requestedSection)
+        if (anchor) setPendingAnchor(anchor)
+    }, [requestedSection])
+
+    const portalSubTab: SupplierPortalSubTabId = allowedPortalSubTabs.some(
+        (item) => item.id === portalSubTabState,
+    )
+        ? portalSubTabState
+        : (allowedPortalSubTabs[0]?.id ?? "portal-accounts")
+
+    const activeSection: SupplierPrimarySectionId = React.useMemo(() => {
+        if (isCreate) return "profile"
+        if (sectionState === "delivery" && !canReadDeliveryTemplates) {
+            return "profile"
+        }
+        if (sectionState === "portal" && !canReadPortal) {
+            return "profile"
+        }
+        return sectionState
+    }, [canReadDeliveryTemplates, canReadPortal, isCreate, sectionState])
+
+    React.useEffect(() => {
+        if (!pendingAnchor || activeSection !== "profile") return
+        const targetAnchor = pendingAnchor
+        const frame = window.requestAnimationFrame(() => {
+            document
+                .getElementById(`supplier-section-${targetAnchor}`)
+                ?.scrollIntoView({ block: "start", behavior: "smooth" })
+            setPendingAnchor(null)
+        })
+        return () => window.cancelAnimationFrame(frame)
+    }, [activeSection, data?.stableId, pendingAnchor])
+
+    const setActiveSection = React.useCallback(
+        (next: SupplierPrimarySectionId) => {
+            setSectionState(next)
+            if (next === "portal") {
+                replaceSectionUrl(portalSubTab)
+                return
+            }
+            replaceSectionUrl(next === "profile" ? null : next)
+        },
+        [portalSubTab],
+    )
+
+    const setPortalSubTab = React.useCallback(
+        (next: SupplierPortalSubTabId) => {
+            setSectionState("portal")
+            setPortalSubTabState(next)
+            replaceSectionUrl(next)
+        },
+        [],
+    )
+
+    const focusProfileSection = React.useCallback(
+        (anchor: SupplierProfileSectionKey) => {
+            setSectionState("profile")
+            replaceSectionUrl(null)
+            setPendingAnchor(anchor)
+        },
+        [],
+    )
+
     const errorRef = React.useRef<HTMLDivElement | null>(null)
     const hydratedKeyRef = React.useRef<string | null>(null)
     /** 弹窗确认的变更原因；保证 setFieldValue 与 handleSubmit 之间不丢值。 */
     const pendingChangeReasonRef = React.useRef<string | null>(null)
+    /** 由表单层同步的真实未保存态，供离开拦截使用。 */
+    const dirtyRef = React.useRef(false)
 
     const initialFormValues = React.useMemo(() => {
         if (!isCreate && data) return hydrateSupplierEditor(data)
@@ -167,7 +325,11 @@ export function useSupplierEditor(stableId: string) {
                 originalBankName: initialFormValues.bankName,
             })
             if (validation) {
+                setSaveReasonOpen(false)
                 setFormError(validation)
+                focusProfileSection(
+                    supplierSectionForValidationError(validation),
+                )
                 return
             }
             const changeReason = (
@@ -175,7 +337,7 @@ export function useSupplierEditor(stableId: string) {
             ).trim()
             pendingChangeReasonRef.current = null
             if (changeReason.length < 2) {
-                setFormError("请填写本次保存的变更原因")
+                setReasonError("请填写本次保存的变更原因")
                 return
             }
 
@@ -242,6 +404,8 @@ export function useSupplierEditor(stableId: string) {
                         pendingAssetUploads,
                     })
                     if (response.outcome === "succeeded") {
+                        setSaveReasonOpen(false)
+                        setReasonError(null)
                         toast.add({
                             title: masterDataCopy.reviseSuccessTitle,
                             description: `${masterDataCopy.resultNo} ${response.stableNo} · v${response.revisionNo}`,
@@ -273,6 +437,8 @@ export function useSupplierEditor(stableId: string) {
                     pendingAssetUploads,
                 })
                 if (response.outcome === "succeeded") {
+                    setSaveReasonOpen(false)
+                    setReasonError(null)
                     toast.add({
                         title: masterDataCopy.createSuccessTitle,
                         description: `${masterDataCopy.resultNo} ${response.stableNo} · v${response.revisionNo}`,
@@ -307,9 +473,9 @@ export function useSupplierEditor(stableId: string) {
         const key = `${data.stableId}:${data.lockVersion}:${data.currentRevision.revisionId}`
         if (hydratedKeyRef.current === key) return
         form.reset(hydrateSupplierEditor(data))
-        editedSensitiveRef.current.clear()
+        clearEditedSensitive()
         hydratedKeyRef.current = key
-    }, [data, form, isCreate])
+    }, [clearEditedSensitive, data, form, isCreate])
 
     // 账号晚于用户录入加载时，只补内部责任字段，不重置已填写的资料。
     React.useEffect(() => {
@@ -333,38 +499,26 @@ export function useSupplierEditor(stableId: string) {
         isCreate,
     ])
 
-    // 离开确认：返回列表 / 侧栏 / 刷新都受未保存保护
-    React.useEffect(() => {
-        const onBeforeUnload = (event: BeforeUnloadEvent) => {
-            if (form.state.isDirty) {
-                event.preventDefault()
-            }
-        }
-        window.addEventListener("beforeunload", onBeforeUnload)
-        return () => window.removeEventListener("beforeunload", onBeforeUnload)
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅挂载时注册一次
-    }, [])
-
     // 校验错误出现时滚动到顶部错误条
     React.useEffect(() => {
-        if (formError) {
+        if (formError && !saveReasonOpen) {
             errorRef.current?.scrollIntoView({
                 block: "center",
                 behavior: "smooth",
             })
         }
-    }, [formError])
+    }, [formError, saveReasonOpen])
 
     const navigateAway = React.useCallback(
         (href: string) => {
-            if (form.state.isDirty) {
+            if (dirtyRef.current) {
                 setPendingNav(href)
                 setDiscardOpen(true)
                 return
             }
             router.push(href)
         },
-        [form.state.isDirty, router],
+        [router],
     )
 
     /** 敏感字段映射：label → 打码展示 + 揭示令牌 */
@@ -432,9 +586,18 @@ export function useSupplierEditor(stableId: string) {
         setPendingNav,
         activeSection,
         setActiveSection,
+        portalSubTab,
+        setPortalSubTab,
+        allowedPortalSubTabs,
+        canReadPortal,
+        focusProfileSection,
         errorRef,
+        editedSensitive,
         editedSensitiveRef,
+        markSensitiveEdited,
+        clearEditedSensitive,
         pendingChangeReasonRef,
+        dirtyRef,
         rememberMediaFiles,
         mediaUrlsFor,
         mediaAssetIdsFor,

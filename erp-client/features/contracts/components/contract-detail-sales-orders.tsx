@@ -65,7 +65,13 @@ export function ContractDetailSalesOrders({
                             {contract.relatedSalesOrders.map((so) => (
                                 <TableRow key={so.salesOrderId}>
                                     <TableCell className="num font-medium">
-                                        {so.documentNumber}
+                                        <Link
+                                            id={`card-contracts-detail-sales-orders-row-${toAutomationIdSegment(so.salesOrderId)}-no`}
+                                            href={`/sales/orders/${encodeURIComponent(so.salesOrderId)}`}
+                                            className="text-primary underline-offset-4 hover:underline"
+                                        >
+                                            {so.documentNumber}
+                                        </Link>
                                     </TableCell>
                                     <TableCell>{so.natureLabel}</TableCell>
                                     <TableCell className="num">
@@ -95,12 +101,15 @@ export function ContractDetailSalesOrders({
                                         <Button
                                             id={`card-contracts-detail-sales-orders-row-${toAutomationIdSegment(so.salesOrderId)}-open`}
                                             type="button"
-                                            size="xs"
-                                            variant="outline"
+                                            size="sm"
+                                            variant="ghost"
+                                            className={
+                                                detailWorkspaceStyles.inlineLinkButton
+                                            }
                                             render={
                                                 <Link
                                                     id={`card-contracts-detail-sales-orders-row-${toAutomationIdSegment(so.salesOrderId)}-open-link`}
-                                                    href={`/sales/orders/${so.salesOrderId}`}
+                                                    href={`/sales/orders/${encodeURIComponent(so.salesOrderId)}`}
                                                 />
                                             }
                                         >

@@ -156,7 +156,7 @@ export function InvoiceRequestPanel({
             key={detailId}
             id={detailId}
             currentSalesOrderId={salesOrderId}
-            presentation={salesOrderId ? "dialog" : "inline"}
+            presentation={salesOrderId ? "dialog" : "embedded"}
             onBack={() => {
                 dismissPendingInvoiceRequestDetail()
                 setDetailId(undefined)

@@ -1,27 +1,21 @@
-import { PagePulseBars } from "@/components/layout/page-pulse"
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
+import { DetailWorkspaceSkeleton } from "@/components/business"
 import { SupplierApiConnectionSettingsPage } from "@/features/supplier-api-connections/pages/supplier-api-connection-settings-page"
 
 export const metadata: Metadata = { title: "平台连接设置" }
 
-function SettingsFallback() {
-    return (
-        <PagePulseBars
-            bars={[
-                "h-10 w-56 animate-pulse rounded-lg bg-muted",
-                "h-10 w-72 animate-pulse rounded-lg bg-muted",
-                "h-40 animate-pulse rounded-xl bg-muted",
-                "h-64 animate-pulse rounded-lg bg-muted",
-            ]}
-        />
-    )
-}
-
 export default function Page() {
     return (
-        <Suspense fallback={<SettingsFallback />}>
+        <Suspense
+            fallback={
+                <DetailWorkspaceSkeleton
+                    title="平台连接设置"
+                    description="正在读取连接状态与接口配置…"
+                />
+            }
+        >
             <SupplierApiConnectionSettingsPage />
         </Suspense>
     )

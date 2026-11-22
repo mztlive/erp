@@ -27,6 +27,7 @@ import { useBatchPagination } from "@/features/import-opening/hooks/use-batch-pa
 import type { ImportOpeningUrlState } from "@/features/import-opening/lib/url-state"
 import type { ImportEnvironment } from "@/features/import-opening/types"
 import { formatDateTime } from "@/lib/datetime"
+import { useRouter } from "@/lib/navigation"
 
 const TABLE_ID = "operations-import-batches-table"
 const CLEAR_FILTERS_ID = `${TABLE_ID}-clear-filters`
@@ -60,6 +61,7 @@ export function BatchListView({
     urlState: ImportOpeningUrlState
     patchUrl: (patch: Partial<ImportOpeningUrlState>) => void
 }) {
+    const router = useRouter()
     const filters = useBatchListFilters({ urlState, patchUrl })
     const listQuery = useImportBatchListQuery({
         environment: urlState.environment,
@@ -70,9 +72,16 @@ export function BatchListView({
     })
 
     const openBatch = React.useCallback(
-        (batchId: string) =>
-            patchUrl({ batchId, section: "overview", page: 1 }),
-        [patchUrl],
+        (batchId: string) => {
+            const params = new URLSearchParams()
+            if (urlState.environment === "PRODUCTION") {
+                params.set("environment", "PRODUCTION")
+            }
+            const qs = params.toString()
+            const base = `/governance/imports/${encodeURIComponent(batchId)}`
+            router.push(qs ? `${base}?${qs}` : base)
+        },
+        [router, urlState.environment],
     )
     const columns = useBatchListColumns({ onOpenBatch: openBatch })
     const data = listQuery.data

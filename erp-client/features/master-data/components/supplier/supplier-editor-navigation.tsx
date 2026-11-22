@@ -1,7 +1,10 @@
 "use client"
 
 import { DetailWorkspaceTabs } from "@/components/business"
-import { SUPPLIER_SECTIONS } from "@/features/master-data/components/supplier/supplier-editor-fields"
+import {
+    SUPPLIER_SECTIONS,
+    type SupplierPrimarySectionId,
+} from "@/features/master-data/components/supplier/supplier-editor-fields"
 
 export function SupplierSummaryStrip({
     rows,
@@ -29,42 +32,30 @@ export function SupplierSectionTabs({
     value,
     isCreate,
     canReadDeliveryTemplates,
-    canReadPortalAccounts,
-    canReadPortalCatalog,
-    canReadPortalApplications,
+    canReadPortal,
     onValueChange,
 }: {
-    value: string
+    value: SupplierPrimarySectionId
     isCreate: boolean
     canReadDeliveryTemplates: boolean
-    canReadPortalAccounts: boolean
-    canReadPortalCatalog: boolean
-    canReadPortalApplications: boolean
-    onValueChange: (value: string) => void
+    canReadPortal: boolean
+    onValueChange: (value: SupplierPrimarySectionId) => void
 }) {
     return (
         <DetailWorkspaceTabs
             value={value}
-            onValueChange={onValueChange}
+            onValueChange={(next) =>
+                onValueChange(next as SupplierPrimarySectionId)
+            }
             ariaLabel="供应商编辑分区"
             tabIdPrefix="master-data-supplier-editor-tab"
-            items={SUPPLIER_SECTIONS.filter(
-                (section) =>
-                    (!isCreate ||
-                        ![
-                            "history",
-                            "delivery",
-                            "portal-accounts",
-                            "portal-catalog",
-                            "portal-applications",
-                        ].includes(section.id)) &&
-                    (section.id !== "delivery" || canReadDeliveryTemplates) &&
-                    (section.id !== "portal-accounts" ||
-                        canReadPortalAccounts) &&
-                    (section.id !== "portal-catalog" || canReadPortalCatalog) &&
-                    (section.id !== "portal-applications" ||
-                        canReadPortalApplications),
-            )}
+            items={SUPPLIER_SECTIONS.filter((section) => {
+                if (isCreate && section.id !== "profile") return false
+                if (section.id === "delivery" && !canReadDeliveryTemplates)
+                    return false
+                if (section.id === "portal" && !canReadPortal) return false
+                return true
+            })}
         />
     )
 }

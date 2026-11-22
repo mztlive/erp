@@ -1,8 +1,9 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { RouteLoading } from "@/components/layout/route-loading"
+import { DetailWorkspaceSkeleton } from "@/components/business"
 import { ContractDetailPage } from "@/features/contracts/pages/contract-detail-page"
+import { resolveSection } from "@/features/contracts/lib/contract-detail-helpers"
 
 export const metadata: Metadata = {
     title: "合同详情",
@@ -18,7 +19,15 @@ export default async function Page({
     const { contractId } = await params
     const { section } = await searchParams
     return (
-        <Suspense fallback={<RouteLoading label="正在加载合同…" />}>
+        <Suspense
+            fallback={
+                <DetailWorkspaceSkeleton
+                    title="合同"
+                    description="正在加载合同…"
+                    sidebar={resolveSection(section) === "overview"}
+                />
+            }
+        >
             <ContractDetailPage
                 key={contractId}
                 contractId={contractId}

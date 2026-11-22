@@ -37,6 +37,8 @@ export function IntegrationPageFailure({
     id,
     idPrefix,
     detail = false,
+    backHref,
+    backAlways = false,
 }: {
     title: string
     description: string
@@ -45,6 +47,8 @@ export function IntegrationPageFailure({
     id?: string
     idPrefix?: string
     detail?: boolean
+    backHref?: string
+    backAlways?: boolean
 }) {
     const failure = (
         <BusinessFailureState
@@ -55,7 +59,12 @@ export function IntegrationPageFailure({
         />
     )
     return detail ? (
-        <IntegrationDetailState title={title} description={description}>
+        <IntegrationDetailState
+            title={title}
+            description={description}
+            backHref={backHref}
+            backAlways={backAlways}
+        >
             {failure}
         </IntegrationDetailState>
     ) : (
@@ -67,23 +76,32 @@ export function IntegrationPageFailure({
 }
 
 export function IntegrationNotFound({
+    title = "外部同步异常",
     view,
     queueContextId,
+    backHref,
+    backAlways = false,
     onRetry,
     detail = false,
 }: {
+    title?: string
     detail?: boolean
     view: IntegrationView
     queueContextId: string
+    backHref?: string
+    backAlways?: boolean
     onRetry: () => void
 }) {
-    const title = "外部同步异常与对账"
-    const description = "未找到该任务"
+    const resolvedBackHref =
+        backHref ??
+        `/governance/integration-errors?view=${view}&queueContextId=${encodeURIComponent(queueContextId)}`
+    const description =
+        title === "对账差异" ? "未找到该对账差异" : "未找到该异常任务"
     const empty = (
         <BusinessEmptyState
             kind="no-data"
-            title="未找到该任务或差异"
-            description="任务可能已结束或链接失效；可返回队列重新选择。"
+            title={description}
+            description="记录可能已结束或链接失效；可返回队列重新选择。"
             className="rounded-lg border-0 bg-transparent shadow-none ring-0"
             action={
                 <div className="flex flex-wrap gap-2">
@@ -101,11 +119,7 @@ export function IntegrationNotFound({
                         type="button"
                         variant="secondary"
                         className="rounded-lg shadow-none"
-                        render={
-                            <Link
-                                href={`/governance/integration-errors?view=${view}&queueContextId=${encodeURIComponent(queueContextId)}`}
-                            />
-                        }
+                        render={<Link href={resolvedBackHref} />}
                     >
                         返回队列
                     </Button>
@@ -114,7 +128,12 @@ export function IntegrationNotFound({
         />
     )
     return detail ? (
-        <IntegrationDetailState title={title} description={description}>
+        <IntegrationDetailState
+            title={title}
+            description={description}
+            backHref={resolvedBackHref}
+            backAlways={backAlways}
+        >
             {empty}
         </IntegrationDetailState>
     ) : (
@@ -128,15 +147,34 @@ export function IntegrationNotFound({
 function IntegrationDetailState({
     title,
     description,
+    backHref,
+    backAlways = false,
     children,
 }: {
     title: string
     description: string
+    backHref?: string
+    backAlways?: boolean
     children: React.ReactNode
 }) {
     return (
         <DetailWorkspacePage>
-            <DetailWorkspaceChrome title={title} meta={description} />
+            <DetailWorkspaceChrome
+                title={title}
+                meta={description}
+                back={
+                    backHref
+                        ? {
+                              id: "integration-detail-nav-back",
+                              label: "返回队列",
+                              href: backHref,
+                              visibility: backAlways
+                                  ? "always"
+                                  : "standalone-only",
+                          }
+                        : undefined
+                }
+            />
             <DetailWorkspaceBody>
                 <DetailWorkspaceSection width="form">
                     {children}

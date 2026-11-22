@@ -4,10 +4,12 @@ import * as React from "react"
 
 import {
     BusinessFailureState,
+    DetailWorkspaceBody,
     DetailWorkspaceChrome,
     DetailWorkspacePage,
+    DetailWorkspaceSkeleton,
 } from "@/components/business"
-import { useRouter } from "@/lib/navigation"
+import { useRouter, useSearchParams } from "@/lib/navigation"
 import { isWorkspaceFrame, workspaceHost } from "@/lib/workspace-tabs"
 
 import type { InvoiceRequest } from "../api"
@@ -18,38 +20,48 @@ import { InvoiceRequestForm } from "./request-form"
 
 const LIST_HREF = "/finance/customer-accounts/invoice-requests"
 
+function safeInternalPath(raw: string | null): string | undefined {
+    const value = raw?.trim()
+    if (!value || !value.startsWith("/") || value.startsWith("//")) {
+        return undefined
+    }
+    return value
+}
+
 /** 开票申请独立详情页，承接列表下钻、工作台任务直达与退回后修改重提。 */
 export function InvoiceRequestDetailPage({ requestId }: { requestId: string }) {
     const router = useRouter()
+    const searchParams = useSearchParams()
     const permissions = useInvoiceRequestPermissions()
     const [editing, setEditing] = React.useState<InvoiceRequest | undefined>()
 
+    const returnTo = safeInternalPath(searchParams.get("returnTo"))
+    const hasSourceContext = Boolean(
+        returnTo || searchParams.get("from") || searchParams.get("workItemId"),
+    )
+
     const backToList = React.useCallback(() => {
         dismissPendingInvoiceRequestDetail()
+        if (returnTo) {
+            router.push(returnTo)
+            return
+        }
         const host = workspaceHost()
         if (host) {
             host.closeCurrent(isWorkspaceFrame() ? window : null, LIST_HREF)
         } else {
             router.push(LIST_HREF)
         }
-    }, [router])
+    }, [returnTo, router])
 
     if (permissions.isPending) {
         return (
-            <DetailWorkspacePage>
-                <DetailWorkspaceChrome
-                    back={{
-                        id: "invoice-request-detail-loading-back",
-                        href: LIST_HREF,
-                        label: "返回开票申请",
-                    }}
-                    title="开票申请详情"
-                />
-                <div className="space-y-4 px-(--scaffold-px) py-6">
-                    <div className="h-16 animate-pulse rounded-lg bg-muted" />
-                    <div className="h-64 animate-pulse rounded-lg bg-muted" />
-                </div>
-            </DetailWorkspacePage>
+            <DetailWorkspaceSkeleton
+                title="开票申请详情"
+                description="正在核对访问权限…"
+                summary
+                sidebar
+            />
         )
     }
 
@@ -59,17 +71,22 @@ export function InvoiceRequestDetailPage({ requestId }: { requestId: string }) {
                 <DetailWorkspaceChrome
                     back={{
                         id: "invoice-request-detail-no-read-back",
-                        href: "/workspace",
-                        label: "返回工作台",
+                        href: returnTo ?? "/workspace",
+                        label: returnTo ? "返回来源页" : "返回工作台",
+                        visibility: hasSourceContext
+                            ? "always"
+                            : "standalone-only",
                     }}
                     title="开票申请详情"
                 />
-                <div className="mx-auto w-full max-w-3xl px-(--scaffold-px) py-8">
-                    <BusinessFailureState
-                        kind="permission"
-                        title="当前账号没有查看开票申请的权限。"
-                    />
-                </div>
+                <DetailWorkspaceBody>
+                    <div className="mx-auto w-full max-w-3xl py-8">
+                        <BusinessFailureState
+                            kind="permission"
+                            title="当前账号没有查看开票申请的权限。"
+                        />
+                    </div>
+                </DetailWorkspaceBody>
             </DetailWorkspacePage>
         )
     }
@@ -87,6 +104,7 @@ export function InvoiceRequestDetailPage({ requestId }: { requestId: string }) {
                         back: {
                             id: "invoice-request-form-back",
                             label: "返回详情",
+                            visibility: "always",
                             onClick: () => setEditing(undefined),
                         },
                     }}
@@ -104,6 +122,9 @@ export function InvoiceRequestDetailPage({ requestId }: { requestId: string }) {
         <InvoiceRequestDetail
             key={requestId}
             id={requestId}
+            presentation="workspace"
+            backLabel={returnTo ? "返回来源页" : "返回申请列表"}
+            backVisibility={hasSourceContext ? "always" : "standalone-only"}
             onBack={backToList}
             onEdit={setEditing}
         />

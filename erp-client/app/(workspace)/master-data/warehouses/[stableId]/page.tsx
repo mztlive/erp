@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { RouteLoading } from "@/components/layout/route-loading"
+import { DetailWorkspaceSkeleton } from "@/components/business"
 import { WarehouseObjectPage } from "@/features/master-data/pages/warehouse-object-page"
 
 export const metadata: Metadata = {
@@ -18,9 +18,9 @@ export default async function Page({
     const { stableId } = await params
     const { section } = await searchParams
     return (
-        <Suspense fallback={<RouteLoading label="正在加载仓库资料…" />}>
+        <Suspense fallback={<DetailWorkspaceSkeleton title="仓库详情" />}>
             <WarehouseObjectPage
-                key={`${stableId}-${section ?? "overview"}`}
+                key={stableId}
                 stableId={stableId}
                 section={section}
             />

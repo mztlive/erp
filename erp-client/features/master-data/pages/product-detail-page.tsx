@@ -3,8 +3,10 @@
 import * as React from "react"
 import { SaveIcon } from "lucide-react"
 import { useSearchParams } from "next/navigation"
+import { useSelector } from "@tanstack/react-form"
 
 import {
+    BusinessFailureState,
     DetailWorkspaceBody,
     DetailWorkspacePage,
     DetailWorkspaceSaveDock,
@@ -14,6 +16,7 @@ import {
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
+import { toast } from "@/components/ui/toast"
 import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { ProductDetailDialogs } from "@/features/master-data/components/product/product-detail-dialogs"
 import { ProductDetailEntryGate } from "@/features/master-data/components/product/product-detail-entry-gate"
@@ -39,6 +42,7 @@ import { createProductFormBindings } from "@/features/master-data/lib/product-fo
 import { useSupplierOfferingsForSkusQuery } from "@/features/supplier-offerings/queries"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import { hasPermission } from "@/lib/permissions"
+import { useWorkspaceDirtyState } from "@/lib/workspace-form-guard"
 import { useChangeConfirmation } from "../hooks/use-change-confirmation"
 
 export function ProductDetailPage({ stableId }: { stableId: string }) {
@@ -47,17 +51,40 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
     const changeConfirmation = useChangeConfirmation(
         "master-data-product-change",
     )
-    const [priceUndo, setPriceUndo] = React.useState<{
-        undo: () => void
-    } | null>(null)
+    const priceUndoToastIdRef = React.useRef<string | null>(null)
+    const dismissPriceUndoToast = React.useCallback(() => {
+        if (!priceUndoToastIdRef.current) return
+        toast.close(priceUndoToastIdRef.current)
+        priceUndoToastIdRef.current = null
+    }, [])
+    const offerPriceUndo = React.useCallback(
+        (undo: () => void) => {
+            dismissPriceUndoToast()
+            const toastId = toast.add({
+                title: "批量价格已应用",
+                description: "可撤销恢复批量改价前的参考售价。",
+                type: "info",
+                timeout: 8000,
+                actionProps: {
+                    children: "撤销",
+                    onClick: () => {
+                        undo()
+                        toast.close(toastId)
+                        if (priceUndoToastIdRef.current === toastId) {
+                            priceUndoToastIdRef.current = null
+                        }
+                    },
+                },
+            })
+            priceUndoToastIdRef.current = toastId
+        },
+        [dismissPriceUndoToast],
+    )
     React.useEffect(() => {
-        if (!priceUndo) return
-        const timer = setTimeout(() => setPriceUndo(null), 8000)
-        return () => clearTimeout(timer)
-    }, [priceUndo])
-    React.useEffect(() => {
-        setPriceUndo(null)
-    }, [stableId, editor.saveOpen])
+        dismissPriceUndoToast()
+    }, [dismissPriceUndoToast, stableId, editor.saveOpen])
+    React.useEffect(() => dismissPriceUndoToast, [dismissPriceUndoToast])
+
     const [resetOpen, setResetOpen] = React.useState(false)
     const [sourceProcessing, setSourceProcessing] = React.useState(false)
     const [selectedSupplySkuId, setSelectedSupplySkuId] = React.useState<
@@ -116,6 +143,20 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
         requestSave,
         initialFormValues,
     } = editor
+
+    const [values, isSubmitting] = useSelector(
+        form.store,
+        (state) => [state.values, state.isSubmitting] as const,
+    )
+    const saving = pending || isSubmitting || sourceProcessing
+    const changes = React.useMemo(
+        () => productChangeSummary(initialFormValues, values),
+        [initialFormValues, values],
+    )
+    const hasUnsavedChanges = changes.length > 0
+    const saveDockOpen = !isCreate && canRevise && hasUnsavedChanges
+
+    useWorkspaceDirtyState({ dirty: hasUnsavedChanges, busy: saving })
 
     const permissions = accountQuery.isSuccess
         ? accountQuery.data.permissions
@@ -197,36 +238,41 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
         return () => window.cancelAnimationFrame(frame)
     }, [activeSection, data?.stableId])
 
+    // 新建态支持 Cmd/Ctrl+S；编辑态由 DetailWorkspaceSaveDock 统一管理快捷保存。
     React.useEffect(() => {
-        if (isCreate || !canRevise) return
+        if (!isCreate || !canRevise) return
         const onKeyDown = (event: KeyboardEvent) => {
             if (
-                (event.metaKey || event.ctrlKey) &&
-                event.key.toLowerCase() === "s"
+                event.defaultPrevented ||
+                event.isComposing ||
+                event.repeat ||
+                event.altKey ||
+                event.shiftKey ||
+                !(event.metaKey || event.ctrlKey) ||
+                event.key.toLowerCase() !== "s" ||
+                (event.target instanceof Element &&
+                    event.target.closest(
+                        '[role="dialog"], [role="alertdialog"]',
+                    ))
             ) {
-                event.preventDefault()
-                if (!sourceProcessing && !pending) {
-                    const currentValues = form.state.values
-                    if (
-                        productChangeSummary(initialFormValues, currentValues)
-                            .length > 0 ||
-                        form.state.isDirty
-                    ) {
-                        requestSave(currentValues)
-                    }
-                }
+                return
+            }
+            event.preventDefault()
+            if (!saving && !saveOpen && !discardOpen && !resetOpen) {
+                requestSave(form.state.values)
             }
         }
         window.addEventListener("keydown", onKeyDown)
         return () => window.removeEventListener("keydown", onKeyDown)
     }, [
         canRevise,
+        discardOpen,
         form,
-        initialFormValues,
         isCreate,
-        pending,
         requestSave,
-        sourceProcessing,
+        resetOpen,
+        saveOpen,
+        saving,
     ])
 
     const openSupplyForSku = React.useCallback(
@@ -237,6 +283,73 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
         [setActiveSection],
     )
 
+    const bindings = createProductFormBindings(
+        form,
+        values,
+        isCreate,
+        data?.name,
+        changeConfirmation.confirm,
+        offerPriceUndo,
+    )
+    const {
+        title,
+        fields,
+        inventoryPreviewSkus,
+        inventoryActionHint,
+        setName,
+        setEffectiveFrom,
+        setEffectiveTo,
+        setChangeReason,
+        setFields,
+        syncSpecDrafts,
+        applySpecDrafts,
+        resetSpecDrafts,
+        updateSku,
+        name,
+        effectiveFrom,
+        effectiveTo,
+        changeReason,
+        specDrafts,
+        activeSpecs,
+        applyBatchReferencePrices,
+    } = bindings
+
+    // Retain old deep links to the effective section, now shown as the save dialog.
+    const showSave = canRevise && (saveOpen || activeSection === "effective")
+    const section =
+        activeSection === "effective" ||
+        activeSection === "sku" ||
+        (activeSection === "supply" && !canReadSupply)
+            ? "basic"
+            : activeSection
+    const changeDescription =
+        changes.length > 0
+            ? changes.slice(0, 3).join("、") + (changes.length > 3 ? " 等" : "")
+            : undefined
+    const totalMediaCount =
+        fields.carouselImages.length + fields.detailImages.length
+
+    const closeSave = (open: boolean) => {
+        setSaveOpen(open)
+        if (!open && activeSection === "effective") setActiveSection("basic")
+    }
+    const feedback = (
+        <ProductDetailFeedback
+            isCreate={isCreate}
+            canRevise={canRevise}
+            reviseBlocker={reviseBlocker}
+            result={result}
+            formError={formError}
+            formErrorTitle={formErrorTitle}
+            checkPassed={checkPassed}
+            checkedSnapshotRef={checkedSnapshotRef}
+            values={values}
+            fields={fields}
+            errorRef={errorRef}
+        />
+    )
+    const loadWarnings = data?.loadWarnings ?? []
+
     return (
         <ProductDetailEntryGate
             isCreate={isCreate}
@@ -246,483 +359,300 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
             canCreate={canCreate}
             listHref={listHref}
         >
-            <form.Subscribe
-                selector={(state) =>
-                    [state.values, state.isSubmitting, state.isDirty] as const
-                }
-            >
-                {([values, isSubmitting, isDirty]) => {
-                    const bindings = createProductFormBindings(
-                        form,
-                        values,
-                        isCreate,
-                        data?.name,
-                        changeConfirmation.confirm,
-                        (undo) => setPriceUndo({ undo }),
-                    )
-                    const {
-                        title,
-                        fields,
-                        inventoryPreviewSkus,
-                        inventoryActionHint,
-                        setName,
-                        setEffectiveFrom,
-                        setEffectiveTo,
-                        setChangeReason,
-                        setFields,
-                        syncSpecDrafts,
-                        applySpecDrafts,
-                        resetSpecDrafts,
-                        updateSku,
-                        name,
-                        effectiveFrom,
-                        effectiveTo,
-                        changeReason,
-                        specDrafts,
-                        activeSpecs,
-                        applyBatchReferencePrices,
-                    } = bindings
-                    const saving = pending || isSubmitting || sourceProcessing
-                    // Retain old deep links to the effective section, now shown as the save dialog.
-                    const showSave =
-                        canRevise && (saveOpen || activeSection === "effective")
-                    const section =
-                        activeSection === "effective" ||
-                        activeSection === "sku" ||
-                        (activeSection === "supply" && !canReadSupply)
-                            ? "basic"
-                            : activeSection
-                    const changes = productChangeSummary(
-                        initialFormValues,
-                        values,
-                    )
-                    const hasUnsavedChanges = changes.length > 0
-                    const saveDockOpen =
-                        !isCreate && canRevise && (hasUnsavedChanges || isDirty)
-                    const changeDescription =
-                        changes.length > 0
-                            ? changes.slice(0, 3).join("、") +
-                              (changes.length > 3 ? " 等" : "")
-                            : undefined
-                    const totalMediaCount =
-                        fields.carouselImages.length +
-                        fields.detailImages.length
+            <DetailWorkspacePage>
+                <form
+                    id="product-detail-form"
+                    className="flex min-w-0 flex-1 flex-col"
+                    onSubmit={(event) => {
+                        event.preventDefault()
+                        if (
+                            saving ||
+                            showSave ||
+                            (!isCreate && !hasUnsavedChanges)
+                        ) {
+                            return
+                        }
+                        requestSave(values)
+                    }}
+                >
+                    <ProductDetailHeader
+                        isCreate={isCreate}
+                        data={data}
+                        title={title}
+                        fields={fields}
+                        canDisable={canDisable}
+                        disableBlocker={disableBlocker}
+                        setDisableOpen={setDisableOpen}
+                        canRevise={canRevise}
+                        pending={saving}
+                        hasUnsavedChanges={hasUnsavedChanges}
+                        onBack={() => navigateAway(listHref)}
+                        onMedia={() => setActiveSection("media")}
+                        onSave={() => requestSave(values)}
+                        tabs={
+                            <ProductSectionTabs
+                                value={section}
+                                isCreate={isCreate}
+                                canReadSupply={canReadSupply}
+                                supplyCount={
+                                    offeringsQuery.isSuccess
+                                        ? totalActiveOfferings
+                                        : undefined
+                                }
+                                missingSupplyCount={missingSupplyCount}
+                                mediaCount={totalMediaCount}
+                                onValueChange={setActiveSection}
+                            />
+                        }
+                    />
 
-                    const closeSave = (open: boolean) => {
-                        setSaveOpen(open)
-                        if (!open && activeSection === "effective")
-                            setActiveSection("basic")
-                    }
-                    const feedback = (
-                        <ProductDetailFeedback
-                            isCreate={isCreate}
-                            canRevise={canRevise}
-                            reviseBlocker={reviseBlocker}
-                            result={result}
-                            formError={formError}
-                            formErrorTitle={formErrorTitle}
-                            checkPassed={checkPassed}
-                            checkedSnapshotRef={checkedSnapshotRef}
-                            values={values}
-                            fields={fields}
-                            errorRef={errorRef}
-                        />
-                    )
-                    return (
-                        <DetailWorkspacePage>
-                            <form
-                                id="product-detail-form"
-                                className="flex min-w-0 flex-1 flex-col"
-                                onSubmit={(event) => {
-                                    event.preventDefault()
-                                    if (!sourceProcessing) requestSave(values)
-                                }}
-                            >
-                                <ProductDetailHeader
-                                    isCreate={isCreate}
-                                    data={data}
-                                    title={title}
-                                    fields={fields}
-                                    canDisable={canDisable}
-                                    disableBlocker={disableBlocker}
-                                    setDisableOpen={setDisableOpen}
+                    <DetailWorkspaceBody
+                        saveDockOpen={saveDockOpen}
+                        alerts={
+                            <>
+                                {loadWarnings.map((message) => (
+                                    <BusinessFailureState
+                                        key={message}
+                                        kind="business"
+                                        title="部分资料读取失败"
+                                        description={message}
+                                    />
+                                ))}
+                                {!showSave ? feedback : null}
+                                <ProductSourceDiff
+                                    key={stableId}
+                                    productId={stableId}
+                                    enabled={!isCreate && Boolean(data)}
+                                    canResolve={hasUpdatePermission}
                                     canRevise={canRevise}
-                                    pending={saving}
-                                    hasUnsavedChanges={
-                                        hasUnsavedChanges || isDirty
+                                    dirty={hasUnsavedChanges}
+                                    busy={saving}
+                                    openRequested={sourceDiffRequested}
+                                    onProcessingChange={setSourceProcessing}
+                                />
+                            </>
+                        }
+                    >
+                        {section === "basic" ? (
+                            <>
+                                <ProductBasicSection
+                                    canSelectUnit={canSelectUnit}
+                                    canSelectCategory={canSelectCategory}
+                                    canSelectBrand={canSelectBrand}
+                                    onRefreshUnits={() =>
+                                        unitOptionsQuery.refetch({
+                                            throwOnError: true,
+                                        })
                                     }
-                                    onBack={() => navigateAway(listHref)}
-                                    onMedia={() => setActiveSection("media")}
-                                    onSave={() => requestSave(values)}
-                                    tabs={
-                                        <ProductSectionTabs
-                                            value={section}
-                                            isCreate={isCreate}
-                                            canReadSupply={canReadSupply}
-                                            supplyCount={
-                                                offeringsQuery.isSuccess
-                                                    ? totalActiveOfferings
-                                                    : undefined
-                                            }
-                                            missingSupplyCount={
-                                                missingSupplyCount
-                                            }
-                                            mediaCount={totalMediaCount}
-                                            onValueChange={setActiveSection}
-                                        />
+                                    onRefreshCategories={() =>
+                                        categoryListQuery.refetch({
+                                            throwOnError: true,
+                                        })
+                                    }
+                                    onRefreshBrands={() =>
+                                        brandListQuery.refetch({
+                                            throwOnError: true,
+                                        })
+                                    }
+                                    idPrefix="master-data-product-detail-basic"
+                                    isCreate={isCreate}
+                                    canRevise={canRevise && !sourceProcessing}
+                                    disabled={saving}
+                                    name={name}
+                                    setName={setName}
+                                    fields={fields}
+                                    setFields={setFields}
+                                    unitOptions={unitOptionsQuery.data}
+                                    unitLoading={unitOptionsQuery.isFetching}
+                                    categoryOptions={categoryOptions}
+                                    brandOptions={brandOptions}
+                                    categoryLoading={
+                                        categoryListQuery.isFetching
+                                    }
+                                    brandLoading={brandListQuery.isFetching}
+                                    rememberPendingFiles={rememberPendingFiles}
+                                    onOpenMediaTab={() =>
+                                        setActiveSection("media")
                                     }
                                 />
-
-                                <DetailWorkspaceBody
-                                    saveDockOpen={saveDockOpen}
-                                    alerts={
-                                        <>
-                                            {!showSave ? feedback : null}
-                                            <ProductSourceDiff
-                                                key={stableId}
-                                                productId={stableId}
-                                                enabled={
-                                                    !isCreate && Boolean(data)
-                                                }
-                                                canResolve={hasUpdatePermission}
-                                                canRevise={canRevise}
-                                                dirty={isDirty}
-                                                busy={saving}
-                                                openRequested={
-                                                    sourceDiffRequested
-                                                }
-                                                onProcessingChange={
-                                                    setSourceProcessing
-                                                }
-                                            />
-                                        </>
+                                <ProductSkuSection
+                                    canEditLifecycle={
+                                        isCreate
+                                            ? canCreate
+                                            : hasUpdatePermission
                                     }
-                                >
-                                    {section === "basic" ? (
-                                        <>
-                                            <ProductBasicSection
-                                                canSelectUnit={canSelectUnit}
-                                                canSelectCategory={
-                                                    canSelectCategory
-                                                }
-                                                canSelectBrand={canSelectBrand}
-                                                onRefreshUnits={() =>
-                                                    unitOptionsQuery.refetch({
-                                                        throwOnError: true,
-                                                    })
-                                                }
-                                                onRefreshCategories={() =>
-                                                    categoryListQuery.refetch({
-                                                        throwOnError: true,
-                                                    })
-                                                }
-                                                onRefreshBrands={() =>
-                                                    brandListQuery.refetch({
-                                                        throwOnError: true,
-                                                    })
-                                                }
-                                                idPrefix="master-data-product-detail-basic"
-                                                isCreate={isCreate}
-                                                canRevise={
-                                                    canRevise &&
-                                                    !sourceProcessing
-                                                }
-                                                disabled={saving}
-                                                name={name}
-                                                setName={setName}
-                                                fields={fields}
-                                                setFields={setFields}
-                                                unitOptions={
-                                                    unitOptionsQuery.data
-                                                }
-                                                categoryOptions={
-                                                    categoryOptions
-                                                }
-                                                brandOptions={brandOptions}
-                                                categoryLoading={
-                                                    categoryListQuery.isFetching
-                                                }
-                                                brandLoading={
-                                                    brandListQuery.isFetching
-                                                }
-                                                rememberPendingFiles={
-                                                    rememberPendingFiles
-                                                }
-                                                onOpenMediaTab={() =>
-                                                    setActiveSection("media")
-                                                }
-                                            />
-                                            <ProductSkuSection
-                                                canEditLifecycle={
-                                                    isCreate
-                                                        ? canCreate
-                                                        : hasUpdatePermission
-                                                }
-                                                idPrefix="master-data-product-detail-sku"
-                                                isCreate={isCreate}
-                                                canRevise={
-                                                    canRevise &&
-                                                    !sourceProcessing
-                                                }
-                                                name={name}
-                                                fields={fields}
-                                                specDrafts={specDrafts}
-                                                activeSpecs={activeSpecs}
-                                                inventoryPreviewSkus={
-                                                    inventoryPreviewSkus
-                                                }
-                                                syncSpecDrafts={syncSpecDrafts}
-                                                applySpecDrafts={
-                                                    applySpecDrafts
-                                                }
-                                                resetSpecDrafts={
-                                                    resetSpecDrafts
-                                                }
-                                                updateSku={updateSku}
-                                                batchBulkPrice={
-                                                    values.batchBulkPrice
-                                                }
-                                                batchBulkMinQuantity={
-                                                    values.batchBulkMinQuantity
-                                                }
-                                                setBatchBulkPrice={(next) =>
-                                                    form.setFieldValue(
-                                                        "batchBulkPrice",
-                                                        next,
-                                                    )
-                                                }
-                                                setBatchBulkMinQuantity={(
-                                                    next,
-                                                ) =>
-                                                    form.setFieldValue(
-                                                        "batchBulkMinQuantity",
-                                                        next,
-                                                    )
-                                                }
-                                                batchSalePrice={
-                                                    values.batchSalePrice
-                                                }
-                                                batchMarketPrice={
-                                                    values.batchMarketPrice
-                                                }
-                                                setBatchSalePrice={(next) =>
-                                                    form.setFieldValue(
-                                                        "batchSalePrice",
-                                                        next,
-                                                    )
-                                                }
-                                                setBatchMarketPrice={(next) =>
-                                                    form.setFieldValue(
-                                                        "batchMarketPrice",
-                                                        next,
-                                                    )
-                                                }
-                                                onApplyBatchReferencePrices={
-                                                    applyBatchReferencePrices
-                                                }
-                                                inventoryActionHint={
-                                                    inventoryActionHint
-                                                }
-                                                showSupplyColumn={
-                                                    !isCreate && canReadSupply
-                                                }
-                                                supplyBySku={supplyBySku}
-                                                supplyLoading={
-                                                    offeringsQuery.isPending
-                                                }
-                                                supplyError={
-                                                    offeringsQuery.isError
-                                                }
-                                                canViewCosts={canViewCosts}
-                                                onOpenSupply={openSupplyForSku}
-                                                onOpenInventory={
-                                                    canReadInventory
-                                                        ? openInventoryPreview
-                                                        : undefined
-                                                }
-                                                rememberSkuFile={
-                                                    rememberSkuFile
-                                                }
-                                            />
-                                        </>
-                                    ) : null}
+                                    idPrefix="master-data-product-detail-sku"
+                                    isCreate={isCreate}
+                                    canRevise={canRevise && !sourceProcessing}
+                                    name={name}
+                                    fields={fields}
+                                    specDrafts={specDrafts}
+                                    activeSpecs={activeSpecs}
+                                    inventoryPreviewSkus={inventoryPreviewSkus}
+                                    syncSpecDrafts={syncSpecDrafts}
+                                    applySpecDrafts={applySpecDrafts}
+                                    resetSpecDrafts={resetSpecDrafts}
+                                    updateSku={updateSku}
+                                    onApplyBatchReferencePrices={
+                                        applyBatchReferencePrices
+                                    }
+                                    inventoryActionHint={inventoryActionHint}
+                                    showSupplyColumn={
+                                        !isCreate && canReadSupply
+                                    }
+                                    supplyBySku={supplyBySku}
+                                    supplyLoading={offeringsQuery.isPending}
+                                    supplyError={offeringsQuery.isError}
+                                    canViewCosts={canViewCosts}
+                                    onOpenSupply={openSupplyForSku}
+                                    onOpenInventory={
+                                        canReadInventory
+                                            ? openInventoryPreview
+                                            : undefined
+                                    }
+                                    rememberSkuFile={rememberSkuFile}
+                                />
+                            </>
+                        ) : null}
 
-                                    {section === "supply" &&
-                                    !isCreate &&
-                                    canReadSupply ? (
-                                        <DetailWorkspaceSection width="full">
-                                            <ProductSupplySection
-                                                fields={fields}
-                                                name={name}
-                                                selectedSkuId={
-                                                    selectedSupplySkuId
-                                                }
-                                                onSelectSkuId={
-                                                    setSelectedSupplySkuId
-                                                }
-                                                onRegisterSupply={
-                                                    setSupplierDialogSku
-                                                }
-                                            />
-                                        </DetailWorkspaceSection>
-                                    ) : null}
+                        {section === "supply" && !isCreate && canReadSupply ? (
+                            <DetailWorkspaceSection width="full">
+                                <ProductSupplySection
+                                    fields={fields}
+                                    name={name}
+                                    selectedSkuId={selectedSupplySkuId}
+                                    onSelectSkuId={setSelectedSupplySkuId}
+                                    onRegisterSupply={setSupplierDialogSku}
+                                />
+                            </DetailWorkspaceSection>
+                        ) : null}
 
-                                    {section === "media" ? (
-                                        <ProductMediaSection
-                                            idPrefix="master-data-product-detail-media"
-                                            productName={title}
-                                            disabled={
-                                                pending || sourceProcessing
-                                            }
-                                            canRevise={canRevise}
-                                            fields={fields}
-                                            setFields={setFields}
-                                            rememberPendingFiles={
-                                                rememberPendingFiles
-                                            }
-                                        />
-                                    ) : null}
-
-                                    {section === "history" && !isCreate ? (
-                                        <DetailWorkspaceSection width="form">
-                                            <ProductHistorySection
-                                                data={data}
-                                            />
-                                        </DetailWorkspaceSection>
-                                    ) : null}
-                                </DetailWorkspaceBody>
-
-                                {!isCreate ? (
-                                    <PermissionGuard permission="product:update">
-                                        <DetailWorkspaceSaveDock
-                                            open={saveDockOpen}
-                                            changeCount={changes.length}
-                                            summary={changes.join("；")}
-                                            description={changeDescription}
-                                            actions={
-                                                <>
-                                                    <Button
-                                                        id="master-data-product-detail-reset"
-                                                        type="button"
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        className={
-                                                            detailWorkspaceStyles.quietButton
-                                                        }
-                                                        disabled={saving}
-                                                        onClick={() =>
-                                                            setResetOpen(true)
-                                                        }
-                                                    >
-                                                        取消修改
-                                                    </Button>
-                                                    <LoadingButton
-                                                        id="master-data-product-detail-header-submit"
-                                                        loading={saving}
-                                                        type="button"
-                                                        size="sm"
-                                                        className="px-3.5"
-                                                        disabled={
-                                                            !canRevise || saving
-                                                        }
-                                                        onClick={() =>
-                                                            requestSave(values)
-                                                        }
-                                                    >
-                                                        <SaveIcon
-                                                            data-icon="inline-start"
-                                                            aria-hidden
-                                                        />
-                                                        {saving
-                                                            ? "提交中…"
-                                                            : "保存更新"}
-                                                    </LoadingButton>
-                                                </>
-                                            }
-                                        />
-                                    </PermissionGuard>
-                                ) : null}
-                            </form>
-
-                            {changeConfirmation.dialog}
-                            {canRevise && priceUndo ? (
-                                <div
-                                    role="status"
-                                    className="fixed bottom-20 right-6 z-40 flex items-center gap-3 rounded-xl border border-border/90 bg-popover/95 px-3.5 py-2 text-body-compact shadow-lg backdrop-blur-md"
-                                >
-                                    <span>批量价格已应用</span>
-                                    <Button
-                                        id="master-data-product-price-undo"
-                                        size="sm"
-                                        variant="ghost"
-                                        className="h-control-sm text-primary hover:bg-sidebar-accent/70 hover:text-primary"
-                                        onClick={() => {
-                                            priceUndo.undo()
-                                            setPriceUndo(null)
-                                        }}
-                                    >
-                                        撤销
-                                    </Button>
-                                </div>
-                            ) : null}
-                            <ProductSaveDialog
-                                open={showSave}
-                                onOpenChange={closeSave}
-                                pending={saving}
-                                changes={changes}
-                                onConfirm={() => {
-                                    void form.handleSubmit()
-                                }}
-                                feedback={feedback}
-                                attempted={saveAttempted}
-                                isCreate={isCreate}
-                                canRevise={canRevise}
-                                effectiveFrom={effectiveFrom}
-                                effectiveTo={effectiveTo}
-                                changeReason={changeReason}
-                                setEffectiveFrom={setEffectiveFrom}
-                                setEffectiveTo={setEffectiveTo}
-                                setChangeReason={setChangeReason}
-                            />
-                            <DiscardConfirmDialog
-                                open={canRevise && resetOpen}
-                                onOpenChange={setResetOpen}
-                                title="取消本次修改？"
-                                description="商品资料将恢复到本次编辑前的内容。"
-                                confirmLabel="取消修改"
-                                cancelLabel="继续编辑"
-                                onConfirm={() => {
-                                    form.reset(initialFormValues)
-                                    editor.setFormError(null)
-                                    editor.setResult(null)
-                                    setResetOpen(false)
-                                }}
-                            />
-                            <ProductDetailDialogs
-                                isCreate={isCreate}
-                                data={data}
-                                disableOpen={disableOpen}
-                                setDisableOpen={setDisableOpen}
-                                supplierDialogSku={supplierDialogSku}
-                                setSupplierDialogSku={setSupplierDialogSku}
-                                inventoryOpen={inventoryOpen}
-                                onInventoryOpenChange={
-                                    handleInventoryOpenChange
-                                }
+                        {section === "media" ? (
+                            <ProductMediaSection
+                                idPrefix="master-data-product-detail-media"
                                 productName={title}
-                                productKind={fields.productKind}
-                                inventoryPreviewSkus={inventoryPreviewSkus}
-                                inventoryInitialSkuId={inventoryInitialSkuId}
-                                discardOpen={discardOpen}
-                                setDiscardOpen={setDiscardOpen}
-                                pendingNav={pendingNav}
-                                setPendingNav={setPendingNav}
-                                router={router}
+                                disabled={pending || sourceProcessing}
+                                canRevise={canRevise}
+                                fields={fields}
+                                setFields={setFields}
+                                rememberPendingFiles={rememberPendingFiles}
                             />
-                        </DetailWorkspacePage>
-                    )
-                }}
-            </form.Subscribe>
+                        ) : null}
+
+                        {section === "history" && !isCreate ? (
+                            <ProductHistorySection data={data} />
+                        ) : null}
+                    </DetailWorkspaceBody>
+
+                    {!isCreate ? (
+                        <PermissionGuard permission="product:update">
+                            <DetailWorkspaceSaveDock
+                                open={saveDockOpen}
+                                changeCount={changes.length}
+                                summary={changes.join("；")}
+                                description={changeDescription}
+                                saving={saving}
+                                enableSaveShortcut={
+                                    !showSave &&
+                                    !disableOpen &&
+                                    !discardOpen &&
+                                    !resetOpen
+                                }
+                                onSave={() => requestSave(values)}
+                                actions={
+                                    <>
+                                        <Button
+                                            id="master-data-product-detail-reset"
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            className={
+                                                detailWorkspaceStyles.quietButton
+                                            }
+                                            disabled={saving}
+                                            onClick={() => setResetOpen(true)}
+                                        >
+                                            取消修改
+                                        </Button>
+                                        <LoadingButton
+                                            id="master-data-product-detail-header-submit"
+                                            loading={saving}
+                                            type="button"
+                                            size="sm"
+                                            className="px-3.5"
+                                            aria-keyshortcuts="Meta+S Control+S"
+                                            disabled={!canRevise || saving}
+                                            onClick={() => requestSave(values)}
+                                        >
+                                            <SaveIcon
+                                                data-icon="inline-start"
+                                                aria-hidden
+                                            />
+                                            {saving ? "提交中…" : "保存更新"}
+                                        </LoadingButton>
+                                    </>
+                                }
+                            />
+                        </PermissionGuard>
+                    ) : null}
+                </form>
+
+                {changeConfirmation.dialog}
+                <ProductSaveDialog
+                    open={showSave}
+                    onOpenChange={closeSave}
+                    pending={saving}
+                    changes={changes}
+                    onConfirm={() => {
+                        void form.handleSubmit()
+                    }}
+                    feedback={feedback}
+                    attempted={saveAttempted}
+                    isCreate={isCreate}
+                    canRevise={canRevise}
+                    effectiveFrom={effectiveFrom}
+                    effectiveTo={effectiveTo}
+                    changeReason={changeReason}
+                    setEffectiveFrom={setEffectiveFrom}
+                    setEffectiveTo={setEffectiveTo}
+                    setChangeReason={setChangeReason}
+                />
+                <DiscardConfirmDialog
+                    idPrefix="master-data-product-reset-confirm"
+                    open={canRevise && resetOpen}
+                    onOpenChange={setResetOpen}
+                    title="取消本次修改？"
+                    description="商品资料将恢复到本次编辑前的内容。"
+                    confirmLabel="取消修改"
+                    cancelLabel="继续编辑"
+                    onConfirm={() => {
+                        form.reset(initialFormValues)
+                        dismissPriceUndoToast()
+                        editor.setFormError(null)
+                        editor.setResult(null)
+                        setResetOpen(false)
+                    }}
+                />
+                <ProductDetailDialogs
+                    isCreate={isCreate}
+                    data={data}
+                    disableOpen={disableOpen}
+                    setDisableOpen={setDisableOpen}
+                    supplierDialogSku={supplierDialogSku}
+                    setSupplierDialogSku={setSupplierDialogSku}
+                    inventoryOpen={inventoryOpen}
+                    onInventoryOpenChange={handleInventoryOpenChange}
+                    productName={title}
+                    productKind={fields.productKind}
+                    inventoryPreviewSkus={inventoryPreviewSkus}
+                    inventoryInitialSkuId={inventoryInitialSkuId}
+                    discardOpen={discardOpen}
+                    setDiscardOpen={setDiscardOpen}
+                    pendingNav={pendingNav}
+                    setPendingNav={setPendingNav}
+                    router={router}
+                />
+            </DetailWorkspacePage>
         </ProductDetailEntryGate>
     )
 }

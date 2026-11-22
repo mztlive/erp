@@ -9,6 +9,7 @@ import {
     FieldLabel,
 } from "@/components/ui/field"
 import { FileUpload } from "@/components/ui/file-upload"
+import { RequiredMark } from "@/components/ui/required-mark"
 import {
     JD_VOP_PRIVATE_KEY_MAX_BYTES,
     jdVopPrivateKeyFileError,
@@ -29,7 +30,8 @@ export function JdVopPrivateKeyField({
     return (
         <Field data-invalid={invalid || undefined}>
             <FieldLabel htmlFor={`${id}-input`}>
-                RSA 私钥文件 <span className="text-destructive">*</span>
+                RSA 私钥文件
+                <RequiredMark />
             </FieldLabel>
             <FileUpload
                 idPrefix={id}

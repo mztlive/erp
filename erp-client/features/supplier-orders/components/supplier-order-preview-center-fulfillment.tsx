@@ -2,14 +2,25 @@
 
 import { EyeIcon, EyeOffIcon } from "lucide-react"
 
-import { DetailWorkspaceSection } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import {
+    BusinessStatusBadge,
+    DetailWorkspaceSection,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { DescriptionList } from "@/components/ui/description-list"
 import type { SupplierOrderDetailView } from "@/features/supplier-orders/types"
 import { formatDateTime } from "@/lib/datetime"
 import { Item } from "@/features/supplier-orders/components/supplier-order-preview-center-section-parts"
+
+const TRACK_LABELS: Record<
+    SupplierOrderDetailView["statusHistory"][number]["track"],
+    string
+> = {
+    fulfillment: "履约",
+    cancel: "取消",
+    refund: "退款",
+}
 
 export function FulfillmentSection({
     logistics,
@@ -39,37 +50,49 @@ export function FulfillmentSection({
                     <Item
                         label="接单时间"
                         value={
-                            logistics.acceptedAt
-                                ? formatDateTime(
-                                      logistics.acceptedAt,
-                                      "fullIntl",
-                                      "passthrough",
-                                  )
-                                : "—"
+                            logistics.acceptedAt ? (
+                                <span className="num">
+                                    {formatDateTime(
+                                        logistics.acceptedAt,
+                                        "fullIntl",
+                                        "passthrough",
+                                    )}
+                                </span>
+                            ) : (
+                                "—"
+                            )
                         }
                     />
                     <Item
                         label="发货时间"
                         value={
-                            logistics.shippedAt
-                                ? formatDateTime(
-                                      logistics.shippedAt,
-                                      "fullIntl",
-                                      "passthrough",
-                                  )
-                                : "—"
+                            logistics.shippedAt ? (
+                                <span className="num">
+                                    {formatDateTime(
+                                        logistics.shippedAt,
+                                        "fullIntl",
+                                        "passthrough",
+                                    )}
+                                </span>
+                            ) : (
+                                "—"
+                            )
                         }
                     />
                     <Item
                         label="完成时间"
                         value={
-                            logistics.completedAt
-                                ? formatDateTime(
-                                      logistics.completedAt,
-                                      "fullIntl",
-                                      "passthrough",
-                                  )
-                                : "—"
+                            logistics.completedAt ? (
+                                <span className="num">
+                                    {formatDateTime(
+                                        logistics.completedAt,
+                                        "fullIntl",
+                                        "passthrough",
+                                    )}
+                                </span>
+                            ) : (
+                                "—"
+                            )
                         }
                     />
                     <Item label="承运商" value={logistics.carrier ?? "—"} />
@@ -148,19 +171,26 @@ export function FulfillmentSection({
                         {statusHistory.map((h) => (
                             <li
                                 key={h.id}
-                                className="border-t border-border/60 py-2 text-xs"
+                                className="border-t border-border/60 py-2 text-xs first:border-t-0 first:pt-0"
                             >
-                                <div className="flex flex-wrap gap-2">
-                                    <Badge variant="secondary">{h.track}</Badge>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <BusinessStatusBadge
+                                        context="list"
+                                        appearance="quiet"
+                                        tone="neutral"
+                                        label={TRACK_LABELS[h.track] ?? h.track}
+                                    />
                                     <span>
                                         {h.fromLabel} → {h.toLabel}
                                     </span>
                                     <span className="text-muted-foreground">
-                                        {formatDateTime(
-                                            h.at,
-                                            "fullIntl",
-                                            "passthrough",
-                                        )}{" "}
+                                        <span className="num">
+                                            {formatDateTime(
+                                                h.at,
+                                                "fullIntl",
+                                                "passthrough",
+                                            )}
+                                        </span>{" "}
                                         · {h.source}
                                     </span>
                                 </div>

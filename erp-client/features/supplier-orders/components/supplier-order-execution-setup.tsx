@@ -1,8 +1,10 @@
 "use client"
 
 import * as React from "react"
+import { BusinessStatusBadge } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -25,10 +27,12 @@ export function SupplierOrderExecutionSetup({
     orderId,
     canEdit,
     addressSummary,
+    executionNotice,
 }: {
     orderId: string
     canEdit: boolean
     addressSummary: string
+    executionNotice?: string
 }) {
     const query = useSupplierExecutionSetupQuery(orderId)
     const mutation = useSaveSupplierExecutionSetupMutation(orderId)
@@ -56,7 +60,7 @@ export function SupplierOrderExecutionSetup({
             "PAYMENT_UNKNOWN",
             "CONFIRMATION_UNKNOWN",
         ].includes(setup.stage)
-    if (query.isPending || (!query.isError && !setup)) return null
+
     const refresh = async () => {
         const result = await query.refetch()
         if (
@@ -69,102 +73,151 @@ export function SupplierOrderExecutionSetup({
         )
             mutation.reset()
     }
+
+    if (query.isPending) {
+        return (
+            <section className="space-y-2" aria-busy="true">
+                <h2 className="text-body-compact font-semibold text-foreground">
+                    接口执行配置
+                </h2>
+                <div className="h-16 animate-pulse rounded-md bg-muted/70" />
+            </section>
+        )
+    }
+
+    if (!query.isError && !setup) {
+        if (!executionNotice) return null
+        return (
+            <section className="space-y-1.5" aria-label="接口执行说明">
+                <h2 className="text-body-compact font-semibold text-foreground">
+                    供应商接口履约
+                </h2>
+                <p className="text-xs leading-5 text-muted-foreground">
+                    {executionNotice}
+                </p>
+            </section>
+        )
+    }
+
+    const stageLabel = query.isError
+        ? "配送资料暂不可查"
+        : (SUPPLIER_EXECUTION_STAGE_LABEL[setup!.stage] ?? "接口执行处理中")
+
+    const hasWarning = Boolean(setup?.blocker || query.isError || unknown)
+
     return (
         <>
-            <Alert
-                variant={setup?.blocker || query.isError ? "warning" : "info"}
-            >
-                <AlertTitle>
-                    {query.isError
-                        ? "接口配送资料暂不可查"
-                        : (SUPPLIER_EXECUTION_STAGE_LABEL[setup!.stage] ??
-                          "接口执行处理中")}
-                </AlertTitle>
-                <AlertDescription>
-                    {query.isError ? (
-                        <p>{getErrorMessage(query.error)}</p>
-                    ) : setup?.blocker ? (
-                        <p>{setup.blocker}</p>
-                    ) : (
-                        <p>
-                            系统按已批准的采购和配送条件执行，实际结果以订单和物流状态为准。
-                        </p>
-                    )}
-                    {saved ? (
-                        <p className="mt-1">
-                            配送资料已保存，等待后台继续核验；尚不代表供应商下单成功。
-                        </p>
-                    ) : null}
-                    <div className="mt-2 flex flex-wrap gap-2">
-                        {editable && canEdit ? (
-                            <Button
-                                id={`${prefix}-open`}
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                    if (!saveOutcomeUnknown) mutation.reset()
-                                    setOpen(true)
-                                }}
-                            >
-                                完善接口配送资料
-                            </Button>
-                        ) : null}
+            <section className="space-y-3" aria-label="接口执行状态与配置">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="text-body-compact font-semibold text-foreground">
+                        接口执行配置
+                    </h2>
+                    <BusinessStatusBadge
+                        context="list"
+                        tone={hasWarning ? "warning" : "info"}
+                        appearance={hasWarning ? "badge" : "quiet"}
+                        label={stageLabel}
+                    />
+                </div>
 
+                {query.isError ? (
+                    <Alert variant="warning">
+                        <AlertTitle>接口配送资料暂不可查</AlertTitle>
+                        <AlertDescription>
+                            {getErrorMessage(query.error)}
+                        </AlertDescription>
+                    </Alert>
+                ) : setup?.blocker ? (
+                    <Alert variant="warning">
+                        <AlertTitle>执行阻塞</AlertTitle>
+                        <AlertDescription>{setup.blocker}</AlertDescription>
+                    </Alert>
+                ) : (
+                    <p className="text-xs leading-5 text-muted-foreground">
+                        {executionNotice ||
+                            "系统按已批准的采购和配送条件执行，实际结果以订单和物流状态为准。"}
+                    </p>
+                )}
+
+                {saved ? (
+                    <p role="status" className="text-xs text-muted-foreground">
+                        配送资料已保存，等待后台继续核验；尚不代表供应商下单成功。
+                    </p>
+                ) : null}
+
+                <div className="flex flex-wrap gap-2">
+                    {editable && canEdit ? (
                         <Button
-                            id={`${prefix}-refresh`}
+                            id={`${prefix}-open`}
                             type="button"
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                            disabled={query.isFetching || mutation.isPending}
-                            onClick={() => void refresh()}
+                            onClick={() => {
+                                if (!saveOutcomeUnknown) mutation.reset()
+                                setOpen(true)
+                            }}
                         >
-                            刷新执行状态
+                            完善接口配送资料
                         </Button>
-                        {setup?.result_query_available && canEdit ? (
-                            <Button
-                                id={`${prefix}-query-original`}
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                disabled={
-                                    !canEdit ||
-                                    resultQuery.isPending ||
-                                    query.isFetching
-                                }
-                                onClick={() =>
-                                    void resultQuery
-                                        .mutateAsync(setup.execution_version)
-                                        .catch(() => undefined)
-                                }
-                            >
-                                {resultQuery.isPending
-                                    ? "正在提交查询…"
-                                    : "查询原结果"}
-                            </Button>
-                        ) : null}
-                    </div>
+                    ) : null}
 
-                    {unknown ? (
-                        <p className="mt-2 text-xs">
-                            原请求可能已送达，暂未查到或尚未确认不代表可以重新发送。
-                        </p>
-                    ) : null}
-                    {resultQuery.error ? (
-                        <p
-                            role="alert"
-                            className="mt-2 text-body-compact text-destructive"
+                    <LoadingButton
+                        id={`${prefix}-refresh`}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        loading={query.isFetching}
+                        disabled={query.isFetching || mutation.isPending}
+                        onClick={() => void refresh()}
+                    >
+                        刷新执行状态
+                    </LoadingButton>
+
+                    {setup?.result_query_available && canEdit ? (
+                        <LoadingButton
+                            id={`${prefix}-query-original`}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            loading={resultQuery.isPending}
+                            disabled={
+                                !canEdit ||
+                                resultQuery.isPending ||
+                                query.isFetching
+                            }
+                            onClick={() =>
+                                void resultQuery
+                                    .mutateAsync(setup.execution_version)
+                                    .catch(() => undefined)
+                            }
                         >
-                            {getErrorMessage(resultQuery.error)}
-                        </p>
+                            {resultQuery.isPending
+                                ? "核验中…"
+                                : "核验接口执行进度"}
+                        </LoadingButton>
                     ) : null}
-                    {resultQuery.isSuccess ? (
-                        <p className="mt-2 text-xs">
-                            已安排查询原请求，实际结果以随后核实的订单进度为准。
-                        </p>
-                    ) : null}
-                </AlertDescription>
-            </Alert>
+                </div>
+
+                {unknown ? (
+                    <p className="text-xs text-warning-soft-foreground">
+                        原请求可能已送达，暂未查到或尚未确认不代表可以重新发送。
+                    </p>
+                ) : null}
+                {resultQuery.error ? (
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
+                        {getErrorMessage(resultQuery.error)}
+                    </p>
+                ) : null}
+                {resultQuery.isSuccess ? (
+                    <p role="status" className="text-xs text-muted-foreground">
+                        已安排核验原执行请求，实际结果以随后核实的订单进度为准。
+                    </p>
+                ) : null}
+            </section>
+
             <Dialog
                 open={open}
                 onOpenChange={(next) => {
@@ -244,10 +297,11 @@ export function SupplierOrderExecutionSetup({
                                     <p className="text-body-compact text-warning-soft-foreground">
                                         上次保存结果确认中，已保留您填写的配送资料，请点击「重试保存」确认结果。
                                     </p>
-                                    <Button
+                                    <LoadingButton
                                         id={`${prefix}-retry-original-save`}
                                         type="button"
                                         variant="outline"
+                                        loading={mutation.isPending}
                                         disabled={
                                             mutation.isPending ||
                                             query.isFetching
@@ -264,18 +318,19 @@ export function SupplierOrderExecutionSetup({
                                         }}
                                     >
                                         重试保存
-                                    </Button>
+                                    </LoadingButton>
                                 </>
                             ) : null}
-                            <Button
+                            <LoadingButton
                                 id={`${prefix}-retry-read`}
                                 type="button"
                                 variant="outline"
+                                loading={query.isFetching}
                                 disabled={query.isFetching}
                                 onClick={() => void refresh()}
                             >
                                 重新读取配送资料
-                            </Button>
+                            </LoadingButton>
                         </div>
                     ) : null}
                 </DialogContent>

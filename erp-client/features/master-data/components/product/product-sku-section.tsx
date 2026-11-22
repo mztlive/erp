@@ -7,8 +7,8 @@ import {
     DetailWorkspaceSection,
     detailWorkspaceStyles,
 } from "@/components/business/detail-workspace"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { ProductSpecDraftsEditor } from "@/features/master-data/components/product/product-spec-drafts"
 import {
@@ -16,6 +16,7 @@ import {
     type SkuSupplySummary,
 } from "@/features/master-data/components/product/product-sku-table"
 import { SkuBulkPriceBar } from "@/features/master-data/components/product/product-sku-bulk-bar"
+import type { BatchReferencePriceDraft } from "@/features/master-data/lib/product-form-bindings"
 import {
     hasPendingSpecs,
     type ProductSpecDraft,
@@ -42,15 +43,7 @@ type ProductSkuSectionProps = {
     applySpecDrafts: () => string | null
     resetSpecDrafts: () => void
     updateSku: (index: number, patch: Partial<ProductSkuFields>) => void
-    batchSalePrice: string
-    batchBulkPrice: string
-    batchBulkMinQuantity: string
-    batchMarketPrice: string
-    setBatchSalePrice: (next: string) => void
-    setBatchBulkPrice: (next: string) => void
-    setBatchBulkMinQuantity: (next: string) => void
-    setBatchMarketPrice: (next: string) => void
-    onApplyBatchReferencePrices: () => void
+    onApplyBatchReferencePrices: (draft: BatchReferencePriceDraft) => void
     inventoryActionHint: string | undefined
     showSupplyColumn?: boolean
     supplyBySku?: ReadonlyMap<string, SkuSupplySummary>
@@ -79,14 +72,6 @@ function ProductSkuSection({
     applySpecDrafts,
     resetSpecDrafts,
     updateSku,
-    batchSalePrice,
-    batchBulkPrice,
-    batchBulkMinQuantity,
-    batchMarketPrice,
-    setBatchSalePrice,
-    setBatchBulkPrice,
-    setBatchBulkMinQuantity,
-    setBatchMarketPrice,
     onApplyBatchReferencePrices,
     inventoryActionHint,
     showSupplyColumn,
@@ -101,6 +86,10 @@ function ProductSkuSection({
     const [specOpen, setSpecOpen] = React.useState(isCreate)
     const [bulkOpen, setBulkOpen] = React.useState(false)
     const [specError, setSpecError] = React.useState<string | null>(null)
+    const [batchSalePrice, setBatchSalePrice] = React.useState("")
+    const [batchBulkPrice, setBatchBulkPrice] = React.useState("")
+    const [batchBulkMinQuantity, setBatchBulkMinQuantity] = React.useState("")
+    const [batchMarketPrice, setBatchMarketPrice] = React.useState("")
     const specsPending = hasPendingSpecs(specDrafts, fields)
     React.useEffect(() => {
         if (specsPending) setSpecOpen(true)
@@ -124,7 +113,7 @@ function ProductSkuSection({
                         {fields.skus.length} 个 SKU
                     </span>
                     {specsPending ? (
-                        <Badge variant="warning">规格待应用</Badge>
+                        <StatusBadge tone="warning" label="规格待应用" />
                     ) : null}
                 </div>
             }
@@ -245,6 +234,7 @@ function ProductSkuSection({
                             id={`${prefix}-spec-apply`}
                             type="button"
                             size="sm"
+                            variant="secondary"
                             onClick={() => setSpecError(applySpecDrafts())}
                         >
                             应用规格
@@ -263,7 +253,14 @@ function ProductSkuSection({
                     setBatchBulkPrice={setBatchBulkPrice}
                     setBatchBulkMinQuantity={setBatchBulkMinQuantity}
                     setBatchMarketPrice={setBatchMarketPrice}
-                    onApplyBatchReferencePrices={onApplyBatchReferencePrices}
+                    onApplyBatchReferencePrices={() =>
+                        onApplyBatchReferencePrices({
+                            salePrice: batchSalePrice,
+                            bulkPriceGross: batchBulkPrice,
+                            bulkMinQuantity: batchBulkMinQuantity,
+                            marketPrice: batchMarketPrice,
+                        })
+                    }
                 />
             ) : null}
             {fields.skus.length === 0 ? (

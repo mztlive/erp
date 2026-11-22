@@ -1,77 +1,100 @@
 "use client"
 
-import { PencilIcon } from "lucide-react"
-
 import {
     BusinessFailureState,
+    DetailWorkspaceMetricItem,
+    DetailWorkspaceMetrics,
     DetailWorkspaceSection,
-    detailWorkspaceStyles,
     DocumentSummary,
-    MetricItem,
-    MetricStrip,
     MoneyValue,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { paymentTermLabel } from "@/lib/business-options"
+import { StatusBadge } from "@/components/ui/status-badge"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { CustomerForm } from "@/features/customers/components/customer-form"
-import type { CustomerCenterView } from "@/features/customers/types"
+import {
+    CustomerDetailContactSections,
+    CustomerReadonlyAddressesSection,
+    CustomerReadonlyBankAccountsSection,
+    CustomerReadonlyContactsSection,
+} from "@/features/customers/pages/customer-detail-contact-sections"
 import {
     can,
     ownerLabel,
 } from "@/features/customers/pages/customer-detail-helpers"
-import { CustomerDetailContactSections } from "@/features/customers/pages/customer-detail-contact-sections"
 import { embeddedSummaryClassName } from "@/features/customers/pages/customer-detail-records"
+import type { CustomerCenterView } from "@/features/customers/types"
+import { paymentTermLabel } from "@/lib/business-options"
+import { compareDecimal } from "@/lib/fixed-decimal"
+import { hasPermission } from "@/lib/permissions"
 
 export function CustomerDetailMetrics({
     customer,
 }: {
     customer: CustomerCenterView
 }) {
+    const overdue = customer.metrics.overdueAmount
+    const hasOverdue =
+        overdue != null &&
+        overdue.trim() !== "" &&
+        compareDecimal(overdue, "0", 2) > 0
+
     return (
-        <MetricStrip
-            columns={4}
-            density="compact"
-            variant="plain"
-            className="grid-cols-2 py-3.5 lg:[&>*+*]:border-l lg:[&>*+*]:border-border/60 lg:[&>*+*]:pl-6"
-            aria-label="关系指标"
-            aria-live="polite"
-        >
-            <MetricItem
-                density="compact"
+        <DetailWorkspaceMetrics columns={4} variant="bar" ariaLabel="关系指标">
+            <DetailWorkspaceMetricItem
                 label="有效合同"
-                value={String(customer.metrics.activeContractCount ?? "—")}
-                detail={
-                    customer.metrics.expiringContractCount
-                        ? `${customer.metrics.expiringContractCount} 将到期`
-                        : undefined
+                value={
+                    customer.metrics.activeContractCount != null
+                        ? String(customer.metrics.activeContractCount)
+                        : "—"
                 }
-                detailMode="inline"
+                detail={
+                    customer.metrics.expiringContractCount ? (
+                        <span className="num text-warning-soft-foreground">
+                            {customer.metrics.expiringContractCount} 份将到期
+                        </span>
+                    ) : undefined
+                }
             />
-            <MetricItem
-                density="compact"
+            <DetailWorkspaceMetricItem
                 label="进行中销售单"
-                value={String(
-                    customer.metrics.inProgressSalesOrderCount ?? "—",
-                )}
-                detail="该客户当前履约中的销售单总数"
-                detailMode="tooltip"
+                value={
+                    customer.metrics.inProgressSalesOrderCount != null
+                        ? String(customer.metrics.inProgressSalesOrderCount)
+                        : "—"
+                }
+                detail="履约中的销售单总数"
             />
-            <MetricItem
-                density="compact"
+            <DetailWorkspaceMetricItem
+                emphasis="primary"
                 label="应收余额"
                 value={
                     <MoneyValue value={customer.metrics.receivableBalance} />
                 }
                 detail="客户往来汇总"
-                detailMode="tooltip"
             />
-            <MetricItem
-                density="compact"
-                label="逾期金额"
-                value={<MoneyValue value={customer.metrics.overdueAmount} />}
-                detailMode="none"
+            <DetailWorkspaceMetricItem
+                label={
+                    <>
+                        <span>逾期金额</span>
+                        {hasOverdue ? (
+                            <StatusBadge
+                                tone="destructive"
+                                label="存在逾期"
+                                appearance="text"
+                            />
+                        ) : null}
+                    </>
+                }
+                value={
+                    <MoneyValue
+                        value={overdue}
+                        className={hasOverdue ? "text-destructive" : undefined}
+                    />
+                }
+                detail={hasOverdue ? "请及时跟进回款" : undefined}
             />
-        </MetricStrip>
+        </DetailWorkspaceMetrics>
     )
 }
 
@@ -93,63 +116,58 @@ export function CustomerDetailIdentityMeta({
 export function CustomerDetailOverviewTab({
     customer,
     refetch,
-    editing,
-    onEditClick,
+    formResetEpoch,
     onFormDirtyChange,
     shortcutBlocked,
-    onFormCancel,
+    onFormReset,
     onFormSucceeded,
 }: {
     customer: CustomerCenterView
     refetch: () => void
-    editing: boolean
-    onEditClick: () => void
+    formResetEpoch: number
     onFormDirtyChange: (isDirty: boolean) => void
     shortcutBlocked: boolean
-    onFormCancel: () => void
+    onFormReset: () => void
     onFormSucceeded: (customerId: string, revisionNo?: number) => void
 }) {
-    const editBlocked = !can(customer, "EDIT_CUSTOMER")
+    const accountProfile = useAccountProfileQuery()
+    const canEdit =
+        can(customer, "EDIT_CUSTOMER") &&
+        hasPermission(accountProfile.data?.permissions, "customer:update")
 
-    if (editing) {
+    if (canEdit) {
         return (
             <CustomerForm
-                key={customer.customerId}
+                key={`${customer.customerId}-${formResetEpoch}`}
                 mode="edit"
                 grouped
                 shortcutBlocked={shortcutBlocked}
                 customer={customer}
                 onDirtyChange={onFormDirtyChange}
-                onCancel={onFormCancel}
+                onCancel={onFormReset}
                 onSucceeded={onFormSucceeded}
+                readonlyContactsFallback={
+                    <CustomerReadonlyContactsSection
+                        customer={customer}
+                        refetch={refetch}
+                    />
+                }
+                readonlyAddressesFallback={
+                    <CustomerReadonlyAddressesSection
+                        customer={customer}
+                        refetch={refetch}
+                    />
+                }
+                readonlyBanksFallback={
+                    <CustomerReadonlyBankAccountsSection customer={customer} />
+                }
             />
         )
     }
 
     return (
         <>
-            <DetailWorkspaceSection
-                title="客户基本资料"
-                width="form"
-                actions={
-                    !editBlocked ? (
-                        <Button
-                            id="customers-detail-overview-edit"
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className={detailWorkspaceStyles.subtleButton}
-                            onClick={onEditClick}
-                        >
-                            <PencilIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            编辑资料
-                        </Button>
-                    ) : null
-                }
-            >
+            <DetailWorkspaceSection title="客户基本资料" width="form">
                 {customer.partitions.identity === "error" ? (
                     <BusinessFailureState
                         kind="system"
@@ -187,6 +205,7 @@ export function CustomerDetailOverviewTab({
                                 value:
                                     customer.currentRevision
                                         .unifiedCreditCode ?? "—",
+                                numeric: true,
                             },
                             {
                                 id: "payment",

@@ -11,6 +11,7 @@ import {
     DetailWorkspacePage,
     DetailWorkspaceSaveDock,
     DetailWorkspaceSection,
+    DetailWorkspaceSubTabs,
     DiscardConfirmDialog,
     detailWorkspaceStyles,
 } from "@/components/business"
@@ -29,10 +30,11 @@ import {
     SupplierSummaryStrip,
 } from "@/features/master-data/components/supplier/supplier-editor-navigation"
 import { SupplierEditorStatusPanel } from "@/features/master-data/components/supplier/supplier-editor-status-panel"
+import type { SupplierPortalSubTabId } from "@/features/master-data/components/supplier/supplier-editor-fields"
 import type { SupplierEditor } from "@/features/master-data/hooks/use-supplier-editor"
 import { useSupplierSaveFlow } from "@/features/master-data/hooks/use-supplier-save-flow"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
-import type { SupplierFieldKey } from "@/features/master-data/lib/supplier-editor-model"
+import { useWorkspaceDirtyState } from "@/lib/workspace-form-guard"
 
 export function SupplierEditorForm({
     idPrefix,
@@ -49,6 +51,7 @@ export function SupplierEditorForm({
         form,
         initialFormValues,
         pendingChangeReasonRef,
+        dirtyRef,
         formError,
         setFormError,
         formErrorTitle,
@@ -68,8 +71,14 @@ export function SupplierEditorForm({
         setPendingNav,
         activeSection,
         setActiveSection,
+        portalSubTab,
+        setPortalSubTab,
+        allowedPortalSubTabs,
+        canReadPortal,
         errorRef,
-        editedSensitiveRef,
+        editedSensitive,
+        markSensitiveEdited,
+        clearEditedSensitive,
         rememberMediaFiles,
         mediaUrlsFor,
         mediaAssetIdsFor,
@@ -94,6 +103,8 @@ export function SupplierEditorForm({
 
     const {
         values,
+        changes,
+        changeDescription,
         setFieldValue,
         requestSave,
         confirmSaveWithReason,
@@ -110,25 +121,21 @@ export function SupplierEditorForm({
 
     const [resetOpen, setResetOpen] = React.useState(false)
     const formRef = React.useRef<HTMLFormElement>(null)
-    const count = (Object.keys(values) as SupplierFieldKey[]).filter(
-        (key) =>
-            key !== "changeReason" &&
-            key !== "maintainerUserId" &&
-            key !== "capabilityOwnerUserId" &&
-            (values[key] !== initialFormValues[key] ||
-                (key === "address" &&
-                    Boolean(addressSensitive) &&
-                    editedSensitiveRef.current.has(key) &&
-                    !values.address.trim())),
-    ).length
+    const count = changes.length
     const saveDockOpen = !isCreate && canRevise && count > 0
+    const isDirtyForGuard = isCreate ? count > 0 : saveDockOpen
+    dirtyRef.current = isDirtyForGuard
 
+    useWorkspaceDirtyState({ dirty: isDirtyForGuard, busy: pending })
+
+    // 新建态挂载 Cmd/Ctrl+S；编辑态由 DetailWorkspaceSaveDock 统一托管快捷键。
     React.useEffect(() => {
-        if (!saveDockOpen) return
+        if (!isCreate || !canEdit) return
         const onKeyDown = (event: KeyboardEvent) => {
             if (
                 event.defaultPrevented ||
                 event.isComposing ||
+                event.repeat ||
                 event.altKey ||
                 event.shiftKey ||
                 !(event.metaKey || event.ctrlKey) ||
@@ -137,12 +144,11 @@ export function SupplierEditorForm({
                     event.target.closest(
                         '[role="dialog"], [role="alertdialog"]',
                     ))
-            )
+            ) {
                 return
-
+            }
             event.preventDefault()
             if (
-                !event.repeat &&
                 !pending &&
                 !form.state.isSubmitting &&
                 !saveReasonOpen &&
@@ -156,14 +162,27 @@ export function SupplierEditorForm({
         window.addEventListener("keydown", onKeyDown)
         return () => window.removeEventListener("keydown", onKeyDown)
     }, [
+        canEdit,
         disableOpen,
         discardOpen,
         form,
+        isCreate,
         pending,
         resetOpen,
-        saveDockOpen,
         saveReasonOpen,
     ])
+
+    const statusPanel = (
+        <SupplierEditorStatusPanel
+            isCreate={isCreate}
+            canRevise={canRevise}
+            reviseBlocker={reviseBlocker}
+            result={result}
+            formError={formError}
+            formErrorTitle={formErrorTitle}
+            errorRef={errorRef}
+        />
+    )
 
     return (
         <DetailWorkspacePage>
@@ -188,9 +207,7 @@ export function SupplierEditorForm({
                     <SupplierSectionTabs
                         value={activeSection}
                         canReadDeliveryTemplates={canReadDeliveryTemplates}
-                        canReadPortalAccounts={canReadPortalAccounts}
-                        canReadPortalCatalog={canReadPortalCatalog}
-                        canReadPortalApplications={canReadPortalApplications}
+                        canReadPortal={canReadPortal}
                         isCreate={isCreate}
                         onValueChange={setActiveSection}
                     />
@@ -199,18 +216,12 @@ export function SupplierEditorForm({
 
             <DetailWorkspaceBody
                 saveDockOpen={saveDockOpen}
-                summary={<SupplierSummaryStrip rows={summaryRows} />}
-                alerts={
-                    <SupplierEditorStatusPanel
-                        isCreate={isCreate}
-                        canRevise={canRevise}
-                        reviseBlocker={reviseBlocker}
-                        result={result}
-                        formError={formError}
-                        formErrorTitle={formErrorTitle}
-                        errorRef={errorRef}
-                    />
+                summary={
+                    isCreate ? undefined : (
+                        <SupplierSummaryStrip rows={summaryRows} />
+                    )
                 }
+                alerts={!saveReasonOpen ? statusPanel : undefined}
             >
                 <form
                     id={formId}
@@ -229,54 +240,53 @@ export function SupplierEditorForm({
                         requestSave(event)
                     }}
                 >
-                    {activeSection === "basic" && (
-                        <SupplierEditorBasicSection
-                            values={values}
-                            setFieldValue={setFieldValue}
-                            canEdit={canEdit}
-                            phoneSensitive={phoneSensitive}
-                            addressSensitive={addressSensitive}
-                            canRevealSensitive={canRevealSensitive}
-                            refreshSensitiveToken={refreshSensitiveToken}
-                            editedSensitiveRef={editedSensitiveRef}
-                        />
-                    )}
+                    {activeSection === "profile" ? (
+                        <>
+                            <SupplierEditorBasicSection
+                                values={values}
+                                setFieldValue={setFieldValue}
+                                canEdit={canEdit}
+                                phoneSensitive={phoneSensitive}
+                                addressSensitive={addressSensitive}
+                                canRevealSensitive={canRevealSensitive}
+                                refreshSensitiveToken={refreshSensitiveToken}
+                                editedSensitive={editedSensitive}
+                                markSensitiveEdited={markSensitiveEdited}
+                            />
 
-                    {activeSection === "commercial" && (
-                        <SupplierEditorCommercialSection
-                            values={values}
-                            setFieldValue={setFieldValue}
-                            canEdit={canEdit}
-                        />
-                    )}
+                            <SupplierEditorCommercialSection
+                                values={values}
+                                setFieldValue={setFieldValue}
+                                canEdit={canEdit}
+                            />
 
-                    {activeSection === "contract" && (
-                        <SupplierEditorContractSection
-                            values={values}
-                            setFieldValue={setFieldValue}
-                            canEdit={canEdit}
-                            mediaUrlsFor={mediaUrlsFor}
-                            mediaAssetIdsFor={mediaAssetIdsFor}
-                            rememberMediaFiles={rememberMediaFiles}
-                        />
-                    )}
+                            <SupplierEditorContractSection
+                                values={values}
+                                setFieldValue={setFieldValue}
+                                canEdit={canEdit}
+                                mediaUrlsFor={mediaUrlsFor}
+                                mediaAssetIdsFor={mediaAssetIdsFor}
+                                rememberMediaFiles={rememberMediaFiles}
+                            />
 
-                    {activeSection === "invoice" && (
-                        <SupplierEditorInvoiceSection
-                            values={values}
-                            setFieldValue={setFieldValue}
-                            canEdit={canEdit}
-                            bankSensitive={bankSensitive}
-                            canRevealSensitive={canRevealSensitive}
-                            refreshSensitiveToken={refreshSensitiveToken}
-                            editedSensitiveRef={editedSensitiveRef}
-                        />
-                    )}
+                            <SupplierEditorInvoiceSection
+                                values={values}
+                                setFieldValue={setFieldValue}
+                                canEdit={canEdit}
+                                bankSensitive={bankSensitive}
+                                canRevealSensitive={canRevealSensitive}
+                                refreshSensitiveToken={refreshSensitiveToken}
+                                editedSensitive={editedSensitive}
+                                markSensitiveEdited={markSensitiveEdited}
+                            />
+                        </>
+                    ) : null}
 
-                    {activeSection === "history" && !isCreate && data && (
+                    {activeSection === "history" && !isCreate && data ? (
                         <SupplierEditorHistorySection data={data} />
-                    )}
+                    ) : null}
                 </form>
+
                 {activeSection === "delivery" &&
                 !isCreate &&
                 data &&
@@ -289,47 +299,47 @@ export function SupplierEditorForm({
                         />
                     </DetailWorkspaceSection>
                 ) : null}
-                {activeSection === "portal-catalog" &&
+
+                {activeSection === "portal" &&
                 !isCreate &&
                 data &&
-                canReadPortalCatalog ? (
-                    <DetailWorkspaceSection width="full">
-                        <div
-                            data-slot="detail-inline-table"
-                            className="[&_[data-slot=list-work-surface]]:rounded-none [&_[data-slot=list-work-surface]]:border-x-0"
-                        >
+                canReadPortal ? (
+                    <>
+                        <DetailWorkspaceSubTabs
+                            value={portalSubTab}
+                            onValueChange={(next) =>
+                                setPortalSubTab(next as SupplierPortalSubTabId)
+                            }
+                            items={allowedPortalSubTabs}
+                            ariaLabel="供应商门户子分区"
+                            idPrefix="master-data-supplier-portal-subtab"
+                        />
+                        {portalSubTab === "portal-accounts" &&
+                        canReadPortalAccounts ? (
+                            <SupplierAccountsSection
+                                key={data.stableId}
+                                supplierId={data.stableId}
+                                supplierEnabled={
+                                    data.lifecycleStatus === "ENABLED"
+                                }
+                            />
+                        ) : null}
+                        {portalSubTab === "portal-catalog" &&
+                        canReadPortalCatalog ? (
                             <SupplierCatalogSection
                                 key={data.stableId}
                                 supplierId={data.stableId}
                             />
-                        </div>
-                    </DetailWorkspaceSection>
-                ) : null}
-                {activeSection === "portal-applications" &&
-                !isCreate &&
-                data &&
-                canReadPortalApplications ? (
-                    <DetailWorkspaceSection width="full">
-                        <div
-                            data-slot="detail-inline-table"
-                            className="[&_[data-slot=list-work-surface]]:rounded-none [&_[data-slot=list-work-surface]]:border-x-0"
-                        >
+                        ) : null}
+                        {portalSubTab === "portal-applications" &&
+                        canReadPortalApplications ? (
                             <SupplierApplicationsSection
                                 key={data.stableId}
                                 supplierId={data.stableId}
+                                onNavigateAway={navigateAway}
                             />
-                        </div>
-                    </DetailWorkspaceSection>
-                ) : null}
-                {activeSection === "portal-accounts" &&
-                !isCreate &&
-                data &&
-                canReadPortalAccounts ? (
-                    <SupplierAccountsSection
-                        key={data.stableId}
-                        supplierId={data.stableId}
-                        supplierEnabled={data.lifecycleStatus === "ENABLED"}
-                    />
+                        ) : null}
+                    </>
                 ) : null}
             </DetailWorkspaceBody>
 
@@ -338,6 +348,16 @@ export function SupplierEditorForm({
                     <DetailWorkspaceSaveDock
                         open={saveDockOpen}
                         changeCount={count}
+                        summary={changes.join("；")}
+                        description={changeDescription}
+                        saving={pending}
+                        enableSaveShortcut={
+                            !saveReasonOpen &&
+                            !disableOpen &&
+                            !discardOpen &&
+                            !resetOpen
+                        }
+                        onSave={() => formRef.current?.requestSubmit()}
                         actions={
                             <>
                                 <Button
@@ -388,7 +408,7 @@ export function SupplierEditorForm({
                                 capabilityOwnerUserId:
                                     values.capabilityOwnerUserId,
                             })
-                            editedSensitiveRef.current.clear()
+                            clearEditedSensitive()
                             pendingChangeReasonRef.current = null
                             clearApiFormError(form)
                             setFormError(null)
@@ -410,6 +430,8 @@ export function SupplierEditorForm({
                 setReasonDraft={setReasonDraft}
                 reasonError={reasonError}
                 setReasonError={setReasonError}
+                changes={changes}
+                feedback={saveReasonOpen ? statusPanel : undefined}
                 pending={pending}
                 onConfirm={confirmSaveWithReason}
                 discardOpen={discardOpen}

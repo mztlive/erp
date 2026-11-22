@@ -145,6 +145,7 @@ export function CustomerDetailSettlementTab({
     return (
         <DetailWorkspaceSection
             title="票款摘要"
+            width="form"
             subtitle="仅展示回款与开票汇总，办理核销或开票请前往「客户往来」。"
             actions={
                 <Button
@@ -185,6 +186,7 @@ export function CustomerDetailSettlementTab({
                                 value:
                                     customer.receivableSummary
                                         .earliestOverdueDate ?? "—",
+                                numeric: true,
                             },
                             {
                                 id: "coll",

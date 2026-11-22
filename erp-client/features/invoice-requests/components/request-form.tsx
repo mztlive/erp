@@ -16,12 +16,15 @@ import {
 import {
     DetailWorkspaceBody,
     DetailWorkspaceChrome,
+    DetailWorkspaceDirtyBadge,
     DetailWorkspaceMeta,
     DetailWorkspaceSection,
+    DiscardConfirmDialog,
     MoneyValue,
     detailWorkspaceStyles,
     type DetailWorkspaceBackLink,
 } from "@/components/business"
+import { useWorkspaceDirtyState } from "@/lib/workspace-form-guard"
 import { DetailHint } from "@/components/business/detail-presentation"
 import { useAppForm, withForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -235,6 +238,9 @@ export function InvoiceRequestForm({
         documentNumber?: string
     } | null>(null)
     const [importOpen, setImportOpen] = useState(false)
+    const [pendingDiscardAction, setPendingDiscardAction] = useState<
+        (() => void) | null
+    >(null)
 
     const rework = useResubmissionReason({
         open: true,
@@ -332,6 +338,7 @@ export function InvoiceRequestForm({
         (s) => s.values.receivableAccountId,
     )
     const formLines = useStore(form.store, (s) => s.values.lines)
+    const isFormDirty = useStore(form.store, (s) => !s.isDefaultValue)
     const linesTotal = invoiceLinesTotal(formLines)
 
     const accounts = useQuery({
@@ -361,6 +368,19 @@ export function InvoiceRequestForm({
         commands.update.isPending ||
         uncertain ||
         saveUncertain
+    const isDirty = isFormDirty || Boolean(rework.reason?.trim())
+    useWorkspaceDirtyState({
+        dirty: isDirty,
+        busy: locked,
+    })
+    function requestLeave(action: () => void) {
+        if (locked) return
+        if (isDirty) {
+            setPendingDiscardAction(() => action)
+            return
+        }
+        action()
+    }
     const latest = checked?.id === existing?.id ? checked : null
     const versionAdvanced = Boolean(
         latest &&
@@ -845,12 +865,39 @@ export function InvoiceRequestForm({
         />
     ) : null
 
+    const discardDialog = (
+        <DiscardConfirmDialog
+            idPrefix="invoice-request-form-discard"
+            open={pendingDiscardAction !== null}
+            onOpenChange={(open) => {
+                if (!open) setPendingDiscardAction(null)
+            }}
+            onConfirm={() => {
+                const action = pendingDiscardAction
+                setPendingDiscardAction(null)
+                action?.()
+            }}
+        />
+    )
+
     if (presentation === "workspace") {
         const orderNo =
             existing?.sales_order_no ||
             (pickedOrder?.id === selectedOrder
                 ? pickedOrder.documentNumber
                 : undefined)
+        const guardedBack =
+            workspaceChrome?.back &&
+            "onClick" in workspaceChrome.back &&
+            workspaceChrome.back.onClick
+                ? {
+                      ...workspaceChrome.back,
+                      onClick: () =>
+                          requestLeave(
+                              workspaceChrome.back!.onClick as () => void,
+                          ),
+                  }
+                : workspaceChrome?.back
         const chromeMeta = (
             <DetailWorkspaceMeta
                 items={[
@@ -884,7 +931,7 @@ export function InvoiceRequestForm({
                     }}
                 >
                     <DetailWorkspaceChrome
-                        back={workspaceChrome?.back}
+                        back={guardedBack}
                         title={
                             workspaceChrome?.title ??
                             (existing ? "修改开票申请" : "新建开票申请")
@@ -895,6 +942,9 @@ export function InvoiceRequestForm({
                                 (existing ? "修改中" : "新建"),
                             tone: "neutral",
                         }}
+                        titleExtra={
+                            isDirty ? <DetailWorkspaceDirtyBadge /> : undefined
+                        }
                         meta={chromeMeta}
                     />
 
@@ -959,7 +1009,7 @@ export function InvoiceRequestForm({
                         savePending={commands.update.isPending}
                         saveStateFetching={saveState.isFetching}
                         canSubmit={canSubmit}
-                        onCancel={onCancel}
+                        onCancel={() => requestLeave(onCancel)}
                         onSave={handleSaveAction}
                         onResolveUncertain={() =>
                             pending.current && void send(pending.current)
@@ -967,6 +1017,7 @@ export function InvoiceRequestForm({
                     />
                 </form>
                 {importDialog}
+                {discardDialog}
             </>
         )
     }
@@ -1068,7 +1119,7 @@ export function InvoiceRequestForm({
                         type="button"
                         variant="outline"
                         disabled={locked}
-                        onClick={onCancel}
+                        onClick={() => requestLeave(onCancel)}
                     >
                         取消
                     </Button>
@@ -1121,6 +1172,7 @@ export function InvoiceRequestForm({
             <>
                 {compactForm}
                 {importDialog}
+                {discardDialog}
             </>
         )
     }
@@ -1129,7 +1181,9 @@ export function InvoiceRequestForm({
         <>
             <Dialog
                 open
-                onOpenChange={(open) => !open && !locked && onCancel()}
+                onOpenChange={(open) => {
+                    if (!open && !locked) requestLeave(onCancel)
+                }}
             >
                 <DialogContent
                     id="invoice-request-dialog"
@@ -1151,6 +1205,7 @@ export function InvoiceRequestForm({
                 </DialogContent>
             </Dialog>
             {importDialog}
+            {discardDialog}
         </>
     )
 }

@@ -10,8 +10,8 @@ import {
 } from "@/components/business"
 import { TableRowActions } from "@/components/business/table-row-actions"
 import { TableToolbarScope } from "@/components/business/table-toolbar"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Table,
     TableHeader,
@@ -78,7 +78,7 @@ export function InquiryRequirementTable({
                 )}
                 <div
                     data-slot="detail-inline-table"
-                    className="min-w-0 border-y border-border/70 [&>[data-slot=table-container]]:max-h-[65vh]"
+                    className="min-w-0 border-y border-border/70"
                 >
                     <Table
                         className={
@@ -87,13 +87,18 @@ export function InquiryRequirementTable({
                                 : "min-w-[1232px] table-fixed"
                         }
                     >
-                        <TableHeader className="sticky top-0 z-10">
+                        <TableHeader>
                             <TableRow>
                                 <TableHead className="w-20">图片</TableHead>
                                 <TableHead>商品 / 规格</TableHead>
-                                <TableHead className="w-36">需求数量</TableHead>
+                                <TableHead data-align="end" className="w-36">
+                                    需求数量
+                                </TableHead>
                                 {!procurement && (
-                                    <TableHead className="w-40 text-right">
+                                    <TableHead
+                                        data-align="end"
+                                        className="w-40 text-right"
+                                    >
                                         销售价
                                     </TableHead>
                                 )}
@@ -150,14 +155,20 @@ export function InquiryRequirementTable({
                                                     SKU {line.sku_code}
                                                 </p>
                                             </TableCell>
-                                            <TableCell>
+                                            <TableCell
+                                                data-align="end"
+                                                className="num text-right"
+                                            >
                                                 <QuantityValue
                                                     value={line.quantity}
                                                     unit={unit}
                                                 />
                                             </TableCell>
                                             {!procurement && (
-                                                <TableCell className="text-right">
+                                                <TableCell
+                                                    data-align="end"
+                                                    className="num text-right"
+                                                >
                                                     {line.sales_reference_price_gross ? (
                                                         <MoneyValue
                                                             value={
@@ -178,17 +189,16 @@ export function InquiryRequirementTable({
                                             </TableCell>
                                             <TableCell>
                                                 <div className="min-w-0 max-w-full space-y-1.5 whitespace-normal">
-                                                    <Badge
+                                                    <StatusBadge
                                                         className="h-auto min-h-5 max-w-full justify-start text-left leading-5 whitespace-normal wrap-anywhere"
-                                                        variant={
+                                                        tone={
                                                             progress.complete &&
                                                             !progress.overAllocated
-                                                                ? "secondary"
+                                                                ? "neutral"
                                                                 : "warning"
                                                         }
-                                                    >
-                                                        {progress.label}
-                                                    </Badge>
+                                                        label={progress.label}
+                                                    />
                                                     {line.delivery_terms && (
                                                         <p className="text-xs text-muted-foreground wrap-anywhere">
                                                             {

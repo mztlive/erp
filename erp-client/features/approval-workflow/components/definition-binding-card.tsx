@@ -30,15 +30,27 @@ export function DefinitionBindingCard({
     definition,
     emptyLabel = "尚未绑定审批流程",
     compact = false,
+    variant = "card",
 }: {
     definition?: ApprovalDefinitionBinding
     emptyLabel?: string
     /** 对象中心 tab 内使用：标题与概览 text-sm 对齐。 */
     compact?: boolean
+    /** `flat` 用于详情工作面零边框通栏；位于 `.erp-detail-workspace-page` 内时也会自动扁平化。 */
+    variant?: "card" | "flat"
 }) {
+    const surfaceClass =
+        variant === "flat"
+            ? "border-0 bg-transparent shadow-none ring-0"
+            : undefined
+
     if (!definition) {
         return (
-            <Card size="sm">
+            <Card
+                size="sm"
+                data-slot="approval-surface"
+                className={surfaceClass}
+            >
                 <CardHeader>
                     <ApprovalSectionHeading compact={compact}>
                         审批流程
@@ -54,7 +66,7 @@ export function DefinitionBindingCard({
     const nodes = routeNodes(definition)
 
     return (
-        <Card size="sm">
+        <Card size="sm" data-slot="approval-surface" className={surfaceClass}>
             <CardHeader>
                 <ApprovalSectionHeading compact={compact}>
                     {displayProcessVersion({

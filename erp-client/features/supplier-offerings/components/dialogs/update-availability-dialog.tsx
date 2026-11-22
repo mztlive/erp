@@ -16,6 +16,8 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { RequiredMark } from "@/components/ui/required-mark"
+import { toast } from "@/components/ui/toast"
 import { useUpdateOfferingAvailabilityMutation } from "@/features/supplier-offerings/hooks/queries"
 import {
     availabilitySchema,
@@ -25,8 +27,18 @@ import {
 import type {
     AvailabilityStatus,
     SupplierOfferingView,
+    UpdateOfferingAvailabilityInput,
 } from "@/features/supplier-offerings/types"
 import { AVAILABILITY_STATUS_LABELS } from "@/features/supplier-offerings/types"
+import {
+    FormalCommandKeyLedger,
+    classifyFormalCommandError,
+} from "@/lib/formal-command"
+
+type AvailabilityPayload = Omit<
+    UpdateOfferingAvailabilityInput,
+    "idempotency_key"
+>
 
 export function UpdateAvailabilityDialog({
     offering,
@@ -37,38 +49,65 @@ export function UpdateAvailabilityDialog({
 }) {
     const mutation = useUpdateOfferingAvailabilityMutation()
     const [submitError, setSubmitError] = React.useState<string | null>(null)
+    const ledgerRef = React.useRef<FormalCommandKeyLedger | null>(null)
+    if (ledgerRef.current === null) {
+        ledgerRef.current = new FormalCommandKeyLedger((prefix) =>
+            idempotencyKey(prefix),
+        )
+    }
+
     const form = useAppForm({
         defaultValues: {
             availabilityStatus: offering.availability_status ?? "UNAVAILABLE",
             availableQuantity: offering.available_quantity ?? "",
-            changeReason: "更新当前可供情况",
+            changeReason: "",
         },
         validators: { onSubmit: availabilitySchema },
         onSubmit: async ({ value }) => {
             setSubmitError(null)
+            const ledger = ledgerRef.current!
+            const slot = `availability:${offering.id}`
+            const payload: AvailabilityPayload = {
+                offeringId: offering.id,
+                expected_version: offering.availability_version ?? undefined,
+                availability_status: value.availabilityStatus,
+                available_quantity: value.availableQuantity.trim() || null,
+                change_reason: value.changeReason.trim(),
+            }
+            const command = ledger.acquire(
+                slot,
+                "update-offering-availability",
+                payload,
+            )
             try {
                 await mutation.mutateAsync({
-                    offeringId: offering.id,
-                    expected_version:
-                        offering.availability_version ?? undefined,
-                    availability_status: value.availabilityStatus,
-                    available_quantity: value.availableQuantity.trim() || null,
-                    change_reason: value.changeReason.trim(),
-                    idempotency_key: idempotencyKey(
-                        "update-offering-availability",
-                    ),
+                    ...command.payload,
+                    idempotency_key: command.idempotencyKey,
+                })
+                ledger.settle(slot, "succeeded")
+                toast.add({
+                    title: "当前可供情况已更新",
+                    type: "success",
                 })
                 onOpenChange(false)
             } catch (error) {
+                ledger.settle(slot, classifyFormalCommandError(error))
                 setSubmitError(errorMessage(error, "可供情况保存失败"))
             }
         },
     })
 
     return (
-        <Dialog open onOpenChange={onOpenChange}>
+        <Dialog
+            open
+            onOpenChange={(next) => {
+                if (!next && mutation.isPending) return
+                onOpenChange(next)
+            }}
+        >
             <DialogContent
                 closeButtonId="supplier-offerings-dialog-availability-close"
+                showCloseButton={!mutation.isPending}
                 className="sm:max-w-lg"
                 onKeyDownCapture={(event) => {
                     if (event.key !== "Escape" || mutation.isPending) return
@@ -106,9 +145,9 @@ export function UpdateAvailabilityDialog({
                     <form.AppField name="availabilityStatus">
                         {(field) => (
                             <div className="space-y-1.5">
-                                <Label>
+                                <Label htmlFor="supplier-offerings-dialog-availability-status">
                                     可供状态
-                                    <span className="text-destructive">*</span>
+                                    <RequiredMark />
                                 </Label>
                                 <OptionCombobox
                                     id="supplier-offerings-dialog-availability-status"
@@ -135,6 +174,7 @@ export function UpdateAvailabilityDialog({
                         {(field) => (
                             <field.TextField
                                 id="supplier-offerings-dialog-availability-quantity"
+                                inputMode="decimal"
                                 label="当前可供数量"
                                 description="留空表示供应商未提供数量上限"
                             />
@@ -145,6 +185,7 @@ export function UpdateAvailabilityDialog({
                             <field.TextField
                                 id="supplier-offerings-dialog-availability-reason"
                                 label="变更原因"
+                                placeholder="例如：供应商反馈当前可售库存变化"
                                 required
                             />
                         )}

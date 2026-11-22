@@ -1,10 +1,10 @@
 "use client"
 
 import { MoneyValue, RateValue } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Table,
     TableBody,
@@ -98,9 +98,11 @@ export function InquiryFees({
                             对应需求第 {feedback.requirement_version} 版
                         </span>
                         {historical && (
-                            <Badge variant="outline">历史反馈</Badge>
+                            <StatusBadge tone="neutral" label="历史反馈" />
                         )}
-                        {accepted && <Badge variant="success">已接受</Badge>}
+                        {accepted && (
+                            <StatusBadge tone="success" label="已接受" />
+                        )}
                         <span className="text-muted-foreground">
                             额外费用 {feedback.data.fees.length} 项
                         </span>
@@ -188,8 +190,12 @@ function FeeQuoteTable({ feedback }: { feedback: InquiryFeedback }) {
                 <TableHeader>
                     <TableRow>
                         <TableHead>费用名称</TableHead>
-                        <TableHead className="text-right">含税金额</TableHead>
-                        <TableHead className="text-right">税率</TableHead>
+                        <TableHead data-align="end" className="text-right">
+                            含税金额
+                        </TableHead>
+                        <TableHead data-align="end" className="text-right">
+                            税率
+                        </TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -203,10 +209,16 @@ function FeeQuoteTable({ feedback }: { feedback: InquiryFeedback }) {
                                     </p>
                                 )}
                             </TableCell>
-                            <TableCell className="text-right">
+                            <TableCell
+                                data-align="end"
+                                className="num text-right"
+                            >
                                 <MoneyValue value={fee.amount_gross} />
                             </TableCell>
-                            <TableCell className="text-right">
+                            <TableCell
+                                data-align="end"
+                                className="num text-right"
+                            >
                                 <RateValue
                                     value={multiplyFixed(fee.tax_rate, "100", {
                                         leftMaxScale: 6,

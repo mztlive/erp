@@ -18,6 +18,7 @@ import {
 import { OptionCombobox } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { fetchCustomerAcceptanceWorkspace } from "@/features/sales-orders/api/acceptance"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import {
@@ -33,6 +34,19 @@ import {
 import type { SalesOrderDetailActionResult } from "@/features/sales-orders/lib/sales-order-detail-model"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { getErrorPresentation } from "@/lib/api/errors"
+import { hasPermission } from "@/lib/permissions"
+
+/** 仅具有销售单更新权限且非终态（已关闭/已作废）的销售单允许发起责任交接。 */
+export function canShowSalesOrderHandover(
+    order: SalesOrderDetailView,
+    permissions: readonly string[] | undefined,
+): boolean {
+    return (
+        hasPermission(permissions, "sales_order:update") &&
+        order.primaryStatus.code !== "closed" &&
+        order.primaryStatus.code !== "voided"
+    )
+}
 
 /**
  * 销售单详情「责任交接」。
@@ -50,12 +64,20 @@ export function SalesOrderHandoverButton({
     triggerVariant?: React.ComponentProps<typeof Button>["variant"]
     triggerClassName?: string
 }) {
+    const profileQuery = useAccountProfileQuery()
+    const allowed = canShowSalesOrderHandover(
+        order,
+        profileQuery.data?.permissions,
+    )
     const [open, setOpen] = React.useState(false)
     const [targetUserId, setTargetUserId] = React.useState("")
     const [reason, setReason] = React.useState("")
     const [idempotencyKey, setIdempotencyKey] = React.useState("")
     const [confirmError, setConfirmError] = React.useState<string | null>(null)
-    const candidatesQuery = useSalesHandoverCandidatesQuery(order.id, open)
+    const candidatesQuery = useSalesHandoverCandidatesQuery(
+        order.id,
+        allowed && open,
+    )
     const handoverMutation = useSubmitSalesHandoverMutation()
     const orderSegment = toAutomationIdSegment(order.id)
     /** 随转预览复用详情验收面同一 QueryKey；已加载时命中缓存，不新增请求。 */
@@ -64,7 +86,7 @@ export function SalesOrderHandoverButton({
         staleTime: 0,
         queryFn: () =>
             fetchCustomerAcceptanceWorkspace({ salesOrderId: order.id }),
-        enabled: open,
+        enabled: allowed && open,
     })
     const acceptanceSummary = React.useMemo(() => {
         const lines = acceptancePreview.data?.salesLines
@@ -84,6 +106,8 @@ export function SalesOrderHandoverButton({
             })),
         [candidatesQuery.data],
     )
+
+    if (!allowed) return null
 
     return (
         <>
@@ -251,12 +275,6 @@ export function SalesOrderHandoverButton({
                                             "交接未完成，请刷新后重试。",
                                         )
                                         setConfirmError(failure.description)
-                                        onResult?.({
-                                            status: "blocked",
-                                            title: failure.title,
-                                            description: failure.description,
-                                            reference: order.documentNumber,
-                                        })
                                     })
                             }}
                         >
