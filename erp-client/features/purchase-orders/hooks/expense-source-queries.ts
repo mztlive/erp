@@ -8,7 +8,11 @@ import {
     type ExpenseSourceQuery,
 } from "../api/expense-sources"
 
-const expenseSourceKeys = ["purchase-orders", "expense-sources"] as const
+export const expenseSourceKeys = ["purchase-orders", "expense-sources"] as const
+
+export function inquiryExpenseCandidatesKey(salesOrderId: string) {
+    return [...expenseSourceKeys, "inquiry-fees", salesOrderId] as const
+}
 export function useExpenseSourcesQuery(
     input: ExpenseSourceQuery,
     enabled: boolean,
@@ -26,7 +30,7 @@ export function useInquiryExpenseCandidatesQuery(
     enabled: boolean,
 ) {
     return useQuery({
-        queryKey: [...expenseSourceKeys, "inquiry-fees", salesOrderId],
+        queryKey: inquiryExpenseCandidatesKey(salesOrderId),
         queryFn: () => fetchInquiryExpenseCandidates(salesOrderId),
         enabled: enabled && Boolean(salesOrderId),
         staleTime: 0,

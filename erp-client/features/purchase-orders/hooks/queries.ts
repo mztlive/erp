@@ -33,6 +33,7 @@ import {
     type ConfirmExpenseOccurrenceInput,
     type CreateExpensePurchaseInput,
 } from "@/features/purchase-orders/api/purchase-expenses"
+import { inquiryExpenseCandidatesKey } from "./expense-source-queries"
 import { workItemKeys } from "@/features/work-items/queries"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 
@@ -348,6 +349,9 @@ export function useCreateExpensePurchaseMutation(salesOrderId: string) {
                 queryClient.invalidateQueries({ queryKey: workItemKeys.all }),
                 queryClient.invalidateQueries({
                     queryKey: queryKeyRoots.salesOrders,
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: inquiryExpenseCandidatesKey(salesOrderId),
                 }),
             ])
         },

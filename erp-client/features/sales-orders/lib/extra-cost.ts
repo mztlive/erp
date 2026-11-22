@@ -18,7 +18,7 @@ import {
     compareDecimal,
     multiplyFixed,
     normalizeFixed,
-    subtractFixed,
+    splitFeeGrossByPercentRate,
 } from "@/lib/fixed-decimal"
 
 export const EXTRA_COST_CATEGORY_LABEL: Record<ExtraCostCategory, string> = {
@@ -205,18 +205,7 @@ export function calculateExtraCostAmounts(
     }
     try {
         if (compareDecimal(trimmedGross, "0", 2) <= 0) return null
-        const gross = normalizeFixed(trimmedGross, {
-            maxScale: 2,
-            outputScale: 2,
-        })
-        const rate = taxRateFromPercent(trimmedPercent)
-        const tax = multiplyFixed(gross, rate, {
-            leftMaxScale: 2,
-            rightMaxScale: 6,
-            outputScale: 2,
-        })
-        const net = subtractFixed(gross, tax, { maxScale: 2, outputScale: 2 })
-        return { gross, tax, net }
+        return splitFeeGrossByPercentRate(trimmedGross, trimmedPercent)
     } catch {
         return null
     }

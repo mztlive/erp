@@ -293,6 +293,29 @@ export function splitGrossByPercentRate(
     }
 }
 
+/**
+ * Derive fee net/tax amounts matching backend `erp_core::money::fee_amounts`:
+ * `tax = round_to_cent(gross * rate)`, `net = gross - tax`.
+ */
+export function splitFeeGrossByPercentRate(
+    grossAmount: string,
+    taxRatePercent: string,
+): { gross: string; net: string; tax: string } {
+    const gross = normalizeFixed(grossAmount, { maxScale: 2, outputScale: 2 })
+    const rate = divideFixed(taxRatePercent, "100", {
+        numeratorMaxScale: 6,
+        denominatorMaxScale: 0,
+        outputScale: 6,
+    })
+    const tax = multiplyFixed(gross, rate, {
+        leftMaxScale: 2,
+        rightMaxScale: 6,
+        outputScale: 2,
+    })
+    const net = subtractFixed(gross, tax, { maxScale: 2, outputScale: 2 })
+    return { gross, net, tax }
+}
+
 /** Compare two canonical decimal strings without converting them to `number`. */
 export function compareDecimal(
     left: string,

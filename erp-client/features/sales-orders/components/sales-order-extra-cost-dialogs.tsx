@@ -3,7 +3,7 @@
 import * as React from "react"
 import { ArrowRightIcon } from "lucide-react"
 
-import { detailWorkspaceStyles } from "@/components/business"
+import { MoneyValue, detailWorkspaceStyles } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -33,6 +33,7 @@ import {
     EXTRA_COST_CATEGORY_LABEL,
     EXTRA_COST_WHOLE_ORDER,
     REGISTER_CATEGORY_OPTIONS,
+    formatTaxRate,
     newExtraCostRequestKey,
     reduceDefaults,
     reduceExtraCostSchema,
@@ -43,6 +44,11 @@ import {
     todayDate,
 } from "@/features/sales-orders/lib/extra-cost"
 import { getErrorMessage } from "@/lib/api/errors"
+import {
+    compareDecimal,
+    normalizeFixed,
+    subtractFixed,
+} from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 import { ExtraCostAmountBreakdown } from "./extra-cost-amount-breakdown"
 import {
@@ -572,18 +578,24 @@ export function ReduceExtraCostDialog({
         onSubmit: async ({ value }) => {
             if (!cost) return
             setFailure(null)
+            const grossAmount = value.grossAmount.trim()
             try {
                 await mutation.mutateAsync({
                     costEntryId: cost.id,
                     value: {
                         description: value.description.trim(),
-                        grossAmount: value.grossAmount.trim(),
+                        grossAmount,
                         occurredOn: value.occurredOn,
                         evidence: value.evidence as File,
                         idempotencyKey: requestKey,
                     },
                 })
                 onOpenChange(false)
+                toast.add({
+                    title: "附加费用已冲减",
+                    description: `已冲减「${cost.description}」${grossAmount} 元，本单实际经营成本已同步更新。`,
+                    type: "success",
+                })
             } catch (error) {
                 setFailure(getErrorMessage(error, "冲减失败，请稍后重试。"))
             }
@@ -601,108 +613,300 @@ export function ReduceExtraCostDialog({
         lastOpenId.current = openId
     }, [form, openId])
 
+    const handleOpenChange = (next: boolean) => {
+        if (!next && mutation.isPending) return
+        onOpenChange(next)
+    }
+
     return (
-        <Dialog open={Boolean(cost)} onOpenChange={onOpenChange}>
+        <Dialog open={Boolean(cost)} onOpenChange={handleOpenChange}>
             <DialogContent
-                className="sm:max-w-lg"
+                className="flex max-h-[min(90svh,44rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl"
                 closeButtonId="sales-orders-extra-cost-reduce-close"
+                showCloseButton={!mutation.isPending}
             >
-                <DialogHeader>
-                    <DialogTitle>冲减附加费用</DialogTitle>
+                <DialogHeader className="shrink-0 gap-2 border-b border-grid px-6 py-4 text-left">
+                    <div className="flex flex-wrap items-center gap-2 pr-8">
+                        <DialogTitle>冲减附加费用</DialogTitle>
+                        <Badge variant="secondary" className="num font-normal">
+                            {order.documentNumber}
+                        </Badge>
+                    </div>
                     <DialogDescription>
-                        {cost
-                            ? `「${cost.description}」剩余 ${remaining} 元可冲减。冲减不修改原费用，追加一笔冲减记录。`
-                            : null}
+                        冲减不修改原费用，将追加一笔冲减记录并沿用原费用的类别、税率与归属。
                     </DialogDescription>
                 </DialogHeader>
+
                 <form
-                    className="flex flex-col gap-4"
+                    className="flex min-h-0 flex-1 flex-col"
                     onSubmit={(event) => {
                         event.preventDefault()
                         void form.handleSubmit()
                     }}
                 >
-                    <form.AppField
-                        name="description"
-                        children={(field) => (
-                            <field.TextField
-                                id="sales-orders-extra-cost-reduce-description"
-                                label="冲减原因"
-                                required
-                                placeholder="例如：快递公司退回部分运费"
-                            />
-                        )}
-                    />
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
+                        {cost ? (
+                            <div className="space-y-2.5 rounded-lg border border-border/75 bg-muted/30 px-4 py-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <Badge
+                                        variant="secondary"
+                                        className="bg-card font-normal"
+                                    >
+                                        {
+                                            EXTRA_COST_CATEGORY_LABEL[
+                                                cost.category
+                                            ]
+                                        }
+                                    </Badge>
+                                    <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+                                        {cost.description}
+                                    </span>
+                                    <span className="num text-xs text-muted-foreground">
+                                        税率 {formatTaxRate(cost.inputTaxRate)}
+                                    </span>
+                                </div>
+                                <dl className="grid grid-cols-3 gap-3 border-t border-border/60 pt-2.5">
+                                    <div className="min-w-0 space-y-0.5">
+                                        <dt className="text-xs text-muted-foreground">
+                                            原含税金额
+                                        </dt>
+                                        <dd className="num text-body-compact text-foreground">
+                                            <MoneyValue
+                                                value={cost.grossAmount}
+                                                display="exact"
+                                            />
+                                        </dd>
+                                    </div>
+                                    <div className="min-w-0 space-y-0.5">
+                                        <dt className="text-xs text-muted-foreground">
+                                            已累计冲减
+                                        </dt>
+                                        <dd className="num text-body-compact text-muted-foreground">
+                                            <MoneyValue
+                                                value={cost.reducedGrossAmount}
+                                                display="exact"
+                                            />
+                                        </dd>
+                                    </div>
+                                    <div className="min-w-0 space-y-0.5">
+                                        <dt className="text-xs text-muted-foreground">
+                                            当前可冲减
+                                        </dt>
+                                        <dd className="num text-body-compact font-semibold text-foreground">
+                                            <MoneyValue
+                                                value={remaining}
+                                                display="exact"
+                                            />
+                                        </dd>
+                                    </div>
+                                </dl>
+                            </div>
+                        ) : null}
+
                         <form.AppField
-                            name="grossAmount"
+                            name="description"
                             children={(field) => (
                                 <field.TextField
-                                    money
-                                    id="sales-orders-extra-cost-reduce-gross"
-                                    label="冲减金额（元）"
+                                    id="sales-orders-extra-cost-reduce-description"
+                                    label="冲减原因"
                                     required
-                                    inputMode="decimal"
-                                    placeholder={remaining}
+                                    placeholder="例如：快递公司退回部分运费、费用登记有误全额冲回"
                                 />
                             )}
                         />
+
+                        <div className="space-y-2.5">
+                            <div className="grid grid-cols-1 items-start gap-x-4 gap-y-3.5 sm:grid-cols-12">
+                                <form.AppField
+                                    name="grossAmount"
+                                    children={(field) => (
+                                        <field.TextField
+                                            money
+                                            id="sales-orders-extra-cost-reduce-gross"
+                                            label="冲减金额（元）"
+                                            required
+                                            inputMode="decimal"
+                                            inputClassName="num"
+                                            placeholder={remaining}
+                                            className="sm:col-span-7"
+                                        />
+                                    )}
+                                />
+                                <form.AppField
+                                    name="occurredOn"
+                                    children={(field) => (
+                                        <field.DateField
+                                            id="sales-orders-extra-cost-reduce-occurred-on"
+                                            label="冲减日期"
+                                            required
+                                            clearable={false}
+                                            disabledDates={{
+                                                after: new Date(
+                                                    `${todayDate()}T00:00:00`,
+                                                ),
+                                            }}
+                                            className="sm:col-span-5"
+                                        />
+                                    )}
+                                />
+                            </div>
+
+                            <form.Subscribe
+                                selector={(state) => state.values.grossAmount}
+                            >
+                                {(grossAmount) => (
+                                    <ReduceBalanceHint
+                                        grossAmount={grossAmount}
+                                        remaining={remaining}
+                                        disabled={mutation.isPending}
+                                        onFillFull={() =>
+                                            form.setFieldValue(
+                                                "grossAmount",
+                                                remaining,
+                                            )
+                                        }
+                                    />
+                                )}
+                            </form.Subscribe>
+                        </div>
+
                         <form.AppField
-                            name="occurredOn"
+                            name="evidence"
                             children={(field) => (
-                                <field.DateField
-                                    id="sales-orders-extra-cost-reduce-occurred-on"
-                                    label="冲减日期"
+                                <field.EvidenceUploadField
+                                    id="sales-orders-extra-cost-reduce-evidence"
+                                    label="冲减凭证"
                                     required
-                                    clearable={false}
-                                    disabledDates={{
-                                        after: new Date(
-                                            `${todayDate()}T00:00:00`,
-                                        ),
-                                    }}
+                                    density="compact"
+                                    uploadLabel="上传退款或更正凭证"
+                                    description="支持 PDF、JPG、PNG 或 WebP，不超过 5 MB。"
                                 />
                             )}
                         />
+
+                        {failure ? (
+                            <Alert variant="destructive">
+                                <AlertDescription>{failure}</AlertDescription>
+                            </Alert>
+                        ) : null}
                     </div>
-                    <form.AppField
-                        name="evidence"
-                        children={(field) => (
-                            <field.EvidenceUploadField
-                                id="sales-orders-extra-cost-reduce-evidence"
-                                label="冲减凭证"
-                                required
-                                uploadLabel="上传退款或更正凭证"
-                            />
-                        )}
-                    />
-                    {failure ? (
-                        <p
-                            role="alert"
-                            className="text-body-compact text-destructive"
-                        >
-                            {failure}
+
+                    <DialogFooter className="shrink-0 border-t border-grid bg-card px-6 py-3.5 sm:items-center sm:justify-between">
+                        <p className="text-xs text-muted-foreground">
+                            冲减后同步调减本单实际经营成本。
                         </p>
-                    ) : null}
-                    <DialogFooter>
-                        <Button
-                            id="sales-orders-extra-cost-reduce-cancel"
-                            type="button"
-                            variant="ghost"
-                            disabled={mutation.isPending}
-                            onClick={() => onOpenChange(false)}
-                        >
-                            取消
-                        </Button>
-                        <form.AppForm>
-                            <form.SubmitButton
-                                id="sales-orders-extra-cost-reduce-submit"
-                                label="确认冲减"
-                                pendingLabel="冲减中…"
-                            />
-                        </form.AppForm>
+                        <div className="flex items-center justify-end gap-2">
+                            <Button
+                                id="sales-orders-extra-cost-reduce-cancel"
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={mutation.isPending}
+                                onClick={() => handleOpenChange(false)}
+                            >
+                                取消
+                            </Button>
+                            <form.AppForm>
+                                <form.SubmitButton
+                                    id="sales-orders-extra-cost-reduce-submit"
+                                    size="sm"
+                                    showError={false}
+                                    label="确认冲减"
+                                    pendingLabel="冲减中…"
+                                />
+                            </form.AppForm>
+                        </div>
                     </DialogFooter>
                 </form>
             </DialogContent>
         </Dialog>
+    )
+}
+
+function ReduceBalanceHint({
+    grossAmount,
+    remaining,
+    disabled,
+    onFillFull,
+}: {
+    grossAmount: string
+    remaining: string
+    disabled: boolean
+    onFillFull: () => void
+}) {
+    const trimmed = grossAmount.trim()
+    let status:
+        | { kind: "empty" }
+        | { kind: "exceeded" }
+        | { kind: "full" }
+        | { kind: "partial"; after: string } = { kind: "empty" }
+    let isFull = false
+
+    if (/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(trimmed)) {
+        try {
+            if (compareDecimal(trimmed, "0", 2) > 0) {
+                const normalized = normalizeFixed(trimmed, {
+                    maxScale: 2,
+                    outputScale: 2,
+                })
+                const cmp = compareDecimal(normalized, remaining, 2)
+                if (cmp > 0) {
+                    status = { kind: "exceeded" }
+                } else if (cmp === 0) {
+                    status = { kind: "full" }
+                    isFull = true
+                } else {
+                    status = {
+                        kind: "partial",
+                        after: subtractFixed(remaining, normalized, {
+                            maxScale: 2,
+                            outputScale: 2,
+                        }),
+                    }
+                }
+            }
+        } catch {
+            status = { kind: "empty" }
+        }
+    }
+
+    return (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/40 px-3.5 py-2 text-xs">
+            <button
+                id="sales-orders-extra-cost-reduce-fill-full"
+                type="button"
+                aria-pressed={isFull}
+                disabled={disabled}
+                onClick={onFillFull}
+                className={cn(
+                    "num inline-flex h-6 cursor-pointer items-center rounded-md px-2 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-primary disabled:pointer-events-none disabled:opacity-50",
+                    isFull
+                        ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                        : "bg-card text-foreground/80 shadow-2xs hover:bg-accent hover:text-foreground",
+                )}
+            >
+                全额冲减（¥{remaining}）
+            </button>
+            {status.kind === "exceeded" ? (
+                <span className="text-destructive">超出当前可冲减余额</span>
+            ) : status.kind === "full" ? (
+                <span className="text-muted-foreground">
+                    本次将全额冲减该笔费用
+                </span>
+            ) : status.kind === "partial" ? (
+                <span className="text-muted-foreground">
+                    冲减后剩余：
+                    <MoneyValue
+                        value={status.after}
+                        display="exact"
+                        className="ml-1 font-medium text-foreground"
+                    />
+                </span>
+            ) : (
+                <span className="text-muted-foreground">
+                    最多可冲减 <MoneyValue value={remaining} display="exact" />
+                </span>
+            )}
+        </div>
     )
 }

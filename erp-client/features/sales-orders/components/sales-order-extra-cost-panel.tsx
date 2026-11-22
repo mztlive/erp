@@ -174,6 +174,12 @@ export function ExtraCostPanel({
     const expenseDialog = canAddExpensePurchase ? (
         <ExpensePurchaseCreateDialog
             salesOrderId={order.id}
+            sourceLabel={
+                order.customerName
+                    ? `${order.documentNumber} · ${order.customerName}`
+                    : order.documentNumber
+            }
+            title="追加费用采购"
             salesLines={order.lineItems
                 .filter((line) => line.quantity !== "0")
                 .map((line) => ({ id: line.id, name: line.name }))}
