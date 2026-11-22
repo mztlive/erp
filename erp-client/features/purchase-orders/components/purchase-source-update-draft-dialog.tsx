@@ -87,16 +87,16 @@ export function PurchaseSourceUpdateDraftDialog({
                 }}
             >
                 <DialogContent
-                    className="flex max-h-[90vh] flex-col sm:max-w-5xl"
+                    className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-5xl"
                     closeButtonId="purchase-source-update-draft-close"
                 >
-                    <DialogHeader>
+                    <DialogHeader className="shrink-0">
                         <DialogTitle>修改采购原单</DialogTitle>
                         <DialogDescription>
                             按来源销售的新要求调整。保存后仍需提交审批，销售变更才算处理完成。
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="min-h-0 overflow-auto space-y-4">
+                    <div className="min-h-0 flex-1 space-y-4 overflow-auto">
                         {result ? <FormalActionResult {...result} /> : null}
                         <PurchaseOrderSourceUpdateNotice
                             order={order}

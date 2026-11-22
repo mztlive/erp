@@ -177,15 +177,15 @@ export function InvoiceRequestDetail({
                 id="invoice-request-detail-dialog"
                 closeButtonId="invoice-request-detail-dialog-close"
                 showCloseButton={!closeBlocked}
-                className="flex max-h-[calc(100dvh-2rem)] flex-col sm:max-w-4xl"
+                className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-4xl"
             >
-                <DialogHeader>
+                <DialogHeader className="shrink-0">
                     <DialogTitle>开票申请详情</DialogTitle>
                     <DialogDescription>
                         查看申请金额、开票资料与审批进度。
                     </DialogDescription>
                 </DialogHeader>
-                <div className="min-h-0 overflow-y-auto">{content}</div>
+                <div className="min-h-0 flex-1 overflow-y-auto">{content}</div>
             </DialogContent>
         </Dialog>
     )

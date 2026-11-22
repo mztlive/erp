@@ -387,7 +387,8 @@ export function SupplyExceptionTaskPanel({
                 idPrefix="supplier-offerings-exception-complete-confirm"
                 open={confirmOpen}
                 onOpenChange={setConfirmOpen}
-                actionLabel="确认已核对并完成任务"
+                actionLabel="完成核对任务"
+                confirmLabel="确认已核对并完成任务"
                 title="确认完成供应停止核对"
                 description="完成核对后，供给与商品发布仍保持暂停。"
                 fromStatus={{ label: "待核对", tone: "warning" }}

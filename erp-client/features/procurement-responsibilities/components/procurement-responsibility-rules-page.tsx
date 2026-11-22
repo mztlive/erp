@@ -208,10 +208,17 @@ function RuleDialog({
     }, [canUseSku, form, open, target])
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && mutation.isPending) return
+                onOpenChange(next)
+            }}
+        >
             <DialogContent
                 className="sm:max-w-2xl"
                 closeButtonId="procurement-responsibility-rules-dialog-close"
+                showCloseButton={!mutation.isPending}
                 finalFocus={finalFocus}
             >
                 <DialogHeader>
@@ -393,6 +400,7 @@ function RuleDialog({
                                     id="procurement-responsibility-rules-dialog-cancel"
                                     type="button"
                                     variant="outline"
+                                    disabled={mutation.isPending}
                                 />
                             }
                         >

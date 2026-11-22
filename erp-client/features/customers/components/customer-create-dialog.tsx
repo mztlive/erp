@@ -31,7 +31,9 @@ export function CustomerCreateDialog({
             >
                 <DialogHeader>
                     <DialogTitle>新建客户</DialogTitle>
-                    <DialogDescription>填写客户资料。</DialogDescription>
+                    <DialogDescription>
+                        填写客户基础信息、联系人和开票资料，创建后可用于签合同与开销售单。
+                    </DialogDescription>
                 </DialogHeader>
                 <CustomerForm
                     key={open ? "open" : "closed"}

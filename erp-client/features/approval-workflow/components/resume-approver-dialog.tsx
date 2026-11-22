@@ -75,8 +75,17 @@ export function ResumeApproverDialog({
     }
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent closeButtonId={`${id}-close`}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && resume.isPending) return
+                onOpenChange(next)
+            }}
+        >
+            <DialogContent
+                closeButtonId={`${id}-close`}
+                showCloseButton={!resume.isPending}
+            >
                 <DialogHeader>
                     <DialogTitle>继续由原审批人审批</DialogTitle>
                     <DialogDescription>

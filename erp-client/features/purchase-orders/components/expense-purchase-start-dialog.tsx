@@ -97,7 +97,7 @@ function ExpensePurchaseStartContent({
                 closeButtonId="procurement-expense-source-close"
                 className="flex max-h-[min(90svh,44rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
             >
-                <DialogHeader className="shrink-0 gap-2 border-b border-grid px-6 py-4 text-left">
+                <DialogHeader className="shrink-0 gap-2 border-b border-grid px-6 py-4 pr-14 text-left">
                     <DialogTitle>新建费用采购单 · 选择归属销售单</DialogTitle>
                     <DialogDescription>
                         先选择费用所属的销售单，再填写收款供应商和费用明细。仅显示协同范围内已生效的实物与服务销售单。

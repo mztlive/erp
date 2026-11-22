@@ -31,7 +31,7 @@ export function SalesOrderApprovalDialog({
                 id={`${idPrefix}-dialog`}
                 closeButtonId={`${idPrefix}-close`}
                 finalFocus={() => document.getElementById(triggerId)}
-                className="flex max-h-[85dvh] flex-col sm:max-w-5xl"
+                className="flex max-h-[85dvh] flex-col overflow-hidden sm:max-w-5xl"
             >
                 <DialogHeader className="shrink-0 pr-8">
                     <DialogTitle>销售单审批链及进度</DialogTitle>
@@ -49,6 +49,7 @@ export function SalesOrderApprovalDialog({
                     ) : null}
                 </div>
                 <DialogFooter
+                    className="shrink-0"
                     showCloseButton
                     closeButtonId={`${idPrefix}-footer-close`}
                 />

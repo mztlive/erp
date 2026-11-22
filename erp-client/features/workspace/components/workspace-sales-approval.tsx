@@ -361,7 +361,7 @@ function DeliveryAllocations({
                 {allocations.length} 条
             </DialogTrigger>
             <DialogContent
-                className="flex max-h-[85dvh] flex-col sm:max-w-4xl"
+                className="flex max-h-[85dvh] flex-col overflow-hidden sm:max-w-4xl"
                 closeButtonId={`${idPrefix}-allocations-close`}
             >
                 <DialogHeader className="shrink-0 pr-8">
@@ -375,7 +375,7 @@ function DeliveryAllocations({
                     id={`${idPrefix}-allocations-list`}
                     role="region"
                     aria-label="收货分配列表"
-                    className="min-h-0 overflow-auto rounded-lg border border-grid"
+                    className="min-h-0 flex-1 overflow-auto rounded-lg border border-grid"
                 >
                     <Table className="min-w-[640px]" aria-label="收货分配明细">
                         <TableHeader>

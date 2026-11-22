@@ -5,6 +5,7 @@ import { hasPermission } from "@/lib/permissions"
 
 import * as React from "react"
 import Link from "next/link"
+import { useStore } from "@tanstack/react-form"
 import { useQueryClient } from "@tanstack/react-query"
 
 import { FormalActionResult } from "@/components/business"
@@ -99,6 +100,8 @@ export function DisableActionDialog({
         },
     })
 
+    const isSubmitting = useStore(form.store, (state) => state.isSubmitting)
+
     React.useEffect(() => {
         if (open) {
             setResult(null)
@@ -109,9 +112,16 @@ export function DisableActionDialog({
     }, [open, ids.stableId])
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && isSubmitting) return
+                onOpenChange(next)
+            }}
+        >
             <DialogContent
                 closeButtonId="master-data-shared-disable-close"
+                showCloseButton={!isSubmitting}
                 className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg"
             >
                 <DialogHeader>
@@ -232,6 +242,7 @@ export function DisableActionDialog({
                                             id="master-data-shared-disable-action-dialog-button-2"
                                             type="button"
                                             variant="outline"
+                                            disabled={isSubmitting}
                                         />
                                     }
                                 >

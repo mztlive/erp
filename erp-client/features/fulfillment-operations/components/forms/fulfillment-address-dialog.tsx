@@ -94,7 +94,7 @@ export function FulfillmentAddressDialog({
                         {action.mode === "delete"
                             ? "删除后，未发商品回到待补地址；已发货记录不变。"
                             : action.mode === "edit"
-                              ? "修改当前收件信息。"
+                              ? "修改当前收件信息，仅影响尚未发货的包裹；已发货记录保持不变。"
                               : "填写收件信息和分配数量，保存后更新当前任务。"}
                     </DialogDescription>
                 </DialogHeader>

@@ -86,8 +86,17 @@ export function CustomerAssignmentDialog({
     }, [dirty, open])
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent closeButtonId="customers-assignment-dialog-close">
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && mutation.isPending) return
+                onOpenChange(next)
+            }}
+        >
+            <DialogContent
+                closeButtonId="customers-assignment-dialog-close"
+                showCloseButton={!mutation.isPending}
+            >
                 <DialogHeader>
                     <DialogTitle>
                         {target

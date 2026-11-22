@@ -30,8 +30,14 @@ export function BackgroundJobCancelDialog({
     onConfirm,
 }: CancelDialogProps) {
     return (
-        <AlertDialog open={open} onOpenChange={onOpenChange}>
-            <AlertDialogContent size="sm">
+        <AlertDialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && pending) return
+                onOpenChange(next)
+            }}
+        >
+            <AlertDialogContent>
                 <AlertDialogHeader>
                     <AlertDialogTitle>取消任务</AlertDialogTitle>
                     <AlertDialogDescription>
@@ -47,11 +53,15 @@ export function BackgroundJobCancelDialog({
                     </p>
                 ) : null}
                 <AlertDialogFooter>
-                    <AlertDialogCancel id={`${ID_PREFIX}-cancel-back`}>
+                    <AlertDialogCancel
+                        id={`${ID_PREFIX}-cancel-back`}
+                        disabled={pending}
+                    >
                         返回
                     </AlertDialogCancel>
                     <AlertDialogAction
                         id={`${ID_PREFIX}-cancel-confirm`}
+                        variant="destructive"
                         disabled={pending}
                         loading={pending}
                         onClick={() => {
@@ -76,8 +86,14 @@ export function BackgroundJobsStopAllDialog({
     result,
 }: CancelDialogProps & { result: CancelAllBackgroundJobsResult | null }) {
     return (
-        <AlertDialog open={open} onOpenChange={onOpenChange}>
-            <AlertDialogContent size="sm">
+        <AlertDialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && pending) return
+                onOpenChange(next)
+            }}
+        >
+            <AlertDialogContent>
                 <AlertDialogHeader>
                     <AlertDialogTitle>停止并取消所有任务</AlertDialogTitle>
                     <AlertDialogDescription>
@@ -113,11 +129,13 @@ export function BackgroundJobsStopAllDialog({
                         <>
                             <AlertDialogCancel
                                 id={`${ID_PREFIX}-stop-all-back`}
+                                disabled={pending}
                             >
                                 返回
                             </AlertDialogCancel>
                             <AlertDialogAction
                                 id={`${ID_PREFIX}-stop-all-confirm`}
+                                variant="destructive"
                                 disabled={pending}
                                 loading={pending}
                                 onClick={() => {

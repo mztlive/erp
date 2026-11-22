@@ -182,7 +182,8 @@ export function InquiryImportDialog({
             <DialogContent
                 id="sales-inquiry-import-dialog"
                 closeButtonId="sales-inquiry-import-dismiss"
-                className="flex max-h-[90dvh] flex-col sm:max-w-4xl"
+                showCloseButton={!busy && !submitting}
+                className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-4xl"
                 finalFocus={
                     creation
                         ? () =>
@@ -192,7 +193,7 @@ export function InquiryImportDialog({
                         : undefined
                 }
             >
-                <DialogHeader>
+                <DialogHeader className="shrink-0">
                     <DialogTitle>导入客户选品</DialogTitle>
                     <DialogDescription>
                         {creation
@@ -208,7 +209,7 @@ export function InquiryImportDialog({
                         void form.handleSubmit()
                     }}
                 >
-                    <div className="min-h-0 space-y-5 overflow-y-auto pr-1">
+                    <div className="min-h-0 flex-1 space-y-5 overflow-y-auto pr-1">
                         {creation && (
                             <form.AppField name="customer_id">
                                 {(field) => (

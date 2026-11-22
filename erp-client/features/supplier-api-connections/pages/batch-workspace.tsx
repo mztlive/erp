@@ -1382,8 +1382,17 @@ export function BatchWorkspace({
                     onOpenChange={(open) => !open && setEditingId(null)}
                 />
             ) : null}
-            <Dialog open={leaveOpen} onOpenChange={setLeaveOpen}>
-                <DialogContent closeButtonId="supplier-catalog-batch-leave-close">
+            <Dialog
+                open={leaveOpen}
+                onOpenChange={(next) => {
+                    if (!next && busy) return
+                    setLeaveOpen(next)
+                }}
+            >
+                <DialogContent
+                    closeButtonId="supplier-catalog-batch-leave-close"
+                    showCloseButton={!busy}
+                >
                     <DialogHeader>
                         <DialogTitle>尚有未保存修改</DialogTitle>
                         <DialogDescription>
@@ -1395,6 +1404,7 @@ export function BatchWorkspace({
                             id="supplier-catalog-batch-leave-cancel"
                             type="button"
                             variant="outline"
+                            disabled={busy}
                             onClick={() => setLeaveOpen(false)}
                         >
                             继续编辑
@@ -1402,7 +1412,8 @@ export function BatchWorkspace({
                         <Button
                             id="supplier-catalog-batch-leave-discard"
                             type="button"
-                            variant="outline"
+                            variant="destructive"
+                            disabled={busy}
                             onClick={returnToCatalog}
                         >
                             放弃修改并离开

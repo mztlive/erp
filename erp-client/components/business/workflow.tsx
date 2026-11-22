@@ -243,10 +243,16 @@ function ConflictResolutionDialog({
     const isPending = pendingAction != null
 
     return (
-        <Dialog open={resolvedOpen} onOpenChange={setOpen}>
+        <Dialog
+            open={resolvedOpen}
+            onOpenChange={(next) => {
+                if (!isPending) setOpen(next)
+            }}
+        >
             {trigger ? <DialogTrigger render={trigger} /> : null}
             <DialogContent
                 closeButtonId={`${baseId}-close`}
+                showCloseButton={!isPending}
                 className="sm:max-w-2xl"
             >
                 <DialogHeader>
@@ -327,7 +333,9 @@ function ConflictResolutionDialog({
                 <DialogFooter>
                     <DialogClose
                         id={`${baseId}-cancel`}
-                        render={<Button variant="ghost" disabled={isPending} />}
+                        render={
+                            <Button variant="outline" disabled={isPending} />
+                        }
                     >
                         取消
                     </DialogClose>

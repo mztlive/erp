@@ -537,7 +537,9 @@ function MediaListEditor({
                         <DialogTitle>
                             {expandedPreview?.name ?? "图片预览"}
                         </DialogTitle>
-                        <DialogDescription>图片预览</DialogDescription>
+                        <DialogDescription>
+                            查看商品原图细节。
+                        </DialogDescription>
                     </DialogHeader>
                     <div className="flex min-h-0 items-center justify-center overflow-hidden rounded-lg bg-surface-sunken">
                         {expandedPreview ? (

@@ -95,8 +95,17 @@ export function ConnectionCreateDialog({
     })
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent closeButtonId="supplier-api-connections-create-close">
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && createMutation.isPending) return
+                onOpenChange(next)
+            }}
+        >
+            <DialogContent
+                closeButtonId="supplier-api-connections-create-close"
+                showCloseButton={!createMutation.isPending}
+            >
                 <DialogHeader>
                     <DialogTitle>新建连接</DialogTitle>
                     <DialogDescription>
@@ -234,7 +243,7 @@ export function ConnectionCreateDialog({
                         <Button
                             id="supplier-api-connections-create-cancel"
                             type="button"
-                            variant="ghost"
+                            variant="outline"
                             disabled={createMutation.isPending}
                             onClick={() => onOpenChange(false)}
                         >

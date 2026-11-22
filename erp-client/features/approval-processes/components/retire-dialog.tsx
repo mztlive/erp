@@ -54,8 +54,17 @@ export function RetireDialog({
     })
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent closeButtonId={`${id}-close`}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && retire.isPending) return
+                onOpenChange(next)
+            }}
+        >
+            <DialogContent
+                closeButtonId={`${id}-close`}
+                showCloseButton={!retire.isPending}
+            >
                 <DialogHeader>
                     <DialogTitle>停用审批流程</DialogTitle>
                     <DialogDescription>

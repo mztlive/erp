@@ -94,13 +94,19 @@ export function AcceptanceRegisterDialog({
     const skippedCount = pendingCount - selection.selected.size
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && postPending) return
+                onOpenChange(next)
+            }}
+        >
             <DialogContent
                 closeButtonId="sales-orders-acceptance-register-close"
                 className="flex h-[min(90vh,48rem)] max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
                 showCloseButton={!postPending}
             >
-                <DialogHeader className="shrink-0 border-b border-grid px-6 py-4 text-left">
+                <DialogHeader className="shrink-0 border-b border-grid px-6 py-4 pr-14 text-left">
                     <DialogTitle>登记客户验收</DialogTitle>
                     <DialogDescription>
                         默认纳入全部 {pendingCount}{" "}
@@ -312,7 +318,7 @@ export function AcceptanceRegisterDialog({
                     </form>
                 )}
 
-                <DialogFooter className="shrink-0 border-t border-grid px-6 py-4 sm:justify-between">
+                <DialogFooter className="shrink-0 border-t border-grid px-6 py-4 sm:items-center sm:justify-between">
                     <div
                         className="text-xs text-muted-foreground"
                         role="status"

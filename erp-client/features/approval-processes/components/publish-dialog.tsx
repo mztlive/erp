@@ -57,9 +57,16 @@ export function PublishDialog({
     })
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && publish.isPending) return
+                onOpenChange(next)
+            }}
+        >
             <DialogContent
                 closeButtonId={`${id}-close`}
+                showCloseButton={!publish.isPending}
                 className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
             >
                 <DialogHeader>

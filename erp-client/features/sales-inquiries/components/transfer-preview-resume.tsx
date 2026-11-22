@@ -161,12 +161,19 @@ export function TransferPreviewResumeDialog({
         },
     })
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && pending) return
+                onOpenChange(next)
+            }}
+        >
             <DialogContent
                 closeButtonId={`${idPrefix}-close`}
-                className="flex max-h-[85svh] flex-col sm:max-w-4xl"
+                showCloseButton={!pending}
+                className="flex max-h-[85svh] flex-col overflow-hidden sm:max-w-4xl"
             >
-                <DialogHeader>
+                <DialogHeader className="shrink-0">
                     <DialogTitle>
                         {quote ? "核对供应商报价" : "核对客户选品导入"}
                     </DialogTitle>
@@ -186,7 +193,7 @@ export function TransferPreviewResumeDialog({
                         void form.handleSubmit()
                     }}
                 >
-                    <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
+                    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
                         {context.resume_state !== "ready" && (
                             <Alert variant="warning">
                                 <AlertDescription>
@@ -254,11 +261,12 @@ export function TransferPreviewResumeDialog({
                             </Alert>
                         )}
                     </div>
-                    <DialogFooter>
+                    <DialogFooter className="shrink-0">
                         <Button
                             id={`${idPrefix}-cancel`}
                             type="button"
                             variant="outline"
+                            disabled={pending}
                             onClick={() => onOpenChange(false)}
                         >
                             关闭

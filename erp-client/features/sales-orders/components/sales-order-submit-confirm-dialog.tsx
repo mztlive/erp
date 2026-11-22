@@ -46,12 +46,19 @@ export function SalesOrderSubmitConfirmDialog({
         disabled: pending,
     })
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && pending) return
+                onOpenChange(next)
+            }}
+        >
             <DialogContent
                 closeButtonId="sales-orders-submit-confirm-close"
+                showCloseButton={!pending}
                 className="flex h-[90vh] max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-6xl"
             >
-                <DialogHeader className="shrink-0 border-b border-border px-6 py-4 text-left">
+                <DialogHeader className="shrink-0 border-b border-border px-6 py-4 pr-14 text-left">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">
                             <DialogTitle>提交销售单</DialogTitle>
@@ -62,7 +69,10 @@ export function SalesOrderSubmitConfirmDialog({
                                 tone="neutral"
                                 label={resubmitting ? "已驳回" : "草稿"}
                             />
-                            <ArrowRightIcon aria-hidden="true" />
+                            <ArrowRightIcon
+                                aria-hidden="true"
+                                className="size-3.5 text-muted-foreground"
+                            />
                             <StatusBadge tone="warning" label="审批中" />
                         </div>
                     </div>
@@ -80,7 +90,9 @@ export function SalesOrderSubmitConfirmDialog({
                 </PaperDocumentViewport>
 
                 {resubmitting ? (
-                    <div className="shrink-0 px-6 py-3">{rework.field}</div>
+                    <div className="shrink-0 border-t border-border px-6 py-3">
+                        {rework.field}
+                    </div>
                 ) : null}
                 <DialogFooter className="shrink-0 border-t border-border px-6 py-4">
                     <Button

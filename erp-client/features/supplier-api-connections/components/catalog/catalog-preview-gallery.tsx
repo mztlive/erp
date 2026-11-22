@@ -103,7 +103,7 @@ export function CatalogPreviewGallery({
         >
             <DialogContent
                 closeButtonId="supplier-catalog-preview-gallery-close"
-                className="flex max-h-[90dvh] flex-col sm:max-w-3xl"
+                className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-3xl"
                 onKeyDown={(event) => {
                     if (event.key === "ArrowLeft" && index > 0) {
                         event.preventDefault()
@@ -117,13 +117,13 @@ export function CatalogPreviewGallery({
                     }
                 }}
             >
-                <DialogHeader className="pr-8">
+                <DialogHeader className="shrink-0 pr-8">
                     <DialogTitle>{name}</DialogTitle>
                     <DialogDescription>
                         {active?.label} · {index + 1} / {available.length}
                     </DialogDescription>
                 </DialogHeader>
-                <div key={activeKey} className="min-h-0 overflow-y-auto">
+                <div key={activeKey} className="min-h-0 flex-1 overflow-y-auto">
                     {active ? (
                         <CatalogSourceImage
                             image={active.image}
@@ -134,7 +134,7 @@ export function CatalogPreviewGallery({
                         />
                     ) : null}
                 </div>
-                <DialogFooter>
+                <DialogFooter className="shrink-0">
                     <Button
                         id="supplier-catalog-preview-gallery-previous"
                         variant="outline"

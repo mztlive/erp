@@ -700,9 +700,16 @@ function QuoteEditor({
         })
     }
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && command.isPending) return
+                onOpenChange(next)
+            }}
+        >
             <DialogContent
                 closeButtonId="procurement-inquiry-quote-editor-close"
+                showCloseButton={!command.isPending}
                 className="flex max-h-[85svh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
             >
                 <DialogHeader className="shrink-0 border-b px-6 py-5 pr-14">

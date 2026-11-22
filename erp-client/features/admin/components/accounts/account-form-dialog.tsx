@@ -4,6 +4,7 @@ import * as React from "react"
 import { z } from "zod"
 
 import { toFieldErrors, useAppForm } from "@/components/form"
+import { DiscardConfirmDialog } from "@/components/business"
 import { getErrorMessage } from "@/lib/api/errors"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -177,10 +178,15 @@ export function AccountFormDialog({
         },
     })
 
+    const [discardOpen, setDiscardOpen] = React.useState(false)
+
     const close = () => {
         if (pending) return
-        if (!form.state.isDirty || window.confirm("修改尚未保存，确定放弃？"))
+        if (!form.state.isDirty) {
             onOpenChange(false)
+            return
+        }
+        setDiscardOpen(true)
     }
     React.useEffect(() => {
         const guard = (event: BeforeUnloadEvent) => {
@@ -192,242 +198,267 @@ export function AccountFormDialog({
         return () => window.removeEventListener("beforeunload", guard)
     }, [form])
     return (
-        <Dialog open onOpenChange={(open) => !open && close()}>
-            <DialogContent
-                closeButtonId={`${id}-close`}
-                className="flex max-h-[90dvh] flex-col gap-5 overflow-hidden sm:max-w-xl"
-            >
-                <DialogHeader className="shrink-0 pr-8">
-                    <DialogTitle>{title}</DialogTitle>
-                    <DialogDescription>
-                        {section === "roles"
-                            ? `为${account?.name}分配角色；每个业务的数据范围在人员页单独设置。`
-                            : section
-                              ? `正在${title}：${account?.name}（${account?.account}）`
-                              : isEdit
-                                ? "修改账号资料与角色权限。"
-                                : onCreated
-                                  ? "创建后继续完善人员资料。"
-                                  : "填写账号信息并分配角色。"}
-                    </DialogDescription>
-                </DialogHeader>
-                <form
-                    className="flex min-h-0 flex-col gap-4"
-                    onSubmit={(e) => {
-                        e.preventDefault()
-                        void form.handleSubmit()
-                    }}
+        <>
+            <Dialog open onOpenChange={(open) => !open && close()}>
+                <DialogContent
+                    closeButtonId={`${id}-close`}
+                    showCloseButton={!pending}
+                    className="flex max-h-[90dvh] flex-col gap-5 overflow-hidden sm:max-w-xl"
                 >
-                    <div className="min-h-0 overflow-y-auto pr-1">
-                        {isEdit && departmentLabel ? (
-                            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/30 p-3 text-body-compact">
-                                <span>所属部门：{departmentLabel}</span>
-                                {onAdjustDepartment ? (
-                                    <form.Subscribe
-                                        selector={(state) => state.isDirty}
-                                    >
-                                        {(dirty) => (
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                {dirty ? (
-                                                    <span className="text-xs text-muted-foreground">
-                                                        先保存账号修改，再调整部门
-                                                    </span>
-                                                ) : null}
-                                                <Button
-                                                    id={`${id}-department`}
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    disabled={dirty || pending}
-                                                    onClick={onAdjustDepartment}
-                                                >
-                                                    调整部门
-                                                </Button>
-                                            </div>
-                                        )}
-                                    </form.Subscribe>
-                                ) : null}
-                            </div>
-                        ) : null}
-                        <FieldGroup
-                            className={
-                                section
-                                    ? "gap-4"
-                                    : "grid grid-cols-1 items-start gap-4 sm:grid-cols-2"
-                            }
-                        >
-                            {!section &&
-                                (isEdit ? (
-                                    <Field data-disabled>
-                                        <FieldLabel
-                                            htmlFor={`${id}-account-readonly`}
+                    <DialogHeader className="shrink-0 pr-8">
+                        <DialogTitle>{title}</DialogTitle>
+                        <DialogDescription>
+                            {section === "roles"
+                                ? `为${account?.name}分配角色；每个业务的数据范围在人员页单独设置。`
+                                : section
+                                  ? `正在${title}：${account?.name}（${account?.account}）`
+                                  : isEdit
+                                    ? "修改账号资料与角色权限。"
+                                    : onCreated
+                                      ? "创建后继续完善人员资料。"
+                                      : "填写账号信息并分配角色。"}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form
+                        className="flex min-h-0 flex-col gap-4"
+                        onSubmit={(e) => {
+                            e.preventDefault()
+                            void form.handleSubmit()
+                        }}
+                    >
+                        <div className="min-h-0 overflow-y-auto pr-1">
+                            {isEdit && departmentLabel ? (
+                                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/30 p-3 text-body-compact">
+                                    <span>所属部门：{departmentLabel}</span>
+                                    {onAdjustDepartment ? (
+                                        <form.Subscribe
+                                            selector={(state) => state.isDirty}
                                         >
-                                            账号
-                                        </FieldLabel>
-                                        <Input
-                                            id={`${id}-account-readonly`}
-                                            value={account?.account ?? ""}
-                                            disabled
-                                            readOnly
+                                            {(dirty) => (
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    {dirty ? (
+                                                        <span className="text-xs text-muted-foreground">
+                                                            先保存账号修改，再调整部门
+                                                        </span>
+                                                    ) : null}
+                                                    <Button
+                                                        id={`${id}-department`}
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        disabled={
+                                                            dirty || pending
+                                                        }
+                                                        onClick={
+                                                            onAdjustDepartment
+                                                        }
+                                                    >
+                                                        调整部门
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </form.Subscribe>
+                                    ) : null}
+                                </div>
+                            ) : null}
+                            <FieldGroup
+                                className={
+                                    section
+                                        ? "gap-4"
+                                        : "grid grid-cols-1 items-start gap-4 sm:grid-cols-2"
+                                }
+                            >
+                                {!section &&
+                                    (isEdit ? (
+                                        <Field data-disabled>
+                                            <FieldLabel
+                                                htmlFor={`${id}-account-readonly`}
+                                            >
+                                                账号
+                                            </FieldLabel>
+                                            <Input
+                                                id={`${id}-account-readonly`}
+                                                value={account?.account ?? ""}
+                                                disabled
+                                                readOnly
+                                            />
+                                        </Field>
+                                    ) : (
+                                        <form.AppField
+                                            name="account"
+                                            children={(field) => (
+                                                <field.TextField
+                                                    id={`${id}-account`}
+                                                    label="账号"
+                                                    required
+                                                    placeholder="3-32 个字符"
+                                                    description="创建后不可修改。"
+                                                    autoComplete="off"
+                                                />
+                                            )}
                                         />
-                                    </Field>
-                                ) : (
+                                    ))}
+                                {(!section || section === "name") && (
                                     <form.AppField
-                                        name="account"
+                                        name="name"
                                         children={(field) => (
                                             <field.TextField
-                                                id={`${id}-account`}
-                                                label="账号"
+                                                id={`${id}-name`}
+                                                label="姓名"
                                                 required
-                                                placeholder="3-32 个字符"
-                                                description="创建后不可修改。"
-                                                autoComplete="off"
+                                                placeholder="人员姓名"
                                             />
                                         )}
                                     />
-                                ))}
-                            {(!section || section === "name") && (
-                                <form.AppField
-                                    name="name"
-                                    children={(field) => (
-                                        <field.TextField
-                                            id={`${id}-name`}
-                                            label="姓名"
-                                            required
-                                            placeholder="人员姓名"
-                                        />
-                                    )}
-                                />
-                            )}
-                            {(!section || section === "password") && (
-                                <form.AppField
-                                    name="password"
-                                    children={(field) => (
-                                        <field.TextField
-                                            id={`${id}-password`}
-                                            label={isEdit ? "新密码" : "密码"}
-                                            className="sm:col-span-2"
-                                            required={
-                                                !isEdit ||
-                                                section === "password"
-                                            }
-                                            type="password"
-                                            placeholder={
-                                                isEdit && !section
-                                                    ? "留空则不修改"
-                                                    : "6-32 个字符"
-                                            }
-                                            autoComplete="new-password"
-                                        />
-                                    )}
-                                />
-                            )}
-                            {(!section || section === "roles") && (
-                                <form.AppField
-                                    name="role_ids"
-                                    mode="array"
-                                    children={(field) => {
-                                        const selected = field.state.value ?? []
-                                        const isInvalid =
-                                            field.state.meta.isTouched &&
-                                            !field.state.meta.isValid
-                                        const errors = toFieldErrors(
-                                            field.state.meta.errors,
-                                        )
-                                        return (
-                                            <Field
-                                                className="gap-2 sm:col-span-2"
-                                                data-invalid={
-                                                    isInvalid || undefined
+                                )}
+                                {(!section || section === "password") && (
+                                    <form.AppField
+                                        name="password"
+                                        children={(field) => (
+                                            <field.TextField
+                                                id={`${id}-password`}
+                                                label={
+                                                    isEdit ? "新密码" : "密码"
                                                 }
-                                            >
-                                                <FieldLabel
-                                                    id={`${id}-roles-label`}
-                                                    htmlFor={`${id}-roles-trigger`}
+                                                className="sm:col-span-2"
+                                                required={
+                                                    !isEdit ||
+                                                    section === "password"
+                                                }
+                                                type="password"
+                                                placeholder={
+                                                    isEdit && !section
+                                                        ? "留空则不修改"
+                                                        : "6-32 个字符"
+                                                }
+                                                autoComplete="new-password"
+                                            />
+                                        )}
+                                    />
+                                )}
+                                {(!section || section === "roles") && (
+                                    <form.AppField
+                                        name="role_ids"
+                                        mode="array"
+                                        children={(field) => {
+                                            const selected =
+                                                field.state.value ?? []
+                                            const isInvalid =
+                                                field.state.meta.isTouched &&
+                                                !field.state.meta.isValid
+                                            const errors = toFieldErrors(
+                                                field.state.meta.errors,
+                                            )
+                                            return (
+                                                <Field
+                                                    className="gap-2 sm:col-span-2"
+                                                    data-invalid={
+                                                        isInvalid || undefined
+                                                    }
                                                 >
-                                                    角色分配
-                                                    <span className="text-destructive">
-                                                        *
-                                                    </span>
-                                                </FieldLabel>
-                                                <RoleOptionsPanel
-                                                    id={`${id}-roles`}
-                                                    options={roleOptions}
-                                                    selected={selected}
-                                                    invalid={isInvalid}
-                                                    disabled={pending}
-                                                    onToggle={(
-                                                        roleId,
-                                                        checked,
-                                                    ) => {
-                                                        const next = checked
-                                                            ? [
-                                                                  ...selected,
-                                                                  roleId,
-                                                              ]
-                                                            : selected.filter(
-                                                                  (value) =>
-                                                                      value !==
+                                                    <FieldLabel
+                                                        id={`${id}-roles-label`}
+                                                        htmlFor={`${id}-roles-trigger`}
+                                                    >
+                                                        角色分配
+                                                        <span className="text-destructive">
+                                                            *
+                                                        </span>
+                                                    </FieldLabel>
+                                                    <RoleOptionsPanel
+                                                        id={`${id}-roles`}
+                                                        options={roleOptions}
+                                                        selected={selected}
+                                                        invalid={isInvalid}
+                                                        disabled={pending}
+                                                        onToggle={(
+                                                            roleId,
+                                                            checked,
+                                                        ) => {
+                                                            const next = checked
+                                                                ? [
+                                                                      ...selected,
                                                                       roleId,
-                                                              )
-                                                        field.handleChange(next)
-                                                        field.handleBlur()
-                                                        form.validateField(
-                                                            "role_ids",
-                                                            "change",
-                                                        )
-                                                    }}
-                                                />
-                                                <p className="text-xs text-muted-foreground">
-                                                    部门与业务数据范围在人员资料中设置。
-                                                </p>
-                                                {isInvalid ? (
-                                                    <FieldError
-                                                        id={`${id}-roles-error`}
-                                                        errors={errors}
+                                                                  ]
+                                                                : selected.filter(
+                                                                      (value) =>
+                                                                          value !==
+                                                                          roleId,
+                                                                  )
+                                                            field.handleChange(
+                                                                next,
+                                                            )
+                                                            field.handleBlur()
+                                                            form.validateField(
+                                                                "role_ids",
+                                                                "change",
+                                                            )
+                                                        }}
                                                     />
-                                                ) : null}
-                                            </Field>
-                                        )
-                                    }}
+                                                    <p className="text-xs text-muted-foreground">
+                                                        部门与业务数据范围在人员资料中设置。
+                                                    </p>
+                                                    {isInvalid ? (
+                                                        <FieldError
+                                                            id={`${id}-roles-error`}
+                                                            errors={errors}
+                                                        />
+                                                    ) : null}
+                                                </Field>
+                                            )
+                                        }}
+                                    />
+                                )}
+                            </FieldGroup>
+                            {submitError ? (
+                                <Alert variant="destructive" role="alert">
+                                    <AlertTitle>提交失败</AlertTitle>
+                                    <AlertDescription>
+                                        {submitError}
+                                    </AlertDescription>
+                                </Alert>
+                            ) : null}
+                        </div>
+                        <DialogFooter className="shrink-0 border-t border-border pt-4">
+                            <Button
+                                id={`${id}-cancel`}
+                                type="button"
+                                variant="outline"
+                                disabled={pending}
+                                onClick={close}
+                            >
+                                取消
+                            </Button>
+                            <form.AppForm>
+                                <form.SubmitButton
+                                    loading={pending}
+                                    id={`${id}-submit`}
+                                    label={
+                                        isEdit
+                                            ? "保存"
+                                            : onCreated
+                                              ? "创建并完善资料"
+                                              : "创建"
+                                    }
                                 />
-                            )}
-                        </FieldGroup>
-                        {submitError ? (
-                            <Alert variant="destructive" role="alert">
-                                <AlertTitle>提交失败</AlertTitle>
-                                <AlertDescription>
-                                    {submitError}
-                                </AlertDescription>
-                            </Alert>
-                        ) : null}
-                    </div>
-                    <DialogFooter className="shrink-0 border-t border-border pt-4">
-                        <Button
-                            id={`${id}-cancel`}
-                            type="button"
-                            variant="outline"
-                            disabled={pending}
-                            onClick={close}
-                        >
-                            取消
-                        </Button>
-                        <form.AppForm>
-                            <form.SubmitButton
-                                loading={pending}
-                                id={`${id}-submit`}
-                                label={
-                                    isEdit
-                                        ? "保存"
-                                        : onCreated
-                                          ? "创建并完善资料"
-                                          : "创建"
-                                }
-                            />
-                        </form.AppForm>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
+                            </form.AppForm>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+            <DiscardConfirmDialog
+                idPrefix={`${id}-discard`}
+                open={discardOpen}
+                onOpenChange={setDiscardOpen}
+                title="放弃未保存的更改？"
+                description="账号修改尚未保存，关闭后将丢失。"
+                confirmLabel="放弃更改"
+                cancelLabel="继续编辑"
+                onConfirm={() => {
+                    setDiscardOpen(false)
+                    onOpenChange(false)
+                }}
+            />
+        </>
     )
 }

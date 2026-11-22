@@ -129,7 +129,13 @@ export function SalesOrderHandoverButton({
             >
                 责任交接
             </Button>
-            <AlertDialog open={open} onOpenChange={setOpen}>
+            <AlertDialog
+                open={open}
+                onOpenChange={(next) => {
+                    if (!next && handoverMutation.isPending) return
+                    setOpen(next)
+                }}
+            >
                 <AlertDialogContent className="sm:max-w-md">
                     <AlertDialogHeader>
                         <AlertDialogTitle>交接销售责任</AlertDialogTitle>

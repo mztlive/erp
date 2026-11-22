@@ -70,11 +70,11 @@ export function BuiltinRoleDialog() {
                 从内建岗位生成
             </DialogTrigger>
             <DialogContent
-                className="flex max-h-[85vh] flex-col sm:max-w-3xl"
+                className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-3xl"
                 closeButtonId="roles-builtin-close"
                 showCloseButton={!generate.isPending}
             >
-                <DialogHeader>
+                <DialogHeader className="shrink-0">
                     <DialogTitle>生成岗位角色</DialogTitle>
                     <DialogDescription>
                         选择适合本公司的岗位，查看职责和权限后生成。已有角色保留当前配置，生成后可以继续编辑。
@@ -211,7 +211,7 @@ function TemplateSelection({
                         : error}
                 </p>
             )}
-            <DialogFooter>
+            <DialogFooter className="shrink-0">
                 {error && (
                     <Button
                         id="roles-builtin-refresh"
@@ -386,7 +386,7 @@ function GenerationResult({
             <p className="text-xs text-muted-foreground">
                 下一步：到“组织与人员”分配岗位角色，按岗位说明配置数据范围和业务责任。
             </p>
-            <DialogFooter>
+            <DialogFooter className="shrink-0">
                 <Button id="roles-builtin-result-close" onClick={onClose}>
                     完成
                 </Button>

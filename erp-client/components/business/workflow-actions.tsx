@@ -174,10 +174,17 @@ function WorkflowDetailList({
                                 : "text-muted-foreground",
                         )}
                     >
-                        <CheckIcon
-                            aria-hidden="true"
-                            className="mt-0.5 size-4 shrink-0"
-                        />
+                        {tone === "destructive" ? (
+                            <TriangleAlertIcon
+                                aria-hidden="true"
+                                className="mt-0.5 size-3.5 shrink-0"
+                            />
+                        ) : (
+                            <CheckIcon
+                                aria-hidden="true"
+                                className="mt-0.5 size-4 shrink-0"
+                            />
+                        )}
                         <span className="min-w-0">{item}</span>
                     </li>
                 ))}
@@ -231,7 +238,7 @@ function FormalActionConfirmDialog({
     title,
     description,
     actionLabel,
-    confirmLabel = `确认${actionLabel}`,
+    confirmLabel,
     cancelLabel = "返回修改",
     fromStatus,
     toStatus,
@@ -267,6 +274,28 @@ function FormalActionConfirmDialog({
     const [internalPending, setInternalPending] = React.useState(false)
     const [confirmError, setConfirmError] = React.useState<string | null>(null)
     const isPending = pending || internalPending
+    React.useEffect(() => {
+        if (!resolvedOpen) {
+            setConfirmError(null)
+        }
+    }, [resolvedOpen])
+    const isDestructive =
+        (actionVariant ??
+            (irreversibleEffects.length > 0 ? "destructive" : "default")) ===
+        "destructive"
+    const normalizedAction = actionLabel.replace(/^确认/, "") || actionLabel
+    const resolvedTitle =
+        title ??
+        (actionLabel.startsWith("确认") ? actionLabel : `确认${actionLabel}`)
+    const resolvedConfirmLabel =
+        confirmLabel ??
+        (actionLabel.startsWith("确认") ? actionLabel : `确认${actionLabel}`)
+    const resolvedDescription =
+        description === undefined
+            ? showStatusChange
+                ? "请核对状态变化和业务影响后再继续。"
+                : "请核对本次操作的业务影响后再继续。"
+            : description
     const sourceStatus = normalizeStatus(
         fromStatus,
         "neutral",
@@ -301,11 +330,9 @@ function FormalActionConfirmDialog({
 
     const header =
         layout === "compact" ? (
-            <AlertDialogHeader className="block space-y-2 text-left">
+            <AlertDialogHeader className="block shrink-0 space-y-2 text-left">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                    <AlertDialogTitle>
-                        {title ?? `确认${actionLabel}`}
-                    </AlertDialogTitle>
+                    <AlertDialogTitle>{resolvedTitle}</AlertDialogTitle>
                     {showStatusChange ? (
                         <StatusChangeStrip
                             sourceStatus={sourceStatus}
@@ -315,26 +342,36 @@ function FormalActionConfirmDialog({
                     ) : null}
                 </div>
                 <AlertDialogDescription render={<div />}>
-                    {description === undefined
-                        ? "请核对状态变化和业务影响后再继续。"
-                        : description}
+                    {resolvedDescription}
                 </AlertDialogDescription>
             </AlertDialogHeader>
         ) : (
-            <AlertDialogHeader className="place-items-start justify-items-start text-left has-data-[slot=alert-dialog-media]:grid-cols-[auto_minmax(0,1fr)]">
-                <AlertDialogMedia className="row-span-2 mb-0 self-start text-primary">
-                    <FileCheck2Icon aria-hidden="true" />
+            <AlertDialogHeader
+                className={cn(
+                    "place-items-start justify-items-start text-left has-data-[slot=alert-dialog-media]:grid-cols-[auto_minmax(0,1fr)]",
+                    layout === "stack" && "shrink-0",
+                )}
+            >
+                <AlertDialogMedia
+                    className={cn(
+                        "row-span-2 mb-0 self-start",
+                        isDestructive
+                            ? "bg-destructive-soft text-destructive-soft-foreground"
+                            : "bg-info-soft text-info-soft-foreground",
+                    )}
+                >
+                    {isDestructive ? (
+                        <TriangleAlertIcon aria-hidden="true" />
+                    ) : (
+                        <FileCheck2Icon aria-hidden="true" />
+                    )}
                 </AlertDialogMedia>
-                <AlertDialogTitle>
-                    {title ?? `确认${actionLabel}`}
-                </AlertDialogTitle>
+                <AlertDialogTitle>{resolvedTitle}</AlertDialogTitle>
                 <AlertDialogDescription
                     render={<div />}
                     className="col-start-2 text-left"
                 >
-                    {description === undefined
-                        ? "请核对状态变化和业务影响后再继续。"
-                        : description}
+                    {resolvedDescription}
                 </AlertDialogDescription>
                 {layout === "stack" && showStatusChange ? (
                     <div className="col-start-2 mt-1">
@@ -358,14 +395,13 @@ function FormalActionConfirmDialog({
             {trigger ? <AlertDialogTrigger render={trigger} /> : null}
             <AlertDialogContent
                 className={cn(
-                    layout === "landscape"
-                        ? "sm:max-w-4xl data-[size=default]:sm:max-w-4xl"
-                        : "sm:max-w-xl data-[size=default]:sm:max-w-xl",
+                    "flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden",
+                    layout === "landscape" ? "sm:max-w-4xl" : "sm:max-w-xl",
                     contentClassName,
                 )}
             >
                 {layout === "landscape" ? (
-                    <div className="grid items-center gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <div className="grid shrink-0 items-center gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
                         {header}
                         {showStatusChange ? (
                             <StatusChangeStrip
@@ -379,54 +415,61 @@ function FormalActionConfirmDialog({
                     header
                 )}
 
-                {hasDetails ? (
-                    <div className="flex flex-col gap-4">
-                        <WorkflowDetailList
-                            title={summaryTitle}
-                            icon={ListChecksIcon}
-                            items={summary}
-                        />
-                        <WorkflowDetailList
-                            title="提交后锁定字段"
-                            icon={LockIcon}
-                            items={lockedFields}
-                        />
-                        <WorkflowDetailList
-                            title="本次动作产生的影响"
-                            icon={ListChecksIcon}
-                            items={effects}
-                        />
+                {hasDetails ||
+                (confirmError != null && onConfirmError == null) ? (
+                    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-0.5">
+                        {hasDetails ? (
+                            <div className="flex flex-col gap-4">
+                                <WorkflowDetailList
+                                    title={summaryTitle}
+                                    icon={ListChecksIcon}
+                                    items={summary}
+                                />
+                                <WorkflowDetailList
+                                    title="提交后锁定字段"
+                                    icon={LockIcon}
+                                    items={lockedFields}
+                                />
+                                <WorkflowDetailList
+                                    title="本次动作产生的影响"
+                                    icon={ListChecksIcon}
+                                    items={effects}
+                                />
 
-                        {formContent}
+                                {formContent}
 
-                        {nextDepartment != null ? (
-                            <Alert>
-                                <UsersRoundIcon aria-hidden="true" />
-                                <AlertTitle>下一责任部门</AlertTitle>
+                                {nextDepartment != null ? (
+                                    <Alert>
+                                        <UsersRoundIcon aria-hidden="true" />
+                                        <AlertTitle>下一责任部门</AlertTitle>
+                                        <AlertDescription>
+                                            {nextDepartment}
+                                        </AlertDescription>
+                                    </Alert>
+                                ) : null}
+
+                                <WorkflowDetailList
+                                    title="无法自动撤回的影响"
+                                    icon={TriangleAlertIcon}
+                                    items={irreversibleEffects}
+                                    tone="destructive"
+                                />
+                            </div>
+                        ) : null}
+
+                        {confirmError != null && onConfirmError == null ? (
+                            <Alert variant="destructive">
+                                <TriangleAlertIcon aria-hidden="true" />
+                                <AlertTitle>操作未完成</AlertTitle>
                                 <AlertDescription>
-                                    {nextDepartment}
+                                    {confirmError}
                                 </AlertDescription>
                             </Alert>
                         ) : null}
-
-                        <WorkflowDetailList
-                            title="无法自动撤回的影响"
-                            icon={TriangleAlertIcon}
-                            items={irreversibleEffects}
-                            tone="destructive"
-                        />
                     </div>
                 ) : null}
 
-                {confirmError != null && onConfirmError == null ? (
-                    <Alert variant="destructive">
-                        <TriangleAlertIcon aria-hidden="true" />
-                        <AlertTitle>操作未完成</AlertTitle>
-                        <AlertDescription>{confirmError}</AlertDescription>
-                    </Alert>
-                ) : null}
-
-                <AlertDialogFooter>
+                <AlertDialogFooter className="shrink-0">
                     <AlertDialogCancel
                         id={`${baseId}-cancel`}
                         disabled={isPending}
@@ -440,12 +483,7 @@ function FormalActionConfirmDialog({
                     </AlertDialogCancel>
                     <AlertDialogAction
                         id={`${baseId}-confirm`}
-                        variant={
-                            actionVariant ??
-                            (irreversibleEffects.length > 0
-                                ? "destructive"
-                                : "default")
-                        }
+                        variant={isDestructive ? "destructive" : "default"}
                         disabled={isPending || confirmDisabled}
                         loading={isPending}
                         onClick={() => void handleConfirm()}
@@ -456,7 +494,9 @@ function FormalActionConfirmDialog({
                                 aria-hidden="true"
                             />
                         ) : null}
-                        {isPending ? `正在${actionLabel}` : confirmLabel}
+                        {isPending
+                            ? `正在${normalizedAction}…`
+                            : resolvedConfirmLabel}
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>

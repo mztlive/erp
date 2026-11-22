@@ -767,6 +767,7 @@ function RoleForm({
                         <Button
                             id="governance-admin-role-form-discard"
                             type="button"
+                            variant="destructive"
                             onClick={() => {
                                 if (confirmDiscard === "reset") {
                                     form.reset(savedValues)

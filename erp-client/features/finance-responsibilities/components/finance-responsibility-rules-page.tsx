@@ -293,10 +293,17 @@ function RuleDialog({
     })
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && mutation.isPending) return
+                onOpenChange(next)
+            }}
+        >
             <DialogContent
                 className="sm:max-w-xl"
                 closeButtonId="finance-responsibilities-rule-dialog-close"
+                showCloseButton={!mutation.isPending}
                 finalFocus={finalFocus}
             >
                 <DialogHeader>
@@ -468,7 +475,13 @@ function RuleDialog({
                     <DialogFooter>
                         <DialogClose
                             id="finance-responsibilities-rule-cancel"
-                            render={<Button type="button" variant="outline" />}
+                            render={
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    disabled={mutation.isPending}
+                                />
+                            }
                         >
                             取消
                         </DialogClose>

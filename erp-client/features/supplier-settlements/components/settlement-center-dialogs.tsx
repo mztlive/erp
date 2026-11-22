@@ -78,8 +78,17 @@ function SettlementResolveDialog({
 }) {
     const diffReadout = describeMoney(activeDiff?.amountGross)?.readout
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent closeButtonId="supplier-settlements-resolve-close">
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && pending) return
+                onOpenChange(next)
+            }}
+        >
+            <DialogContent
+                closeButtonId="supplier-settlements-resolve-close"
+                showCloseButton={!pending}
+            >
                 <DialogHeader>
                     <DialogTitle>登记差异处理结论</DialogTitle>
                     <DialogDescription>
@@ -256,8 +265,17 @@ function SettlementEvidenceDialog({
     onSubmit: () => void
 }) {
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent closeButtonId="supplier-settlements-evidence-close">
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && pending) return
+                onOpenChange(next)
+            }}
+        >
+            <DialogContent
+                closeButtonId="supplier-settlements-evidence-close"
+                showCloseButton={!pending}
+            >
                 <DialogHeader>
                     <DialogTitle>追加采购协同证据</DialogTitle>
                     <DialogDescription>
@@ -336,8 +354,17 @@ function SettlementRejectDialog({
     onSubmit: () => void
 }) {
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent closeButtonId="supplier-settlements-reject-close">
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && pending) return
+                onOpenChange(next)
+            }}
+        >
+            <DialogContent
+                closeButtonId="supplier-settlements-reject-close"
+                showCloseButton={!pending}
+            >
                 <DialogHeader>
                     <DialogTitle>驳回复核</DialogTitle>
                     <DialogDescription>
@@ -388,7 +415,7 @@ function SettlementRejectDialog({
                     <Button
                         id="supplier-settlements-reject-cancel"
                         type="button"
-                        variant="ghost"
+                        variant="outline"
                         disabled={pending}
                         onClick={() => onOpenChange(false)}
                     >
@@ -550,7 +577,7 @@ function SettlementConfirmSettlementDialog({
             onOpenChange={onOpenChange}
             title="确认结算"
             description="确认后更新成本差额并生成应付，结果不可撤回；经办人不能确认本单。"
-            actionLabel="确认结算"
+            actionLabel="完成结算"
             confirmLabel="确认结算"
             fromStatus={{
                 label: statement.statusLabel,

@@ -70,9 +70,15 @@ export function ReceivableActionDialogs({
         <>
             <Dialog
                 open={partyPickerOpen}
-                onOpenChange={onPartyPickerOpenChange}
+                onOpenChange={(next) => {
+                    if (!next && createPending) return
+                    onPartyPickerOpenChange(next)
+                }}
             >
-                <DialogContent closeButtonId="customer-receivables-party-picker-dialog-close">
+                <DialogContent
+                    closeButtonId="customer-receivables-party-picker-dialog-close"
+                    showCloseButton={!createPending}
+                >
                     <DialogHeader>
                         <DialogTitle>
                             {partyPickerMode === "receipt"
@@ -80,8 +86,7 @@ export function ReceivableActionDialogs({
                                 : "登记销项发票 — 选择往来主体"}
                         </DialogTitle>
                         <DialogDescription>
-                            创建后不可更换结算主体。
-                            经营客户与结算主体可能不同。
+                            创建后不可更换结算主体；经营客户与结算主体可能不同。
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-2">
@@ -137,9 +142,15 @@ export function ReceivableActionDialogs({
 
             <Dialog
                 open={reverseRequest != null}
-                onOpenChange={onReverseOpenChange}
+                onOpenChange={(next) => {
+                    if (!next && reversePending) return
+                    onReverseOpenChange(next)
+                }}
             >
-                <DialogContent closeButtonId="customer-receivables-reverse-dialog-close">
+                <DialogContent
+                    closeButtonId="customer-receivables-reverse-dialog-close"
+                    showCloseButton={!reversePending}
+                >
                     <DialogHeader>
                         <DialogTitle>
                             {reverseRequest?.kind === "red_invoice"
@@ -149,12 +160,12 @@ export function ReceivableActionDialogs({
                                   : "发起回款冲正"}
                         </DialogTitle>
                         <DialogDescription>
-                            原记录保留。原单 {reverseRequest?.label}。
+                            原单 {reverseRequest?.label} 将保留；
                             {reverseRequest?.kind === "receipt_reverse"
-                                ? "冲正表示撤销本次回款记录。"
+                                ? "冲正用于撤销本次回款记录。"
                                 : reverseRequest?.kind === "refund"
-                                  ? "退款表示向客户退回资金。"
-                                  : "红票表示冲减原票的分配。"}
+                                  ? "退款用于向客户退回资金。"
+                                  : "红票用于冲减原发票的核销金额。"}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-3">
@@ -168,6 +179,7 @@ export function ReceivableActionDialogs({
                                     id="customer-receivables-reverse-amount"
                                     className="num"
                                     inputMode="decimal"
+                                    disabled={reversePending}
                                     value={reverseAmount}
                                     onChange={(event) =>
                                         onReverseAmountChange(
@@ -194,7 +206,7 @@ export function ReceivableActionDialogs({
                                 ) : (
                                     ""
                                 )}
-                                ，原记录保留。
+                                。
                             </p>
                         )}
                         <div className="space-y-1.5">
@@ -204,6 +216,7 @@ export function ReceivableActionDialogs({
                             </Label>
                             <Textarea
                                 id="customer-receivables-reverse-reason"
+                                disabled={reversePending}
                                 value={reverseReason}
                                 onChange={(event) =>
                                     onReverseReasonChange(event.target.value)
@@ -233,7 +246,13 @@ export function ReceivableActionDialogs({
                             }
                             onClick={onConfirmReverse}
                         >
-                            {reversePending ? "提交中…" : "提交红票"}
+                            {reversePending
+                                ? "提交中…"
+                                : reverseRequest?.kind === "red_invoice"
+                                  ? "提交红票"
+                                  : reverseRequest?.kind === "refund"
+                                    ? "提交退款"
+                                    : "提交冲正"}
                         </LoadingButton>
                     </DialogFooter>
                 </DialogContent>

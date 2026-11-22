@@ -137,9 +137,9 @@ export function SalesOrderLinesImportDialog({
             <DialogContent
                 id="invoice-request-import-dialog"
                 closeButtonId="invoice-request-import-dialog-close"
-                className="flex max-h-[calc(100dvh-2rem)] flex-col sm:max-w-4xl"
+                className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-4xl"
             >
-                <DialogHeader>
+                <DialogHeader className="shrink-0">
                     <DialogTitle>
                         从销售单带入明细
                         {query.data?.orderNo ? (
@@ -374,7 +374,7 @@ export function SalesOrderLinesImportDialog({
                     )}
                 </div>
 
-                <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border/60 pt-3">
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border/60 pt-3">
                     <Button
                         id="invoice-request-import-cancel"
                         type="button"

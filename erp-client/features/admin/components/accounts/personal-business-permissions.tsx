@@ -3,6 +3,7 @@ import * as React from "react"
 import {
     BusinessFailureState,
     DetailWorkspaceSection,
+    DiscardConfirmDialog,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { actionLabel, resourceLabel } from "@/lib/permission-catalog"
@@ -36,6 +37,8 @@ export function PersonalBusinessPermissions({
         draft?.values.resource ?? null,
     )
     const [notice, setNotice] = React.useState<string | null>(null)
+    const [discardUnavailableOpen, setDiscardUnavailableOpen] =
+        React.useState(false)
     const previous = React.useRef(draft)
     React.useEffect(() => {
         if (previous.current && !draft) setEditing(null)
@@ -75,17 +78,24 @@ export function PersonalBusinessPermissions({
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => {
-                            if (
-                                window.confirm("确定放弃当前未保存的数据范围？")
-                            ) {
-                                onDraftChange(null)
-                                setEditing(null)
-                            }
-                        }}
+                        onClick={() => setDiscardUnavailableOpen(true)}
                     >
                         放弃草稿
                     </Button>
+                    <DiscardConfirmDialog
+                        idPrefix="person-scope-unavailable-discard-dialog"
+                        open={discardUnavailableOpen}
+                        onOpenChange={setDiscardUnavailableOpen}
+                        title="放弃未保存的数据范围？"
+                        description="当前未保存的数据范围草稿将被清除，放弃后无法恢复。"
+                        confirmLabel="放弃草稿"
+                        cancelLabel="继续核对"
+                        onConfirm={() => {
+                            setDiscardUnavailableOpen(false)
+                            onDraftChange(null)
+                            setEditing(null)
+                        }}
+                    />
                 </div>
             )}
             {!canRead ? (

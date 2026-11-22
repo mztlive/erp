@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
@@ -752,7 +753,7 @@ export const SelectionForm = ({
                         <Input
                             id="sales-selection-public-search"
                             type="text"
-                            placeholder="搜索几百款商品、规格或名称..."
+                            placeholder="搜索几百款商品、规格或名称…"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="h-control-sm w-full rounded-full pl-8 pr-8"
@@ -1118,7 +1119,7 @@ export const SelectionForm = ({
             >
                 <DialogContent
                     closeButtonId="sales-selection-public-item-close"
-                    className="max-w-lg rounded-3xl p-5 max-h-[85vh] overflow-y-auto space-y-4"
+                    className="max-h-[85dvh] space-y-4 overflow-y-auto rounded-3xl p-5 sm:max-w-lg"
                 >
                     {detailItem && (
                         <>
@@ -1126,6 +1127,9 @@ export const SelectionForm = ({
                                 <DialogTitle className="line-clamp-1">
                                     {detailItem.name}
                                 </DialogTitle>
+                                <DialogDescription className="sr-only">
+                                    查看商品价格、规格与套餐明细并选择加入选品。
+                                </DialogDescription>
                             </DialogHeader>
 
                             {/* 大图预览 */}
@@ -1253,16 +1257,19 @@ export const SelectionForm = ({
             <Dialog open={cartDrawerOpen} onOpenChange={setCartDrawerOpen}>
                 <DialogContent
                     closeButtonId="sales-selection-public-cart-close"
-                    className="max-w-lg rounded-3xl p-5 max-h-[75vh] flex flex-col"
+                    className="flex max-h-[75dvh] flex-col overflow-hidden rounded-3xl p-5 sm:max-w-lg"
                 >
-                    <DialogHeader>
+                    <DialogHeader className="shrink-0">
                         <DialogTitle className="flex items-center gap-2">
                             <ShoppingBag className="h-5 w-5 text-primary" />
                             已选商品清单 ({selectedCount} 款)
                         </DialogTitle>
+                        <DialogDescription className="sr-only">
+                            查看或移除当前已选商品。
+                        </DialogDescription>
                     </DialogHeader>
 
-                    <div className="flex-1 overflow-y-auto py-2 space-y-3">
+                    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto py-2">
                         {page.items
                             .filter((item) => picks[item.item_id]?.selected)
                             .map((item) => {

@@ -175,10 +175,17 @@ export function DeliveryTemplateEditorDialog({
         setFailure,
     )
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && pending) return
+                onOpenChange(next)
+            }}
+        >
             <DialogContent
                 className="max-h-[90svh] overflow-y-auto sm:max-w-3xl"
                 closeButtonId="delivery-template-editor-close"
+                showCloseButton={!pending}
             >
                 <DialogHeader>
                     <DialogTitle>

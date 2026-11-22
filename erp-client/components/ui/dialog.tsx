@@ -48,6 +48,8 @@ function DialogOverlay({
     )
 }
 
+const DialogCloseContext = React.createContext(false)
+
 function DialogContent({
     className,
     children,
@@ -71,7 +73,9 @@ function DialogContent({
                 )}
                 {...props}
             >
-                {children}
+                <DialogCloseContext.Provider value={showCloseButton}>
+                    {children}
+                </DialogCloseContext.Provider>
                 {showCloseButton && (
                     <DialogPrimitive.Close
                         id={closeButtonId}
@@ -94,10 +98,15 @@ function DialogContent({
 }
 
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
+    const hasCloseButton = React.useContext(DialogCloseContext)
     return (
         <div
             data-slot="dialog-header"
-            className={cn("flex flex-col gap-1.5", className)}
+            className={cn(
+                "flex flex-col gap-1.5",
+                hasCloseButton && "pr-8",
+                className,
+            )}
             {...props}
         />
     )

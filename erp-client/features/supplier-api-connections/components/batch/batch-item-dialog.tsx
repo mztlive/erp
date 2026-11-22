@@ -337,9 +337,10 @@ function BatchItemEditor({
             <DialogContent
                 id={`${prefix}-dialog`}
                 closeButtonId={`${prefix}-close`}
+                showCloseButton={!busy}
                 className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
             >
-                <DialogHeader className="shrink-0 border-b border-grid px-6 py-5">
+                <DialogHeader className="shrink-0 border-b border-grid px-6 py-5 pr-14">
                     <DialogTitle>调整入库商品</DialogTitle>
                     <DialogDescription>
                         {item.name} · {item.specification}

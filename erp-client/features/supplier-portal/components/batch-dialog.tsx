@@ -1101,9 +1101,9 @@ export function PortalBatchDialog({
             >
                 <DialogContent
                     showCloseButton={false}
-                    className="flex max-h-[90svh] flex-col gap-4 sm:max-w-6xl"
+                    className="flex max-h-[90svh] flex-col gap-4 overflow-hidden sm:max-w-6xl"
                 >
-                    <DialogHeader>
+                    <DialogHeader className="shrink-0">
                         <div className="flex items-center justify-between gap-3">
                             <DialogTitle>{batchModeLabels[mode]}</DialogTitle>
                             <Button

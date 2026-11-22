@@ -124,12 +124,12 @@ function DeliveryAllocationForm({
     })
     return (
         <DialogContent
-            className="flex max-h-[85dvh] flex-col sm:max-w-2xl"
+            className="flex max-h-[85dvh] flex-col overflow-hidden sm:max-w-2xl"
             closeButtonId={`${prefix}-close`}
         >
-            <DialogHeader>
+            <DialogHeader className="shrink-0">
                 <DialogTitle>设置收货地址</DialogTitle>
-                <DialogDescription className="break-words pr-6">
+                <DialogDescription className="break-words">
                     {line.name || "商品"}
                     {line.specification ? ` · ${line.specification}` : ""} ·
                     销售数量{" "}
@@ -137,7 +137,7 @@ function DeliveryAllocationForm({
                 </DialogDescription>
             </DialogHeader>
             <form
-                className="flex min-h-0 flex-col gap-4"
+                className="flex min-h-0 flex-1 flex-col gap-4"
                 noValidate
                 onSubmit={(event) => {
                     event.preventDefault()
@@ -153,7 +153,7 @@ function DeliveryAllocationForm({
                         })
                         return (
                             <div
-                                className="space-y-1 rounded-lg bg-muted/40 px-3 py-2 text-body-compact"
+                                className="shrink-0 space-y-1 rounded-lg bg-muted/40 px-3 py-2 text-body-compact"
                                 aria-live="polite"
                             >
                                 <p className="num">
@@ -172,7 +172,7 @@ function DeliveryAllocationForm({
                         )
                     }}
                 </form.Subscribe>
-                <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
                     <form.AppField name="rows" mode="array">
                         {(arrayField) => (
                             <div className="space-y-4">
@@ -346,11 +346,11 @@ function DeliveryAllocationForm({
                         )}
                     </form.AppField>
                 </div>
-                <DialogFooter>
+                <DialogFooter className="shrink-0">
                     <Button
                         id={`${prefix}-cancel`}
                         type="button"
-                        variant="ghost"
+                        variant="outline"
                         onClick={onClose}
                     >
                         取消

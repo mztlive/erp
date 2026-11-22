@@ -65,8 +65,17 @@ export function ContractSalesAccessDialog({
     ])
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent closeButtonId="contracts-sales-access-close">
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && mutation.isPending) return
+                onOpenChange(next)
+            }}
+        >
+            <DialogContent
+                closeButtonId="contracts-sales-access-close"
+                showCloseButton={!mutation.isPending}
+            >
                 <DialogHeader>
                     <DialogTitle>管理合同共享销售</DialogTitle>
                     <DialogDescription>

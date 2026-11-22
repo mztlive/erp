@@ -4,6 +4,7 @@ import { LockKeyholeIcon } from "lucide-react"
 import { useStore } from "@tanstack/react-form"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
+import { DiscardConfirmDialog } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -90,6 +91,7 @@ export function PersonalGrantForm({
 }) {
     const save = useSavePersonScope(userId)
     const [discarding, setDiscarding] = React.useState(false)
+    const [reloadConfirmOpen, setReloadConfirmOpen] = React.useState(false)
     const [initialDraft] = React.useState(draft)
     const [version] = React.useState(
         draft?.policyVersion ?? data.policy_version,
@@ -333,7 +335,7 @@ export function PersonalGrantForm({
         <Dialog
             open
             onOpenChange={(open) => {
-                if (!open) leave()
+                if (!open && !save.isPending) leave()
             }}
         >
             <DialogContent
@@ -376,16 +378,9 @@ export function PersonalGrantForm({
                                         id="person-scope-reload"
                                         type="button"
                                         variant="link"
-                                        onClick={() => {
-                                            if (
-                                                window.confirm(
-                                                    "放弃当前草稿并刷新配置？",
-                                                )
-                                            ) {
-                                                onDone()
-                                                onReload()
-                                            }
-                                        }}
+                                        onClick={() =>
+                                            setReloadConfirmOpen(true)
+                                        }
                                     >
                                         刷新配置
                                     </Button>
@@ -555,6 +550,7 @@ export function PersonalGrantForm({
                             </AlertDialogCancel>
                             <AlertDialogAction
                                 id="person-scope-discard-confirm"
+                                variant="destructive"
                                 onClick={onDone}
                             >
                                 放弃修改
@@ -562,6 +558,20 @@ export function PersonalGrantForm({
                         </AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialog>
+                <DiscardConfirmDialog
+                    idPrefix="person-scope-reload-discard"
+                    open={reloadConfirmOpen}
+                    onOpenChange={setReloadConfirmOpen}
+                    title="放弃当前草稿并刷新配置？"
+                    description="配置已变化，刷新后将清除当前未保存草稿并重新加载最新权限。"
+                    confirmLabel="放弃草稿并刷新"
+                    cancelLabel="继续核对"
+                    onConfirm={() => {
+                        setReloadConfirmOpen(false)
+                        onDone()
+                        onReload()
+                    }}
+                />
             </DialogContent>
         </Dialog>
     )

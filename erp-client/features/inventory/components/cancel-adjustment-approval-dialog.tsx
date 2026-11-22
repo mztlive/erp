@@ -133,7 +133,9 @@ export function CancelAdjustmentApprovalDialog({
                             {reviseRejected ? "修改原单" : "撤回审批"}
                         </DialogTitle>
                         <DialogDescription>
-                            当前节点：{currentNodeName ?? "—"}。
+                            {currentNodeName
+                                ? `当前节点：${currentNodeName}。`
+                                : null}
                             {reviseRejected
                                 ? "撤回后打开原调整单草稿，修改后可重新提交。"
                                 : "撤回后库存调整单将回到草稿。"}

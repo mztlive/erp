@@ -166,13 +166,19 @@ function PurchaseEmailDialog({
                 if (!next && !send.isPending) onClose()
             }}
         >
-            <DialogContent>
+            <DialogContent
+                closeButtonId="purchase-order-email-close"
+                showCloseButton={!send.isPending}
+            >
                 <DialogHeader>
                     <DialogTitle>发送采购单邮件</DialogTitle>
                     <DialogDescription>
-                        将采购单 {order.identity.purchaseNo}（v
-                        {order.identity.revisionNo}）发送给{" "}
-                        {order.header.supplierSnapshot}
+                        将采购单{" "}
+                        <span className="num">
+                            {order.identity.purchaseNo}（v
+                            {order.identity.revisionNo}）
+                        </span>
+                        发送给 {order.header.supplierSnapshot}
                         。邮件包含采购内容和可打印附件。
                     </DialogDescription>
                 </DialogHeader>
@@ -206,11 +212,13 @@ function PurchaseEmailDialog({
                             最近发送记录（最多 20 条）
                         </h3>
                         {history.isError ? (
-                            <p>
+                            <p role="alert" className="text-destructive">
                                 发送记录读取失败，请刷新后核对，避免重复发送。
                             </p>
                         ) : history.isPending ? (
-                            <p>正在读取…</p>
+                            <p role="status" className="text-muted-foreground">
+                                正在读取…
+                            </p>
                         ) : !history.data?.length ? (
                             <p className="text-muted-foreground">
                                 暂无发送记录

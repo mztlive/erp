@@ -196,7 +196,7 @@ export function ImportExecutionActions({
                             size="sm"
                             variant="outline"
                             disabled
-                            reason="期初数据正式写入功能暂未开放，暂不支持重试失败数据。"
+                            reason="期初数据写入功能暂未开放，暂不支持重试失败数据。"
                             onClick={() => setConfirming("RETRY_FAILED")}
                         >
                             重试失败数据
@@ -213,10 +213,10 @@ export function ImportExecutionActions({
                     onOpenChange={(open) => {
                         if (!open) setConfirming(undefined)
                     }}
-                    title="开始正式导入"
-                    actionLabel="确认开始导入"
+                    title="开始导入"
+                    actionLabel="开始导入"
                     confirmLabel="确认开始导入"
-                    description="提交后将开始正式导入当前待处理数据。"
+                    description="提交后将开始导入当前待处理数据。"
                     fromStatus={{ label: "待导入", tone: "success" }}
                     toStatus={{ label: "导入中", tone: "info" }}
                     effects={["启动后台导入任务", "仅处理当前待导入的数据"]}
@@ -237,9 +237,9 @@ export function ImportExecutionActions({
                         if (!open) setConfirming(undefined)
                     }}
                     title="重试失败数据"
-                    actionLabel="确认重试"
+                    actionLabel="重置失败数据"
                     confirmLabel="确认重试"
-                    description="仅重置上轮失败的数据；重置完成后仍需点击“开始正式导入”。"
+                    description="仅重置上轮失败的数据；重置完成后仍需点击「开始导入」。"
                     fromStatus={{ label: "失败结果", tone: "destructive" }}
                     toStatus={{ label: "待导入", tone: "success" }}
                     effects={[

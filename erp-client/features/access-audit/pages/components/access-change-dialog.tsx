@@ -60,6 +60,7 @@ function AccessChangeDialog({
             <DialogContent
                 className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"
                 closeButtonId="operations-access-change-dialog-close"
+                showCloseButton={!isSubmitting}
             >
                 <DialogHeader>
                     <DialogTitle>授权变更影响预览</DialogTitle>
@@ -210,7 +211,7 @@ function AccessChangeDialog({
                                     <Button
                                         id="operations-access-change-dialog-cancel"
                                         type="button"
-                                        variant="ghost"
+                                        variant="outline"
                                         disabled={isSubmitting}
                                         onClick={() => onOpenChange(false)}
                                     >
@@ -238,7 +239,7 @@ function AccessChangeDialog({
                                 <Button
                                     id="operations-access-change-dialog-close-blocked"
                                     type="button"
-                                    variant="ghost"
+                                    variant="outline"
                                     onClick={() => {
                                         onApplyOutcome({
                                             outcome: "REJECTED",

@@ -84,16 +84,16 @@ export function CatalogBatchHistory({
             <DialogContent
                 forceOverlay
                 closeButtonId="supplier-catalog-batch-history-close"
-                className="flex max-h-[80dvh] flex-col sm:max-w-2xl"
+                className="flex max-h-[80dvh] flex-col overflow-hidden sm:max-w-2xl"
             >
-                <DialogHeader className="pr-8">
+                <DialogHeader className="shrink-0 pr-8">
                     <DialogTitle>入库批次</DialogTitle>
                     <DialogDescription>
                         {supplierName} · 最近 20
                         个批次，执行中、待处理和草稿优先展示。
                     </DialogDescription>
                 </DialogHeader>
-                <div className="min-h-0 overflow-y-auto">
+                <div className="min-h-0 flex-1 overflow-y-auto">
                     {query.isPending ? (
                         <p role="status" className="py-6 text-muted-foreground">
                             正在读取已保存的批次…
@@ -188,7 +188,7 @@ export function CatalogBatchHistory({
                         })}
                     </ul>
                 </div>
-                <DialogFooter>
+                <DialogFooter className="shrink-0">
                     <Button
                         id="supplier-catalog-batch-history-refresh"
                         variant="outline"

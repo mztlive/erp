@@ -136,7 +136,7 @@ export function InquiryRatioPricing({
             <Dialog open={open} onOpenChange={setOpen}>
                 <DialogContent
                     closeButtonId="procurement-inquiry-ratio-close"
-                    className="max-w-3xl"
+                    className="sm:max-w-3xl"
                 >
                     <DialogHeader>
                         <DialogTitle>按供应商报价统一设置供给价</DialogTitle>
@@ -275,7 +275,7 @@ export function InquiryRatioPricing({
                             </TableBody>
                         </Table>
                     </div>
-                    <DialogFooter>
+                    <DialogFooter className="sm:items-center">
                         <p className="mr-auto text-xs text-muted-foreground">
                             将覆盖 {count} 项单价和税率，其他商品保留原值。
                         </p>

@@ -150,10 +150,17 @@ export const BookCreateDialog = ({
     }, [form, initialSkuIds, open, sourceKind])
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && operations.create.isPending) return
+                onOpenChange(next)
+            }}
+        >
             <DialogContent
                 className="max-h-[90svh] overflow-y-auto sm:max-w-2xl"
                 closeButtonId="sales-selection-create-close"
+                showCloseButton={!operations.create.isPending}
             >
                 <DialogHeader>
                     <DialogTitle>发起选品</DialogTitle>
@@ -349,6 +356,7 @@ export const BookCreateDialog = ({
                             id="sales-selection-create-cancel"
                             type="button"
                             variant="outline"
+                            disabled={operations.create.isPending}
                             onClick={() => onOpenChange(false)}
                         >
                             取消

@@ -1070,7 +1070,7 @@ export function InvoiceRequestForm({
                 {reasonFields}
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3">
                 <div className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1">
                     <div className="flex items-baseline gap-1.5">
                         <span className="text-xs text-muted-foreground">
@@ -1189,9 +1189,9 @@ export function InvoiceRequestForm({
                     id="invoice-request-dialog"
                     closeButtonId="invoice-request-dialog-close"
                     showCloseButton={!locked}
-                    className="flex max-h-[calc(100dvh-2rem)] flex-col sm:max-w-4xl"
+                    className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-4xl"
                 >
-                    <DialogHeader>
+                    <DialogHeader className="shrink-0">
                         <DialogTitle>
                             {existing ? "修改开票申请" : "申请开票"}
                         </DialogTitle>

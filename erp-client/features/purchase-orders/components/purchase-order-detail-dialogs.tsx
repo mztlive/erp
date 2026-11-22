@@ -85,10 +85,17 @@ export function PurchaseOrderDetailDialogs({
                 onConfirm={onConfirmVoid}
             />
 
-            <Dialog open={leaveGuardOpen} onOpenChange={onLeaveGuardOpenChange}>
+            <Dialog
+                open={leaveGuardOpen}
+                onOpenChange={(next) => {
+                    if (!next && savePending) return
+                    onLeaveGuardOpenChange(next)
+                }}
+            >
                 <DialogContent
                     className="sm:max-w-md"
                     closeButtonId="procurement-orders-detail-leave-guard-close"
+                    showCloseButton={!savePending}
                 >
                     <DialogHeader>
                         <DialogTitle>有未保存的修改</DialogTitle>
@@ -103,21 +110,12 @@ export function PurchaseOrderDetailDialogs({
                                     id="procurement-orders-detail-leave-continue"
                                     type="button"
                                     variant="outline"
+                                    disabled={savePending}
                                 />
                             }
                         >
                             继续编辑
                         </DialogClose>
-                        <LoadingButton
-                            id="procurement-orders-detail-leave-save"
-                            loading={savePending}
-                            type="button"
-                            variant="outline"
-                            disabled={savePending}
-                            onClick={onSaveAndLeave}
-                        >
-                            {savePending ? "保存中…" : "保存并离开"}
-                        </LoadingButton>
                         <Button
                             id="procurement-orders-detail-leave-discard"
                             type="button"
@@ -127,6 +125,15 @@ export function PurchaseOrderDetailDialogs({
                         >
                             放弃修改并离开
                         </Button>
+                        <LoadingButton
+                            id="procurement-orders-detail-leave-save"
+                            loading={savePending}
+                            type="button"
+                            disabled={savePending}
+                            onClick={onSaveAndLeave}
+                        >
+                            {savePending ? "保存中…" : "保存并离开"}
+                        </LoadingButton>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

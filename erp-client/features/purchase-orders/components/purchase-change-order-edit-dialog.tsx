@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
-import { XIcon } from "lucide-react"
 import { useAppForm } from "@/components/form"
 import { BusinessFailureState } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -111,34 +110,25 @@ export function PurchaseChangeOrderEditDialog({
             }}
         >
             <DialogContent
-                className="max-h-[90dvh] w-[calc(100vw_-_2rem)] overflow-y-auto sm:max-w-5xl"
-                showCloseButton={false}
+                className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
+                showCloseButton={!busy}
                 closeButtonId={`${id}-close`}
             >
-                <DialogHeader className="sticky -top-6 z-10 -mx-6 -mt-6 border-b bg-popover px-6 py-5 pr-16">
-                    <Button
-                        id={`${id}-close`}
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        className="absolute top-4 right-4"
-                        aria-label="关闭改单"
-                        disabled={busy}
-                        onClick={() => onOpenChange(false)}
-                    >
-                        <XIcon />
-                    </Button>
+                <DialogHeader className="shrink-0 border-b border-border bg-popover px-6 py-4 pr-14 text-left">
                     <DialogTitle>采购改单</DialogTitle>
                     <DialogDescription>
-                        修改后填写变更原因并提交审批。审批通过前仍按当前采购版本执行，已有入库、发货和付款记录保留。
+                        修改后填写变更原因并提交审批。审批通过前仍按当前采购版本执行，已有入库、发货和付款记录保留。关闭不会放弃本次改单；未保存的内容请先点「保存修改」。
                     </DialogDescription>
                 </DialogHeader>
                 {query.isPending || optionsQuery.isPending ? (
-                    <p role="status" className="text-xs text-muted-foreground">
+                    <p
+                        role="status"
+                        className="px-6 py-5 text-xs text-muted-foreground"
+                    >
                         正在读取原单…
                     </p>
                 ) : loadError || !complete || !draft ? (
-                    <div className="space-y-3">
+                    <div className="space-y-3 px-6 py-5">
                         <p
                             role="alert"
                             className="text-body-compact text-destructive"
@@ -419,7 +409,7 @@ function PurchaseChangeEditForm({
     return (
         <form
             id={`${id}-form`}
-            className="space-y-6"
+            className="flex min-h-0 flex-1 flex-col"
             onSubmit={(event) => {
                 event.preventDefault()
                 event.stopPropagation()
@@ -427,55 +417,62 @@ function PurchaseChangeEditForm({
                 void form.handleSubmit()
             }}
         >
-            {centerQuery.isError ||
-            (!centerQuery.isPending && !centerQuery.data) ? (
-                <BusinessFailureState
-                    id={`${id}-expense-state-failure`}
-                    title="费用发生情况读取失败，暂不能修改或提交"
-                    error={centerQuery.error ?? undefined}
-                    description="未能找到原采购单，请重新读取后核对。"
-                    onRetry={() => void centerQuery.refetch()}
+            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5">
+                {centerQuery.isError ||
+                (!centerQuery.isPending && !centerQuery.data) ? (
+                    <BusinessFailureState
+                        id={`${id}-expense-state-failure`}
+                        title="费用发生情况读取失败，暂不能修改或提交"
+                        error={centerQuery.error ?? undefined}
+                        description="未能找到原采购单，请重新读取后核对。"
+                        onRetry={() => void centerQuery.refetch()}
+                    />
+                ) : !centerQuery.data ? (
+                    <p role="status" className="text-xs text-muted-foreground">
+                        正在读取费用发生情况，请稍候…
+                    </p>
+                ) : null}
+                <PurchaseChangeDraftFields
+                    form={form}
+                    id={id}
+                    draft={draft}
+                    options={options}
+                    disabled={disabled}
+                    occurredExpenseIds={occurredExpenseIds}
                 />
-            ) : !centerQuery.data ? (
-                <p role="status" className="text-xs text-muted-foreground">
-                    正在读取费用发生情况，请稍候…
-                </p>
-            ) : null}
-            <PurchaseChangeDraftFields
-                form={form}
-                id={id}
-                draft={draft}
-                options={options}
-                disabled={disabled}
-                occurredExpenseIds={occurredExpenseIds}
-            />
-            {saved ? (
-                <p role="status" className="text-xs text-muted-foreground">
-                    修改已保存，尚未重新提交审批。
-                </p>
-            ) : null}
-            {rework.field}
-            <SubmissionRouteConfirmation definition={approval?.definition} />
-            {error ? (
-                <p role="alert" className="text-body-compact text-destructive">
-                    {error}
-                </p>
-            ) : null}
-            {unknown ? (
-                <Alert variant="warning">
-                    <AlertTitle>
-                        {unknownOperation === "save"
-                            ? "保存结果待确认"
-                            : "提交结果待确认"}
-                    </AlertTitle>
-                    <AlertDescription>
-                        {unknownOperation === "save"
-                            ? "当前修改已保留，请使用本次保存重试，确认前不能修改或关闭。"
-                            : "当前改单内容已保留。请查询改单状态或使用本次操作重试，确认前不能修改或关闭。"}
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-            <DialogFooter className="sticky -bottom-6 z-10 -mx-6 flex-col border-t bg-popover px-6 py-4 sm:items-center sm:justify-between">
+                {saved ? (
+                    <p role="status" className="text-xs text-muted-foreground">
+                        修改已保存，尚未重新提交审批。
+                    </p>
+                ) : null}
+                {rework.field}
+                <SubmissionRouteConfirmation
+                    definition={approval?.definition}
+                />
+                {error ? (
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
+                        {error}
+                    </p>
+                ) : null}
+                {unknown ? (
+                    <Alert variant="warning">
+                        <AlertTitle>
+                            {unknownOperation === "save"
+                                ? "保存结果待确认"
+                                : "提交结果待确认"}
+                        </AlertTitle>
+                        <AlertDescription>
+                            {unknownOperation === "save"
+                                ? "当前修改已保留，请使用本次保存重试，确认前不能修改或关闭。"
+                                : "当前改单内容已保留。请查询改单状态或使用本次操作重试，确认前不能修改或关闭。"}
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
+            </div>
+            <DialogFooter className="shrink-0 flex-col border-t border-border bg-popover px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <PurchaseChangeTotalSummary
                     form={form}
                     baseAmount={draft.base_gross_amount ?? ""}

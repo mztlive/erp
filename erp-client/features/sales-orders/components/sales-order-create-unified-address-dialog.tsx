@@ -177,7 +177,7 @@ export function SalesOrderCreateUnifiedAddressDialog({
                             <Button
                                 id="sales-orders-create-unified-address-cancel"
                                 type="button"
-                                variant="ghost"
+                                variant="outline"
                                 onClick={() => setOpen(false)}
                             >
                                 取消

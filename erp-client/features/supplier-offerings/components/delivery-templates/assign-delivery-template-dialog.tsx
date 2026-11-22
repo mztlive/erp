@@ -74,8 +74,17 @@ export function AssignDeliveryTemplateDialog({
         })),
     ]
     return (
-        <Dialog open onOpenChange={onOpenChange}>
-            <DialogContent closeButtonId="assign-delivery-template-close">
+        <Dialog
+            open
+            onOpenChange={(next) => {
+                if (!next && mutation.isPending) return
+                onOpenChange(next)
+            }}
+        >
+            <DialogContent
+                closeButtonId="assign-delivery-template-close"
+                showCloseButton={!mutation.isPending}
+            >
                 <DialogHeader>
                     <DialogTitle>设置配送模板</DialogTitle>
                     <DialogDescription>

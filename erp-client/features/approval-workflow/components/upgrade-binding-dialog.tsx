@@ -109,9 +109,16 @@ export function UpgradeBindingDialog({
     }, [documentId, form, open])
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && upgrade.isPending) return
+                onOpenChange(next)
+            }}
+        >
             <DialogContent
                 closeButtonId={`${id}-close`}
+                showCloseButton={!upgrade.isPending}
                 className="sm:max-w-lg"
             >
                 <DialogHeader>

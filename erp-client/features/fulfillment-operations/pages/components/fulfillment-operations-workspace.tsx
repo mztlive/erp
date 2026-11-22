@@ -226,12 +226,12 @@ export function FulfillmentOperationsWorkspace({
                         ? OPERATION_CONFIRM_TITLE[
                               controller.operation.operationType
                           ]
-                        : "确认？"
+                        : "确认办理操作"
                 }
                 description={
                     controller.draft
                         ? confirmDescription(controller.draft)
-                        : "确认后不能改。"
+                        : "提交后不可直接撤回，请先核对本次履约信息。"
                 }
                 actionLabel={
                     controller.operation

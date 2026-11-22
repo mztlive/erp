@@ -340,7 +340,7 @@ export function ConfirmSection({
                         if (!open) setConfirming(undefined)
                     }}
                     title={`确认${CONFIRMATION_SCOPE_LABEL[confirming.scope]}`}
-                    actionLabel="确认本范围"
+                    actionLabel="提交范围确认"
                     confirmLabel="确认本范围"
                     description="确认本范围的数据预检结果。"
                     fromStatus={{ label: "待确认", tone: "warning" }}

@@ -69,7 +69,7 @@ export function PurchaseOrderCreateSourcePickerDialog({
                 className="flex h-[90vh] max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-6xl"
                 closeButtonId="procurement-orders-create-source-picker-close"
             >
-                <DialogHeader className="shrink-0 border-b border-border px-6 py-4 text-left">
+                <DialogHeader className="shrink-0 border-b border-border px-6 py-4 pr-14 text-left">
                     <DialogTitle>选择来源销售单</DialogTitle>
                     <DialogDescription>
                         预览待分配供给的销售单，选定后作为本次供给分配来源。

@@ -315,23 +315,23 @@ export function TransferBatchResult({
             <Dialog open={open} onOpenChange={setOpen}>
                 <DialogContent
                     closeButtonId={`${id}-dialog-close`}
-                    className="flex max-h-[85svh] flex-col sm:max-w-3xl"
+                    className="flex max-h-[85svh] flex-col overflow-hidden sm:max-w-3xl"
                 >
-                    <DialogHeader>
+                    <DialogHeader className="shrink-0">
                         <DialogTitle>逐行处理结果</DialogTitle>
                         <DialogDescription>
                             成功行已经完成；失败行回业务页面修正；待确认行先核对原结果，保留原内容。
                         </DialogDescription>
                     </DialogHeader>
                     {result.isError && (
-                        <p role="alert" className="text-destructive">
+                        <p role="alert" className="shrink-0 text-destructive">
                             {getErrorMessage(
                                 result.error,
                                 "逐行结果读取失败，请关闭后重新读取",
                             )}
                         </p>
                     )}
-                    <ul className="min-h-0 space-y-3 overflow-y-auto">
+                    <ul className="min-h-0 flex-1 space-y-3 overflow-y-auto">
                         {rows.map((row, index) => {
                             const state = outcome(row, context)
                             const href =
@@ -400,7 +400,7 @@ export function TransferBatchResult({
                             )
                         })}
                     </ul>
-                    <DialogFooter>
+                    <DialogFooter className="shrink-0">
                         <Button
                             id={`${id}-dialog-done`}
                             variant="outline"

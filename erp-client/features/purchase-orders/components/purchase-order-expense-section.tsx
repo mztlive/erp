@@ -348,10 +348,17 @@ function ConfirmExpenseDialog({
     }, [form, openId])
 
     return (
-        <Dialog open={Boolean(line)} onOpenChange={onOpenChange}>
+        <Dialog
+            open={Boolean(line)}
+            onOpenChange={(next) => {
+                if (!next && mutation.isPending) return
+                onOpenChange(next)
+            }}
+        >
             <DialogContent
                 className="sm:max-w-lg"
                 closeButtonId="procurement-orders-expense-confirm-close"
+                showCloseButton={!mutation.isPending}
             >
                 <DialogHeader>
                     <DialogTitle>确认费用已发生</DialogTitle>
@@ -405,7 +412,7 @@ function ConfirmExpenseDialog({
                         <Button
                             id="procurement-orders-expense-confirm-cancel"
                             type="button"
-                            variant="ghost"
+                            variant="outline"
                             disabled={mutation.isPending}
                             onClick={() => onOpenChange(false)}
                         >

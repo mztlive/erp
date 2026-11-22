@@ -36,27 +36,30 @@ function CommandDialog({
     children,
     className,
     showCloseButton = false,
+    closeButtonId,
     ...props
 }: Omit<React.ComponentProps<typeof Dialog>, "children"> & {
     title?: string
     description?: string
     className?: string
     showCloseButton?: boolean
+    closeButtonId?: string
     children: React.ReactNode
 }) {
     return (
         <Dialog {...props}>
-            <DialogHeader className="sr-only">
-                <DialogTitle>{title}</DialogTitle>
-                <DialogDescription>{description}</DialogDescription>
-            </DialogHeader>
             <DialogContent
                 className={cn(
-                    "top-1/4 translate-y-0 overflow-hidden rounded-xl! p-0 sm:max-w-lg",
+                    "top-1/4 translate-y-0 flex flex-col overflow-hidden rounded-xl! p-0 sm:max-w-lg",
                     className,
                 )}
                 showCloseButton={showCloseButton}
+                closeButtonId={closeButtonId}
             >
+                <DialogHeader className="sr-only">
+                    <DialogTitle>{title}</DialogTitle>
+                    <DialogDescription>{description}</DialogDescription>
+                </DialogHeader>
                 {children}
             </DialogContent>
         </Dialog>

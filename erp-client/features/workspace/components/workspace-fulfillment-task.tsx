@@ -382,10 +382,16 @@ function WorkspaceFulfillmentReassignDialog({
     }, [form, item.workItemId, open])
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && mutation.isPending) return
+                onOpenChange(next)
+            }}
+        >
             <DialogContent
                 closeButtonId={`workspace-fulfillment-reassign-close-${toAutomationIdSegment(item.workItemId)}`}
-                aria-describedby={undefined}
+                showCloseButton={!mutation.isPending}
                 className="sm:max-w-lg"
             >
                 <DialogHeader>
@@ -415,7 +421,7 @@ function WorkspaceFulfillmentReassignDialog({
                     ) : null}
                     {error ? (
                         <Alert variant="destructive">
-                            <AlertTitle>没有转交</AlertTitle>
+                            <AlertTitle>转交未完成</AlertTitle>
                             <AlertDescription>{error}</AlertDescription>
                         </Alert>
                     ) : null}

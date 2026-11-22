@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
-import { XIcon } from "lucide-react"
 import {
     SalesChangeBlockers,
     SalesChangeDraftFields,
@@ -74,23 +73,11 @@ export function SalesChangeOrderEditDialog({
             onOpenChange={(next) => !busyRef.current && onOpenChange(next)}
         >
             <DialogContent
-                className="max-h-[90dvh] w-[calc(100vw_-_2rem)] overflow-y-auto sm:max-w-5xl"
-                showCloseButton={false}
+                className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
+                showCloseButton={!busy}
                 closeButtonId={`${id}-close`}
             >
-                <DialogHeader className="sticky -top-6 z-10 -mx-6 -mt-6 border-b bg-popover px-6 py-5 pr-16">
-                    <Button
-                        id={`${id}-close`}
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        className="absolute top-4 right-4"
-                        aria-label="关闭改单"
-                        disabled={busy}
-                        onClick={() => onOpenChange(false)}
-                    >
-                        <XIcon />
-                    </Button>
+                <DialogHeader className="shrink-0 border-b border-border bg-popover px-6 py-4 pr-14 text-left">
                     <DialogTitle>销售改单</DialogTitle>
                     <DialogDescription>
                         修改后填写变更原因并提交审批。审批通过前仍按当前销售版本执行，已有回款、开票和交付记录保留。
@@ -98,11 +85,11 @@ export function SalesChangeOrderEditDialog({
                     </DialogDescription>
                 </DialogHeader>
                 {query.isPending ? (
-                    <p className="text-xs text-muted-foreground">
+                    <p className="px-6 py-5 text-xs text-muted-foreground">
                         正在读取原单…
                     </p>
                 ) : query.isError && !query.data ? (
-                    <div className="space-y-3">
+                    <div className="space-y-3 px-6 py-5">
                         <p
                             role="alert"
                             className="text-body-compact text-destructive"
@@ -330,34 +317,41 @@ function SalesChangeDraftForm({
     const disabled = pending || uncertain
     return (
         <form
-            className="space-y-6"
+            className="flex min-h-0 flex-1 flex-col"
             onSubmit={(event) => {
                 event.preventDefault()
                 shouldSubmit.current = true
                 void form.handleSubmit()
             }}
         >
-            <SalesChangeDraftFields
-                form={form}
-                id={id}
-                draft={draft}
-                changeOrderId={changeOrderId}
-                disabled={disabled}
-                onError={setError}
-            />
-            {rework.field}
-            <SubmissionRouteConfirmation definition={approval?.definition} />
-            {saved ? (
-                <p role="status" className="text-xs text-muted-foreground">
-                    修改已保存，尚未重新提交审批。
-                </p>
-            ) : null}
-            {error ? (
-                <p role="alert" className="text-body-compact text-destructive">
-                    {error}
-                </p>
-            ) : null}
-            <DialogFooter className="sticky -bottom-6 z-10 -mx-6 flex-col border-t bg-popover px-6 py-4 sm:items-center sm:justify-between">
+            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5">
+                <SalesChangeDraftFields
+                    form={form}
+                    id={id}
+                    draft={draft}
+                    changeOrderId={changeOrderId}
+                    disabled={disabled}
+                    onError={setError}
+                />
+                {rework.field}
+                <SubmissionRouteConfirmation
+                    definition={approval?.definition}
+                />
+                {saved ? (
+                    <p role="status" className="text-xs text-muted-foreground">
+                        修改已保存，尚未重新提交审批。
+                    </p>
+                ) : null}
+                {error ? (
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
+                        {error}
+                    </p>
+                ) : null}
+            </div>
+            <DialogFooter className="shrink-0 flex-col border-t border-border bg-popover px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <SalesChangeTotalSummary
                     form={form}
                     baseAmount={draft.base_gross_amount}

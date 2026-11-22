@@ -78,7 +78,7 @@ export function WorkspaceApprovalRouteSummary({
                     </DialogTrigger>
                     <DialogContent
                         closeButtonId={`${prefix}-history-close`}
-                        className="flex max-h-[85dvh] flex-col sm:max-w-2xl"
+                        className="flex max-h-[85dvh] flex-col overflow-hidden sm:max-w-2xl"
                     >
                         <DialogHeader className="shrink-0 pr-8">
                             <DialogTitle>审批记录</DialogTitle>
@@ -86,7 +86,7 @@ export function WorkspaceApprovalRouteSummary({
                                 查看各轮审批的处理人、时间和审批意见。
                             </DialogDescription>
                         </DialogHeader>
-                        <div className="min-h-0 space-y-4 overflow-auto">
+                        <div className="min-h-0 flex-1 space-y-4 overflow-auto">
                             {historyQuery.isPending ? (
                                 <p
                                     role="status"

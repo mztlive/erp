@@ -50,7 +50,7 @@ export function AcceptanceDialogs({
                 open={confirmOpen}
                 onOpenChange={onConfirmOpenChange}
                 title="确认客户验收"
-                actionLabel="确认本次验收"
+                actionLabel="登记本次验收"
                 confirmLabel="确认本次验收"
                 fromStatus={{ label: "待登记", tone: "warning" }}
                 toStatus={{

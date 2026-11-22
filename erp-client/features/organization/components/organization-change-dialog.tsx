@@ -240,10 +240,17 @@ export function OrganizationChangeDialog({
         (draft.operation === "transfer_member" && !draft.userId)
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && submitting) return
+                onOpenChange(next)
+            }}
+        >
             <DialogContent
                 className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-2xl overflow-x-hidden overflow-y-auto sm:max-w-2xl"
                 closeButtonId="organization-change-dialog-close"
+                showCloseButton={!submitting}
                 onKeyDownCapture={(event) => {
                     if (
                         event.key !== "Escape" ||
@@ -267,7 +274,7 @@ export function OrganizationChangeDialog({
                     // 收起状态的选择框会消费 Esc 清空选项；此时应关闭弹窗。
                     event.preventDefault()
                     event.stopPropagation()
-                    onOpenChange(false)
+                    if (!submitting) onOpenChange(false)
                 }}
             >
                 <DialogHeader>

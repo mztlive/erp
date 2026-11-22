@@ -125,8 +125,17 @@ export function DecisionDialog({
     }, [defaultDecision, form, open, initialReason])
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent closeButtonId={`${id}-close`}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && submitDecision.isPending) return
+                onOpenChange(next)
+            }}
+        >
+            <DialogContent
+                closeButtonId={`${id}-close`}
+                showCloseButton={!submitDecision.isPending}
+            >
                 <DialogHeader>
                     <DialogTitle>
                         {defaultDecision === "REJECT" ? "确认驳回" : "确认通过"}

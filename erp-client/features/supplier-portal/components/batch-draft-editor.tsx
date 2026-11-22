@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
@@ -36,11 +38,14 @@ export function PortalBatchDraftEditor({
             <DialogContent
                 id="supplier-portal-batch-draft-dialog"
                 showCloseButton={!unresolved}
-                className="flex max-h-[90vh] w-[min(96vw,72rem)] flex-col overflow-hidden"
+                className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-6xl"
                 closeButtonId="supplier-portal-batch-draft-close"
             >
-                <DialogHeader>
+                <DialogHeader className="shrink-0">
                     <DialogTitle>补充本批新品资料</DialogTitle>
+                    <DialogDescription>
+                        补齐当前草稿的图片与商品资料，保存后返回本批次统一提交采购确认。
+                    </DialogDescription>
                 </DialogHeader>
                 <div className="min-h-0 flex-1 overflow-y-auto">
                     <PortalError
@@ -70,20 +75,24 @@ export function PortalBatchDraftEditor({
                             </p>
                         )}
                 </div>
-                {unresolved && (
-                    <p className="text-xs text-muted-foreground">
-                        本次上传或保存结果尚未确认，请在原草稿恢复操作后再返回批次。
-                    </p>
-                )}
-                <Button
-                    id="supplier-portal-batch-draft-back"
-                    type="button"
-                    variant="outline"
-                    onClick={onClose}
-                    disabled={unresolved}
-                >
-                    返回本批次
-                </Button>
+                <DialogFooter className="shrink-0 border-t border-border pt-3 sm:items-center sm:justify-between">
+                    {unresolved ? (
+                        <p className="text-xs text-muted-foreground">
+                            本次上传或保存结果尚未确认，请在原草稿恢复操作后再返回批次。
+                        </p>
+                    ) : (
+                        <span />
+                    )}
+                    <Button
+                        id="supplier-portal-batch-draft-back"
+                        type="button"
+                        variant="outline"
+                        onClick={onClose}
+                        disabled={unresolved}
+                    >
+                        返回本批次
+                    </Button>
+                </DialogFooter>
             </DialogContent>
         </Dialog>
     )

@@ -123,18 +123,25 @@ export function SupplierQuoteImportButton({
                 <UploadIcon aria-hidden="true" />
                 导入供应商报价
             </Button>
-            <Dialog open={open} onOpenChange={setOpen}>
+            <Dialog
+                open={open}
+                onOpenChange={(next) => {
+                    if (!next && pending) return
+                    setOpen(next)
+                }}
+            >
                 <DialogContent
                     closeButtonId="procurement-quote-import-close"
-                    className="flex max-h-[85svh] flex-col sm:max-w-4xl"
+                    showCloseButton={!pending}
+                    className="flex max-h-[85svh] flex-col overflow-hidden sm:max-w-4xl"
                 >
-                    <DialogHeader>
+                    <DialogHeader className="shrink-0">
                         <DialogTitle>导入供应商报价</DialogTitle>
                         <DialogDescription>
                             选择供应商回填的新版报价表。核对后统一登记内部报价，不覆盖正在填写的供给价。
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="min-h-0 space-y-4 overflow-y-auto">
+                    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
                         <FileUpload
                             idPrefix="procurement-quote-import"
                             inputId="procurement-quote-import-files"
@@ -225,7 +232,7 @@ export function SupplierQuoteImportButton({
                             <SupplierQuotePreviewPanel preview={preview.data} />
                         )}
                     </div>
-                    <DialogFooter>
+                    <DialogFooter className="shrink-0">
                         {command.unresolved && (
                             <Button
                                 id="procurement-quote-import-recover"

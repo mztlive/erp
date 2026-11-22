@@ -1954,7 +1954,7 @@ export function PortalReviewForm({
                         ? "重试确认通过并生效"
                         : "确认通过供应商申请并生效"
                 }
-                actionLabel="确认通过并生效"
+                actionLabel="通过并生效"
                 confirmLabel={
                     retryDecision === "approve"
                         ? "重试原通过决定"

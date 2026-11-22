@@ -290,9 +290,10 @@ export function ProductSourceDiff({
             >
                 <DialogContent
                     closeButtonId="product-source-diff-close"
-                    className="flex max-h-[90dvh] flex-col sm:max-w-5xl"
+                    showCloseButton={!mutation.isPending}
+                    className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-5xl"
                 >
-                    <DialogHeader>
+                    <DialogHeader className="shrink-0">
                         <DialogTitle>确认供应商商品资料更新</DialogTitle>
                         <DialogDescription>
                             逐项核对公司内容与供应商最新资料。采用后恢复该字段自动同步；保留或编辑后确认，本次相同更新不再提醒。
@@ -351,7 +352,7 @@ export function ProductSourceDiff({
                             />
                         ))}
                     </div>
-                    <DialogFooter className="flex-wrap">
+                    <DialogFooter className="shrink-0 flex-wrap">
                         <Button
                             id="product-source-diff-refresh"
                             type="button"

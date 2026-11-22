@@ -131,7 +131,7 @@ export function PurchaseOrderCreatePreviewDialog({
                 closeButtonId="procurement-orders-create-preview-close"
                 showCloseButton={!creating && !unresolved && !downloading}
             >
-                <DialogHeader className="shrink-0 border-b border-border px-6 py-4 text-left">
+                <DialogHeader className="shrink-0 border-b border-border px-6 py-4 pr-14 text-left">
                     <DialogTitle>预览供给分配</DialogTitle>
                     <DialogDescription>
                         {description ?? allocationSummary}

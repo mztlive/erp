@@ -37,7 +37,7 @@ export function TerminalActionDialog({
                 onOpenChange={(open) => {
                     if (!open) onCancel()
                 }}
-                actionLabel={duplicate ? "关闭重复" : "关闭误派任务"}
+                actionLabel={duplicate ? "关闭重复任务" : "关闭误派任务"}
                 title={duplicate ? "确认关闭重复任务" : "确认关闭误派任务"}
                 description="关闭当前任务，不改变业务记录。"
                 fromStatus={{ label: item.status.label, tone: "warning" }}
@@ -62,7 +62,8 @@ export function TerminalActionDialog({
             onOpenChange={(open) => {
                 if (!open) onCancel()
             }}
-            actionLabel={isNoError ? "确认无误" : "确认有效差异"}
+            actionLabel={isNoError ? "核实无误" : "标记有效差异"}
+            confirmLabel={isNoError ? "确认差异无误" : "确认有效差异"}
             title={isNoError ? "确认差异无误" : "确认差异为有效差异"}
             description="登记本次对账结论，不改变两侧业务数据。"
             fromStatus={{ label: item.status.label, tone: "warning" }}

@@ -93,7 +93,7 @@ function BatchSupplyEditor({
                     showCloseButton={!editor.busy}
                     className="flex max-h-[92dvh] w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1280px]"
                 >
-                    <DialogHeader className="shrink-0 border-b px-6 py-5">
+                    <DialogHeader className="shrink-0 border-b px-6 py-5 pr-14">
                         <DialogTitle>{MODE_LABELS[mode]}</DialogTitle>
                         <DialogDescription>
                             {mode === "revise"

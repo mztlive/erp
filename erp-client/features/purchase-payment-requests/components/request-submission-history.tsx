@@ -67,15 +67,15 @@ export function RequestSubmissionHistory({
                 <DialogContent
                     id="ppr-submission-dialog"
                     closeButtonId="ppr-submission-dialog-close"
-                    className="flex max-h-[90vh] flex-col sm:max-w-4xl"
+                    className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-4xl"
                 >
-                    <DialogHeader>
+                    <DialogHeader className="shrink-0">
                         <DialogTitle>第 {selected} 次提交材料</DialogTitle>
                         <DialogDescription>
                             {request.request_no} · 本次提交时的原申请与审核依据
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="min-h-0 space-y-5 overflow-y-auto pr-1">
+                    <div className="min-h-0 flex-1 space-y-5 overflow-y-auto pr-1">
                         {query.isPending ? (
                             <p className="text-xs text-muted-foreground">
                                 正在读取历史材料…

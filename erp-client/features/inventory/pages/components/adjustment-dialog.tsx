@@ -242,7 +242,7 @@ export function AdjustmentDialog({
                                         </p>
                                     )}
                                 </form.Subscribe>
-                                <DialogFooter className="gap-2 sm:justify-between">
+                                <DialogFooter className="gap-2 sm:items-center sm:justify-between">
                                     <Button
                                         id="inventory-adjustment-dialog-cancel"
                                         type="button"

@@ -36,12 +36,13 @@ export function ContractPaperDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 className="flex max-h-[92vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
+                closeButtonId="card-contracts-paper-dialog-x"
                 showCloseButton
             >
-                <DialogHeader className="shrink-0 border-b border-border px-6 py-4 text-left">
+                <DialogHeader className="shrink-0 border-b border-border px-6 py-4 pr-14 text-left">
                     <DialogTitle>合同纸质预览</DialogTitle>
                     <DialogDescription>
-                        合同关键条款打印摘要，正式内容以签署的合同原件为准。
+                        合同关键条款打印摘要，具体条款以签署的合同原件为准。
                     </DialogDescription>
                 </DialogHeader>
 
@@ -59,7 +60,7 @@ export function ContractPaperDialog({
                     ) : null}
                 </div>
 
-                <DialogFooter className="shrink-0 border-t border-border px-6 py-4 sm:justify-between">
+                <DialogFooter className="shrink-0 border-t border-border px-6 py-4 sm:items-center sm:justify-between">
                     <p className="text-xs text-muted-foreground">
                         {contract
                             ? `${contract.contractNo} · v${contract.currentRevision.revisionNo} · ${contract.statusLabel}`
