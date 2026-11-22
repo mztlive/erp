@@ -14,6 +14,7 @@ import {
     getRequest,
     getRequestSaveState,
     getRequestAmounts,
+    getSalesOrderInvoiceLines,
     submitRequest,
     updateRequest,
     cancelRequest,
@@ -46,6 +47,10 @@ export function useInvoiceRequestPermissions() {
         canCancel: hasPermission(
             profile.data?.permissions,
             "sales_invoice_request:cancel",
+        ),
+        canReadSalesOrder: hasPermission(
+            profile.data?.permissions,
+            "sales_order:detail",
         ),
     }
 }
@@ -83,6 +88,16 @@ export const useInvoiceRequestAmounts = (id?: string, enabled = true) =>
         queryKey: [...requestKeys.all, "amounts", id],
         queryFn: () => getRequestAmounts(id!),
         enabled: Boolean(id) && enabled,
+    })
+/** 读取销售单生效版本商业明细，用于一键带入开票明细。 */
+export const useSalesOrderInvoiceLines = (
+    salesOrderId?: string,
+    enabled = true,
+) =>
+    useQuery({
+        queryKey: [...requestKeys.all, "sales-order-lines", salesOrderId],
+        queryFn: () => getSalesOrderInvoiceLines(salesOrderId!),
+        enabled: Boolean(salesOrderId) && enabled,
     })
 /** 多结算主体逐笔核对准入；任一笔可申请才开放销售单入口。 */
 export const useInvoiceRequestAvailability = (

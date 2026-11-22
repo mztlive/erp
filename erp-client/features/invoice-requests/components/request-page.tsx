@@ -8,10 +8,9 @@ import { BarChart3Icon, PlusIcon } from "lucide-react"
 import {
     BusinessFailureState,
     BusinessStatusBadge,
-    DetailWorkspaceBody,
     DetailWorkspaceChrome,
     DetailWorkspacePage,
-    DetailWorkspaceSection,
+    DetailWorkspaceSkeleton,
     ListDataTable,
     ListFilterSection,
     ListFilterSections,
@@ -304,26 +303,11 @@ export function InvoiceRequestsPage() {
     if (isCreateMode) {
         if (permissions.isPending) {
             return (
-                <DetailWorkspacePage>
-                    <DetailWorkspaceChrome
-                        title={CREATE_LABEL}
-                        secondaryActions={
-                            <Button
-                                id="invoice-request-form-back"
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={closeCreate}
-                            >
-                                返回申请列表
-                            </Button>
-                        }
-                    />
-                    <div className="space-y-4 px-(--scaffold-px) py-6">
-                        <div className="h-16 animate-pulse rounded-lg bg-muted" />
-                        <div className="h-64 animate-pulse rounded-lg bg-muted" />
-                    </div>
-                </DetailWorkspacePage>
+                <DetailWorkspaceSkeleton
+                    title={CREATE_LABEL}
+                    description="正在核对当前账号权限…"
+                    sidebar
+                />
             )
         }
         if (!permissions.canSubmit) {
@@ -352,41 +336,29 @@ export function InvoiceRequestsPage() {
         }
         return (
             <DetailWorkspacePage>
-                <DetailWorkspaceChrome
-                    title={CREATE_LABEL}
-                    primaryStatus={{ label: "新建", tone: "neutral" }}
-                    meta="填写销方与购方开票明细，审批通过后由财务开票"
-                    secondaryActions={
-                        <Button
-                            id="invoice-request-form-back"
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={closeCreate}
-                        >
-                            返回申请列表
-                        </Button>
-                    }
+                <InvoiceRequestForm
+                    key="new"
+                    presentation="workspace"
+                    workspaceChrome={{
+                        title: CREATE_LABEL,
+                        statusLabel: "新建",
+                        back: {
+                            id: "invoice-request-form-back",
+                            label: "返回开票申请",
+                            onClick: closeCreate,
+                        },
+                    }}
+                    onCancel={closeCreate}
+                    onDone={(request) => {
+                        const id = request.id || pendingInvoiceRequestDetailId()
+                        dismissPendingInvoiceRequestDetail()
+                        if (id) {
+                            router.replace(detailHref(id))
+                        } else {
+                            closeCreate()
+                        }
+                    }}
                 />
-                <DetailWorkspaceBody>
-                    <DetailWorkspaceSection width="form">
-                        <InvoiceRequestForm
-                            key="new"
-                            onCancel={closeCreate}
-                            onDone={(request) => {
-                                const id =
-                                    request.id ||
-                                    pendingInvoiceRequestDetailId()
-                                dismissPendingInvoiceRequestDetail()
-                                if (id) {
-                                    router.replace(detailHref(id))
-                                } else {
-                                    closeCreate()
-                                }
-                            }}
-                        />
-                    </DetailWorkspaceSection>
-                </DetailWorkspaceBody>
             </DetailWorkspacePage>
         )
     }

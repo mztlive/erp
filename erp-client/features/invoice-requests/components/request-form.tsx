@@ -1,17 +1,31 @@
 "use client"
 
-import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
-import { RequiredMark } from "@/components/ui/required-mark"
-import { useRef, useState } from "react"
+import { useRef, useState, type ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { revalidateLogic, useStore } from "@tanstack/react-form"
 import { z } from "zod"
-import { PlusIcon, Trash2Icon } from "lucide-react"
+import {
+    CircleAlertIcon,
+    CircleHelpIcon,
+    FileDownIcon,
+    InfoIcon,
+    PlusIcon,
+    Trash2Icon,
+} from "lucide-react"
+
+import {
+    DetailWorkspaceBody,
+    DetailWorkspaceChrome,
+    DetailWorkspaceMeta,
+    DetailWorkspaceSection,
+    MoneyValue,
+    detailWorkspaceStyles,
+    type DetailWorkspaceBackLink,
+} from "@/components/business"
+import { DetailHint } from "@/components/business/detail-presentation"
 import { useAppForm, withForm } from "@/components/form"
-import { Input } from "@/components/ui/input"
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
@@ -19,6 +33,14 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import {
+    Field,
+    FieldDescription,
+    FieldError,
+    FieldLabel,
+} from "@/components/ui/field"
+import { LoadingButton } from "@/components/ui/loading-button"
+import { RequiredMark } from "@/components/ui/required-mark"
 import {
     Table,
     TableBody,
@@ -28,16 +50,15 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { MoneyValue } from "@/components/business"
-import { SalesOrderSearchCombobox } from "@/features/entity-selectors/components/sales-order-search-combobox"
+import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
 import { loadReceivables } from "@/features/customer-receivables/api/loaders"
-import { classifyFormalCommandError } from "@/lib/formal-command"
+import { SalesOrderSearchCombobox } from "@/features/entity-selectors/components/sales-order-search-combobox"
 import { getErrorCode, getErrorMessage } from "@/lib/api/errors"
-import {
-    useInvoiceRequestAmounts,
-    useInvoiceRequestCommands,
-    useInvoiceRequestSaveState,
-} from "../hooks/queries"
+import { formatCurrencyFixed } from "@/lib/fixed-decimal"
+import { classifyFormalCommandError } from "@/lib/formal-command"
+import { describeMoney } from "@/lib/money-display"
+import { cn } from "@/lib/utils"
+
 import {
     requestStatusLabels,
     type InvoiceRequest,
@@ -46,22 +67,37 @@ import {
     type UpdateRequest,
 } from "../api"
 import {
-    canonicalInvoiceDecimal,
+    useInvoiceRequestAmounts,
+    useInvoiceRequestCommands,
+    useInvoiceRequestPermissions,
+    useInvoiceRequestSaveState,
+} from "../hooks/queries"
+import {
     INVOICE_CONTENT_LIMIT,
     INVOICE_QUANTITY_SCALE,
     INVOICE_REQUEST_LINE_LIMIT,
     INVOICE_UNIT_PRICE_SCALE,
+    canonicalInvoiceDecimal,
+    invoiceExceedsAvailable,
     invoiceLineAmount,
     invoiceLinesTotal,
-    invoiceTotalMismatch,
+    invoiceOverAmount,
+    isInvoiceAmountText,
     isPositiveInvoiceDecimal,
 } from "../line-amounts"
+import { InvoiceRequestFormFooter } from "./request-form-footer"
+import {
+    InvoiceRequestDialogContext,
+    InvoiceRequestFormSidebar,
+    type InvoiceArchiveSnapshot,
+} from "./request-form-sidebar"
+import { SalesOrderLinesImportDialog } from "./sales-order-lines-import-dialog"
 
 type LineInput = InvoiceRequestLine & { rowKey: string }
 
 const zeroLineMessage = "请提高数量或含税单价，使本行金额至少为 0.01 元。"
-const totalMismatchMessage = "请调整明细或申请金额，使两者一致。"
 const lineLimitMessage = `最多填写 ${INVOICE_REQUEST_LINE_LIMIT} 行；如需增加项目，请先删除一行或另发起一笔申请。`
+
 const lineSchema = z.object({
     rowKey: z.string(),
     content: z
@@ -88,25 +124,13 @@ const schema = z
     .object({
         receivableAccountId: z.string(),
         salesOrderId: z.string().min(1, "请选择销售单"),
-        amount: z
-            .string()
-            .regex(/^\d+(\.\d{1,2})?$/, "金额最多两位小数")
-            .refine((v) => /[1-9]/.test(v), "请输入大于零的金额"),
         lines: z
             .array(lineSchema)
             .min(1, "请至少添加一行开票明细")
             .max(INVOICE_REQUEST_LINE_LIMIT, lineLimitMessage),
         reason: z.string().trim().min(1, "请输入申请事由").max(1000),
     })
-    .superRefine(({ amount, lines }, context) => {
-        const total = invoiceLinesTotal(lines)
-        if (invoiceTotalMismatch(total, amount)) {
-            context.addIssue({
-                code: "custom",
-                path: ["lines"],
-                message: totalMismatchMessage,
-            })
-        }
+    .superRefine(({ lines }, context) => {
         lines.forEach((line, index) => {
             if (invoiceLineAmount(line) === "0.00") {
                 context.addIssue({
@@ -121,7 +145,6 @@ const schema = z
 const formDefaults: z.input<typeof schema> = {
     receivableAccountId: "",
     salesOrderId: "",
-    amount: "",
     lines: [],
     reason: "",
 }
@@ -140,22 +163,44 @@ function initialLines(request?: InvoiceRequest): LineInput[] {
     return lines.map((line) => ({ ...line, rowKey: `item-${++nextKey}` }))
 }
 
-/** 申请表单保留未知结果载荷，锁定编辑后使用同一命令核对结果。 */
+function isBlankLine(line: InvoiceRequestLine): boolean {
+    return (
+        !line.content.trim() && !line.quantity.trim() && !line.unit_price.trim()
+    )
+}
+
+export type InvoiceRequestWorkspaceChromeConfig = {
+    title?: string
+    statusLabel?: string
+    meta?: ReactNode
+    back?: DetailWorkspaceBackLink
+}
+
+/**
+ * 开票申请表单：
+ * - `workspace`：独立新建/修改全页，采用纯白通栏左作业区 + 右参考侧栏 + 吸底核对栏；
+ * - `dialog`：销售单内弹窗态，采用紧凑无套娃单栏；
+ * - `inline`：嵌入式回退形态。
+ * 保留未知结果载荷，锁定编辑后使用同一幂等命令核对结果。
+ */
 export function InvoiceRequestForm({
     salesOrderId,
     accountId,
     existing: original,
     presentation = "inline",
+    workspaceChrome,
     onDone,
     onCancel,
 }: {
     salesOrderId?: string
     accountId?: string
     existing?: InvoiceRequest
-    presentation?: "inline" | "dialog"
+    presentation?: "workspace" | "inline" | "dialog"
+    workspaceChrome?: InvoiceRequestWorkspaceChromeConfig
     onDone: (request: InvoiceRequest) => void
     onCancel: () => void
 }) {
+    const permissions = useInvoiceRequestPermissions()
     const commands = useInvoiceRequestCommands()
     const [adopted, setAdopted] = useState<Pick<
         InvoiceRequest,
@@ -171,6 +216,13 @@ export function InvoiceRequestForm({
         "id" | "version" | "status"
     > | null>(null)
 
+    const [defaultLines] = useState<LineInput[]>(() => initialLines(existing))
+    const nextLineKey = useRef(defaultLines.length)
+    const createRowKey = () => {
+        nextLineKey.current += 1
+        return `item-${nextLineKey.current}`
+    }
+
     const pending = useRef<SubmitRequest | null>(null)
     const pendingSave = useRef<UpdateRequest | null>(null)
     const intent = useRef<"submit" | "save">("submit")
@@ -178,6 +230,12 @@ export function InvoiceRequestForm({
     const [uncertain, setUncertain] = useState(false)
     const [committedUnreadable, setCommittedUnreadable] = useState(false)
     const [error, setError] = useState<unknown>(null)
+    const [pickedOrder, setPickedOrder] = useState<{
+        id: string
+        documentNumber?: string
+    } | null>(null)
+    const [importOpen, setImportOpen] = useState(false)
+
     const rework = useResubmissionReason({
         open: true,
         required: existing?.status === "rejected",
@@ -188,13 +246,13 @@ export function InvoiceRequestForm({
             uncertain ||
             saveUncertain,
     })
+
     const form = useAppForm({
         defaultValues: {
             receivableAccountId:
                 existing?.receivable_account_id ?? accountId ?? "",
             salesOrderId: existing?.sales_order_id ?? salesOrderId ?? "",
-            amount: existing?.data.amount ?? "",
-            lines: initialLines(existing),
+            lines: defaultLines,
             reason: existing?.data.reason ?? "",
         },
         validationLogic: revalidateLogic(),
@@ -214,8 +272,10 @@ export function InvoiceRequestForm({
                     unit_price: canonicalInvoiceDecimal(unit_price),
                 }),
             )
+            const total = invoiceLinesTotal(lines)
+            if (!total || !isPositiveInvoiceDecimal(total, 2)) return
             const data = {
-                amount: canonicalInvoiceDecimal(value.amount),
+                amount: total,
                 invoice_content: lines[0]?.content ?? "",
                 reason: value.reason.trim(),
                 seller_name: amounts.data?.seller_name,
@@ -245,7 +305,8 @@ export function InvoiceRequestForm({
                 !resolvedAccountId ||
                 !amounts.data?.can_submit ||
                 amounts.isError ||
-                amounts.isFetching
+                amounts.isFetching ||
+                invoiceExceedsAvailable(total, amounts.data.available_amount)
             )
                 return
             const input = pending.current ?? {
@@ -264,7 +325,15 @@ export function InvoiceRequestForm({
             await send(input)
         },
     })
+
     const selectedOrder = useStore(form.store, (s) => s.values.salesOrderId)
+    const selectedAccount = useStore(
+        form.store,
+        (s) => s.values.receivableAccountId,
+    )
+    const formLines = useStore(form.store, (s) => s.values.lines)
+    const linesTotal = invoiceLinesTotal(formLines)
+
     const accounts = useQuery({
         queryKey: ["invoice-requests", "source", selectedOrder],
         queryFn: () =>
@@ -276,10 +345,7 @@ export function InvoiceRequestForm({
             }),
         enabled: Boolean(selectedOrder) && !accountId && !existing,
     })
-    const selectedAccount = useStore(
-        form.store,
-        (s) => s.values.receivableAccountId,
-    )
+
     const resolvedAccountId =
         existing?.receivable_account_id ??
         accountId ??
@@ -289,6 +355,7 @@ export function InvoiceRequestForm({
                 ? accounts.data.items[0]?.id
                 : undefined))
     const amounts = useInvoiceRequestAmounts(resolvedAccountId)
+
     const locked =
         commands.submit.isPending ||
         commands.update.isPending ||
@@ -302,6 +369,138 @@ export function InvoiceRequestForm({
     )
     const latestEditable =
         latest?.status === "draft" || latest?.status === "rejected"
+
+    const archive: InvoiceArchiveSnapshot = {
+        invoiceTitle:
+            pending.current?.data.invoice_title ??
+            amounts.data?.invoice_title ??
+            existing?.data.invoice_title ??
+            "",
+        taxNumber:
+            pending.current?.data.tax_number ??
+            amounts.data?.tax_number ??
+            existing?.data.tax_number ??
+            "",
+        sellerName:
+            pending.current?.data.seller_name ??
+            pendingSave.current?.data.seller_name ??
+            (amounts.data
+                ? amounts.data.seller_name
+                : existing?.data.seller_name) ??
+            "",
+        sellerTaxNumber:
+            pending.current?.data.seller_tax_number ??
+            pendingSave.current?.data.seller_tax_number ??
+            (amounts.data
+                ? amounts.data.seller_tax_number
+                : existing?.data.seller_tax_number) ??
+            "",
+    }
+
+    const exceedsAvailable = invoiceExceedsAvailable(
+        linesTotal,
+        amounts.data?.available_amount,
+    )
+    const overAmount = invoiceOverAmount(
+        linesTotal,
+        amounts.data?.available_amount,
+    )
+    const canImportSalesLines = Boolean(
+        permissions.canReadSalesOrder && selectedOrder,
+    )
+    const hasMeaningfulExistingLines = formLines.some(
+        (line) => !isBlankLine(line),
+    )
+    const showLegacyAmountHint = Boolean(
+        existing &&
+        !existing.data.lines?.length &&
+        isInvoiceAmountText(existing.data.amount) &&
+        !linesTotal,
+    )
+    const showOrderSelector = !salesOrderId && !existing
+    const showAccountSelector =
+        !accountId && !existing && (accounts.data?.items.length ?? 0) > 1
+    const showSourceSection = showOrderSelector || showAccountSelector
+
+    const canSubmit =
+        !locked &&
+        rework.valid &&
+        !amounts.isError &&
+        !amounts.isFetching &&
+        Boolean(amounts.data?.can_submit) &&
+        !exceedsAvailable
+
+    const { statusMessage, isErrorStatus } = (() => {
+        if (uncertain) {
+            return {
+                statusMessage: "提交结果尚未确认，请核对本次提交结果",
+                isErrorStatus: true,
+            }
+        }
+        if (saveUncertain) {
+            return {
+                statusMessage: "保存结果尚未确认，请读取最新版本核对",
+                isErrorStatus: true,
+            }
+        }
+        if (!selectedOrder && !existing) {
+            return {
+                statusMessage: "请先选择已生效的销售单",
+                isErrorStatus: false,
+            }
+        }
+        if (accounts.isError || amounts.isError) {
+            return {
+                statusMessage: "销售应收读取失败，请重新读取",
+                isErrorStatus: true,
+            }
+        }
+        if (accounts.isFetching || amounts.isFetching) {
+            return {
+                statusMessage: "正在核对本单可申请额度…",
+                isErrorStatus: false,
+            }
+        }
+        if (!resolvedAccountId) {
+            return {
+                statusMessage:
+                    (accounts.data?.items.length ?? 0) > 1
+                        ? "请选择本次开票的结算主体"
+                        : "该销售单暂无可开票应收，请确认是否已生效",
+                isErrorStatus: false,
+            }
+        }
+        if (amounts.data && !amounts.data.can_submit) {
+            return {
+                statusMessage:
+                    amounts.data.unavailable_reason || "当前暂不可提交开票申请",
+                isErrorStatus: true,
+            }
+        }
+        if (exceedsAvailable && overAmount) {
+            return {
+                statusMessage: `超出可申请额度 ${formatCurrencyFixed(overAmount, { maxScale: 2, minimumFractionDigits: 2 })}，请调减明细`,
+                isErrorStatus: true,
+            }
+        }
+        if (!rework.valid) {
+            return {
+                statusMessage: "请填写重新提交说明",
+                isErrorStatus: false,
+            }
+        }
+        if (!linesTotal) {
+            return {
+                statusMessage: "请完善明细数量与含税单价，系统将自动合计金额",
+                isErrorStatus: false,
+            }
+        }
+        return {
+            statusMessage: `共 ${formLines.length} 行明细，核对无误后可提交审批`,
+            isErrorStatus: false,
+        }
+    })()
+
     async function checkSave() {
         setChecked(null)
         const result = await saveState.refetch()
@@ -311,6 +510,7 @@ export function InvoiceRequestForm({
         }
         if (result.data) setChecked(result.data)
     }
+
     function adoptLatest() {
         if (!latest || !versionAdvanced || !latestEditable) return
         setAdopted(latest)
@@ -319,6 +519,7 @@ export function InvoiceRequestForm({
         setError(null)
         setChecked(null)
     }
+
     async function save(input: UpdateRequest) {
         setError(null)
         setChecked(null)
@@ -334,6 +535,7 @@ export function InvoiceRequestForm({
             if (!unknown && !saveUncertain) pendingSave.current = null
         }
     }
+
     /** 成功时关闭表单；未知结果保持同一请求，明确失败才允许修改。 */
     async function send(input: SubmitRequest) {
         setError(null)
@@ -354,429 +556,692 @@ export function InvoiceRequestForm({
             if (!unknown && !uncertain) pending.current = null
         }
     }
-    const content = (
+
+    function handleSaveAction() {
+        if (saveUncertain && pendingSave.current) {
+            void save(pendingSave.current)
+            return
+        }
+        intent.current = "save"
+        void form.handleSubmit()
+    }
+
+    function handleImportSalesLines(
+        imported: InvoiceRequestLine[],
+        mode: "replace" | "append",
+    ) {
+        const nextImported: LineInput[] = imported.map((line) => ({
+            ...line,
+            rowKey: createRowKey(),
+        }))
+        if (mode === "replace") {
+            form.setFieldValue("lines", nextImported)
+            return
+        }
+        const current = form.getFieldValue("lines")
+        const kept = current.filter((line) => !isBlankLine(line))
+        form.setFieldValue(
+            "lines",
+            [...kept, ...nextImported].slice(0, INVOICE_REQUEST_LINE_LIMIT),
+        )
+    }
+
+    function retryContextQueries() {
+        if (accounts.isError) void accounts.refetch()
+        if (amounts.isError) void amounts.refetch()
+    }
+
+    const alertsNode = (
+        <>
+            {amounts.data?.unavailable_reason ? (
+                <Alert variant="warning">
+                    <CircleAlertIcon aria-hidden="true" />
+                    <AlertTitle>当前暂不可提交开票申请</AlertTitle>
+                    <AlertDescription>
+                        {amounts.data.unavailable_reason}
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+            {exceedsAvailable && overAmount && amounts.data ? (
+                <Alert variant="destructive">
+                    <CircleAlertIcon aria-hidden="true" />
+                    <AlertTitle>本次申请金额超出可申请额度</AlertTitle>
+                    <AlertDescription>
+                        明细合计已超过本单可申请额度{" "}
+                        <span className="num font-medium">
+                            {formatCurrencyFixed(overAmount, {
+                                maxScale: 2,
+                                minimumFractionDigits: 2,
+                            })}
+                        </span>
+                        ，请调减明细数量或含税单价后再提交。
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+            {error ? (
+                <Alert variant="destructive">
+                    <CircleAlertIcon aria-hidden="true" />
+                    <AlertDescription className="text-body-compact">
+                        {saveUncertain
+                            ? "保存结果尚未确认，请核对本次保存结果。"
+                            : committedUnreadable
+                              ? "已提交，结果暂不可读取。请稍后核对本次提交结果。"
+                              : uncertain
+                                ? "提交结果尚未确认，请核对本次提交结果，勿重复新建申请。"
+                                : getErrorMessage(
+                                      error,
+                                      "提交失败，请检查后重试",
+                                  )}
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+            {saveUncertain ? (
+                <Alert variant="warning">
+                    <CircleAlertIcon aria-hidden="true" />
+                    <AlertTitle>保存结果待核对</AlertTitle>
+                    <AlertDescription className="space-y-3">
+                        <p>刚才的保存结果尚未确认，已保留您当前填写的内容。</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <LoadingButton
+                                id="invoice-request-check-save"
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                loading={saveState.isFetching}
+                                disabled={
+                                    commands.update.isPending ||
+                                    saveState.isFetching
+                                }
+                                onClick={() => void checkSave()}
+                            >
+                                读取最新版本
+                            </LoadingButton>
+                            {versionAdvanced && latestEditable ? (
+                                <Button
+                                    id="invoice-request-adopt-latest"
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={
+                                        saveState.isFetching ||
+                                        commands.update.isPending
+                                    }
+                                    onClick={adoptLatest}
+                                >
+                                    采用最新版本并保留输入
+                                </Button>
+                            ) : null}
+                            {versionAdvanced && !latestEditable ? (
+                                <Button
+                                    id="invoice-request-exit-save-recovery"
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={
+                                        saveState.isFetching ||
+                                        commands.update.isPending
+                                    }
+                                    onClick={onCancel}
+                                >
+                                    退出编辑
+                                </Button>
+                            ) : null}
+                        </div>
+                        {saveState.isError ? (
+                            <p role="alert" className="text-destructive">
+                                {getErrorMessage(
+                                    saveState.error,
+                                    "读取最新版本失败，请重试",
+                                )}
+                            </p>
+                        ) : null}
+                        {latest ? (
+                            <p>
+                                {versionAdvanced
+                                    ? `该申请单已被更新（当前状态：${requestStatusLabels[latest.status]}），请加载最新内容后再修改。`
+                                    : "刚才的保存尚未生效，可点击重新保存继续提交。"}
+                            </p>
+                        ) : null}
+                        {versionAdvanced && !latestEditable ? (
+                            <p>
+                                当前状态不能修改。可保留此页查看本地输入，或退出编辑；退出不表示原保存成功。
+                            </p>
+                        ) : null}
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+        </>
+    )
+
+    const sourceFields = (
+        <div
+            data-slot="detail-form-grid"
+            className="grid gap-x-5 gap-y-4 sm:grid-cols-12"
+        >
+            {showOrderSelector ? (
+                <div className="sm:col-span-6">
+                    <form.AppField name="salesOrderId">
+                        {(field) => {
+                            const isInvalid =
+                                field.state.meta.isTouched &&
+                                !field.state.meta.isValid
+                            return (
+                                <Field data-invalid={isInvalid || undefined}>
+                                    <FieldLabel htmlFor="invoice-request-sales-order">
+                                        销售单
+                                        <RequiredMark />
+                                    </FieldLabel>
+                                    <SalesOrderSearchCombobox
+                                        id="invoice-request-sales-order"
+                                        className="w-full"
+                                        value={field.state.value}
+                                        onValueChange={(id) => {
+                                            field.handleChange(id ?? "")
+                                            form.setFieldValue(
+                                                "receivableAccountId",
+                                                "",
+                                            )
+                                            if (!id) setPickedOrder(null)
+                                        }}
+                                        onItemChange={(item) => {
+                                            setPickedOrder(
+                                                item
+                                                    ? {
+                                                          id: item.id,
+                                                          documentNumber:
+                                                              item.documentNumber,
+                                                      }
+                                                    : null,
+                                            )
+                                        }}
+                                        disabled={locked}
+                                    />
+                                    {isInvalid ? (
+                                        <FieldError
+                                            id="invoice-request-sales-order-error"
+                                            errors={field.state.meta.errors}
+                                        />
+                                    ) : null}
+                                </Field>
+                            )
+                        }}
+                    </form.AppField>
+                </div>
+            ) : null}
+
+            {showAccountSelector ? (
+                <div className="sm:col-span-6">
+                    <form.AppField name="receivableAccountId">
+                        {(field) => (
+                            <field.SelectField
+                                onRefresh={() =>
+                                    accounts.refetch({ throwOnError: true })
+                                }
+                                id="invoice-request-account"
+                                label="开票结算主体"
+                                placeholder="选择本次开票对应的结算主体"
+                                required
+                                disabled={locked}
+                                options={(accounts.data?.items ?? []).map(
+                                    (account) => ({
+                                        value: account.id,
+                                        label: `第 ${account.account_seq} 笔 · ${account.counterparty_party_name ?? account.customer_name} · 未开票 ${account.open_invoiceable_total} 元`,
+                                    }),
+                                )}
+                            />
+                        )}
+                    </form.AppField>
+                </div>
+            ) : null}
+
+            {showOrderSelector &&
+            selectedOrder &&
+            !accounts.isPending &&
+            !accounts.isError &&
+            (accounts.data?.items.length ?? 0) === 0 ? (
+                <div className="sm:col-span-12">
+                    <Alert variant="warning">
+                        <CircleAlertIcon aria-hidden="true" />
+                        <AlertDescription>
+                            该销售单暂无可开票的应收记录，请核对销售单是否已生效。
+                        </AlertDescription>
+                    </Alert>
+                </div>
+            ) : null}
+        </div>
+    )
+
+    const reasonFields = (
+        <fieldset
+            disabled={locked}
+            data-slot="detail-form-grid"
+            className="space-y-4"
+        >
+            <form.AppField name="reason">
+                {(field) => (
+                    <field.TextareaField
+                        id="invoice-request-reason"
+                        label="申请事由"
+                        placeholder="请输入本次开票背景、合同节点或财务开票注意事项"
+                        rows={3}
+                        maxLength={1000}
+                        required
+                    />
+                )}
+            </form.AppField>
+            {rework.field}
+        </fieldset>
+    )
+
+    const importDialog = canImportSalesLines ? (
+        <SalesOrderLinesImportDialog
+            open={importOpen}
+            onOpenChange={setImportOpen}
+            salesOrderId={selectedOrder}
+            availableAmount={amounts.data?.available_amount}
+            existingLineCount={formLines.length}
+            hasMeaningfulExistingLines={hasMeaningfulExistingLines}
+            onImport={handleImportSalesLines}
+        />
+    ) : null
+
+    if (presentation === "workspace") {
+        const orderNo =
+            existing?.sales_order_no ||
+            (pickedOrder?.id === selectedOrder
+                ? pickedOrder.documentNumber
+                : undefined)
+        const chromeMeta = (
+            <DetailWorkspaceMeta
+                items={[
+                    existing?.request_no ? (
+                        <span key="req-no" className="num">
+                            申请单号 {existing.request_no}
+                        </span>
+                    ) : null,
+                    orderNo ? (
+                        <span key="order-no" className="num">
+                            销售单 {orderNo}
+                        </span>
+                    ) : null,
+                    workspaceChrome?.meta ??
+                        (existing
+                            ? "修改开票明细后保存或重新提交审批"
+                            : "关联已生效销售单并录入开票明细，审批通过后由财务开票"),
+                ]}
+            />
+        )
+
+        return (
+            <>
+                <form
+                    id="invoice-request-form"
+                    className="flex min-w-0 flex-1 flex-col"
+                    onSubmit={(event) => {
+                        event.preventDefault()
+                        intent.current = "submit"
+                        void form.handleSubmit()
+                    }}
+                >
+                    <DetailWorkspaceChrome
+                        back={workspaceChrome?.back}
+                        title={
+                            workspaceChrome?.title ??
+                            (existing ? "修改开票申请" : "新建开票申请")
+                        }
+                        primaryStatus={{
+                            label:
+                                workspaceChrome?.statusLabel ??
+                                (existing ? "修改中" : "新建"),
+                            tone: "neutral",
+                        }}
+                        meta={chromeMeta}
+                    />
+
+                    <DetailWorkspaceBody
+                        alerts={alertsNode}
+                        sidebarLabel="开票额度与档案"
+                        sidebar={
+                            <InvoiceRequestFormSidebar
+                                hasOrder={Boolean(selectedOrder)}
+                                hasAccount={Boolean(resolvedAccountId)}
+                                isLoading={
+                                    accounts.isFetching || amounts.isFetching
+                                }
+                                isError={accounts.isError || amounts.isError}
+                                onRetry={retryContextQueries}
+                                amounts={amounts.data}
+                                archive={archive}
+                                linesTotal={linesTotal}
+                            />
+                        }
+                    >
+                        {showSourceSection ? (
+                            <DetailWorkspaceSection
+                                title="关联业务单据"
+                                width="form"
+                            >
+                                {sourceFields}
+                            </DetailWorkspaceSection>
+                        ) : null}
+
+                        <InvoiceLinesSection
+                            form={form}
+                            locked={locked}
+                            presentation="workspace"
+                            canImportSalesLines={canImportSalesLines}
+                            onOpenImport={() => setImportOpen(true)}
+                            createRowKey={createRowKey}
+                            availableAmount={amounts.data?.available_amount}
+                            legacyAmountHint={
+                                showLegacyAmountHint
+                                    ? existing?.data.amount
+                                    : undefined
+                            }
+                        />
+
+                        <DetailWorkspaceSection title="申请说明" width="form">
+                            {reasonFields}
+                        </DetailWorkspaceSection>
+                    </DetailWorkspaceBody>
+
+                    <InvoiceRequestFormFooter
+                        availableAmount={amounts.data?.available_amount}
+                        linesTotal={linesTotal}
+                        statusMessage={statusMessage}
+                        isErrorStatus={isErrorStatus}
+                        locked={locked}
+                        isEditing={Boolean(existing)}
+                        uncertain={uncertain}
+                        saveUncertain={saveUncertain}
+                        versionAdvanced={versionAdvanced}
+                        submitPending={commands.submit.isPending}
+                        savePending={commands.update.isPending}
+                        saveStateFetching={saveState.isFetching}
+                        canSubmit={canSubmit}
+                        onCancel={onCancel}
+                        onSave={handleSaveAction}
+                        onResolveUncertain={() =>
+                            pending.current && void send(pending.current)
+                        }
+                    />
+                </form>
+                {importDialog}
+            </>
+        )
+    }
+
+    const compactForm = (
         <form
             id="invoice-request-form"
-            className="space-y-4"
+            className={cn(
+                "flex min-h-0 flex-col gap-5",
+                presentation === "dialog" && "flex-1",
+            )}
             onSubmit={(event) => {
                 event.preventDefault()
                 intent.current = "submit"
                 void form.handleSubmit()
             }}
         >
-            {!salesOrderId && !existing ? (
-                <form.AppField name="salesOrderId">
-                    {(field) => (
-                        <div className="space-y-2">
-                            <label htmlFor="invoice-request-sales-order">
-                                销售单
-                                <RequiredMark />
-                            </label>
-                            <SalesOrderSearchCombobox
-                                id="invoice-request-sales-order"
-                                value={field.state.value}
-                                onValueChange={(id) => {
-                                    field.handleChange(id ?? "")
-                                    form.setFieldValue(
-                                        "receivableAccountId",
-                                        "",
-                                    )
-                                }}
-                                disabled={locked}
-                            />
-                        </div>
-                    )}
-                </form.AppField>
-            ) : null}
-            {!accountId &&
-            !existing &&
-            (accounts.data?.items.length ?? 0) > 1 ? (
-                <form.AppField name="receivableAccountId">
-                    {(field) => (
-                        <field.SelectField
-                            onRefresh={() =>
-                                accounts.refetch({ throwOnError: true })
-                            }
-                            id="invoice-request-account"
-                            label="开票结算主体"
-                            placeholder="选择本次开票的应收"
-                            disabled={locked}
-                            options={(accounts.data?.items ?? []).map(
-                                (account) => ({
-                                    value: account.id,
-                                    label: `第 ${account.account_seq} 笔 · ${account.counterparty_party_name ?? account.customer_name} · 未开票 ${account.open_invoiceable_total} 元`,
-                                }),
-                            )}
-                        />
-                    )}
-                </form.AppField>
-            ) : null}
-            {!amounts.data ? (
-                <p className="text-xs text-muted-foreground">
-                    {amounts.isError || accounts.isError
-                        ? "销售应收读取失败，请重新选择或刷新。"
-                        : selectedOrder &&
-                            !accounts.isPending &&
-                            !resolvedAccountId
-                          ? "请选择本次开票的结算主体；如无应收，请核对销售单是否已生效。"
-                          : "请选择已生效的销售单。"}
-                </p>
-            ) : null}
-            {amounts.data?.unavailable_reason ? (
-                <p role="status" className="text-xs text-muted-foreground">
-                    {amounts.data.unavailable_reason}
-                </p>
-            ) : null}
-            <fieldset disabled={locked} className="grid gap-5 sm:grid-cols-2">
-                <div className="rounded-lg border border-border/60 bg-muted/25 p-4 sm:col-span-2">
-                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-2.5">
-                        <span className="text-xs font-medium text-muted-foreground">
-                            自动带入开票档案（只读）
+            <div
+                className={cn(
+                    "space-y-5",
+                    presentation === "dialog" &&
+                        "min-h-0 flex-1 overflow-y-auto pr-1",
+                )}
+            >
+                {showSourceSection ? sourceFields : null}
+
+                <InvoiceRequestDialogContext
+                    isLoading={accounts.isFetching || amounts.isFetching}
+                    isError={accounts.isError || amounts.isError}
+                    onRetry={retryContextQueries}
+                    amounts={amounts.data}
+                    archive={archive}
+                />
+
+                <div className="space-y-2.5 empty:hidden">{alertsNode}</div>
+
+                <InvoiceLinesSection
+                    form={form}
+                    locked={locked}
+                    presentation={presentation}
+                    canImportSalesLines={canImportSalesLines}
+                    onOpenImport={() => setImportOpen(true)}
+                    createRowKey={createRowKey}
+                    availableAmount={amounts.data?.available_amount}
+                    legacyAmountHint={
+                        showLegacyAmountHint ? existing?.data.amount : undefined
+                    }
+                />
+
+                {reasonFields}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3">
+                <div className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1">
+                    <div className="flex items-baseline gap-1.5">
+                        <span className="text-xs text-muted-foreground">
+                            本次申请
                         </span>
-                        {amounts.data ? (
-                            <span className="text-xs text-muted-foreground">
-                                本单可申请{" "}
-                                <MoneyValue
-                                    value={amounts.data.available_amount}
-                                    className="font-semibold text-foreground"
-                                />
-                            </span>
-                        ) : null}
+                        <span id="invoice-request-amount">
+                            {linesTotal ? (
+                                exceedsAvailable ? (
+                                    <span className="num font-semibold text-destructive">
+                                        {formatCurrencyFixed(linesTotal, {
+                                            maxScale: 2,
+                                            minimumFractionDigits: 2,
+                                        })}
+                                    </span>
+                                ) : (
+                                    <MoneyValue
+                                        value={linesTotal}
+                                        display="exact"
+                                        className="font-semibold"
+                                    />
+                                )
+                            ) : (
+                                <span className="num text-muted-foreground">
+                                    —
+                                </span>
+                            )}
+                        </span>
                     </div>
-                    <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-                        <Field className="gap-0.5">
-                            <FieldLabel
-                                htmlFor="invoice-request-title"
-                                className="text-xs font-normal text-muted-foreground"
-                            >
-                                购方开票抬头
-                            </FieldLabel>
-                            <Input
-                                id="invoice-request-title"
-                                readOnly
-                                className="h-auto border-0 bg-transparent px-0 py-0 font-medium text-foreground shadow-none hover:bg-transparent focus-visible:border-transparent focus-visible:ring-0"
-                                value={
-                                    pending.current?.data.invoice_title ??
-                                    amounts.data?.invoice_title ??
-                                    existing?.data.invoice_title ??
-                                    ""
-                                }
-                                placeholder="选择结算主体后自动带入"
-                            />
-                        </Field>
-                        <Field className="gap-0.5">
-                            <FieldLabel
-                                htmlFor="invoice-request-tax-number"
-                                className="text-xs font-normal text-muted-foreground"
-                            >
-                                购方纳税人识别号
-                            </FieldLabel>
-                            <Input
-                                id="invoice-request-tax-number"
-                                readOnly
-                                className="num h-auto border-0 bg-transparent px-0 py-0 font-medium text-foreground shadow-none hover:bg-transparent focus-visible:border-transparent focus-visible:ring-0"
-                                value={
-                                    pending.current?.data.tax_number ??
-                                    amounts.data?.tax_number ??
-                                    existing?.data.tax_number ??
-                                    ""
-                                }
-                                placeholder="从结算主体档案自动带入"
-                            />
-                        </Field>
-                        <Field className="gap-0.5">
-                            <FieldLabel
-                                htmlFor="invoice-request-seller-name"
-                                className="text-xs font-normal text-muted-foreground"
-                            >
-                                开票主体名称（销方）
-                            </FieldLabel>
-                            <Input
-                                id="invoice-request-seller-name"
-                                readOnly
-                                className="h-auto border-0 bg-transparent px-0 py-0 font-medium text-foreground shadow-none hover:bg-transparent focus-visible:border-transparent focus-visible:ring-0"
-                                value={
-                                    pending.current?.data.seller_name ??
-                                    pendingSave.current?.data.seller_name ??
-                                    (amounts.data
-                                        ? amounts.data.seller_name
-                                        : existing?.data.seller_name) ??
-                                    ""
-                                }
-                                placeholder={
-                                    amounts.data
-                                        ? "销方名称未带入"
-                                        : "选择应收后自动带入"
-                                }
-                            />
-                        </Field>
-                        <Field className="gap-0.5">
-                            <FieldLabel
-                                htmlFor="invoice-request-seller-tax-number"
-                                className="text-xs font-normal text-muted-foreground"
-                            >
-                                开票主体纳税人识别号
-                            </FieldLabel>
-                            <Input
-                                id="invoice-request-seller-tax-number"
-                                readOnly
-                                className="num h-auto border-0 bg-transparent px-0 py-0 font-medium text-foreground shadow-none hover:bg-transparent focus-visible:border-transparent focus-visible:ring-0"
-                                value={
-                                    pending.current?.data.seller_tax_number ??
-                                    pendingSave.current?.data
-                                        .seller_tax_number ??
-                                    (amounts.data
-                                        ? amounts.data.seller_tax_number
-                                        : existing?.data.seller_tax_number) ??
-                                    ""
-                                }
-                                placeholder={
-                                    amounts.data
-                                        ? "销方税号未带入"
-                                        : "选择应收后自动带入"
-                                }
-                            />
-                        </Field>
-                    </div>
+                    {statusMessage ? (
+                        <span
+                            role="status"
+                            className={
+                                isErrorStatus || exceedsAvailable
+                                    ? "text-xs text-destructive"
+                                    : "text-xs text-muted-foreground"
+                            }
+                        >
+                            {statusMessage}
+                        </span>
+                    ) : null}
                 </div>
-                <form.AppField name="amount">
-                    {(field) => (
-                        <field.TextField
-                            money
-                            id="invoice-request-amount"
-                            label="本次申请金额（含税）"
-                            inputMode="decimal"
-                            required
-                        />
-                    )}
-                </form.AppField>
-                <InvoiceLinesFields form={form} locked={locked} />
-                <div className="sm:col-span-2">
-                    <form.AppField name="reason">
-                        {(field) => (
-                            <field.TextareaField
-                                id="invoice-request-reason"
-                                label="申请事由"
-                                required
-                            />
-                        )}
-                    </form.AppField>
-                </div>
-            </fieldset>
-            {rework.field}
-            {error ? (
-                <p role="alert" className="text-body-compact text-destructive">
-                    {saveUncertain
-                        ? "保存结果尚未确认，请核对本次保存结果。"
-                        : committedUnreadable
-                          ? "已提交，结果暂不可读取。请稍后核对本次提交结果。"
-                          : uncertain
-                            ? "提交结果尚未确认，请核对本次提交结果，勿重复新建申请。"
-                            : getErrorMessage(error, "提交失败，请检查后重试")}
-                </p>
-            ) : null}
-            {saveUncertain ? (
-                <div
-                    role="status"
-                    className="space-y-3 rounded-lg border p-3 text-body-compact"
-                >
-                    <p>刚才的保存结果尚未确认，已保留您当前填写的内容。</p>
-                    <LoadingButton
-                        id="invoice-request-check-save"
+
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                    <Button
+                        id="invoice-request-form-cancel"
                         type="button"
                         variant="outline"
-                        loading={saveState.isFetching}
-                        disabled={
-                            commands.update.isPending || saveState.isFetching
-                        }
-                        onClick={() => void checkSave()}
+                        disabled={locked}
+                        onClick={onCancel}
                     >
-                        读取最新版本
-                    </LoadingButton>
-                    {saveState.isError ? (
-                        <p role="alert" className="text-destructive">
-                            {getErrorMessage(
-                                saveState.error,
-                                "读取最新版本失败，请重试",
-                            )}
-                        </p>
-                    ) : null}
-                    {latest ? (
-                        <p>
-                            {versionAdvanced
-                                ? `该申请单已被更新（当前状态：${requestStatusLabels[latest.status]}），请加载最新内容后再修改。`
-                                : "刚才的保存尚未生效，可点击重新保存继续提交。"}
-                        </p>
-                    ) : null}
-                    {versionAdvanced && latestEditable ? (
-                        <Button
-                            id="invoice-request-adopt-latest"
+                        取消
+                    </Button>
+                    {existing && !uncertain ? (
+                        <LoadingButton
+                            id="invoice-request-save"
                             type="button"
                             variant="outline"
+                            loading={commands.update.isPending}
                             disabled={
+                                commands.update.isPending ||
+                                commands.submit.isPending ||
                                 saveState.isFetching ||
-                                commands.update.isPending
+                                (saveUncertain && versionAdvanced)
                             }
-                            onClick={adoptLatest}
+                            onClick={handleSaveAction}
                         >
-                            采用最新版本并保留输入
-                        </Button>
+                            {saveUncertain ? "重新保存" : "保存修改"}
+                        </LoadingButton>
                     ) : null}
-                    {versionAdvanced && !latestEditable ? (
-                        <>
-                            <p>
-                                当前状态不能修改。可保留此页查看本地输入，或退出编辑；退出不表示原保存成功。
-                            </p>
-                            <Button
-                                id="invoice-request-exit-save-recovery"
-                                type="button"
-                                variant="outline"
-                                disabled={
-                                    saveState.isFetching ||
-                                    commands.update.isPending
-                                }
-                                onClick={onCancel}
-                            >
-                                退出编辑
-                            </Button>
-                        </>
-                    ) : null}
-                </div>
-            ) : null}
-            <div className="flex justify-end gap-2">
-                <Button
-                    id="invoice-request-form-cancel"
-                    type="button"
-                    variant="outline"
-                    disabled={locked}
-                    onClick={onCancel}
-                >
-                    取消
-                </Button>
-                {existing && !uncertain ? (
-                    <LoadingButton
-                        id="invoice-request-save"
-                        type="button"
-                        variant="outline"
-                        loading={commands.update.isPending}
-                        disabled={
-                            commands.update.isPending ||
-                            commands.submit.isPending ||
-                            saveState.isFetching ||
-                            (saveUncertain && versionAdvanced)
-                        }
-                        onClick={() => {
-                            if (saveUncertain && pendingSave.current) {
-                                void save(pendingSave.current)
-                                return
+                    {uncertain ? (
+                        <LoadingButton
+                            id="invoice-request-resolve"
+                            type="button"
+                            loading={commands.submit.isPending}
+                            disabled={commands.submit.isPending}
+                            onClick={() =>
+                                pending.current && void send(pending.current)
                             }
-                            intent.current = "save"
-                            void form.handleSubmit()
-                        }}
-                    >
-                        {saveUncertain ? "重新保存" : "保存修改"}
-                    </LoadingButton>
-                ) : null}
-                {uncertain ? (
-                    <LoadingButton
-                        id="invoice-request-resolve"
-                        type="button"
-                        loading={commands.submit.isPending}
-                        disabled={commands.submit.isPending}
-                        onClick={() =>
-                            pending.current && void send(pending.current)
-                        }
-                    >
-                        核对提交结果
-                    </LoadingButton>
-                ) : (
-                    <LoadingButton
-                        id="invoice-request-submit"
-                        type="submit"
-                        loading={commands.submit.isPending}
-                        disabled={
-                            locked ||
-                            !rework.valid ||
-                            amounts.isError ||
-                            amounts.isFetching ||
-                            !amounts.data?.can_submit
-                        }
-                    >
-                        提交审批
-                    </LoadingButton>
-                )}
+                        >
+                            核对提交结果
+                        </LoadingButton>
+                    ) : (
+                        <LoadingButton
+                            id="invoice-request-submit"
+                            type="submit"
+                            loading={commands.submit.isPending}
+                            disabled={!canSubmit}
+                        >
+                            提交审批
+                        </LoadingButton>
+                    )}
+                </div>
             </div>
         </form>
     )
-    if (presentation === "inline") return content
+
+    if (presentation === "inline") {
+        return (
+            <>
+                {compactForm}
+                {importDialog}
+            </>
+        )
+    }
+
     return (
-        <Dialog open onOpenChange={(open) => !open && !locked && onCancel()}>
-            <DialogContent
-                id="invoice-request-dialog"
-                closeButtonId="invoice-request-dialog-close"
-                showCloseButton={!locked}
-                className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-3xl"
+        <>
+            <Dialog
+                open
+                onOpenChange={(open) => !open && !locked && onCancel()}
             >
-                <DialogHeader>
-                    <DialogTitle>
-                        {existing ? "修改开票申请" : "申请开票"}
-                    </DialogTitle>
-                    <DialogDescription>
-                        {existing
-                            ? "保存修改保留当前状态；重新提交需说明依据，审批通过后由财务开票。"
-                            : "提交申请，审批通过后由财务开票。"}
-                    </DialogDescription>
-                </DialogHeader>
-                {content}
-            </DialogContent>
-        </Dialog>
+                <DialogContent
+                    id="invoice-request-dialog"
+                    closeButtonId="invoice-request-dialog-close"
+                    showCloseButton={!locked}
+                    className="flex max-h-[calc(100dvh-2rem)] flex-col sm:max-w-4xl"
+                >
+                    <DialogHeader>
+                        <DialogTitle>
+                            {existing ? "修改开票申请" : "申请开票"}
+                        </DialogTitle>
+                        <DialogDescription>
+                            {existing
+                                ? "保存修改保留当前状态；重新提交需说明依据，审批通过后由财务开票。"
+                                : "录入开票明细，本次申请金额将自动合计；审批通过后由财务开票。"}
+                        </DialogDescription>
+                    </DialogHeader>
+                    {compactForm}
+                </DialogContent>
+            </Dialog>
+            {importDialog}
+        </>
     )
 }
 
-const InvoiceLinesFields = withForm({
+const InvoiceLinesSection = withForm({
     defaultValues: formDefaults,
-    props: { locked: false },
-    render: function InvoiceLinesFields({ form, locked }) {
-        const nextLineKey = useRef(form.getFieldValue("lines").length)
+    props: {
+        locked: false,
+        presentation: "inline" as "workspace" | "inline" | "dialog",
+        canImportSalesLines: false,
+        onOpenImport: () => {},
+        createRowKey: (() => "item-0") as () => string,
+        availableAmount: undefined as string | null | undefined,
+        legacyAmountHint: undefined as string | undefined,
+    },
+    render: function InvoiceLinesSection({
+        form,
+        locked,
+        presentation,
+        canImportSalesLines,
+        onOpenImport,
+        createRowKey,
+        availableAmount,
+        legacyAmountHint,
+    }) {
         return (
             <form.AppField name="lines" mode="array">
-                {(array) => (
-                    <section
-                        aria-labelledby="invoice-request-lines-heading"
-                        className="flex min-w-0 flex-col gap-3 sm:col-span-2"
-                    >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                                <h3
-                                    id="invoice-request-lines-heading"
-                                    className="font-semibold"
+                {(array) => {
+                    const atLimit =
+                        array.state.value.length >= INVOICE_REQUEST_LINE_LIMIT
+                    const addRow = () => {
+                        if (locked || atLimit) return
+                        void array.pushValue({
+                            rowKey: createRowKey(),
+                            content: "",
+                            quantity: "",
+                            unit_price: "",
+                        })
+                    }
+
+                    const badge = (
+                        <div className="inline-flex items-center gap-1">
+                            <span className="num rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                                {array.state.value.length} /{" "}
+                                {INVOICE_REQUEST_LINE_LIMIT} 行
+                            </span>
+                            <DetailHint
+                                id="invoice-request-lines-hint"
+                                label="开票明细计算规则"
+                                icon={
+                                    <CircleHelpIcon
+                                        className="size-3.5"
+                                        aria-hidden="true"
+                                    />
+                                }
+                            >
+                                每行按数量 ×
+                                含税单价舍入到分（四舍六入五成双）。本次申请金额将由明细自动合计，且不可超过本单可申请额度。
+                            </DetailHint>
+                        </div>
+                    )
+
+                    const actions = (
+                        <>
+                            {canImportSalesLines ? (
+                                <Button
+                                    id="invoice-request-import-sales-lines"
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className={
+                                        detailWorkspaceStyles.subtleButton
+                                    }
+                                    disabled={locked}
+                                    onClick={onOpenImport}
                                 >
-                                    开票明细
-                                </h3>
-                                <span className="num rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                                    {array.state.value.length} /{" "}
-                                    {INVOICE_REQUEST_LINE_LIMIT} 行
-                                </span>
-                            </div>
+                                    <FileDownIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
+                                    从销售单带入
+                                </Button>
+                            ) : null}
                             <Button
                                 id="invoice-request-add-line"
                                 type="button"
-                                variant="outline"
+                                variant="ghost"
                                 size="sm"
-                                disabled={
-                                    locked ||
-                                    array.state.value.length >=
-                                        INVOICE_REQUEST_LINE_LIMIT
-                                }
-                                onClick={() => {
-                                    nextLineKey.current += 1
-                                    void array.pushValue({
-                                        rowKey: `item-${nextLineKey.current}`,
-                                        content: "",
-                                        quantity: "",
-                                        unit_price: "",
-                                    })
-                                }}
+                                className={detailWorkspaceStyles.subtleButton}
+                                disabled={locked || atLimit}
+                                onClick={addRow}
                             >
                                 <PlusIcon
                                     data-icon="inline-start"
@@ -784,248 +1249,350 @@ const InvoiceLinesFields = withForm({
                                 />
                                 添加明细
                             </Button>
-                        </div>
-                        <FieldDescription>
-                            每行按数量 ×
-                            含税单价舍入到分（四舍六入五成双）。明细合计须等于本次申请金额。
-                        </FieldDescription>
-                        {array.state.value.length >=
-                            INVOICE_REQUEST_LINE_LIMIT && (
-                            <FieldDescription>
-                                {lineLimitMessage}
-                            </FieldDescription>
-                        )}
-                        <div className="overflow-x-auto border-y border-border/70">
-                            <Table className="min-w-[620px]">
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead className="w-10">
-                                            #
-                                        </TableHead>
-                                        <TableHead>
-                                            开票内容
-                                            <RequiredMark />
-                                        </TableHead>
-                                        <TableHead className="w-28 text-right">
-                                            数量
-                                            <RequiredMark />
-                                        </TableHead>
-                                        <TableHead className="w-36 text-right">
-                                            含税单价（元）
-                                            <RequiredMark />
-                                        </TableHead>
-                                        <TableHead className="w-32 text-right">
-                                            行金额
-                                        </TableHead>
-                                        <TableHead className="w-12">
-                                            <span className="sr-only">
-                                                删除
-                                            </span>
-                                        </TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {array.state.value.map((line, index) => {
-                                        const prefix = `invoice-request-line-${line.rowKey}`
-                                        return (
-                                            <TableRow
-                                                key={line.rowKey}
-                                                className="align-top"
-                                            >
-                                                <TableCell className="num pt-3 text-muted-foreground">
-                                                    {index + 1}
-                                                </TableCell>
-                                                <TableCell className="min-w-48">
-                                                    <form.AppField
-                                                        name={`lines[${index}].content`}
+                        </>
+                    )
+
+                    const tableBody = (
+                        <fieldset
+                            disabled={locked}
+                            className="min-w-0 space-y-3"
+                        >
+                            {legacyAmountHint ? (
+                                <Alert variant="info">
+                                    <InfoIcon aria-hidden="true" />
+                                    <AlertDescription>
+                                        原申请金额为{" "}
+                                        <MoneyValue
+                                            value={legacyAmountHint}
+                                            display="exact"
+                                            className="inline font-medium"
+                                        />
+                                        ，请补充开票明细的数量与含税单价；本次申请金额将按明细合计自动更新。
+                                    </AlertDescription>
+                                </Alert>
+                            ) : null}
+
+                            {atLimit ? (
+                                <FieldDescription>
+                                    {lineLimitMessage}
+                                </FieldDescription>
+                            ) : null}
+
+                            <div
+                                data-slot="detail-inline-table"
+                                className={cn(
+                                    detailWorkspaceStyles.inlineTableWrapper,
+                                    "overflow-x-auto",
+                                )}
+                            >
+                                <Table className="min-w-[600px]">
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="w-9">
+                                                #
+                                            </TableHead>
+                                            <TableHead>
+                                                开票内容
+                                                <RequiredMark />
+                                            </TableHead>
+                                            <TableHead className="w-28 text-right">
+                                                数量
+                                                <RequiredMark />
+                                            </TableHead>
+                                            <TableHead className="w-36 text-right">
+                                                含税单价（元）
+                                                <RequiredMark />
+                                            </TableHead>
+                                            <TableHead className="w-32 text-right">
+                                                行金额
+                                            </TableHead>
+                                            <TableHead className="w-10">
+                                                <span className="sr-only">
+                                                    删除
+                                                </span>
+                                            </TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {array.state.value.map(
+                                            (line, index) => {
+                                                const prefix = `invoice-request-line-${line.rowKey}`
+                                                return (
+                                                    <TableRow
+                                                        key={line.rowKey}
+                                                        className="align-top"
                                                     >
-                                                        {(field) => (
-                                                            <field.TextField
-                                                                id={`${prefix}-content`}
-                                                                label="开票内容"
-                                                                hideLabel
-                                                                placeholder="如：货物名称或服务项目"
-                                                                required
-                                                            />
-                                                        )}
-                                                    </form.AppField>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <form.AppField
-                                                        name={`lines[${index}].quantity`}
-                                                    >
-                                                        {(field) => (
-                                                            <field.TextField
-                                                                id={`${prefix}-quantity`}
-                                                                label="数量"
-                                                                hideLabel
-                                                                inputMode="decimal"
-                                                                placeholder="0"
-                                                                required
-                                                            />
-                                                        )}
-                                                    </form.AppField>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <form.AppField
-                                                        name={`lines[${index}].unit_price`}
-                                                    >
-                                                        {(field) => (
-                                                            <field.TextField
-                                                                id={`${prefix}-unit-price`}
-                                                                label="含税单价（元）"
-                                                                hideLabel
-                                                                inputMode="decimal"
-                                                                placeholder="0.00"
-                                                                required
-                                                            />
-                                                        )}
-                                                    </form.AppField>
-                                                </TableCell>
-                                                <TableCell className="pt-3 text-right">
-                                                    <form.Subscribe
-                                                        selector={(state) => {
-                                                            const value =
-                                                                state.values
-                                                                    .lines[
-                                                                    index
-                                                                ]
-                                                            return value
-                                                                ? invoiceLineAmount(
-                                                                      value,
-                                                                  )
-                                                                : null
-                                                        }}
-                                                    >
-                                                        {(lineAmount) =>
-                                                            lineAmount ===
-                                                            null ? (
-                                                                <span className="text-muted-foreground">
-                                                                    —
-                                                                </span>
-                                                            ) : (
-                                                                <MoneyValue
-                                                                    value={
-                                                                        lineAmount
-                                                                    }
-                                                                    display="exact"
+                                                        <TableCell className="num pt-3 text-muted-foreground">
+                                                            {index + 1}
+                                                        </TableCell>
+                                                        <TableCell className="min-w-52">
+                                                            <form.AppField
+                                                                name={`lines[${index}].content`}
+                                                            >
+                                                                {(field) => (
+                                                                    <field.TextareaField
+                                                                        id={`${prefix}-content`}
+                                                                        label="开票内容"
+                                                                        hideLabel
+                                                                        rows={1}
+                                                                        maxLength={
+                                                                            INVOICE_CONTENT_LIMIT
+                                                                        }
+                                                                        textareaClassName="min-h-control py-1.5"
+                                                                        placeholder="如：货物名称、规格或服务项目"
+                                                                        required
+                                                                    />
+                                                                )}
+                                                            </form.AppField>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <form.AppField
+                                                                name={`lines[${index}].quantity`}
+                                                            >
+                                                                {(field) => (
+                                                                    <field.TextField
+                                                                        id={`${prefix}-quantity`}
+                                                                        label="数量"
+                                                                        hideLabel
+                                                                        inputMode="decimal"
+                                                                        inputClassName="num text-right"
+                                                                        placeholder="0"
+                                                                        required
+                                                                    />
+                                                                )}
+                                                            </form.AppField>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <form.AppField
+                                                                name={`lines[${index}].unit_price`}
+                                                            >
+                                                                {(field) => (
+                                                                    <field.TextField
+                                                                        id={`${prefix}-unit-price`}
+                                                                        label="含税单价（元）"
+                                                                        hideLabel
+                                                                        inputMode="decimal"
+                                                                        inputClassName="num text-right"
+                                                                        placeholder="0.00"
+                                                                        required
+                                                                    />
+                                                                )}
+                                                            </form.AppField>
+                                                        </TableCell>
+                                                        <TableCell className="pt-3 text-right">
+                                                            <form.Subscribe
+                                                                selector={(
+                                                                    state,
+                                                                ) => {
+                                                                    const value =
+                                                                        state
+                                                                            .values
+                                                                            .lines[
+                                                                            index
+                                                                        ]
+                                                                    return value
+                                                                        ? invoiceLineAmount(
+                                                                              value,
+                                                                          )
+                                                                        : null
+                                                                }}
+                                                            >
+                                                                {(
+                                                                    lineAmount,
+                                                                ) =>
+                                                                    lineAmount ===
+                                                                    null ? (
+                                                                        <span className="num text-muted-foreground">
+                                                                            —
+                                                                        </span>
+                                                                    ) : (
+                                                                        <MoneyValue
+                                                                            value={
+                                                                                lineAmount
+                                                                            }
+                                                                            display="exact"
+                                                                        />
+                                                                    )
+                                                                }
+                                                            </form.Subscribe>
+                                                        </TableCell>
+                                                        <TableCell className="pt-2 text-right">
+                                                            <Button
+                                                                id={`${prefix}-remove`}
+                                                                type="button"
+                                                                size="icon-sm"
+                                                                variant="ghost"
+                                                                className="text-muted-foreground hover:bg-destructive-soft/75 hover:text-destructive-soft-foreground"
+                                                                aria-label={`删除第 ${index + 1} 行`}
+                                                                disabled={
+                                                                    locked ||
+                                                                    array.state
+                                                                        .value
+                                                                        .length <=
+                                                                        1
+                                                                }
+                                                                onClick={() =>
+                                                                    void array.removeValue(
+                                                                        index,
+                                                                    )
+                                                                }
+                                                            >
+                                                                <Trash2Icon
+                                                                    className="size-3.5"
+                                                                    aria-hidden="true"
                                                                 />
-                                                            )
-                                                        }
-                                                    </form.Subscribe>
-                                                </TableCell>
-                                                <TableCell className="pt-2">
+                                                            </Button>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )
+                                            },
+                                        )}
+                                        {!atLimit ? (
+                                            <TableRow className="border-b-0 hover:bg-transparent">
+                                                <TableCell
+                                                    colSpan={6}
+                                                    className="py-1.5"
+                                                >
                                                     <Button
-                                                        id={`${prefix}-remove`}
+                                                        id="invoice-request-add-line-bottom"
                                                         type="button"
-                                                        size="icon-sm"
                                                         variant="ghost"
-                                                        aria-label={`删除第 ${index + 1} 行`}
-                                                        disabled={
-                                                            locked ||
-                                                            array.state.value
-                                                                .length <= 1
-                                                        }
-                                                        onClick={() =>
-                                                            void array.removeValue(
-                                                                index,
-                                                            )
-                                                        }
+                                                        size="xs"
+                                                        className="text-muted-foreground hover:text-foreground"
+                                                        disabled={locked}
+                                                        onClick={addRow}
                                                     >
-                                                        <Trash2Icon
-                                                            className="size-3.5"
+                                                        <PlusIcon
+                                                            data-icon="inline-start"
                                                             aria-hidden="true"
                                                         />
+                                                        添加明细行
                                                     </Button>
                                                 </TableCell>
                                             </TableRow>
-                                        )
-                                    })}
-                                </TableBody>
-                                <TableFooter>
-                                    <TableRow>
-                                        <TableCell colSpan={4}>
-                                            <form.Subscribe
-                                                selector={(state) => {
-                                                    const total =
+                                        ) : null}
+                                    </TableBody>
+                                    <TableFooter>
+                                        <TableRow>
+                                            <TableCell colSpan={4}>
+                                                <form.Subscribe
+                                                    selector={(state) =>
                                                         invoiceLinesTotal(
                                                             state.values.lines,
                                                         )
-                                                    return [
-                                                        total,
-                                                        invoiceTotalMismatch(
-                                                            total,
-                                                            state.values.amount,
-                                                        ),
-                                                    ] as const
-                                                }}
-                                            >
-                                                {([total, mismatch]) => (
-                                                    <div
-                                                        role="status"
-                                                        className="flex flex-wrap items-center gap-x-3 gap-y-1"
-                                                    >
-                                                        <span className="font-medium">
-                                                            明细合计
-                                                        </span>
-                                                        {mismatch ? (
-                                                            <>
-                                                                <span className="text-xs font-normal text-destructive">
-                                                                    {
-                                                                        totalMismatchMessage
-                                                                    }
+                                                    }
+                                                >
+                                                    {(total) => {
+                                                        const readout = total
+                                                            ? describeMoney(
+                                                                  total,
+                                                              )?.readout
+                                                            : null
+                                                        return (
+                                                            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                                                                <span className="font-medium text-foreground">
+                                                                    明细合计（本次申请金额）
                                                                 </span>
-                                                                {total !==
-                                                                    null &&
-                                                                !locked ? (
-                                                                    <Button
-                                                                        id="invoice-request-sync-amount"
-                                                                        type="button"
-                                                                        size="xs"
-                                                                        variant="outline"
-                                                                        onClick={() =>
-                                                                            form.setFieldValue(
-                                                                                "amount",
-                                                                                total,
-                                                                            )
+                                                                {readout ? (
+                                                                    <span className="text-xs font-normal text-muted-foreground">
+                                                                        {
+                                                                            readout
                                                                         }
-                                                                    >
-                                                                        按明细合计回填申请金额
-                                                                    </Button>
+                                                                    </span>
                                                                 ) : null}
-                                                            </>
-                                                        ) : null}
-                                                    </div>
-                                                )}
-                                            </form.Subscribe>
-                                        </TableCell>
-                                        <TableCell className="text-right font-semibold">
-                                            <form.Subscribe
-                                                selector={(state) =>
-                                                    invoiceLinesTotal(
-                                                        state.values.lines,
-                                                    )
-                                                }
-                                            >
-                                                {(total) =>
-                                                    total === null ? (
-                                                        "—"
-                                                    ) : (
-                                                        <MoneyValue
-                                                            value={total}
-                                                            display="exact"
-                                                        />
-                                                    )
-                                                }
-                                            </form.Subscribe>
-                                        </TableCell>
-                                        <TableCell />
-                                    </TableRow>
-                                </TableFooter>
-                            </Table>
-                        </div>
-                    </section>
-                )}
+                                                            </div>
+                                                        )
+                                                    }}
+                                                </form.Subscribe>
+                                            </TableCell>
+                                            <TableCell className="text-right font-semibold">
+                                                <form.Subscribe
+                                                    selector={(state) =>
+                                                        invoiceLinesTotal(
+                                                            state.values.lines,
+                                                        )
+                                                    }
+                                                >
+                                                    {(total) => {
+                                                        if (total === null) {
+                                                            return (
+                                                                <span className="num text-muted-foreground">
+                                                                    —
+                                                                </span>
+                                                            )
+                                                        }
+                                                        if (
+                                                            invoiceExceedsAvailable(
+                                                                total,
+                                                                availableAmount,
+                                                            )
+                                                        ) {
+                                                            return (
+                                                                <span className="num font-semibold text-destructive">
+                                                                    {formatCurrencyFixed(
+                                                                        total,
+                                                                        {
+                                                                            maxScale: 2,
+                                                                            minimumFractionDigits: 2,
+                                                                        },
+                                                                    )}
+                                                                </span>
+                                                            )
+                                                        }
+                                                        return (
+                                                            <MoneyValue
+                                                                value={total}
+                                                                display="exact"
+                                                            />
+                                                        )
+                                                    }}
+                                                </form.Subscribe>
+                                            </TableCell>
+                                            <TableCell />
+                                        </TableRow>
+                                    </TableFooter>
+                                </Table>
+                            </div>
+                        </fieldset>
+                    )
+
+                    if (presentation === "workspace") {
+                        return (
+                            <DetailWorkspaceSection
+                                title="开票明细"
+                                headingId="invoice-request-lines-heading"
+                                width="full"
+                                badge={badge}
+                                actions={actions}
+                            >
+                                {tableBody}
+                            </DetailWorkspaceSection>
+                        )
+                    }
+
+                    return (
+                        <section
+                            aria-labelledby="invoice-request-lines-heading"
+                            className="flex min-w-0 flex-col gap-3"
+                        >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <h3
+                                        id="invoice-request-lines-heading"
+                                        className="font-semibold text-foreground"
+                                    >
+                                        开票明细
+                                    </h3>
+                                    {badge}
+                                </div>
+                                <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                                    {actions}
+                                </div>
+                            </div>
+                            {tableBody}
+                        </section>
+                    )
+                }}
             </form.AppField>
         )
     },

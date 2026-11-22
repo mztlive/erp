@@ -1,10 +1,18 @@
 /** 开票申请 API；所有调用由 TanStack Query 管理。 */
 import { apiGet, apiPost, apiPut, type Page } from "@/lib/api"
+import { compactFixed, normalizeFixed } from "@/lib/fixed-decimal"
 import type {
     InvoiceRequestData,
     InvoiceRequestLine,
 } from "@/lib/invoice-request-data"
 import type { DocumentApprovalViewDto } from "@/features/approval-workflow/types"
+import {
+    INVOICE_CONTENT_LIMIT,
+    INVOICE_QUANTITY_SCALE,
+    INVOICE_UNIT_PRICE_SCALE,
+    invoiceLineAmount,
+    isPositiveInvoiceDecimal,
+} from "./line-amounts"
 import {
     enrichSubmittedInvoiceRequest,
     submittedInvoiceRequest,
@@ -286,4 +294,181 @@ export async function getRequestSaveState(
         throw new Error("未取得完整的服务端申请版本和状态，请重新核对")
     }
     return { id, version: wire.version, status }
+}
+
+export type SalesOrderInvoiceCandidateLine = {
+    id: string
+    lineNo: number
+    content: string
+    quantity: string
+    unitPrice: string
+    unit?: string
+    lineAmount: string | null
+    isGift: boolean
+    selectable: boolean
+    disabledReason?: string
+}
+
+export type SalesOrderInvoiceLinesResult = {
+    orderNo: string
+    lines: SalesOrderInvoiceCandidateLine[]
+}
+
+const SNAPSHOT_IDENTITY_PATTERN = /^[0-9a-f]{24}(?:[0-9a-f]{8})?$/i
+
+function cleanSnapshotLabel(value: unknown, skuId?: string): string {
+    const text = textOf(value)
+    if (!text) return ""
+    if (skuId && text === skuId) return ""
+    if (SNAPSHOT_IDENTITY_PATTERN.test(text)) return ""
+    return text
+}
+
+function normalizeCandidateDecimal(raw: string, maxScale: number): string {
+    const trimmed = raw.trim()
+    const match = /^(\d+)(?:\.(\d+))?$/.exec(trimmed)
+    if (!match) return ""
+    const whole = match[1].replace(/^0+(?=\d)/, "")
+    const fraction = match[2] ?? ""
+    const canonical = fraction ? `${whole}.${fraction}` : whole
+    if (fraction.length <= maxScale) {
+        return compactFixed(canonical)
+    }
+    return compactFixed(
+        normalizeFixed(canonical, {
+            maxScale: fraction.length,
+            outputScale: maxScale,
+        }),
+    )
+}
+
+function extractCommercialLines(
+    wire: Record<string, unknown>,
+): Record<string, unknown>[] {
+    const currentRevisionId = textOf(wire.current_revision_id)
+    const revisions = Array.isArray(wire.revisions) ? wire.revisions : []
+    if (currentRevisionId) {
+        const current = revisions
+            .map(asRecord)
+            .find((revision) => textOf(revision.id) === currentRevisionId)
+        if (current && Array.isArray(current.commercial_lines)) {
+            return current.commercial_lines.map(asRecord)
+        }
+    }
+    const workingCopy = asRecord(wire.working_copy)
+    if (Array.isArray(workingCopy.lines) && workingCopy.lines.length > 0) {
+        return workingCopy.lines.map(asRecord)
+    }
+    const submissions = Array.isArray(wire.submissions)
+        ? wire.submissions.map(asRecord)
+        : []
+    const latestSubmission = submissions.reduce<Record<string, unknown> | null>(
+        (latest, entry) => {
+            if (!Array.isArray(entry.lines) || entry.lines.length === 0) {
+                return latest
+            }
+            if (!latest) return entry
+            const currentNo =
+                typeof entry.submission_no === "number"
+                    ? entry.submission_no
+                    : 0
+            const latestNo =
+                typeof latest.submission_no === "number"
+                    ? latest.submission_no
+                    : 0
+            return currentNo >= latestNo ? entry : latest
+        },
+        null,
+    )
+    if (latestSubmission && Array.isArray(latestSubmission.lines)) {
+        return latestSubmission.lines.map(asRecord)
+    }
+    return []
+}
+
+/** 读取销售单当前生效版本的商业明细，用于一键带入开票明细。 */
+export async function getSalesOrderInvoiceLines(
+    salesOrderId: string,
+): Promise<SalesOrderInvoiceLinesResult> {
+    const wire = asRecord(
+        await apiGet<unknown>(
+            `/admin/sales-orders/${encodeURIComponent(salesOrderId)}`,
+        ),
+    )
+    const orderNo = textOf(wire.order_no)
+    const rawLines = extractCommercialLines(wire)
+    const lines: SalesOrderInvoiceCandidateLine[] = rawLines.map(
+        (line, index) => {
+            const lineNo =
+                typeof line.line_no === "number" &&
+                Number.isSafeInteger(line.line_no) &&
+                line.line_no > 0
+                    ? line.line_no
+                    : index + 1
+            const id =
+                textOf(line.sales_order_line_id) ||
+                textOf(line.id) ||
+                `line-${lineNo}`
+            const skuId = textOf(line.sku_id) || undefined
+            const name = textOf(line.item_name_snapshot)
+            const spec = cleanSnapshotLabel(line.spec_snapshot, skuId)
+            const rawContent =
+                spec && name && !name.includes(spec)
+                    ? `${name}（${spec}）`
+                    : name || spec
+            const content = rawContent.slice(0, INVOICE_CONTENT_LIMIT)
+            const isVoucher = textOf(line.line_type) === "VOUCHER"
+            const isGift = textOf(line.pricing_mode) === "GIFT"
+            const cardCountText =
+                typeof line.card_count === "number" &&
+                Number.isSafeInteger(line.card_count) &&
+                line.card_count > 0
+                    ? String(line.card_count)
+                    : ""
+            const rawQuantity = isVoucher
+                ? cardCountText || textOf(line.quantity)
+                : textOf(line.quantity)
+            const quantity = normalizeCandidateDecimal(
+                rawQuantity,
+                INVOICE_QUANTITY_SCALE,
+            )
+            const unitPrice = normalizeCandidateDecimal(
+                textOf(line.unit_price_gross),
+                INVOICE_UNIT_PRICE_SCALE,
+            )
+            const unit =
+                cleanSnapshotLabel(line.unit_snapshot) ||
+                cleanSnapshotLabel(line.base_unit_code) ||
+                (isVoucher ? "张" : "") ||
+                undefined
+            const lineAmount = invoiceLineAmount({
+                quantity,
+                unit_price: unitPrice,
+            })
+            const hasPositiveAmount =
+                !isGift &&
+                Boolean(content) &&
+                isPositiveInvoiceDecimal(quantity, INVOICE_QUANTITY_SCALE) &&
+                isPositiveInvoiceDecimal(unitPrice, INVOICE_UNIT_PRICE_SCALE) &&
+                lineAmount !== null &&
+                lineAmount !== "0.00"
+            return {
+                id,
+                lineNo,
+                content,
+                quantity,
+                unitPrice,
+                unit,
+                lineAmount,
+                isGift,
+                selectable: hasPositiveAmount,
+                disabledReason: isGift
+                    ? "赠品行，不可开票"
+                    : !hasPositiveAmount
+                      ? "金额为零或缺少单价，不可直接带入"
+                      : undefined,
+            }
+        },
+    )
+    return { orderNo, lines }
 }

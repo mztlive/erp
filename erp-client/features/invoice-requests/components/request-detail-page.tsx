@@ -4,12 +4,9 @@ import * as React from "react"
 
 import {
     BusinessFailureState,
-    DetailWorkspaceBody,
     DetailWorkspaceChrome,
     DetailWorkspacePage,
-    DetailWorkspaceSection,
 } from "@/components/business"
-import { Button } from "@/components/ui/button"
 import { useRouter } from "@/lib/navigation"
 import { isWorkspaceFrame, workspaceHost } from "@/lib/workspace-tabs"
 
@@ -80,39 +77,25 @@ export function InvoiceRequestDetailPage({ requestId }: { requestId: string }) {
     if (editing && permissions.canSubmit) {
         return (
             <DetailWorkspacePage>
-                <DetailWorkspaceChrome
-                    title="修改开票申请"
-                    primaryStatus={{ label: "修改中", tone: "neutral" }}
-                    meta={
-                        editing.request_no
-                            ? `申请单号 ${editing.request_no}`
-                            : "修改开票资料后重新提交审批"
-                    }
-                    secondaryActions={
-                        <Button
-                            id="invoice-request-form-back"
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setEditing(undefined)}
-                        >
-                            返回详情
-                        </Button>
-                    }
+                <InvoiceRequestForm
+                    key={editing.id}
+                    existing={editing}
+                    presentation="workspace"
+                    workspaceChrome={{
+                        title: "修改开票申请",
+                        statusLabel: "修改中",
+                        back: {
+                            id: "invoice-request-form-back",
+                            label: "返回详情",
+                            onClick: () => setEditing(undefined),
+                        },
+                    }}
+                    onCancel={() => setEditing(undefined)}
+                    onDone={() => {
+                        dismissPendingInvoiceRequestDetail()
+                        setEditing(undefined)
+                    }}
                 />
-                <DetailWorkspaceBody>
-                    <DetailWorkspaceSection width="form">
-                        <InvoiceRequestForm
-                            key={editing.id}
-                            existing={editing}
-                            onCancel={() => setEditing(undefined)}
-                            onDone={() => {
-                                dismissPendingInvoiceRequestDetail()
-                                setEditing(undefined)
-                            }}
-                        />
-                    </DetailWorkspaceSection>
-                </DetailWorkspaceBody>
             </DetailWorkspacePage>
         )
     }

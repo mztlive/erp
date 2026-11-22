@@ -737,20 +737,26 @@
 .erp-detail-workspace-page
     [data-slot="detail-inline-table"]
     [data-slot="table-body"]
-    [data-slot="input"]:not(:disabled) {
+    :is([data-slot="input"], [data-slot="textarea"]):not(:disabled):not(
+        [aria-invalid="true"]
+    ) {
     border-color: transparent;
     background-color: color-mix(in oklab, var(--muted) 52%, transparent);
 }
 .erp-detail-workspace-page
     [data-slot="detail-inline-table"]
     [data-slot="table-body"]
-    [data-slot="input"]:not(:disabled):hover {
+    :is([data-slot="input"], [data-slot="textarea"]):not(:disabled):not(
+        [aria-invalid="true"]
+    ):hover {
     background-color: color-mix(in oklab, var(--muted) 85%, transparent);
 }
 .erp-detail-workspace-page
     [data-slot="detail-inline-table"]
     [data-slot="table-body"]
-    [data-slot="input"]:not(:disabled):focus-visible {
+    :is([data-slot="input"], [data-slot="textarea"]):not(:disabled):not(
+        [aria-invalid="true"]
+    ):focus-visible {
     border-color: color-mix(in oklab, var(--primary) 65%, transparent);
     background-color: var(--card);
     box-shadow: 0 0 0 3px var(--ring);
@@ -758,7 +764,7 @@
 .erp-detail-workspace-page
     [data-slot="detail-inline-table"]
     [data-slot="table-body"]
-    [data-slot="input"]:disabled {
+    :is([data-slot="input"], [data-slot="textarea"]):disabled {
     border-color: transparent;
     background-color: transparent;
 }
