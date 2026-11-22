@@ -156,18 +156,19 @@ export function PurchaseOrderExpenseSection({
                 </Table>
             </div>
             {expenseOnly ? (
-                <div className="flex flex-wrap items-baseline justify-end gap-4 pt-1 text-body-compact">
-                    <span className="text-xs text-muted-foreground">
-                        合计（含税）
-                    </span>
-                    <span className="num text-value-compact font-semibold tracking-tight text-foreground">
-                        {costMasked ? (
-                            "•••"
-                        ) : (
-                            <MoneyValue
-                                value={order.currentContent.totals.gross}
-                            />
-                        )}
+                <div className="flex flex-wrap items-baseline justify-end gap-x-4 gap-y-1 pt-1 text-xs text-muted-foreground">
+                    <span className="num">共 {lines.length} 项</span>
+                    <span>
+                        含税合计{" "}
+                        <span className="num text-body-compact font-semibold text-foreground">
+                            {costMasked ? (
+                                "•••"
+                            ) : (
+                                <MoneyValue
+                                    value={order.currentContent.totals.gross}
+                                />
+                            )}
+                        </span>
                     </span>
                 </div>
             ) : null}
@@ -285,7 +286,7 @@ function ExpenseRow({
                         id={`procurement-orders-expense-confirm-${key}`}
                         type="button"
                         size="sm"
-                        className="px-3.5"
+                        variant="outline"
                         onClick={onConfirm}
                     >
                         确认发生

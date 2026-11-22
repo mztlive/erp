@@ -2,17 +2,16 @@
 
 import {
     BusinessStatusBadge,
-    DetailWorkspaceMetricItem,
-    DetailWorkspaceMetrics,
     DetailWorkspaceSection,
 } from "@/components/business"
 import { PurchaseChangeOrderApprovalSection } from "@/features/purchase-orders/components/purchase-change-order-approval-section"
 import { PurchaseReturnOrderRelatedSection } from "@/features/purchase-orders/components/purchase-return-order-section"
 import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
 import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
+import { formatDateTime } from "@/lib/datetime"
 import { PurchaseOrderDetailSection as DetailRecordSection } from "./purchase-order-detail-section"
 
-/** 当前版本、在途变更和历史分层展示；采购退货只读展示执行状态。 */
+/** 在途变更置顶无双标题套娃，历史变更去除在途重复并补充发起时间；采购退货只读展示执行状态。 */
 export function PurchaseOrderDetailChangesSection({
     order,
     workItemId,
@@ -26,38 +25,15 @@ export function PurchaseOrderDetailChangesSection({
     workItemAllowedActions?: readonly string[]
     onApprovalResult?: (result: PurchaseOrderDetailResult) => void
 }) {
+    const activeId = order.activeChangeOrder?.id
+    const historicalChanges = activeId
+        ? order.changes.filter((change) => change.changeId !== activeId)
+        : order.changes
+
     return (
         <>
-            <DetailWorkspaceSection width="form">
-                <DetailWorkspaceMetrics
-                    columns={2}
-                    variant="inline"
-                    ariaLabel="采购变更摘要"
-                >
-                    <DetailWorkspaceMetricItem
-                        label="当前有效版本"
-                        value={
-                            <span className="num text-body-compact font-semibold">
-                                {order.identity.revisionNo == null
-                                    ? "尚未生效"
-                                    : `v${order.identity.revisionNo}`}
-                            </span>
-                        }
-                    />
-                    <DetailWorkspaceMetricItem
-                        label="当前变更"
-                        value={
-                            <span className="text-body-compact font-semibold">
-                                {order.activeChangeOrder?.statusLabel ??
-                                    "无在途变更"}
-                            </span>
-                        }
-                    />
-                </DetailWorkspaceMetrics>
-            </DetailWorkspaceSection>
-
             {order.activeChangeOrder ? (
-                <DetailRecordSection width="form" title="当前变更">
+                <DetailWorkspaceSection width="form">
                     <PurchaseChangeOrderApprovalSection
                         readonlyApproval
                         purchaseOrderId={order.identity.purchaseOrderId}
@@ -69,45 +45,58 @@ export function PurchaseOrderDetailChangesSection({
                         workItemAllowedActions={workItemAllowedActions}
                         onResult={onApprovalResult}
                     />
-                </DetailRecordSection>
+                </DetailWorkspaceSection>
             ) : null}
 
-            <DetailRecordSection
-                width="form"
-                title="变更记录"
-                count={order.changes.length}
-            >
-                {order.changes.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">
-                        暂无采购变更
-                    </p>
-                ) : (
-                    <ul className="divide-y divide-border/60 border-y border-border/60">
-                        {order.changes.map((change) => (
-                            <li
-                                key={change.changeId}
-                                className="flex items-start justify-between gap-4 py-3 text-body-compact"
-                            >
-                                <div className="min-w-0">
-                                    <p className="break-words font-medium text-foreground">
-                                        {change.label}
-                                    </p>
-                                    {change.baseRevisionNo != null ? (
-                                        <p className="num mt-0.5 text-xs text-muted-foreground">
-                                            基准版本 v{change.baseRevisionNo}
+            {!order.activeChangeOrder || historicalChanges.length > 0 ? (
+                <DetailRecordSection
+                    width="form"
+                    title="变更记录"
+                    count={historicalChanges.length}
+                >
+                    {historicalChanges.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                            暂无采购变更
+                        </p>
+                    ) : (
+                        <ul className="divide-y divide-border/60 border-y border-border/60">
+                            {historicalChanges.map((change) => (
+                                <li
+                                    key={change.changeId}
+                                    className="flex items-start justify-between gap-4 py-3 text-body-compact"
+                                >
+                                    <div className="min-w-0 space-y-0.5">
+                                        <p className="break-words font-medium text-foreground">
+                                            {change.label}
                                         </p>
-                                    ) : null}
-                                </div>
-                                <BusinessStatusBadge
-                                    context="list"
-                                    label={change.statusLabel}
-                                    tone={change.tone}
-                                />
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </DetailRecordSection>
+                                        {change.createdAt ||
+                                        change.baseRevisionNo != null ? (
+                                            <p className="num text-xs text-muted-foreground">
+                                                {[
+                                                    change.baseRevisionNo !=
+                                                    null
+                                                        ? `基准版本 v${change.baseRevisionNo}`
+                                                        : null,
+                                                    change.createdAt
+                                                        ? `发起于 ${formatDateTime(change.createdAt, "default")}`
+                                                        : null,
+                                                ]
+                                                    .filter(Boolean)
+                                                    .join(" · ")}
+                                            </p>
+                                        ) : null}
+                                    </div>
+                                    <BusinessStatusBadge
+                                        context="list"
+                                        label={change.statusLabel}
+                                        tone={change.tone}
+                                    />
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </DetailRecordSection>
+            ) : null}
 
             <PurchaseReturnOrderRelatedSection
                 purchaseOrderId={order.identity.purchaseOrderId}

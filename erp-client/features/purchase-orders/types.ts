@@ -267,6 +267,7 @@ type RelatedChangeView = Readonly<{
     statusLabel: string
     tone: StatusTone
     baseRevisionNo?: number
+    createdAt?: string
 }>
 
 export type PurchaseChangeOrderSummary = Readonly<{
@@ -392,6 +393,7 @@ export type PurchaseOrderCenterView = Readonly<{
         submittedBy?: string
         submittedAt?: string
         expectedDate?: string
+        createdAt?: string
         creationBasisId?: string
     }
     progress: {

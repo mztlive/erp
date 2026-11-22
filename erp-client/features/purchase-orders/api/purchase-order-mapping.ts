@@ -72,6 +72,19 @@ export function expenseLineName(expense: PurchaseExpenseDetail | undefined) {
         : "费用"
 }
 
+/** 从明细中取最早的预计交付日（YYYY-MM-DD 字典序即时间序）。 */
+function earliestExpectedDate(
+    lines: readonly { expectedDeliveryDate?: string }[],
+): string | undefined {
+    let earliest: string | undefined
+    for (const line of lines) {
+        const value = line.expectedDeliveryDate?.trim()
+        if (!value) continue
+        if (!earliest || value < earliest) earliest = value
+    }
+    return earliest
+}
+
 /** 展示名称缺失或误填为关联主键时，保留明确的可读占位。 */
 function readableName(
     value: string | null | undefined,
@@ -281,8 +294,10 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
             targetWarehouseName: center.target_warehouse_name ?? undefined,
             submittedBy: undefined,
             submittedAt: undefined,
-            expectedDate: lines.find((l) => l.expectedDeliveryDate)
-                ?.expectedDeliveryDate,
+            expectedDate: earliestExpectedDate(lines),
+            createdAt: center.created_at
+                ? secsToIso(center.created_at)
+                : undefined,
             creationBasisId: undefined,
         },
         progress: {
@@ -399,6 +414,7 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
             statusLabel: purchaseChangeOrderStatusLabel(c.status),
             tone: purchaseChangeOrderStatusTone(c.status),
             baseRevisionNo: undefined,
+            createdAt: c.created_at ? secsToIso(c.created_at) : undefined,
         })),
         workflow: [],
         approval,

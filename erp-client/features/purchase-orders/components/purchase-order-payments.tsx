@@ -76,7 +76,7 @@ export function PurchaseOrderPayments({
                                         <p className="text-xs text-muted-foreground">
                                             本单核销金额
                                         </p>
-                                        <p className="num mt-1 text-value-compact font-semibold tracking-tight">
+                                        <p className="num mt-0.5 text-body-compact font-semibold text-foreground">
                                             {costMasked ? (
                                                 "•••"
                                             ) : (

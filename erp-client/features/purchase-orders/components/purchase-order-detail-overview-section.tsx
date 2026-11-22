@@ -9,10 +9,11 @@ import { PurchaseOrderExpenseSection } from "@/features/purchase-orders/componen
 import { PurchaseOrderSourceSales } from "@/features/purchase-orders/components/purchase-order-source-sales"
 import {
     FULFILLMENT_RESPONSIBILITY_LABEL,
-    PURCHASE_TYPE_LABEL,
+    SUPPLY_PRICE_BASIS_LABEL,
     type PurchaseOrderCenterView,
 } from "@/features/purchase-orders/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { formatDateTime } from "@/lib/datetime"
 import { PurchaseOrderDetailLines } from "./purchase-order-detail-lines"
 import { PurchaseOrderDetailSection as DetailRecordSection } from "./purchase-order-detail-section"
 
@@ -35,7 +36,10 @@ function OverviewField({
     )
 }
 
-/** 概览先处理费用确认，再展示采购明细、来源与交易约定；金额和进度摘要由顶部通栏与侧栏承载。 */
+/**
+ * 概览聚焦业务核心：先处理费用确认（如有），再展示商品/服务明细，
+ * 最后在一个紧凑分区内收口来源单据与履约付款约定；已置于吸顶头的身份信息不再重复。
+ */
 export function PurchaseOrderDetailOverviewSection({
     order,
     costMasked,
@@ -43,9 +47,16 @@ export function PurchaseOrderDetailOverviewSection({
     order: PurchaseOrderCenterView
     costMasked: boolean
 }) {
-    const expenseOnly =
-        order.currentContent.lines.length > 0 &&
-        order.currentContent.lines.every((line) => line.expense)
+    const expenseLines = order.currentContent.lines.filter(
+        (line) => line.expense,
+    )
+    const productLines = order.currentContent.lines.filter(
+        (line) => !line.expense,
+    )
+    const hasExpenses = expenseLines.length > 0
+    const showProductLines = productLines.length > 0 || !hasExpenses
+    const notEffective = order.identity.revisionNo == null
+
     return (
         <>
             <PurchaseOrderExpenseSection
@@ -53,11 +64,11 @@ export function PurchaseOrderDetailOverviewSection({
                 costMasked={costMasked}
             />
 
-            {!expenseOnly ? (
+            {showProductLines ? (
                 <DetailRecordSection
                     width="full"
                     title="采购明细"
-                    count={order.currentContent.lines.length}
+                    count={productLines.length}
                 >
                     <div
                         data-slot="detail-inline-table"
@@ -65,34 +76,43 @@ export function PurchaseOrderDetailOverviewSection({
                     >
                         <PurchaseOrderDetailLines
                             order={order}
+                            lines={productLines}
                             costMasked={costMasked}
                         />
                     </div>
-                    <div className="flex items-baseline justify-end gap-4 pt-1 text-body-compact">
-                        <span className="text-xs text-muted-foreground">
-                            合计（含税）
-                        </span>
-                        <span className="num text-value-compact font-semibold tracking-tight text-foreground">
-                            {costMasked ? (
-                                "•••"
-                            ) : (
-                                <MoneyValue
-                                    value={order.currentContent.totals.gross}
-                                />
-                            )}
-                        </span>
-                    </div>
+                    {!hasExpenses && productLines.length > 0 ? (
+                        <div className="flex flex-wrap items-baseline justify-end gap-x-4 gap-y-1 pt-1 text-xs text-muted-foreground">
+                            <span className="num">
+                                共 {productLines.length} 项
+                            </span>
+                            <span>
+                                含税合计{" "}
+                                <span className="num text-body-compact font-semibold text-foreground">
+                                    {costMasked ? (
+                                        "•••"
+                                    ) : (
+                                        <MoneyValue
+                                            value={
+                                                order.currentContent.totals
+                                                    .gross
+                                            }
+                                        />
+                                    )}
+                                </span>
+                            </span>
+                        </div>
+                    ) : null}
                 </DetailRecordSection>
             ) : null}
 
             <DetailRecordSection width="form" title="关联单据与基本信息">
                 <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
                     <OverviewField label="来源销售单">
-                        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
                             <Link
                                 id={`procurement-orders-source-sales-${toAutomationIdSegment(order.identity.purchaseOrderId)}-detail`}
                                 href={`/sales/orders/${encodeURIComponent(order.header.salesOrderId)}`}
-                                className="inline-flex max-w-full items-center gap-1 rounded-sm text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                                className="inline-flex max-w-full items-center gap-1 rounded-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                                 aria-label={`查看销售单 ${order.header.salesOrderNo}`}
                             >
                                 <span className="num break-all">
@@ -106,31 +126,11 @@ export function PurchaseOrderDetailOverviewSection({
                             <PurchaseOrderSourceSales order={order} />
                         </div>
                     </OverviewField>
-                    <OverviewField label="采购类型">
-                        {PURCHASE_TYPE_LABEL[order.header.purchaseType]}
-                    </OverviewField>
-                    <OverviewField label="修订版次">
-                        <span className="num">
-                            {order.identity.revisionNo == null
-                                ? "尚未生效"
-                                : `v${order.identity.revisionNo}`}
-                        </span>
-                    </OverviewField>
-                    <OverviewField label="当前内容">
-                        {order.currentContent.source === "DRAFT"
-                            ? "草稿"
-                            : order.currentContent.source === "SUBMISSION"
-                              ? "已提交审批"
-                              : "已生效"}
-                    </OverviewField>
-                </dl>
-            </DetailRecordSection>
 
-            <DetailRecordSection width="form" title="付款与履约约定">
-                <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
                     <OverviewField label="付款条件">
                         {order.header.paymentTermLabel || "—"}
                     </OverviewField>
+
                     <OverviewField label="履约责任">
                         {
                             FULFILLMENT_RESPONSIBILITY_LABEL[
@@ -138,11 +138,54 @@ export function PurchaseOrderDetailOverviewSection({
                             ]
                         }
                     </OverviewField>
-                    <OverviewField label="最近预计交期">
-                        <span className="num">
-                            {order.header.expectedDate ?? "—"}
-                        </span>
-                    </OverviewField>
+
+                    {order.header.targetWarehouseName ? (
+                        <OverviewField label="目标收货仓">
+                            {order.header.targetWarehouseName}
+                        </OverviewField>
+                    ) : null}
+
+                    {order.delivery ? (
+                        <OverviewField label="价格依据">
+                            {
+                                SUPPLY_PRICE_BASIS_LABEL[
+                                    order.delivery.priceBasis
+                                ]
+                            }
+                        </OverviewField>
+                    ) : null}
+
+                    {productLines.length > 0 && order.header.expectedDate ? (
+                        <OverviewField label="最早预计交期">
+                            <span className="num">
+                                {order.header.expectedDate}
+                            </span>
+                        </OverviewField>
+                    ) : null}
+
+                    {order.header.createdAt ? (
+                        <OverviewField label="创建时间">
+                            <span className="num">
+                                {formatDateTime(
+                                    order.header.createdAt,
+                                    "default",
+                                )}
+                            </span>
+                        </OverviewField>
+                    ) : null}
+
+                    {notEffective ? (
+                        <OverviewField label="生效状态">
+                            <span className="inline-flex flex-wrap items-center gap-1.5">
+                                <span>尚未生效</span>
+                                <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                                    {order.currentContent.source === "DRAFT"
+                                        ? "草稿"
+                                        : "已提交审批"}
+                                </span>
+                            </span>
+                        </OverviewField>
+                    ) : null}
                 </dl>
             </DetailRecordSection>
         </>

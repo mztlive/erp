@@ -1,8 +1,10 @@
 "use client"
 
-import { SalesLinePriceComparison } from "@/components/business/sales-line-price-comparison"
 import { useRef, useState } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
+import { FileTextIcon } from "lucide-react"
+
+import { SalesLinePriceComparison } from "@/components/business/sales-line-price-comparison"
 
 import {
     BusinessStatusBadge,
@@ -153,12 +155,13 @@ export function PurchaseOrderSourceSales({
                 id={`${idPrefix}-open`}
                 ref={triggerRef}
                 type="button"
-                variant="link"
-                size="sm"
-                className="h-auto p-0 text-xs font-normal text-muted-foreground"
+                variant="ghost"
+                size="xs"
+                className="h-6 gap-1 rounded-md bg-muted/65 px-2 text-xs font-normal text-foreground/80 shadow-none hover:bg-muted hover:text-foreground"
                 onClick={() => setOpen(true)}
             >
-                关联资料
+                <FileTextIcon className="size-3.5" aria-hidden="true" />
+                查看销售资料
             </Button>
             <QuickPreviewSheet
                 idPrefix={`${idPrefix}-sheet`}

@@ -16,7 +16,6 @@ import {
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
-import { ApprovalReadonly } from "@/features/approval-workflow/components/approval-readonly"
 import { PurchaseChangeOrderApprovalSection } from "@/features/purchase-orders/components/purchase-change-order-approval-section"
 import { PurchaseChangeOrderEditDialog } from "@/features/purchase-orders/components/purchase-change-order-edit-dialog"
 import { PurchaseOrderDetailDialogs } from "@/features/purchase-orders/components/purchase-order-detail-dialogs"
@@ -57,9 +56,6 @@ import {
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
 import { mapWorkItemDto } from "@/features/work-items/types"
 import { useRouter, useSearchParams } from "@/lib/navigation"
-
-const APPROVAL_READONLY_WORKSPACE_CLASS =
-    "space-y-5 [&_[data-slot=card]]:rounded-none [&_[data-slot=card]]:border-0 [&_[data-slot=card]]:bg-transparent [&_[data-slot=card]]:shadow-none [&_[data-slot=card]]:ring-0 [&_[data-slot=card-header]]:px-0 [&_[data-slot=card-content]]:px-0 [&_[data-slot=card-footer]]:px-0 [&>[data-slot=card]:first-child]:rounded-lg [&>[data-slot=card]:first-child]:bg-muted/30 [&>[data-slot=card]:first-child]:px-4 [&>[data-slot=card]:first-child]:py-3.5"
 
 /**
  * 采购单详情保留采购方操作，审批与跨岗位进度只读展示；
@@ -309,15 +305,14 @@ export function PurchaseOrderDetailPage({
         order.identity.draftLabel ??
         "采购单（未编号）"
     const costMasked = order.currentContent.costMasked
-    const gate = order.progress.prepaymentGate
+    const isEditing = mode === "edit" && permissions.canEdit
 
-    const modeLabel =
-        mode === "edit"
-            ? order.identity.status === "REJECTED" ||
-              order.identity.reviewStatus === "REJECTED"
-                ? "被驳回待修改"
-                : "采购草稿编辑"
-            : "详情"
+    const modeLabel = isEditing
+        ? order.identity.status === "REJECTED" ||
+          order.identity.reviewStatus === "REJECTED"
+            ? "被驳回待修改"
+            : "采购草稿编辑"
+        : "详情"
 
     const activeChange = order.activeChangeOrder
     const continueChange = Boolean(
@@ -344,7 +339,7 @@ export function PurchaseOrderDetailPage({
         <DetailWorkspacePage>
             <PurchaseOrderDetailHeader
                 order={order}
-                mode={mode}
+                mode={isEditing ? "edit" : "view"}
                 displayNo={displayNo}
                 modeLabel={modeLabel}
                 titleRef={titleRef}
@@ -356,26 +351,37 @@ export function PurchaseOrderDetailPage({
                 canChange={permissions.canChange}
                 continueChange={continueChange}
                 changePending={editActions.changePending}
+                editDirty={guard.editDirty}
+                draftEditToken={editActions.draftEditToken}
+                savePending={editActions.savePending}
                 requestLeave={guard.requestLeave}
+                onExitEdit={() =>
+                    guard.requestLeave(() => router.replace(baseHref))
+                }
+                onSaveDraft={() => void editActions.handleSave()}
                 onRequestVoid={() => editActions.setVoidConfirmOpen(true)}
                 onRequestChange={openChange}
                 onRequestSubmit={() => editActions.setSubmitConfirmOpen(true)}
                 onCancelResult={handleResult}
                 tabs={
-                    <PurchaseOrderDetailSectionTabs
-                        order={order}
-                        activeSection={activeSection}
-                        onSelectSection={selectSection}
-                    />
+                    isEditing ? undefined : (
+                        <PurchaseOrderDetailSectionTabs
+                            order={order}
+                            activeSection={activeSection}
+                            onSelectSection={selectSection}
+                        />
+                    )
                 }
             />
 
             <DetailWorkspaceBody
                 summary={
-                    <PurchaseOrderAmountSummary
-                        order={order}
-                        costMasked={costMasked}
-                    />
+                    isEditing ? undefined : (
+                        <PurchaseOrderAmountSummary
+                            order={order}
+                            costMasked={costMasked}
+                        />
+                    )
                 }
                 alerts={
                     <>
@@ -407,7 +413,7 @@ export function PurchaseOrderDetailPage({
 
                         <PurchaseOrderSourceUpdateNotice
                             order={order}
-                            showActions={mode !== "edit"}
+                            showActions={!isEditing}
                             canEdit={permissions.canEdit}
                             canVoid={permissions.canVoid}
                             canChange={permissions.canChange || continueChange}
@@ -419,7 +425,9 @@ export function PurchaseOrderDetailPage({
                             onRequestChange={openChange}
                         />
 
-                        {isChangeOrderTask && activeSection !== "changes" ? (
+                        {!isEditing &&
+                        isChangeOrderTask &&
+                        activeSection !== "changes" ? (
                             <PurchaseChangeOrderApprovalSection
                                 readonlyApproval
                                 purchaseOrderId={order.identity.purchaseOrderId}
@@ -441,35 +449,31 @@ export function PurchaseOrderDetailPage({
                     </>
                 }
                 sidebar={
-                    <PurchaseOrderDetailSidebar
-                        order={order}
-                        costMasked={costMasked}
-                        onSelectSection={selectSection}
-                    />
+                    isEditing ? undefined : (
+                        <PurchaseOrderDetailSidebar
+                            order={order}
+                            costMasked={costMasked}
+                            onSelectSection={selectSection}
+                        />
+                    )
                 }
-                sidebarLabel="采购单摘要"
+                sidebarLabel={isEditing ? undefined : "采购单摘要"}
             >
                 <PurchaseOrderDetailSectionContent
                     order={order}
                     activeSection={activeSection}
                     editor={
-                        mode === "edit" && permissions.canEdit ? (
+                        isEditing ? (
                             <EditSurface
                                 order={order}
                                 lineEdits={editActions.lineEdits}
                                 setLineEdits={editActions.setLineEdits}
                                 draftEditToken={editActions.draftEditToken}
-                                canSubmit={permissions.canSubmit}
                                 savePending={editActions.savePending}
-                                onSave={() => void editActions.handleSave()}
-                                onSubmitOpen={() =>
-                                    editActions.setSubmitConfirmOpen(true)
-                                }
                             />
                         ) : undefined
                     }
                     costMasked={costMasked}
-                    gate={gate}
                     changeWorkItemId={
                         isChangeOrderTask
                             ? focusedWorkItem?.workItemId
@@ -486,13 +490,6 @@ export function PurchaseOrderDetailPage({
                             : undefined
                     }
                     onChangeApprovalResult={handleResult}
-                    approvalPanel={
-                        <ApprovalReadonly
-                            id="purchase-order-approval"
-                            approval={order.approval}
-                            className={APPROVAL_READONLY_WORKSPACE_CLASS}
-                        />
-                    }
                 />
             </DetailWorkspaceBody>
 

@@ -1,7 +1,14 @@
 "use client"
 
 import * as React from "react"
-import { FilePenLineIcon, PlusIcon, SendIcon, Trash2Icon } from "lucide-react"
+import Link from "next/link"
+import {
+    ChevronDownIcon,
+    FilePenLineIcon,
+    PlusIcon,
+    SendIcon,
+    Trash2Icon,
+} from "lucide-react"
 
 import {
     DetailWorkspaceChrome,
@@ -14,18 +21,32 @@ import {
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
+import {
+    Popover,
+    PopoverContent,
+    PopoverTitle,
+    PopoverTrigger,
+} from "@/components/ui/popover"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { PurchaseOrderCancelApprovalButton } from "@/features/purchase-orders/components/purchase-order-cancel-approval-button"
 import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
+import { isPurchaseOrderApprovalInProgress } from "@/features/purchase-orders/lib/purchase-order-approval"
 import type { PurchaseOrderDetailMode } from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
 import {
     PURCHASE_TYPE_LABEL,
     type PurchaseOrderCenterView,
 } from "@/features/purchase-orders/types"
+import { formatDateTime } from "@/lib/datetime"
 import { useRouter, useSearchParams } from "@/lib/navigation"
 import { hasPermission } from "@/lib/permissions"
 import { ExpensePurchaseStartDialog } from "./expense-purchase-start-dialog"
 import { PurchaseOrderCorrespondence } from "./purchase-order-correspondence"
+
+const MENU_ITEM_CLASS =
+    "w-full justify-start font-normal text-foreground/85 shadow-none hover:bg-muted/80 hover:text-foreground"
+const MENU_DANGER_ITEM_CLASS =
+    "w-full justify-start font-normal text-muted-foreground shadow-none hover:bg-destructive-soft/75 hover:text-destructive-soft-foreground"
 
 export function PurchaseOrderDetailHeader({
     order,
@@ -41,7 +62,12 @@ export function PurchaseOrderDetailHeader({
     canChange,
     continueChange,
     changePending,
+    editDirty = false,
+    draftEditToken = null,
+    savePending = false,
     requestLeave,
+    onExitEdit,
+    onSaveDraft,
     onRequestVoid,
     onRequestChange,
     onRequestSubmit,
@@ -62,7 +88,12 @@ export function PurchaseOrderDetailHeader({
     /** 已有可编辑的改单草稿，入口显示「继续改单」。 */
     continueChange: boolean
     changePending: boolean
+    editDirty?: boolean
+    draftEditToken?: string | null
+    savePending?: boolean
     requestLeave: (go: () => void) => void
+    onExitEdit?: () => void
+    onSaveDraft?: () => void
     onRequestVoid: () => void
     onRequestChange: () => void
     onRequestSubmit: () => void
@@ -96,8 +127,17 @@ export function PurchaseOrderDetailHeader({
         hasPermission(profile.data?.permissions, "purchase_order:create") &&
         mode !== "edit" &&
         order.identity.status !== "VOID"
+    const hasCancelApproval =
+        isPurchaseOrderApprovalInProgress(order) &&
+        hasPermission(
+            profile.data?.permissions,
+            "purchase_order:cancel_approval",
+        )
+    const hasDestructiveMenuActions =
+        mode !== "edit" && (hasCancelApproval || canVoid)
 
-    const changeIsPrimary = continueChange && !canSubmit
+    const isEditing = mode === "edit"
+    const changeIsPrimary = !isEditing && continueChange && !canSubmit
 
     return (
         <>
@@ -125,7 +165,7 @@ export function PurchaseOrderDetailHeader({
                             router.push(backTarget ?? "/procurement/orders"),
                         ),
                 }}
-                navigationMeta={mode === "edit" ? modeLabel : undefined}
+                navigationMeta={isEditing ? modeLabel : undefined}
                 headingProps={{
                     id: "procurement-orders-detail-heading",
                     ref: titleRef,
@@ -148,7 +188,10 @@ export function PurchaseOrderDetailHeader({
                         <Badge variant="secondary" className="font-normal">
                             {PURCHASE_TYPE_LABEL[order.header.purchaseType]}
                         </Badge>
-                        {order.activeChangeOrder ? (
+                        {isEditing && editDirty ? (
+                            <DetailWorkspaceDirtyBadge />
+                        ) : null}
+                        {!isEditing && order.activeChangeOrder ? (
                             <DetailWorkspaceDirtyBadge label="改单中" />
                         ) : null}
                     </>
@@ -169,102 +212,210 @@ export function PurchaseOrderDetailHeader({
                             ) : null,
                             order.header.salesOrderNo ? (
                                 <span key="sales" className="num">
-                                    来源销售 {order.header.salesOrderNo}
+                                    来源销售{" "}
+                                    <Link
+                                        id="procurement-orders-detail-header-sales-order"
+                                        href={`/sales/orders/${encodeURIComponent(order.header.salesOrderId)}`}
+                                        className="font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
+                                    >
+                                        {order.header.salesOrderNo}
+                                    </Link>
+                                </span>
+                            ) : null,
+                            order.header.createdAt ? (
+                                <span key="created" className="num">
+                                    创建于{" "}
+                                    {formatDateTime(
+                                        order.header.createdAt,
+                                        "default",
+                                    )}
                                 </span>
                             ) : null,
                         ]}
                     />
                 }
                 secondaryActions={
-                    <>
-                        {mode !== "edit" ? (
-                            <PurchaseOrderCorrespondence order={order} />
-                        ) : null}
-                        <PurchaseOrderCancelApprovalButton
-                            order={order}
-                            onResult={onCancelResult}
-                            triggerVariant="ghost"
-                            triggerClassName={
-                                detailWorkspaceStyles.quietDangerButton
-                            }
-                        />
-                        {canVoid && mode !== "edit" ? (
-                            <Button
-                                id="procurement-orders-detail-void"
+                    isEditing ? (
+                        <>
+                            {onExitEdit ? (
+                                <Button
+                                    id="procurement-orders-detail-exit-edit"
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className={
+                                        detailWorkspaceStyles.quietButton
+                                    }
+                                    disabled={savePending}
+                                    onClick={onExitEdit}
+                                >
+                                    退出编辑
+                                </Button>
+                            ) : null}
+                            <LoadingButton
+                                id={`procurement-orders-detail-edit-save-${order.identity.purchaseOrderId}`}
+                                loading={savePending}
                                 type="button"
-                                size="sm"
                                 variant="ghost"
-                                className={
-                                    detailWorkspaceStyles.quietDangerButton
-                                }
-                                onClick={onRequestVoid}
-                            >
-                                <Trash2Icon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                />
-                                作废草稿
-                            </Button>
-                        ) : null}
-                        {canCreateExpense ? (
-                            <Button
-                                id="procurement-orders-detail-add-expense"
-                                type="button"
                                 size="sm"
-                                variant="ghost"
                                 className={detailWorkspaceStyles.subtleButton}
-                                onClick={() => setExpenseOpen(true)}
+                                disabled={!draftEditToken || savePending}
+                                onClick={onSaveDraft}
                             >
-                                <PlusIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                />
-                                追加费用
-                            </Button>
-                        ) : null}
-                        {canEdit && mode !== "edit" ? (
-                            <Button
-                                id="procurement-orders-detail-edit"
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                className={detailWorkspaceStyles.subtleButton}
-                                onClick={() =>
-                                    router.push(`${baseHref}?mode=edit`)
-                                }
-                            >
-                                <FilePenLineIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                />
-                                编辑草稿
-                            </Button>
-                        ) : null}
-                        {(canChange || continueChange) && !changeIsPrimary ? (
-                            <Button
-                                id="procurement-orders-detail-change"
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                className={detailWorkspaceStyles.subtleButton}
-                                disabled={changePending}
-                                onClick={onRequestChange}
-                            >
-                                <FilePenLineIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                />
-                                {changePending
-                                    ? "正在打开改单…"
-                                    : continueChange
-                                      ? "继续改单"
-                                      : "发起改单"}
-                            </Button>
-                        ) : null}
-                    </>
+                                {savePending ? "保存中…" : "保存草稿"}
+                            </LoadingButton>
+                        </>
+                    ) : (
+                        <>
+                            <Popover>
+                                <PopoverTrigger
+                                    id="procurement-orders-detail-more-actions"
+                                    render={
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            className={
+                                                detailWorkspaceStyles.quietButton
+                                            }
+                                        />
+                                    }
+                                >
+                                    更多
+                                    <ChevronDownIcon
+                                        aria-hidden="true"
+                                        data-icon="inline-end"
+                                    />
+                                </PopoverTrigger>
+                                <PopoverContent
+                                    align="end"
+                                    keepMounted
+                                    className="w-48 gap-1.5 p-2"
+                                >
+                                    <PopoverTitle className="px-2 pt-1 text-xs font-medium text-muted-foreground">
+                                        采购单操作
+                                    </PopoverTitle>
+                                    <div className="flex flex-col gap-0.5">
+                                        <PurchaseOrderCorrespondence
+                                            order={order}
+                                            menuItem
+                                        />
+                                        {canCreateExpense ? (
+                                            <Button
+                                                id="procurement-orders-detail-add-expense"
+                                                type="button"
+                                                size="sm"
+                                                variant="ghost"
+                                                className={MENU_ITEM_CLASS}
+                                                onClick={() =>
+                                                    setExpenseOpen(true)
+                                                }
+                                            >
+                                                <PlusIcon
+                                                    data-icon="inline-start"
+                                                    aria-hidden="true"
+                                                />
+                                                追加费用
+                                            </Button>
+                                        ) : null}
+                                        {hasDestructiveMenuActions ? (
+                                            <hr className="my-1 border-0 border-t border-border/60" />
+                                        ) : null}
+                                        <PurchaseOrderCancelApprovalButton
+                                            order={order}
+                                            onResult={onCancelResult}
+                                            triggerVariant="ghost"
+                                            triggerClassName={
+                                                MENU_DANGER_ITEM_CLASS
+                                            }
+                                        />
+                                        {canVoid ? (
+                                            <Button
+                                                id="procurement-orders-detail-void"
+                                                type="button"
+                                                size="sm"
+                                                variant="ghost"
+                                                className={
+                                                    MENU_DANGER_ITEM_CLASS
+                                                }
+                                                onClick={onRequestVoid}
+                                            >
+                                                <Trash2Icon
+                                                    data-icon="inline-start"
+                                                    aria-hidden="true"
+                                                />
+                                                作废草稿
+                                            </Button>
+                                        ) : null}
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
+                            {canEdit ? (
+                                <Button
+                                    id="procurement-orders-detail-edit"
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className={
+                                        detailWorkspaceStyles.subtleButton
+                                    }
+                                    onClick={() =>
+                                        router.push(`${baseHref}?mode=edit`)
+                                    }
+                                >
+                                    <FilePenLineIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
+                                    编辑草稿
+                                </Button>
+                            ) : null}
+                            {(canChange || continueChange) &&
+                            !changeIsPrimary ? (
+                                <Button
+                                    id="procurement-orders-detail-change"
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className={
+                                        detailWorkspaceStyles.subtleButton
+                                    }
+                                    disabled={changePending}
+                                    onClick={onRequestChange}
+                                >
+                                    <FilePenLineIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
+                                    {changePending
+                                        ? "正在打开改单…"
+                                        : continueChange
+                                          ? "继续改单"
+                                          : "发起改单"}
+                                </Button>
+                            ) : null}
+                        </>
+                    )
                 }
                 primaryAction={
-                    canSubmit ? (
+                    isEditing ? (
+                        <Button
+                            id={`procurement-orders-detail-edit-submit-${order.identity.purchaseOrderId}`}
+                            type="button"
+                            size="sm"
+                            className="px-3.5"
+                            disabled={
+                                !draftEditToken || !canSubmit || savePending
+                            }
+                            onClick={onRequestSubmit}
+                        >
+                            <SendIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            提交审批
+                        </Button>
+                    ) : canSubmit ? (
                         <Button
                             id="procurement-orders-detail-submit"
                             type="button"
@@ -301,7 +452,7 @@ export function PurchaseOrderDetailHeader({
     )
 }
 
-/** 置于吸顶头下方的通栏无框金额摘要带：首屏即览，随页面自然滚走不挤占正文视野。 */
+/** 置于吸顶头下方的通栏无框金额摘要带：整页唯一的大号 KPI 金额汇总，随页面自然滚走。 */
 export function PurchaseOrderAmountSummary({
     order,
     costMasked,

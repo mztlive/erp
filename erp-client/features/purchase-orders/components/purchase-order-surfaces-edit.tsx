@@ -9,14 +9,12 @@ import {
     DataTable,
     DetailWorkspaceSection,
     detailWorkspaceStyles,
-    surfaceInsetClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { DatePicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
-import { Label } from "@/components/ui/label"
 import type { PurchaseDeliveryLineOption } from "@/features/purchase-orders/api/purchase-delivery-options"
 import { PurchaseDeliveryAllocationEditor } from "@/features/purchase-orders/components/purchase-delivery-allocation-editor"
 import type { PurchaseOrderLineRow } from "@/features/purchase-orders/components/purchase-order-surfaces-lines-table"
@@ -41,10 +39,7 @@ import {
     purchaseQuantityValid,
     taxRateValid,
 } from "@/features/purchase-orders/lib/purchase-order-validation"
-import {
-    FULFILLMENT_RESPONSIBILITY_LABEL,
-    PURCHASE_TYPE_LABEL,
-} from "@/features/purchase-orders/types"
+import { FULFILLMENT_RESPONSIBILITY_LABEL } from "@/features/purchase-orders/types"
 import { compactFixed, divideFixed, multiplyFixed } from "@/lib/fixed-decimal"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
@@ -195,7 +190,7 @@ function LineNumberInput({
                 </span>
             ) : null}
             {invalid ? (
-                <span className="block text-tiny text-destructive">
+                <span className="mt-0.5 block text-xs text-destructive">
                     {invalidMessage}
                 </span>
             ) : null}
@@ -228,7 +223,7 @@ const editLineColumns: ColumnDef<PurchaseOrderLineRow>[] = [
             return (
                 <div className="whitespace-normal">
                     <div className="font-medium">{line.itemName}</div>
-                    <div className="text-tiny text-muted-foreground">
+                    <div className="text-xs text-muted-foreground">
                         {lineSubtitle(line)}
                     </div>
                 </div>
@@ -424,7 +419,7 @@ const editLineColumns: ColumnDef<PurchaseOrderLineRow>[] = [
                     />
                     <span
                         className={cn(
-                            "block text-tiny",
+                            "num mt-0.5 block text-xs",
                             late ? "text-destructive" : "text-muted-foreground",
                         )}
                     >
@@ -489,7 +484,7 @@ export function EditSurface({
     lineEdits,
     setLineEdits,
     draftEditToken,
-    canSubmit,
+    canSubmit = false,
     savePending,
     onSave,
     onSubmitOpen,
@@ -498,13 +493,15 @@ export function EditSurface({
     lineEdits: LineEdits
     setLineEdits: LineEditSetter
     draftEditToken: string | null
-    canSubmit: boolean
+    /** 弹窗复用时在表底渲染保存/提交按钮；详情页编辑态由吸顶页头承载，避免同屏双按钮。 */
+    canSubmit?: boolean
     savePending: boolean
-    onSave: () => void
-    onSubmitOpen: () => void
+    onSave?: () => void
+    onSubmitOpen?: () => void
 }) {
     const lines = order.currentContent.lines
     const allowZeroQuantity = order.sourceUpdate?.affected === true
+    const showInlineActions = Boolean(onSave || onSubmitOpen)
     const optionsQuery = usePurchaseDeliveryOptionsQuery(
         order.identity.purchaseOrderId,
         true,
@@ -521,149 +518,141 @@ export function EditSurface({
     )
 
     return (
-        <>
-            <DetailWorkspaceSection
-                width="form"
-                title={
-                    order.identity.status === "REJECTED" ||
-                    order.identity.reviewStatus === "REJECTED"
-                        ? "被驳回待修改"
-                        : "采购草稿"
-                }
-                subtitle={`来源销售 ${order.header.salesOrderNo}。供应商、类型、履约责任和付款条件来自创建依据，本区只读。`}
-            >
-                {!draftEditToken ? (
-                    <Alert variant="warning">
-                        <AlertTitle>正在进入编辑…</AlertTitle>
-                        <AlertDescription>
-                            编辑内容仅保存在当前页面；刷新或关闭将丢失，请及时保存。
-                        </AlertDescription>
-                    </Alert>
-                ) : (
-                    <p className="text-xs text-muted-foreground">正在编辑中</p>
-                )}
+        <DetailWorkspaceSection
+            width="full"
+            title={
+                order.identity.status === "REJECTED" ||
+                order.identity.reviewStatus === "REJECTED"
+                    ? "被驳回待修改"
+                    : "调整采购明细"
+            }
+            subtitle="可改数量、含税单价、税率、预计交付日和收件分配；预计交付日不晚于销售履约期限。⌘S 保存草稿 · ⌘↵ 提交审批。"
+        >
+            {!draftEditToken ? (
+                <Alert variant="warning">
+                    <AlertTitle>正在准备编辑会话…</AlertTitle>
+                    <AlertDescription>
+                        修改内容保存在当前页面，刷新或离开前请先保存草稿。
+                    </AlertDescription>
+                </Alert>
+            ) : null}
 
-                <div
-                    data-slot="detail-form-grid"
-                    className="grid gap-x-5 gap-y-4 sm:grid-cols-2"
-                >
-                    <div className="space-y-1.5">
-                        <Label>供应商（只读）</Label>
-                        <div
-                            className={cn(
-                                surfaceInsetClassName,
-                                "px-3 py-2 text-body-compact text-foreground",
-                            )}
-                        >
+            <dl className="flex flex-wrap items-center gap-x-6 gap-y-2 border-y border-border/60 py-2.5 text-xs text-muted-foreground">
+                {showInlineActions ? (
+                    <div className="flex items-center gap-1.5">
+                        <dt>供应商</dt>
+                        <dd className="font-medium text-foreground">
                             {order.header.supplierSnapshot}
-                        </div>
+                        </dd>
                     </div>
-                    <div className="space-y-1.5">
-                        <Label>采购类型 / 履约责任（只读）</Label>
-                        <div
-                            className={cn(
-                                surfaceInsetClassName,
-                                "px-3 py-2 text-body-compact text-foreground",
-                            )}
-                        >
-                            {PURCHASE_TYPE_LABEL[order.header.purchaseType]} ·{" "}
-                            {
-                                FULFILLMENT_RESPONSIBILITY_LABEL[
-                                    order.header.fulfillmentResponsibility
-                                ]
-                            }
-                        </div>
-                    </div>
-                    <div className="space-y-1.5 sm:col-span-2">
-                        <Label>付款条件（只读）</Label>
-                        <div
-                            className={cn(
-                                surfaceInsetClassName,
-                                "px-3 py-2 text-body-compact text-foreground",
-                            )}
-                        >
-                            {order.header.paymentTermLabel}
-                        </div>
-                    </div>
+                ) : null}
+                <div className="flex items-center gap-1.5">
+                    <dt>履约责任</dt>
+                    <dd className="font-medium text-foreground">
+                        {
+                            FULFILLMENT_RESPONSIBILITY_LABEL[
+                                order.header.fulfillmentResponsibility
+                            ]
+                        }
+                    </dd>
                 </div>
-            </DetailWorkspaceSection>
+                {order.header.targetWarehouseName ? (
+                    <div className="flex items-center gap-1.5">
+                        <dt>目标收货仓</dt>
+                        <dd className="font-medium text-foreground">
+                            {order.header.targetWarehouseName}
+                        </dd>
+                    </div>
+                ) : null}
+                <div className="flex items-center gap-1.5">
+                    <dt>付款条件</dt>
+                    <dd className="font-medium text-foreground">
+                        {order.header.paymentTermLabel}
+                    </dd>
+                </div>
+                <span className="text-muted-foreground/80">
+                    （以上条款继承自创建依据，不可修改）
+                </span>
+            </dl>
 
-            <DetailWorkspaceSection
-                width="full"
-                title="本单可调"
-                subtitle="可改数量、含税单价、税率、预计交付日和收件分配；预计交付日不晚于销售履约期限，收件地址取自销售当前收件资料。⌘S 保存 · ⌘↵ 打开提交确认。"
+            <fieldset
+                disabled={!draftEditToken || savePending}
+                className="min-w-0 space-y-4"
             >
-                <fieldset
-                    disabled={!draftEditToken || savePending}
-                    className="min-w-0 space-y-4"
+                <EditLineContext.Provider
+                    value={{
+                        lineEdits,
+                        setLineEdits,
+                        allowZeroQuantity,
+                        options,
+                    }}
                 >
-                    <EditLineContext.Provider
-                        value={{
-                            lineEdits,
-                            setLineEdits,
-                            allowZeroQuantity,
-                            options,
-                        }}
+                    <div
+                        data-slot="detail-inline-table"
+                        className={detailWorkspaceStyles.inlineTableWrapper}
                     >
-                        <div
-                            data-slot="detail-inline-table"
-                            className={detailWorkspaceStyles.inlineTableWrapper}
-                        >
-                            <DataTable
-                                id={`procurement-orders-detail-edit-table-${order.identity.purchaseOrderId}`}
-                                data={[...lines]}
-                                columns={editLineColumns}
-                                getRowId={(row) => row.lineId}
-                                rowCount={lines.length}
-                                rowLabel={(row) => row.itemName}
-                                caption="本单可调明细"
-                                layout="flush"
-                                density="compact"
-                                showPagination={false}
-                                showColumnVisibility={false}
-                                defaultColumnPinning={{ left: ["item"] }}
-                                emptyTitle="暂无采购明细"
-                            />
-                        </div>
-                    </EditLineContext.Provider>
-                    {optionsQuery.isError ? (
-                        <p className="text-xs text-muted-foreground">
-                            暂时读取不到销售当前的履约期限和收件资料，预计交付日与收件分配本次不可调整。
-                        </p>
-                    ) : null}
-                    <DeliveryAllocationEditors
-                        lines={lines}
-                        lineEdits={lineEdits}
-                        setLineEdits={setLineEdits}
-                        options={options}
-                    />
-                </fieldset>
+                        <DataTable
+                            id={`procurement-orders-detail-edit-table-${order.identity.purchaseOrderId}`}
+                            data={[...lines]}
+                            columns={editLineColumns}
+                            getRowId={(row) => row.lineId}
+                            rowCount={lines.length}
+                            rowLabel={(row) => row.itemName}
+                            caption="本单可调明细"
+                            layout="flush"
+                            density="compact"
+                            showPagination={false}
+                            showColumnVisibility={false}
+                            defaultColumnPinning={{ left: ["item"] }}
+                            emptyTitle="暂无采购明细"
+                        />
+                    </div>
+                </EditLineContext.Provider>
+                {optionsQuery.isError ? (
+                    <p className="text-xs text-muted-foreground">
+                        暂时读取不到销售当前的履约期限和收件资料，预计交付日与收件分配本次不可调整。
+                    </p>
+                ) : null}
+                <DeliveryAllocationEditors
+                    lines={lines}
+                    lineEdits={lineEdits}
+                    setLineEdits={setLineEdits}
+                    options={options}
+                />
+            </fieldset>
 
+            {showInlineActions ? (
                 <div className="flex flex-wrap items-center gap-2 pt-2">
-                    <LoadingButton
-                        id={`procurement-orders-detail-edit-save-${order.identity.purchaseOrderId}`}
-                        loading={savePending}
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className={detailWorkspaceStyles.subtleButton}
-                        disabled={!draftEditToken || savePending}
-                        onClick={onSave}
-                    >
-                        {savePending ? "保存中…" : "保存草稿"}
-                    </LoadingButton>
-                    <Button
-                        id={`procurement-orders-detail-edit-submit-${order.identity.purchaseOrderId}`}
-                        type="button"
-                        size="sm"
-                        className="px-3.5"
-                        disabled={!draftEditToken || !canSubmit || savePending}
-                        onClick={onSubmitOpen}
-                    >
-                        提交审批
-                    </Button>
+                    {onSave ? (
+                        <LoadingButton
+                            id={`procurement-orders-detail-edit-save-${order.identity.purchaseOrderId}`}
+                            loading={savePending}
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className={detailWorkspaceStyles.subtleButton}
+                            disabled={!draftEditToken || savePending}
+                            onClick={onSave}
+                        >
+                            {savePending ? "保存中…" : "保存草稿"}
+                        </LoadingButton>
+                    ) : null}
+                    {onSubmitOpen ? (
+                        <Button
+                            id={`procurement-orders-detail-edit-submit-${order.identity.purchaseOrderId}`}
+                            type="button"
+                            size="sm"
+                            className="px-3.5"
+                            disabled={
+                                !draftEditToken || !canSubmit || savePending
+                            }
+                            onClick={onSubmitOpen}
+                        >
+                            提交审批
+                        </Button>
+                    ) : null}
                 </div>
-            </DetailWorkspaceSection>
-        </>
+            ) : null}
+        </DetailWorkspaceSection>
     )
 }

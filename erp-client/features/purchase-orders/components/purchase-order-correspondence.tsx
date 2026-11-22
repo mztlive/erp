@@ -26,8 +26,11 @@ import type { PurchaseOrderCenterView } from "../types"
 
 export function PurchaseOrderCorrespondence({
     order,
+    menuItem = false,
 }: {
     order: PurchaseOrderCenterView
+    /** 放入「更多」菜单时使用左对齐整行按钮样式。 */
+    menuItem?: boolean
 }) {
     const [open, setOpen] = useState(false)
     const paper = usePurchasePaper(
@@ -43,13 +46,16 @@ export function PurchaseOrderCorrespondence({
         ["EFFECTIVE", "PARTIALLY_EXECUTED", "COMPLETED"].includes(
             order.identity.status,
         ) && order.currentContent.source === "REVISION"
+    const buttonClassName = menuItem
+        ? "w-full justify-start font-normal text-foreground/85 shadow-none hover:bg-muted/80 hover:text-foreground"
+        : detailWorkspaceStyles.quietButton
     return (
         <>
             <Button
                 id="purchase-order-download-paper"
                 size="sm"
                 variant="ghost"
-                className={detailWorkspaceStyles.quietButton}
+                className={buttonClassName}
                 disabled={paper.isPending}
                 onClick={async () => {
                     try {
@@ -77,7 +83,7 @@ export function PurchaseOrderCorrespondence({
                     id="purchase-order-email-open"
                     size="sm"
                     variant="ghost"
-                    className={detailWorkspaceStyles.quietButton}
+                    className={buttonClassName}
                     disabled={!effective}
                     title={!effective ? "审批生效后可发送给供应商" : undefined}
                     onClick={() => setOpen(true)}

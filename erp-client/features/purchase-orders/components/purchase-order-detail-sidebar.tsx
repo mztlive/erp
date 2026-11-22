@@ -10,20 +10,60 @@ import {
 } from "lucide-react"
 
 import { MoneyValue } from "@/components/business"
-import { Button } from "@/components/ui/button"
-import { StatusBadge } from "@/components/ui/status-badge"
-import { displayInstanceStatus } from "@/features/approval-workflow/display"
-import type { PurchaseOrderDetailSectionId } from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import {
-    SUPPLY_PRICE_BASIS_LABEL,
-    type PurchaseOrderCenterView,
-} from "@/features/purchase-orders/types"
+    displayInstanceStatus,
+    instanceStatusTone,
+} from "@/features/approval-workflow/display"
+import type { PurchaseOrderDetailSectionId } from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
+import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
 import { formatDateTime } from "@/lib/datetime"
 import { cn } from "@/lib/utils"
 
+function fulfillmentDisplay(raw: string): { label: string; tone: StatusTone } {
+    if (raw === "完成") return { label: "已完成", tone: "success" }
+    if (raw === "部分") return { label: "部分履约", tone: "info" }
+    return { label: raw || "未开始", tone: "neutral" }
+}
+
+function paymentDisplay(raw: string): { label: string; tone: StatusTone } {
+    if (raw === "已付") return { label: "已付清", tone: "success" }
+    if (raw === "部分付款") return { label: "部分付款", tone: "info" }
+    return { label: raw || "未付", tone: "neutral" }
+}
+
+function invoiceDisplay(raw: string): { label: string; tone: StatusTone } {
+    if (raw === "完成") return { label: "已收齐", tone: "success" }
+    if (raw === "部分") return { label: "部分收票", tone: "info" }
+    if (raw === "未收") return { label: "未收票", tone: "neutral" }
+    return { label: raw || "未收票", tone: "neutral" }
+}
+
+function approvalDisplay(order: PurchaseOrderCenterView): {
+    label: string
+    tone: StatusTone
+} {
+    if (order.approval?.instance) {
+        return {
+            label: displayInstanceStatus(order.approval.instance.status),
+            tone: instanceStatusTone(order.approval.instance.status),
+        }
+    }
+    const status = order.identity.reviewStatus
+    const tone: StatusTone =
+        status === "APPROVED"
+            ? "success"
+            : status === "REJECTED"
+              ? "destructive"
+              : status === "PENDING"
+                ? "warning"
+                : "neutral"
+    return { label: order.identity.reviewLabel, tone }
+}
+
 /**
  * 右侧摘要栏（无外框，由 DetailWorkspaceBody 的 1px 竖线与正文分栏）：
- * 汇总办理进度（含应付未结 / 履约 / 审批 / 进项票快捷跳转）、先款条件与责任人信息。
+ * 聚焦审批、履约、付款与进项票办理进度；整行可点，与销售单侧栏保持一致层级。
  */
 export function PurchaseOrderDetailSidebar({
     order,
@@ -35,9 +75,10 @@ export function PurchaseOrderDetailSidebar({
     onSelectSection?: (section: PurchaseOrderDetailSectionId) => void
 }) {
     const gate = order.progress.prepaymentGate
-    const approvalStatus = order.approval?.instance
-        ? displayInstanceStatus(order.approval.instance.status)
-        : order.identity.reviewLabel
+    const approval = approvalDisplay(order)
+    const fulfillment = fulfillmentDisplay(order.progress.fulfillment)
+    const payment = paymentDisplay(order.progress.payment)
+    const invoice = invoiceDisplay(order.progress.invoice)
 
     const amount = (value?: string) =>
         costMasked ? "•••" : value == null ? "—" : <MoneyValue value={value} />
@@ -48,24 +89,15 @@ export function PurchaseOrderDetailSidebar({
                 aria-labelledby="purchase-order-progress-heading"
                 className="min-w-0"
             >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h2
-                        id="purchase-order-progress-heading"
-                        className="text-section-title font-semibold tracking-tight text-foreground"
-                    >
-                        办理进度
-                    </h2>
-                    <StatusBadge
-                        tone={order.identity.statusTone}
-                        label={order.identity.statusLabel}
-                    />
-                </div>
-                {order.approval?.instance?.currentAssigneeName ? (
+                <h2
+                    id="purchase-order-progress-heading"
+                    className="text-section-title font-semibold tracking-tight text-foreground"
+                >
+                    办理进度
+                </h2>
+                {order.activeChangeOrder ? (
                     <p className="mt-1.5 text-xs text-muted-foreground">
-                        当前审批人{" "}
-                        <span className="font-medium text-foreground">
-                            {order.approval.instance.currentAssigneeName}
-                        </span>
+                        以下为当前生效版本的执行进度，尚未包含在途改单。
                     </p>
                 ) : null}
 
@@ -80,9 +112,22 @@ export function PurchaseOrderDetailSidebar({
                                 : undefined
                         }
                     >
-                        <p className="text-body-compact text-foreground">
-                            {approvalStatus}
-                        </p>
+                        <StatusBadge
+                            tone={approval.tone}
+                            label={approval.label}
+                            appearance="text"
+                        />
+                        {order.approval?.instance?.currentAssigneeName ? (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                当前审批人{" "}
+                                <span className="font-medium text-foreground">
+                                    {
+                                        order.approval.instance
+                                            .currentAssigneeName
+                                    }
+                                </span>
+                            </p>
+                        ) : null}
                     </SidebarTrackRow>
 
                     <SidebarTrackRow
@@ -95,12 +140,18 @@ export function PurchaseOrderDetailSidebar({
                                 : undefined
                         }
                     >
-                        <p className="text-body-compact text-foreground">
-                            {order.progress.fulfillment}
-                        </p>
+                        <StatusBadge
+                            tone={fulfillment.tone}
+                            label={fulfillment.label}
+                            appearance="text"
+                        />
                         {order.header.expectedDate ? (
-                            <p className="num mt-0.5 text-xs text-muted-foreground">
+                            <p className="num mt-1 text-xs text-muted-foreground">
                                 预计交期 {order.header.expectedDate}
+                            </p>
+                        ) : order.header.targetWarehouseName ? (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                目标仓 {order.header.targetWarehouseName}
                             </p>
                         ) : null}
                     </SidebarTrackRow>
@@ -115,37 +166,37 @@ export function PurchaseOrderDetailSidebar({
                                 : undefined
                         }
                     >
-                        <p className="text-body-compact text-foreground">
-                            {order.progress.payment}
-                        </p>
-                        <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-2 text-xs text-muted-foreground">
-                            <span>应付未结</span>
-                            <span className="num text-body-compact font-semibold text-foreground">
-                                {amount(
-                                    order.payableSummary?.payableOpenAmount,
-                                )}
-                            </span>
-                        </div>
-                        {!order.payableSummary ? (
-                            <p className="mt-0.5 text-xs text-muted-foreground">
+                        <StatusBadge
+                            tone={payment.tone}
+                            label={payment.label}
+                            appearance="text"
+                        />
+                        {order.payableSummary ? (
+                            <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-2 text-xs text-muted-foreground">
+                                <span>应付未结</span>
+                                <span className="num font-medium text-foreground">
+                                    {amount(
+                                        order.payableSummary.payableOpenAmount,
+                                    )}
+                                </span>
+                            </div>
+                        ) : (
+                            <p className="mt-1 text-xs text-muted-foreground">
                                 尚未形成应付（需审批通过）。
                             </p>
-                        ) : null}
+                        )}
                     </SidebarTrackRow>
 
                     <SidebarTrackRow
                         id="purchase-order-sidebar-invoice"
                         icon={<FileTextIcon aria-hidden="true" />}
                         title="进项票"
-                        onClick={
-                            onSelectSection
-                                ? () => onSelectSection("payable")
-                                : undefined
-                        }
                     >
-                        <p className="text-body-compact text-foreground">
-                            {order.progress.invoice}
-                        </p>
+                        <StatusBadge
+                            tone={invoice.tone}
+                            label={invoice.label}
+                            appearance="text"
+                        />
                     </SidebarTrackRow>
                 </div>
 
@@ -204,46 +255,6 @@ export function PurchaseOrderDetailSidebar({
                     </div>
                 ) : null}
             </section>
-
-            <section
-                aria-labelledby="purchase-order-owner-heading"
-                className="border-t border-border/60 pt-5"
-            >
-                <h2
-                    id="purchase-order-owner-heading"
-                    className="text-section-title font-semibold tracking-tight text-foreground"
-                >
-                    责任人信息
-                </h2>
-                <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-body-compact">
-                    {[
-                        { label: "负责人", value: order.header.ownerName },
-                        {
-                            label: "提交人",
-                            value: order.header.submittedBy ?? "—",
-                        },
-                        ...(order.delivery
-                            ? [
-                                  {
-                                      label: "价格依据",
-                                      value: SUPPLY_PRICE_BASIS_LABEL[
-                                          order.delivery.priceBasis
-                                      ],
-                                  },
-                              ]
-                            : []),
-                    ].map((item) => (
-                        <div key={item.label} className="min-w-0 space-y-0.5">
-                            <dt className="text-xs text-muted-foreground">
-                                {item.label}
-                            </dt>
-                            <dd className="break-words font-medium text-foreground">
-                                {item.value}
-                            </dd>
-                        </div>
-                    ))}
-                </dl>
-            </section>
         </div>
     )
 }
@@ -261,30 +272,46 @@ function SidebarTrackRow({
     children: ReactNode
     onClick?: () => void
 }) {
-    return (
-        <div className="group -mx-2 flex items-start gap-2.5 rounded-lg px-2 py-3 transition-colors hover:bg-muted/40">
+    const content = (
+        <>
             <span className="mt-0.5 shrink-0 text-muted-foreground [&>svg]:size-4">
                 {icon}
             </span>
-            <div className="min-w-0 flex-1 space-y-0.5">
-                <h3 className="text-xs font-medium text-muted-foreground">
+            <div className="min-w-0 flex-1 space-y-1 text-left">
+                <h3 className="text-body-compact font-medium text-foreground">
                     {title}
                 </h3>
                 <div>{children}</div>
             </div>
             {onClick ? (
-                <Button
-                    id={id}
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    className="shrink-0 text-muted-foreground group-hover:text-foreground"
-                    aria-label={`查看${title}`}
-                    onClick={onClick}
-                >
-                    <ChevronRightIcon aria-hidden="true" />
-                </Button>
+                <ChevronRightIcon
+                    aria-hidden="true"
+                    className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground"
+                />
             ) : null}
+        </>
+    )
+
+    if (onClick) {
+        return (
+            <button
+                id={id}
+                type="button"
+                aria-label={`查看${title}`}
+                onClick={onClick}
+                className="group -mx-2 flex w-[calc(100%+1rem)] cursor-pointer items-start gap-2.5 rounded-lg px-2 py-3 text-left transition-colors hover:bg-muted/45 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+            >
+                {content}
+            </button>
+        )
+    }
+
+    return (
+        <div
+            id={id}
+            className="-mx-2 flex items-start gap-2.5 px-2 py-3 text-left"
+        >
+            {content}
         </div>
     )
 }

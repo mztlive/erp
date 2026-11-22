@@ -4,7 +4,6 @@ export type PurchaseOrderDetailSectionId =
     | "fulfillment"
     | "payable"
     | "changes"
-    | "audit"
 
 export type PurchaseOrderDetailMode = "view" | "edit"
 
@@ -17,7 +16,6 @@ export const PURCHASE_ORDER_DETAIL_NAV: readonly {
     { id: "fulfillment", label: "履约" },
     { id: "payable", label: "票款" },
     { id: "changes", label: "变更" },
-    { id: "audit", label: "记录" },
 ]
 
 export function resolvePurchaseOrderDetailSection(
