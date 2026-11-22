@@ -8,7 +8,8 @@ import {
     BusinessFailureState,
     BusinessStatusBadge,
     DataFreshness,
-    DocumentSection,
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
     DocumentSummary,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
@@ -19,7 +20,6 @@ import {
     DetailRecordColumn,
     DetailRecordColumns,
     DetailRecordRow,
-    detailSectionClassName,
     embeddedSummaryClassName,
     periodLabel,
 } from "@/features/customers/pages/customer-detail-records"
@@ -34,10 +34,9 @@ export function CustomerDetailQualityTab({
     const qualityHref = `/analytics/customer-quality?customerId=${encodeURIComponent(customer.customerId)}`
 
     return (
-        <DocumentSection
-            className={detailSectionClassName}
+        <DetailWorkspaceSection
             title="经营摘要"
-            action={
+            actions={
                 <Button
                     id="customers-detail-quality-open"
                     type="button"
@@ -123,7 +122,7 @@ export function CustomerDetailQualityTab({
                     />
                 ) : null}
             </AsyncSectionState>
-        </DocumentSection>
+        </DetailWorkspaceSection>
     )
 }
 
@@ -141,17 +140,18 @@ export function CustomerDetailAuditTab({
     )
 
     return (
-        <DocumentSection
-            className={detailSectionClassName}
+        <DetailWorkspaceSection
             title="销售归属与修改记录"
-            description="多名销售可共同服务同一客户，各自负责的业务单据独立管理"
-            action={
+            width="form"
+            subtitle="多名销售可共同服务同一客户，各自负责的业务单据独立管理"
+            actions={
                 can(customer, "MANAGE_ASSIGNMENTS") ? (
                     <Button
                         id="customers-detail-audit-manage-assignments"
                         type="button"
                         size="sm"
-                        variant="outline"
+                        variant="ghost"
+                        className={detailWorkspaceStyles.subtleButton}
                         onClick={onManageAssignments}
                     >
                         管理负责销售
@@ -231,6 +231,6 @@ export function CustomerDetailAuditTab({
                     </DetailRecordColumn>
                 </DetailRecordColumns>
             )}
-        </DocumentSection>
+        </DetailWorkspaceSection>
     )
 }

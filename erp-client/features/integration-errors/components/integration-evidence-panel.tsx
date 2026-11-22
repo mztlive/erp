@@ -7,16 +7,26 @@ import { EVIDENCE_KIND_LABEL, REVIEWER_SEPARATION_LABEL } from "../types"
 
 export function IntegrationEvidencePanel({
     item,
+    flat,
 }: {
     item: IntegrationResolutionItemView
+    flat?: boolean
 }) {
     return (
-        <details className="group border-t border-grid pt-5">
+        <details className={flat ? "group" : "group border-t border-grid pt-5"}>
             <summary
                 id="integration-evidence-history-toggle"
                 className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-                <h3 className="font-semibold">执行与处理记录</h3>
+                <h3
+                    className={
+                        flat
+                            ? "text-section-title font-semibold tracking-tight"
+                            : "font-semibold"
+                    }
+                >
+                    执行与处理记录
+                </h3>
                 <span className="flex items-center gap-3 text-xs text-muted-foreground">
                     {item.auditTrail.length} 条处理记录 ·{" "}
                     {item.linkedEvidence.length} 项核验

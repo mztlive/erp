@@ -1,5 +1,7 @@
 "use client"
 
+import { WorkspaceProcessingPane } from "./workspace-processing-layout"
+
 import Link from "next/link"
 import { isResourceAuthorizationPending } from "@/lib/resource-authorization"
 import { Button } from "@/components/ui/button"
@@ -14,7 +16,6 @@ import { InvoiceRequestDetails } from "@/features/invoice-requests/components/re
 import {
     BusinessFailureState,
     MoneyValue,
-    WorkspaceTaskPane,
     workspaceTaskSurfacePadClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -104,7 +105,7 @@ export function WorkspaceInvoiceTask({
         (identityOk && receivable?.salesOrderNo) || taskRequest?.sales_order_no
 
     return (
-        <WorkspaceTaskPane
+        <WorkspaceProcessingPane
             header={
                 <WorkspaceTaskIdentityHeader
                     item={item}
@@ -260,7 +261,7 @@ export function WorkspaceInvoiceTask({
                     onTaskCompleted={onTaskCompleted}
                 />
             )}
-        </WorkspaceTaskPane>
+        </WorkspaceProcessingPane>
     )
 }
 

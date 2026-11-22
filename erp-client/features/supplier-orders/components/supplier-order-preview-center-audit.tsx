@@ -2,7 +2,11 @@
 
 import * as React from "react"
 
-import { BusinessStatusBadge, DocumentSection } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -42,58 +46,62 @@ export function AuditSection({
     })
 
     return (
-        <DocumentSection
+        <DetailWorkspaceSection
             title="动作与审计"
-            description="不展示密钥、完整消息内容或敏感地址"
+            subtitle="不展示密钥、完整消息内容或敏感地址"
         >
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>动作</TableHead>
-                        <TableHead>结果</TableHead>
-                        <TableHead>操作人</TableHead>
-                        <TableHead>时间</TableHead>
-                        <TableHead>尝试</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {detail.actions.map((a) => (
-                        <TableRow key={a.actionId}>
-                            <TableCell>
-                                <div>{a.actionLabel}</div>
-                            </TableCell>
-                            <TableCell>
-                                <BusinessStatusBadge
-                                    context="list"
-                                    label={a.outcomeLabel}
-                                    tone={a.outcomeTone}
-                                />
-                            </TableCell>
-                            <TableCell className="text-xs">{a.actor}</TableCell>
-                            <TableCell className="num text-xs">
-                                {formatDateTime(
-                                    a.at,
-                                    "fullIntl",
-                                    "passthrough",
-                                )}
-                            </TableCell>
-                            <TableCell className="num">
-                                {a.attemptCount}
-                            </TableCell>
-                        </TableRow>
-                    ))}
-                    {detail.actions.length === 0 ? (
+            <div className={detailWorkspaceStyles.dataTableWrapper}>
+                <Table>
+                    <TableHeader>
                         <TableRow>
-                            <TableCell
-                                colSpan={5}
-                                className="py-6 text-center text-body-compact text-muted-foreground"
-                            >
-                                暂无动作记录
-                            </TableCell>
+                            <TableHead>动作</TableHead>
+                            <TableHead>结果</TableHead>
+                            <TableHead>操作人</TableHead>
+                            <TableHead>时间</TableHead>
+                            <TableHead>尝试</TableHead>
                         </TableRow>
-                    ) : null}
-                </TableBody>
-            </Table>
+                    </TableHeader>
+                    <TableBody>
+                        {detail.actions.map((a) => (
+                            <TableRow key={a.actionId}>
+                                <TableCell>
+                                    <div>{a.actionLabel}</div>
+                                </TableCell>
+                                <TableCell>
+                                    <BusinessStatusBadge
+                                        context="list"
+                                        label={a.outcomeLabel}
+                                        tone={a.outcomeTone}
+                                    />
+                                </TableCell>
+                                <TableCell className="text-xs">
+                                    {a.actor}
+                                </TableCell>
+                                <TableCell className="num text-xs">
+                                    {formatDateTime(
+                                        a.at,
+                                        "fullIntl",
+                                        "passthrough",
+                                    )}
+                                </TableCell>
+                                <TableCell className="num">
+                                    {a.attemptCount}
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                        {detail.actions.length === 0 ? (
+                            <TableRow>
+                                <TableCell
+                                    colSpan={5}
+                                    className="py-6 text-center text-body-compact text-muted-foreground"
+                                >
+                                    暂无动作记录
+                                </TableCell>
+                            </TableRow>
+                        ) : null}
+                    </TableBody>
+                </Table>
+            </div>
 
             <Separator className="my-4" />
             <form
@@ -126,6 +134,6 @@ export function AuditSection({
                     />
                 </noteForm.AppForm>
             </form>
-        </DocumentSection>
+        </DetailWorkspaceSection>
     )
 }

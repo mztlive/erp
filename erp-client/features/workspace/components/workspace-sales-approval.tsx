@@ -7,7 +7,8 @@ import {
     MoneyValue,
     QuantityValue,
     RateValue,
-    workspaceTaskSurfacePadClassName,
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
 } from "@/components/business"
 import { SalesLinePriceComparison } from "@/components/business/sales-line-price-comparison"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -42,7 +43,6 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { fullDeliveryAddress } from "@/lib/delivery-address"
 import { displayBusinessText } from "@/lib/display-name"
 import { multiplyFixed } from "@/lib/fixed-decimal"
-import { cn } from "@/lib/utils"
 import type { WorkspaceWorkItem } from "../types"
 import type { WorkspacePaperTarget } from "./workspace-document-paper-dialog"
 
@@ -64,27 +64,22 @@ export function WorkspaceSalesApproval({
     const prefix = `workspace-sales-approval-${toAutomationIdSegment(instanceId)}`
 
     return (
-        <section
-            aria-label="销售明细"
-            className={cn(
-                workspaceTaskSurfacePadClassName,
-                "@container/sales-lines min-w-0 space-y-4 border-b border-grid py-4",
-            )}
-        >
-            <header className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    <h3 className="font-semibold">销售明细</h3>
-                    {submission && (
-                        <span className="text-xs text-muted-foreground">
-                            共 {submission.lines.length} 行 · 本次提交的全部明细
-                        </span>
-                    )}
-                </div>
+        <DetailWorkspaceSection
+            title="销售明细"
+            subtitle={
+                submission
+                    ? `共 ${submission.lines.length} 行 · 本次提交的全部明细`
+                    : undefined
+            }
+            ariaLabel="销售明细"
+            className="@container/sales-lines"
+            actions={
                 <Button
                     id={`${prefix}-preview`}
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
+                    className={detailWorkspaceStyles.subtleButton}
                     onClick={() =>
                         onPreview({
                             kind: "approval_snapshot",
@@ -96,7 +91,8 @@ export function WorkspaceSalesApproval({
                     <FileTextIcon aria-hidden="true" />
                     预览完整销售单
                 </Button>
-            </header>
+            }
+        >
             {query.isPending ? (
                 <p
                     role="status"
@@ -121,10 +117,13 @@ export function WorkspaceSalesApproval({
             ) : (
                 <>
                     {submission.lines.length ? (
-                        <div className="min-w-0 overflow-hidden rounded-lg border border-grid">
+                        <div
+                            data-slot="detail-inline-table"
+                            className={detailWorkspaceStyles.inlineTableWrapper}
+                        >
                             <Table
                                 aria-label="销售明细"
-                                className="min-w-[1080px]"
+                                className="min-w-[1080px] [&_:is(th,td):first-child]:ps-0"
                             >
                                 <TableHeader>
                                     <TableRow>
@@ -203,7 +202,7 @@ export function WorkspaceSalesApproval({
                     ) : null}
                 </>
             )}
-        </section>
+        </DetailWorkspaceSection>
     )
 }
 

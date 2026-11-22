@@ -11,7 +11,11 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { DocumentSection, MoneyValue } from "@/components/business"
+import {
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
+    MoneyValue,
+} from "@/components/business"
 import type { SupplierOrderDetailView } from "@/features/supplier-orders/types"
 import { codeVersion } from "@/features/supplier-orders/types"
 import { Item } from "@/features/supplier-orders/components/supplier-order-preview-center-section-parts"
@@ -26,9 +30,10 @@ export function OverviewSection({
     purchaseOrderNo?: string
 }) {
     return (
-        <DocumentSection
+        <DetailWorkspaceSection
             title="概览"
-            description="来源采购、供应商与下单记录版本"
+            width="form"
+            subtitle="来源采购、供应商与下单记录版本"
         >
             <DescriptionList className="gap-y-3">
                 <Item label="履约链" value="ERP 自动供应商履约" />
@@ -64,7 +69,7 @@ export function OverviewSection({
             <p className="mt-3 text-xs text-muted-foreground">
                 供给、商品与成本在下单时固定，不受后续基础资料变化影响。
             </p>
-        </DocumentSection>
+        </DetailWorkspaceSection>
     )
 }
 
@@ -78,89 +83,91 @@ export function ItemsSection({
     totalCostGross: string | null
 }) {
     return (
-        <DocumentSection
+        <DetailWorkspaceSection
             title="商品明细"
-            description="一条商品明细只属于一个供应商子订单；下单记录不可改供应商"
+            subtitle="一条商品明细只属于一个供应商子订单；下单记录不可改供应商"
         >
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>商品</TableHead>
-                        <TableHead>数量</TableHead>
-                        <TableHead>供应商商品 / 订货编码</TableHead>
-                        <TableHead>供给版本</TableHead>
-                        <TableHead className="text-right">
-                            下单成本（含税）
-                        </TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {items.map((item) => (
-                        <TableRow key={item.itemId}>
-                            <TableCell>
-                                <div className="font-medium">
-                                    {item.productName}
-                                </div>
-                                <div className="num text-xs text-muted-foreground">
-                                    {item.skuCode}
-                                </div>
-                                <Badge
-                                    variant="secondary"
-                                    className="mt-1 text-xs"
-                                >
-                                    下单记录不可变
-                                </Badge>
-                            </TableCell>
-                            <TableCell className="num">
-                                {item.quantity} {item.unit}
-                            </TableCell>
-                            <TableCell>
-                                <div className="num text-tiny text-muted-foreground">
-                                    {item.supplierProductId}
-                                </div>
-                            </TableCell>
-                            <TableCell className="num text-xs">
-                                {codeVersion(item.supplyVersion)}
-                            </TableCell>
-                            <TableCell className="text-right">
-                                {item.unitCostGross != null ? (
-                                    <MoneyValue
-                                        display="exact"
-                                        value={item.unitCostGross}
-                                        taxBasis="gross"
-                                    />
-                                ) : (
-                                    <span className="text-muted-foreground">
-                                        •••
-                                    </span>
-                                )}
-                            </TableCell>
+            <div className={detailWorkspaceStyles.dataTableWrapper}>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>商品</TableHead>
+                            <TableHead>数量</TableHead>
+                            <TableHead>供应商商品 / 订货编码</TableHead>
+                            <TableHead>供给版本</TableHead>
+                            <TableHead className="text-right">
+                                下单成本（含税）
+                            </TableHead>
                         </TableRow>
-                    ))}
-                    {items.length > 0 ? (
-                        <TableRow className="border-t-2 border-border font-medium">
-                            <TableCell>合计</TableCell>
-                            <TableCell className="num">
-                                {totalQuantity} {items[0].unit}
-                            </TableCell>
-                            <TableCell />
-                            <TableCell />
-                            <TableCell className="text-right">
-                                {totalCostGross != null ? (
-                                    <MoneyValue
-                                        value={totalCostGross}
-                                        taxBasis="gross"
-                                    />
-                                ) : (
-                                    <span className="text-muted-foreground">
-                                        •••
-                                    </span>
-                                )}
-                            </TableCell>
-                        </TableRow>
-                    ) : null}
-                </TableBody>
-            </Table>
-        </DocumentSection>
+                    </TableHeader>
+                    <TableBody>
+                        {items.map((item) => (
+                            <TableRow key={item.itemId}>
+                                <TableCell>
+                                    <div className="font-medium">
+                                        {item.productName}
+                                    </div>
+                                    <div className="num text-xs text-muted-foreground">
+                                        {item.skuCode}
+                                    </div>
+                                    <Badge
+                                        variant="secondary"
+                                        className="mt-1 text-xs"
+                                    >
+                                        下单记录不可变
+                                    </Badge>
+                                </TableCell>
+                                <TableCell className="num">
+                                    {item.quantity} {item.unit}
+                                </TableCell>
+                                <TableCell>
+                                    <div className="num text-tiny text-muted-foreground">
+                                        {item.supplierProductId}
+                                    </div>
+                                </TableCell>
+                                <TableCell className="num text-xs">
+                                    {codeVersion(item.supplyVersion)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                    {item.unitCostGross != null ? (
+                                        <MoneyValue
+                                            display="exact"
+                                            value={item.unitCostGross}
+                                            taxBasis="gross"
+                                        />
+                                    ) : (
+                                        <span className="text-muted-foreground">
+                                            •••
+                                        </span>
+                                    )}
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                        {items.length > 0 ? (
+                            <TableRow className="border-t-2 border-border font-medium">
+                                <TableCell>合计</TableCell>
+                                <TableCell className="num">
+                                    {totalQuantity} {items[0].unit}
+                                </TableCell>
+                                <TableCell />
+                                <TableCell />
+                                <TableCell className="text-right">
+                                    {totalCostGross != null ? (
+                                        <MoneyValue
+                                            value={totalCostGross}
+                                            taxBasis="gross"
+                                        />
+                                    ) : (
+                                        <span className="text-muted-foreground">
+                                            •••
+                                        </span>
+                                    )}
+                                </TableCell>
+                            </TableRow>
+                        ) : null}
+                    </TableBody>
+                </Table>
+            </div>
+        </DetailWorkspaceSection>
     )
 }

@@ -3,9 +3,8 @@
 import {
     BackgroundJobProgress,
     BusinessEmptyState,
-    surfacePanelClassName,
+    DetailWorkspaceSection,
 } from "@/components/business"
-import { Card, CardContent } from "@/components/ui/card"
 import { Fact } from "@/features/import-opening/components/batch-facts"
 import type { ImportBatchView } from "@/features/import-opening/types"
 import { formatDateTime } from "@/lib/datetime"
@@ -23,7 +22,7 @@ export function ProgressSection({ batch }: { batch: ImportBatchView }) {
     }
 
     return (
-        <div className="space-y-4">
+        <DetailWorkspaceSection>
             <BackgroundJobProgress
                 mode="partialAllowed"
                 status={job.status}
@@ -46,18 +45,16 @@ export function ProgressSection({ batch }: { batch: ImportBatchView }) {
                     </span>
                 }
             />
-            <Card size="sm" className={surfacePanelClassName}>
-                <CardContent className="grid gap-3 pt-4 sm:grid-cols-4">
-                    <Fact
-                        label="已处理"
-                        value={`${job.processed}/${job.total}`}
-                        mono
-                    />
-                    <Fact label="成功" value={job.succeeded} mono />
-                    <Fact label="跳过" value={job.skipped} mono />
-                    <Fact label="失败" value={job.failed} mono />
-                </CardContent>
-            </Card>
-        </div>
+            <div className="grid gap-3 sm:grid-cols-4">
+                <Fact
+                    label="已处理"
+                    value={`${job.processed}/${job.total}`}
+                    mono
+                />
+                <Fact label="成功" value={job.succeeded} mono />
+                <Fact label="跳过" value={job.skipped} mono />
+                <Fact label="失败" value={job.failed} mono />
+            </div>
+        </DetailWorkspaceSection>
     )
 }

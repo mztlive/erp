@@ -24,7 +24,7 @@ export function CopyFiles({
         [preview],
     )
     return (
-        <div className="space-y-3">
+        <div className="divide-y divide-border/60">
             {!files.length && (
                 <p className="text-xs text-muted-foreground">
                     本次提交没有附件。
@@ -33,7 +33,7 @@ export function CopyFiles({
             {files.map((file) => (
                 <div
                     key={file.file_asset_id}
-                    className="flex flex-wrap items-center gap-2 rounded-md border p-3"
+                    className="flex flex-wrap items-center gap-2 py-2.5"
                 >
                     <span className="min-w-0 flex-1 break-all text-body-compact">
                         {file.file_name}
@@ -106,7 +106,7 @@ export function CopyFiles({
                 </p>
             )}
             {preview && (
-                <div className="space-y-2">
+                <div className="space-y-2 pt-3">
                     <Button
                         id="copy-file-preview-close"
                         variant="outline"

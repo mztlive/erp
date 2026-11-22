@@ -6,10 +6,12 @@ import { BanIcon, HistoryIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
-    DetailPageHeader,
-    PageHeader,
-    PageScaffold,
-    surfacePanelClassName,
+    DetailWorkspaceBody,
+    DetailWorkspaceChrome,
+    DetailWorkspacePage,
+    DetailWorkspaceSection,
+    DetailWorkspaceSkeleton,
+    detailWorkspaceStyles,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -80,14 +82,34 @@ export function ObjectCenterView({
         (blocker) => blocker.action === "DISABLE",
     )
 
+    const scrollToSection = React.useCallback((id: MasterDataSectionId) => {
+        const target = document.getElementById(`md-section-${id}`)
+        const header = target
+            ?.closest(".erp-detail-workspace-page")
+            ?.querySelector('[data-slot="detail-workspace-chrome"]')
+        if (!target || !header) return
+        const main = target.closest("main")
+        const scroller =
+            main && /^(auto|scroll)$/.test(getComputedStyle(main).overflowY)
+                ? main
+                : document.scrollingElement
+        if (!scroller) return
+        const top =
+            id === "overview"
+                ? 0
+                : scroller.scrollTop +
+                  target.getBoundingClientRect().top -
+                  header.getBoundingClientRect().bottom
+        scroller.scrollTo({ top })
+    }, [])
+
     React.useEffect(() => {
-        const el = document.getElementById(`md-section-${activeSection}`)
-        if (el) el.scrollIntoView({ block: "start", behavior: "smooth" })
-    }, [activeSection, data])
+        scrollToSection(activeSection)
+    }, [activeSection, scrollToSection])
 
     return (
-        <PageScaffold density="compact">
-            <DetailPageHeader
+        <DetailWorkspacePage>
+            <DetailWorkspaceChrome
                 back={{
                     id: `${prefix}-back`,
                     label: masterDataCopy.actionBackList,
@@ -172,7 +194,10 @@ export function ObjectCenterView({
                                 id={`${prefix}-disable`}
                                 type="button"
                                 size="sm"
-                                variant="outline"
+                                variant="ghost"
+                                className={
+                                    detailWorkspaceStyles.quietDangerButton
+                                }
                                 disabled={!canDisable}
                                 onClick={onDisable}
                             >
@@ -185,59 +210,78 @@ export function ObjectCenterView({
                         </span>
                     ) : null
                 }
+                tabs={
+                    <nav
+                        aria-label="资料分区"
+                        className={cn(
+                            "flex items-center",
+                            detailWorkspaceStyles.tabsList,
+                        )}
+                    >
+                        {SECTION_NAV.map((item) => (
+                            <Link
+                                id={`${prefix}-nav-${item.id}`}
+                                key={item.id}
+                                href={`${baseHref}${baseHref.includes("?") ? "&" : "?"}section=${item.id}`}
+                                scroll={false}
+                                aria-current={
+                                    item.id === activeSection
+                                        ? "location"
+                                        : undefined
+                                }
+                                data-active={
+                                    item.id === activeSection ? "" : undefined
+                                }
+                                className={detailWorkspaceStyles.tab}
+                                onClick={(event) => {
+                                    if (
+                                        item.id === activeSection &&
+                                        !event.metaKey &&
+                                        !event.ctrlKey &&
+                                        !event.shiftKey &&
+                                        !event.altKey
+                                    ) {
+                                        event.preventDefault()
+                                        scrollToSection(item.id)
+                                    }
+                                }}
+                            >
+                                {item.label}
+                            </Link>
+                        ))}
+                    </nav>
+                }
             />
 
-            {canWrite && !canRevise && reviseBlocker ? (
-                <p className="text-xs text-muted-foreground">
-                    {masterDataCopy.centerUpdateBlocked(reviseBlocker.message)}
-                </p>
-            ) : null}
-            {canWrite && !canDisable && disableBlocker ? (
-                <p className="text-xs text-muted-foreground">
-                    {masterDataCopy.centerDisableBlocked(
-                        disableBlocker.message,
-                    )}
-                </p>
-            ) : null}
-
-            <nav
-                aria-label="资料分区"
-                className="sticky top-0 z-10 flex w-full flex-wrap items-center gap-6 border-b border-border bg-card"
+            <DetailWorkspaceBody
+                alerts={
+                    <>
+                        {canWrite && !canRevise && reviseBlocker ? (
+                            <p className="text-xs text-muted-foreground">
+                                {masterDataCopy.centerUpdateBlocked(
+                                    reviseBlocker.message,
+                                )}
+                            </p>
+                        ) : null}
+                        {canWrite && !canDisable && disableBlocker ? (
+                            <p className="text-xs text-muted-foreground">
+                                {masterDataCopy.centerDisableBlocked(
+                                    disableBlocker.message,
+                                )}
+                            </p>
+                        ) : null}
+                    </>
+                }
             >
-                {SECTION_NAV.map((item) => {
-                    const selected = item.id === activeSection
-                    return (
-                        <Button
-                            id={`${prefix}-nav-${item.id}`}
-                            key={item.id}
-                            size="sm"
-                            variant="ghost"
-                            className={cn(
-                                "h-object-tab rounded-none border-b-2 border-transparent px-0 text-body-compact",
-                                selected
-                                    ? "border-b-foreground bg-transparent font-semibold text-foreground hover:bg-transparent"
-                                    : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
-                            )}
-                            render={
-                                <Link href={`${baseHref}?section=${item.id}`} />
-                            }
-                        >
-                            {item.label}
-                        </Button>
-                    )
-                })}
-            </nav>
-
-            <div className={cn(surfacePanelClassName, "space-y-6 py-5")}>
                 <ObjectCenterOverviewSection
                     data={data}
                     canRevealSensitive={canRevealSensitive}
                 />
                 <ObjectCenterVersionsSection data={data} />
                 <ObjectCenterAuditSection data={data} />
-            </div>
+            </DetailWorkspaceBody>
             {canWrite ? dialogs : null}
-        </PageScaffold>
+        </DetailWorkspacePage>
     )
 }
 
@@ -263,44 +307,42 @@ export function ObjectCenterQueryState({
     const prefix = idPrefix ?? "master-data-shared-object-center-view"
     if (isPending) {
         return (
-            <PageScaffold>
-                <PageHeader
-                    title={title}
-                    description={masterDataCopy.centerLoading}
-                />
-                <div
-                    className="h-40 animate-pulse rounded-lg bg-muted"
-                    aria-busy
-                />
-            </PageScaffold>
+            <DetailWorkspaceSkeleton
+                title={title}
+                description={masterDataCopy.centerLoading}
+            />
         )
     }
     if (isError) {
         return (
-            <PageScaffold>
-                <PageHeader title={title} />
-                <BusinessFailureState
-                    error={error}
-                    action={
-                        <Button
-                            id={`${prefix}-retry`}
-                            type="button"
-                            onClick={onRetry}
-                        >
-                            重试
-                        </Button>
-                    }
-                />
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title={title} />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection>
+                        <BusinessFailureState
+                            error={error}
+                            action={
+                                <Button
+                                    id={`${prefix}-retry`}
+                                    type="button"
+                                    onClick={onRetry}
+                                >
+                                    重试
+                                </Button>
+                            }
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     }
     if (missing) {
         return (
-            <PageScaffold>
-                <PageHeader
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome
                     title={masterDataCopy.centerMissingTitle}
-                    description={masterDataCopy.centerMissingDesc}
-                    actions={
+                    meta={masterDataCopy.centerMissingDesc}
+                    primaryAction={
                         <Button
                             id={`${prefix}-back-list`}
                             render={<Link href={listHref} />}
@@ -309,7 +351,7 @@ export function ObjectCenterQueryState({
                         </Button>
                     }
                 />
-            </PageScaffold>
+            </DetailWorkspacePage>
         )
     }
     return null

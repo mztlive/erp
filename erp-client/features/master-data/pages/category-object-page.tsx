@@ -49,7 +49,7 @@ export function CategoryObjectPage({
         <ObjectCenterView
             idPrefix="master-data-category-object-view"
             data={query.data}
-            baseHref={`${listHref}/${query.data.stableId}`}
+            baseHref={`/master-data/categories/${query.data.stableId}${returnTo && listHref === returnTo ? `?${new URLSearchParams({ returnTo })}` : ""}`}
             section={section}
             onBack={() => router.push(listHref)}
             onRevise={() => setReviseOpen(true)}

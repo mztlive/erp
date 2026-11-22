@@ -2,7 +2,12 @@
 
 import { useState, type ReactNode } from "react"
 import { FileTextIcon, XIcon } from "lucide-react"
-import { MoneyValue, PaperDocument, QuantityValue } from "@/components/business"
+import {
+    DetailWorkspaceSection,
+    MoneyValue,
+    PaperDocument,
+    QuantityValue,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -37,6 +42,7 @@ export function RequestMaterials({
     summary = false,
     concise = false,
     action,
+    detailWorkspace = false,
 }: {
     request: PaymentRequest
     workItemId?: string
@@ -45,6 +51,7 @@ export function RequestMaterials({
     summary?: boolean
     concise?: boolean
     action?: ReactNode
+    detailWorkspace?: boolean
 }) {
     const query = usePaymentMaterialsQuery(
         request.id,
@@ -62,17 +69,10 @@ export function RequestMaterials({
             ].map((file) => [file.file_asset_id, file]),
         ).values(),
     ]
-    return (
-        <section
-            className="space-y-4 border-t pt-5"
-            aria-label="申请提交时的采购与销售单据"
-        >
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="text-body-compact font-semibold">
-                    {summary || concise ? "审核材料" : "采购、销售与审核材料"}
-                </h3>
-                {action}
-            </div>
+    const title = summary || concise ? "审核材料" : "采购、销售与审核材料"
+    const ariaLabel = "申请提交时的采购与销售单据"
+    const content = (
+        <>
             {!summary && !concise && (
                 <p className="text-xs text-muted-foreground">
                     {request.status === "draft"
@@ -244,6 +244,23 @@ export function RequestMaterials({
                     </div>
                 </DialogContent>
             </Dialog>
+        </>
+    )
+    return detailWorkspace ? (
+        <DetailWorkspaceSection
+            title={title}
+            ariaLabel={ariaLabel}
+            actions={action}
+        >
+            {content}
+        </DetailWorkspaceSection>
+    ) : (
+        <section className="space-y-4 border-t pt-5" aria-label={ariaLabel}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-body-compact font-semibold">{title}</h3>
+                {action}
+            </div>
+            {content}
         </section>
     )
 }

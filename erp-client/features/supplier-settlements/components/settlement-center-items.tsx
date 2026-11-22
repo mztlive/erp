@@ -1,16 +1,13 @@
 "use client"
 
+import {
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
+} from "@/components/business/detail-workspace"
 import Link from "next/link"
 
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { MoneyValue, surfaceInsetClassName } from "@/components/business"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
+import { MoneyValue } from "@/components/business"
 import {
     Table,
     TableBody,
@@ -20,7 +17,6 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import type { SettlementDetailView } from "@/features/supplier-settlements/types"
-import { cn } from "@/lib/utils"
 
 function SettlementCenterItems({
     items,
@@ -30,19 +26,11 @@ function SettlementCenterItems({
     statementId: string
 }) {
     return (
-        <Card
-            size="sm"
-            className={cn(surfaceInsetClassName, "shadow-none ring-0")}
+        <DetailWorkspaceSection
+            title="结算明细"
+            subtitle="按结算单锁定的业务明细汇总，金额仅供核对，不可直接修改"
         >
-            <CardHeader className="rounded-t-lg border-b border-grid py-3">
-                <CardTitle className="text-section-title font-semibold tracking-tight">
-                    结算明细
-                </CardTitle>
-                <CardDescription>
-                    按结算单锁定的业务明细汇总，金额仅供核对，不可直接修改
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0">
+            <div className={detailWorkspaceStyles.dataTableWrapper}>
                 <Table className="min-w-[48rem]" data-density="compact">
                     <TableHeader>
                         <TableRow>
@@ -157,11 +145,11 @@ function SettlementCenterItems({
                         ) : null}
                     </TableBody>
                 </Table>
-                <p className="mt-2 text-xs text-muted-foreground">
-                    为保障账实一致，明细金额来自采购单与供应商账单原值，不支持在此处手动修改。
-                </p>
-            </CardContent>
-        </Card>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+                为保障账实一致，明细金额来自采购单与供应商账单原值，不支持在此处手动修改。
+            </p>
+        </DetailWorkspaceSection>
     )
 }
 

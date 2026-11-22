@@ -130,7 +130,7 @@ export function SupplierEditorContractSection({
                                 </FieldShell>
                             </div>
                         </div>
-                        <div className="border-grid lg:border-l lg:pl-5">
+                        <div className="border-border/60 lg:border-l lg:pl-5">
                             <MediaListField
                                 existingFileNames={existingFileNames}
                                 idPrefix="master-data-supplier-contract-contract-file-upload"
@@ -195,7 +195,7 @@ export function SupplierEditorContractSection({
                                 />
                             </FieldShell>
                         </div>
-                        <div className="border-grid lg:border-l lg:pl-5">
+                        <div className="border-border/60 lg:border-l lg:pl-5">
                             <MediaListField
                                 existingFileNames={existingFileNames}
                                 idPrefix="master-data-supplier-contract-authorization-file-upload"
@@ -221,7 +221,7 @@ export function SupplierEditorContractSection({
 
                 <CredentialGroup title="企业经营资质">
                     <div className="grid gap-4 lg:grid-cols-3">
-                        <div className="rounded-md border border-border bg-background p-4">
+                        <div className="min-w-0">
                             <MediaListField
                                 existingFileNames={existingFileNames}
                                 idPrefix="master-data-supplier-contract-qualification-upload"
@@ -240,7 +240,7 @@ export function SupplierEditorContractSection({
                                 accept={QUALIFICATION_ACCEPT}
                             />
                         </div>
-                        <div className="rounded-md border border-border bg-background p-4">
+                        <div className="min-w-0">
                             <MediaListField
                                 existingFileNames={existingFileNames}
                                 idPrefix="master-data-supplier-contract-food-license-upload"
@@ -259,7 +259,7 @@ export function SupplierEditorContractSection({
                                 accept={QUALIFICATION_ACCEPT}
                             />
                         </div>
-                        <div className="rounded-md border border-border bg-background p-4">
+                        <div className="min-w-0">
                             <MediaListField
                                 existingFileNames={existingFileNames}
                                 idPrefix="master-data-supplier-contract-legal-person-id-card-upload"

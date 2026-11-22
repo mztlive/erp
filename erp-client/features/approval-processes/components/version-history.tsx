@@ -18,14 +18,10 @@ export function VersionHistory({
     id?: string
 }) {
     if (!versions.length)
-        return (
-            <p className="p-6 text-xs text-muted-foreground">
-                还没有历史版本。
-            </p>
-        )
+        return <p className="text-xs text-muted-foreground">还没有历史版本。</p>
     return (
         <div
-            className="flex flex-wrap items-center gap-2 px-4 py-4 sm:px-6"
+            className="flex flex-wrap items-center gap-2"
             role="group"
             aria-label="选择历史版本"
         >

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 
-import { surfaceInsetClassName } from "@/components/business"
+import { DetailWorkspaceSection } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
@@ -228,19 +228,13 @@ export function SectionPanel({
     children: React.ReactNode
 }) {
     return (
-        <section className="space-y-5">
-            <div className="space-y-1 border-b border-grid pb-3">
-                <h2 className="text-section-title font-semibold tracking-tight">
-                    {title}
-                </h2>
-                {description ? (
-                    <p className="max-w-3xl text-xs text-muted-foreground">
-                        {description}
-                    </p>
-                ) : null}
-            </div>
-            {children}
-        </section>
+        <DetailWorkspaceSection
+            title={title}
+            subtitle={description}
+            width="form"
+        >
+            <div data-slot="detail-form-grid">{children}</div>
+        </DetailWorkspaceSection>
     )
 }
 
@@ -254,16 +248,18 @@ export function CredentialGroup({
     children: React.ReactNode
 }) {
     return (
-        <section className={cn(surfaceInsetClassName, "overflow-hidden")}>
-            <div className="border-b border-grid px-4 py-3">
-                <h3 className="font-semibold text-foreground">{title}</h3>
+        <section className="space-y-4 border-t border-border/60 pt-5 first:border-t-0 first:pt-0">
+            <div className="space-y-1">
+                <h3 className="text-body-compact font-semibold text-foreground">
+                    {title}
+                </h3>
                 {description ? (
-                    <p className="mt-1 text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         {description}
                     </p>
                 ) : null}
             </div>
-            <div className="p-4">{children}</div>
+            {children}
         </section>
     )
 }

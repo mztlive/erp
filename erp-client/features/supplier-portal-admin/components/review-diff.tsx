@@ -1,5 +1,9 @@
 "use client"
 
+import {
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
+} from "@/components/business/detail-workspace"
 import type { ReactNode } from "react"
 import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
 import {
@@ -258,7 +262,7 @@ function comparison(
     return (
         <section className="space-y-3">
             <h3 className="font-semibold">{title}</h3>
-            <div className="rounded-lg border">
+            <div className={detailWorkspaceStyles.dataTableWrapper}>
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -337,15 +341,10 @@ export function PortalReviewDiff({
         ? current.skus.map(record)
         : []
     return (
-        <section className="space-y-5 rounded-xl border bg-card p-5">
-            <div>
-                <h2 className="text-section-title font-semibold tracking-tight">
-                    逐项核对及生效影响
-                </h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                    本次拟生效值采用供应商本次提交内容。采购确认前，当前价格、供货条款及合作条件继续有效。
-                </p>
-            </div>
+        <DetailWorkspaceSection title="逐项核对及生效影响">
+            <p className="text-xs text-muted-foreground">
+                本次拟生效值采用供应商本次提交内容。采购确认前，当前价格、供货条款及合作条件继续有效。
+            </p>
             {!currentLoaded &&
                 (application.kind === "terms" ||
                     application.kind === "cooperation" ||
@@ -423,7 +422,7 @@ export function PortalReviewDiff({
                                         ? sku.row_id
                                         : String(index)
                                 }
-                                className="space-y-4 rounded-lg border p-4"
+                                className="flex flex-col gap-4 border-t border-border/60 pt-4"
                             >
                                 <h3 className="font-semibold">
                                     规格{index + 1} ·{" "}
@@ -477,6 +476,6 @@ export function PortalReviewDiff({
                     </p>
                 )}
             </div>
-        </section>
+        </DetailWorkspaceSection>
     )
 }

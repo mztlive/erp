@@ -11,17 +11,27 @@ export function IntegrationActionResult({
     autoNext,
     resultRef,
     onNext,
+    detailWorkspace,
 }: {
     lastResult: IntegrationFormalResult | null
     actionError: string | null
     autoNext: boolean
     resultRef: React.Ref<HTMLDivElement>
     onNext: () => void
+    detailWorkspace?: boolean
 }) {
     return (
         <>
             {lastResult ? (
-                <div ref={resultRef} tabIndex={-1} className="outline-none">
+                <div
+                    ref={resultRef}
+                    tabIndex={-1}
+                    className={
+                        detailWorkspace
+                            ? "scroll-mt-32 outline-none"
+                            : "outline-none"
+                    }
+                >
                     <FormalActionResult
                         status={formalStatus(lastResult.status)}
                         title={lastResult.title}

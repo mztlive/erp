@@ -10,7 +10,12 @@ import {
     workspaceQueueHref,
 } from "@/lib/workspace-detail-href"
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import { BusinessFailureState, PageScaffold } from "@/components/business"
+import {
+    BusinessFailureState,
+    DetailWorkspaceBody,
+    DetailWorkspacePage,
+    DetailWorkspaceSection,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { WorkspaceHomeSkeleton } from "../components/workspace-home-skeleton"
 import { WorkspaceProcessingLayout } from "../components/workspace-processing-layout"
@@ -141,64 +146,81 @@ function WorkspaceDetailContent({
     }
     if (completion)
         return (
-            <PageScaffold>
-                {autoNext && queue.isError ? (
-                    <BusinessFailureState
-                        title="当前任务已处理，后续任务读取失败"
-                        description="无需重复审批或提交，请重试读取下一项，或返回任务队列。"
-                        error={queue.error}
-                        onRetry={() => void queue.refetch()}
-                        action={
-                            <Button
-                                id="workspace-completed-back"
-                                onClick={back}
+            <DetailWorkspacePage>
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection>
+                        {autoNext && queue.isError ? (
+                            <BusinessFailureState
+                                title="当前任务已处理，后续任务读取失败"
+                                description="无需重复审批或提交，请重试读取下一项，或返回任务队列。"
+                                error={queue.error}
+                                onRetry={() => void queue.refetch()}
+                                action={
+                                    <Button
+                                        id="workspace-completed-back"
+                                        onClick={back}
+                                    >
+                                        {backLabel}
+                                    </Button>
+                                }
+                            />
+                        ) : (
+                            <p
+                                role="status"
+                                className="text-xs text-muted-foreground"
                             >
-                                {backLabel}
-                            </Button>
-                        }
-                    />
-                ) : (
-                    <p role="status" className="text-xs text-muted-foreground">
-                        {autoNext && !approval
-                            ? "当前任务已处理，正在打开下一项…"
-                            : "当前任务已处理，正在返回队列…"}
-                    </p>
-                )}
-            </PageScaffold>
+                                {autoNext && !approval
+                                    ? "当前任务已处理，正在打开下一项…"
+                                    : "当前任务已处理，正在返回队列…"}
+                            </p>
+                        )}
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     if (profile.isError || detail.isError)
         return (
-            <PageScaffold>
-                <BusinessFailureState
-                    title={approval ? "审批详情读取失败" : "任务详情读取失败"}
-                    error={profile.error ?? detail.error}
-                    onRetry={() =>
-                        void (profile.isError
-                            ? profile.refetch()
-                            : detail.refetch())
-                    }
-                    action={
-                        <Button
-                            id="workspace-detail-failure-back"
-                            onClick={back}
-                        >
-                            {backLabel}
-                        </Button>
-                    }
-                />
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection>
+                        <BusinessFailureState
+                            title={
+                                approval
+                                    ? "审批详情读取失败"
+                                    : "任务详情读取失败"
+                            }
+                            error={profile.error ?? detail.error}
+                            onRetry={() =>
+                                void (profile.isError
+                                    ? profile.refetch()
+                                    : detail.refetch())
+                            }
+                            action={
+                                <Button
+                                    id="workspace-detail-failure-back"
+                                    onClick={back}
+                                >
+                                    {backLabel}
+                                </Button>
+                            }
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     if (!detail.data || profile.isPending)
         return <WorkspaceHomeSkeleton detail />
     return (
-        <PageScaffold density="compact" className="min-h-0 gap-0">
+        <DetailWorkspacePage className="min-h-0">
             {autoNext && queue.isError && (
-                <BusinessFailureState
-                    title="后续任务读取失败"
-                    description="当前任务可继续办理；完成后可重试读取下一项，或返回队列。"
-                    error={queue.error}
-                    onRetry={() => void queue.refetch()}
-                />
+                <DetailWorkspaceSection className="shrink-0 last:pb-5">
+                    <BusinessFailureState
+                        title="后续任务读取失败"
+                        description="当前任务可继续办理；完成后可重试读取下一项，或返回队列。"
+                        error={queue.error}
+                        onRetry={() => void queue.refetch()}
+                    />
+                </DetailWorkspaceSection>
             )}
             <WorkspaceProcessingLayout
                 item={detail.data.item}
@@ -220,6 +242,6 @@ function WorkspaceDetailContent({
                     onTaskCompleted={complete}
                 />
             </WorkspaceProcessingLayout>
-        </PageScaffold>
+        </DetailWorkspacePage>
     )
 }

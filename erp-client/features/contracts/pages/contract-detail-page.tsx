@@ -6,14 +6,14 @@ import { useRouter } from "@/lib/navigation"
 
 import {
     BusinessFailureState,
-    ObjectSectionTabs,
-    ObjectSectionTabsPanel,
-    PageHeader,
-    PageScaffold,
-    surfacePanelClassName,
+    DetailWorkspaceBody,
+    DetailWorkspaceChrome,
+    DetailWorkspacePage,
+    DetailWorkspaceSection,
+    DetailWorkspaceSkeleton,
+    DetailWorkspaceTabs,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
 import { ContractUploadDialog } from "@/features/contracts/contract-upload-dialog"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
@@ -21,7 +21,10 @@ import { ContractPaperDialog } from "@/features/contracts/components/contract-pa
 import { ContractSalesAccessDialog } from "@/features/contracts/components/contract-sales-access-dialog"
 import { ContractDetailAttachments } from "@/features/contracts/components/contract-detail-attachments"
 import { ContractDetailHeader } from "@/features/contracts/components/contract-detail-header"
-import { ContractDetailOverview } from "@/features/contracts/components/contract-detail-overview"
+import {
+    ContractDetailOverview,
+    ContractDetailRelatedSalesSummary,
+} from "@/features/contracts/components/contract-detail-overview"
 import { ContractDetailSalesOrders } from "@/features/contracts/components/contract-detail-sales-orders"
 import { ContractDetailSettlement } from "@/features/contracts/components/contract-detail-settlement"
 import { ContractDetailVersions } from "@/features/contracts/components/contract-detail-versions"
@@ -30,7 +33,6 @@ import {
     CONTRACT_SECTION_NAV,
     contractSectionHref,
     resolveSection,
-    type ContractDetailSectionId,
 } from "@/features/contracts/lib/contract-detail-helpers"
 
 export function ContractDetailPage({
@@ -50,6 +52,8 @@ export function ContractDetailPage({
     }>()
 
     const activeSection = resolveSection(section)
+    const tabsId = `contracts-detail-tabs-${contractId}`
+    const tabIdPrefix = `${tabsId}-tab`
     const [paperOpen, setPaperOpen] = React.useState(false)
     const [salesAccessOpen, setSalesAccessOpen] = React.useState(false)
 
@@ -67,63 +71,67 @@ export function ContractDetailPage({
 
     if (query.isPending) {
         return (
-            <PageScaffold>
-                <PageHeader title="合同" description="正在加载详情…" />
-                <div className="space-y-3" aria-busy="true" aria-label="加载中">
-                    <div className="h-16 animate-pulse rounded-lg bg-muted" />
-                    <div className="h-24 animate-pulse rounded-lg bg-muted" />
-                    <div className="h-40 animate-pulse rounded-lg bg-muted" />
-                </div>
-            </PageScaffold>
+            <DetailWorkspaceSkeleton
+                title="合同"
+                description="正在加载详情…"
+                sidebar
+            />
         )
     }
 
     if (query.isError) {
         return (
-            <PageScaffold>
-                <PageHeader title="合同" />
-                <BusinessFailureState
-                    id="card-contracts-detail-failure"
-                    title="合同加载失败"
-                    error={query.error}
-                    onRetry={() => {
-                        void query.refetch()
-                    }}
-                />
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title="合同" />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <BusinessFailureState
+                            id="card-contracts-detail-failure"
+                            title="合同加载失败"
+                            error={query.error}
+                            onRetry={() => void query.refetch()}
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     }
 
     if (!contract) {
         return (
-            <PageScaffold>
-                <PageHeader
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome
                     title="合同不存在"
-                    description="未找到这份合同。可能编号有误，或当前角色无权查看。"
-                    actions={
+                    meta="未找到这份合同。可能编号有误，或当前角色无权查看。"
+                    primaryAction={
                         <Button
                             id="card-contracts-detail-notfound-back"
+                            size="sm"
                             render={<Link href="/sales/contracts" />}
                         >
                             返回列表
                         </Button>
                     }
                 />
-            </PageScaffold>
+            </DetailWorkspacePage>
         )
     }
 
     return (
-        <PageScaffold density="compact">
-            {contract.loadWarnings?.map((message) => (
-                <BusinessFailureState
-                    key={message}
-                    title="部分关联资料未能读取"
-                    description={message}
-                />
-            ))}
+        <DetailWorkspacePage>
             <ContractDetailHeader
                 contract={contract}
+                tabs={
+                    <div id={tabsId}>
+                        <DetailWorkspaceTabs
+                            value={activeSection}
+                            onValueChange={handleSectionChange}
+                            items={CONTRACT_SECTION_NAV}
+                            ariaLabel="合同分区"
+                            tabIdPrefix={tabIdPrefix}
+                        />
+                    </div>
+                }
                 onPaperOpen={() => setPaperOpen(true)}
                 onManageSalesAccess={
                     hasPermission(
@@ -159,42 +167,44 @@ export function ContractDetailPage({
             />
 
             <div
-                className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
+                id={`${tabsId}-panel-${activeSection}`}
+                role="tabpanel"
+                aria-labelledby={`${tabIdPrefix}-${activeSection}`}
+                tabIndex={0}
+                className="min-w-0 flex-1"
             >
-                <ObjectSectionTabs
-                    id={`contracts-detail-tabs-${contractId}`}
-                    value={activeSection}
-                    onValueChange={handleSectionChange}
-                    items={CONTRACT_SECTION_NAV}
-                    listLabel="合同分区"
-                >
-                    <ObjectSectionTabsPanel value="overview">
-                        <ContractDetailOverview
-                            contract={contract}
-                            onOpenSalesOrders={() =>
-                                handleSectionChange(
-                                    "sales-orders" satisfies ContractDetailSectionId,
-                                )
-                            }
+                <DetailWorkspaceBody
+                    sidebarLabel="关联销售摘要"
+                    sidebar={
+                        activeSection === "overview" ? (
+                            <ContractDetailRelatedSalesSummary
+                                contract={contract}
+                                onOpenSalesOrders={() =>
+                                    handleSectionChange("sales-orders")
+                                }
+                            />
+                        ) : undefined
+                    }
+                    alerts={contract.loadWarnings?.map((message) => (
+                        <BusinessFailureState
+                            key={message}
+                            title="部分关联资料未能读取"
+                            description={message}
                         />
-                    </ObjectSectionTabsPanel>
-
-                    <ObjectSectionTabsPanel value="settlement">
+                    ))}
+                >
+                    {activeSection === "overview" ? (
+                        <ContractDetailOverview contract={contract} />
+                    ) : activeSection === "settlement" ? (
                         <ContractDetailSettlement contract={contract} />
-                    </ObjectSectionTabsPanel>
-
-                    <ObjectSectionTabsPanel value="attachments">
+                    ) : activeSection === "attachments" ? (
                         <ContractDetailAttachments contract={contract} />
-                    </ObjectSectionTabsPanel>
-
-                    <ObjectSectionTabsPanel value="sales-orders">
+                    ) : activeSection === "sales-orders" ? (
                         <ContractDetailSalesOrders contract={contract} />
-                    </ObjectSectionTabsPanel>
-
-                    <ObjectSectionTabsPanel value="versions">
+                    ) : (
                         <ContractDetailVersions contract={contract} />
-                    </ObjectSectionTabsPanel>
-                </ObjectSectionTabs>
+                    )}
+                </DetailWorkspaceBody>
             </div>
 
             <ContractUploadDialog
@@ -216,6 +226,6 @@ export function ContractDetailPage({
                 open={paperOpen}
                 onOpenChange={setPaperOpen}
             />
-        </PageScaffold>
+        </DetailWorkspacePage>
     )
 }

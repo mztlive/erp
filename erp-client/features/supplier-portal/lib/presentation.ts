@@ -19,6 +19,19 @@ export const statusLabels: Record<string, string> = {
     withdrawn: "已撤回",
     effective: "已生效",
 }
+export function portalApplicationStatus(status: string) {
+    return {
+        label: statusLabels[status] ?? "待核对",
+        tone:
+            status === "effective"
+                ? "success"
+                : status === "pending"
+                  ? "info"
+                  : status === "returned"
+                    ? "warning"
+                    : "neutral",
+    } as const
+}
 export const kindLabels: Record<string, string> = {
     quote: "已有商品报价",
     terms: "供给条款变更",

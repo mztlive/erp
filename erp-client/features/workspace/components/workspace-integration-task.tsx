@@ -1,6 +1,7 @@
 "use client"
 
-import { WorkspaceTaskPane } from "@/components/business"
+import { WorkspaceProcessingPane } from "./workspace-processing-layout"
+
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { IntegrationErrorsPage } from "@/features/integration-errors/pages/integration-errors-page"
 
@@ -20,7 +21,7 @@ export function WorkspaceIntegrationTask({
         item.businessObjectType !== "reconciliation_difference"
     ) {
         return (
-            <WorkspaceTaskPane
+            <WorkspaceProcessingPane
                 header={<WorkspaceTaskIdentityHeader item={item} />}
                 aria-label="当前集成异常任务"
             >
@@ -30,12 +31,12 @@ export function WorkspaceIntegrationTask({
                         请刷新待办重试；仍无法打开时，联系管理员核对关联的异常记录。
                     </AlertDescription>
                 </Alert>
-            </WorkspaceTaskPane>
+            </WorkspaceProcessingPane>
         )
     }
 
     return (
-        <WorkspaceTaskPane
+        <WorkspaceProcessingPane
             header={<WorkspaceTaskIdentityHeader item={item} />}
             aria-label="当前集成异常任务"
         >
@@ -53,6 +54,6 @@ export function WorkspaceIntegrationTask({
                 embedded
                 onTaskCompleted={onTaskCompleted}
             />
-        </WorkspaceTaskPane>
+        </WorkspaceProcessingPane>
     )
 }

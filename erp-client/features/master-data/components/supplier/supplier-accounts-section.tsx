@@ -3,9 +3,13 @@
 import { useMemo, useState } from "react"
 import { PlusIcon, Settings2Icon, UsersIcon } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
-import { BusinessEmptyState, DataTable } from "@/components/business"
+import {
+    BusinessEmptyState,
+    DataTable,
+    DetailWorkspaceSection,
+} from "@/components/business"
 import { ListWorkSurface } from "@/components/business/list-workspace"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -70,11 +74,10 @@ export function SupplierAccountsSection({
                 accessorKey: "active",
                 header: "状态",
                 cell: ({ row }) => (
-                    <Badge
-                        variant={row.original.active ? "success" : "neutral"}
-                    >
-                        {row.original.active ? "启用" : "停用"}
-                    </Badge>
+                    <StatusBadge
+                        label={row.original.active ? "启用" : "停用"}
+                        tone={row.original.active ? "success" : "neutral"}
+                    />
                 ),
             },
             ...(canUpdate
@@ -107,39 +110,31 @@ export function SupplierAccountsSection({
     if (!canList) return null
 
     return (
-        <section
-            className="space-y-5"
-            aria-labelledby="supplier-portal-accounts-title"
-        >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-1">
-                    <h2
-                        id="supplier-portal-accounts-title"
-                        className="text-section-title font-semibold tracking-tight"
-                    >
-                        门户账号
-                    </h2>
-                    <p className="text-xs text-muted-foreground">
-                        为供应商人员开通登录账号，按岗位分配维护或查看权限。
-                    </p>
-                    {!supplierEnabled && (
-                        <p className="text-xs text-muted-foreground">
-                            供应商已停用，暂不能开通新账号。
-                        </p>
-                    )}
-                </div>
-                {canCreate && (
+        <DetailWorkspaceSection
+            headingId="supplier-portal-accounts-title"
+            title="门户账号"
+            width="full"
+            subtitle="为供应商人员开通登录账号，按岗位分配维护或查看权限。"
+            actions={
+                canCreate ? (
                     <Button
                         id="supplier-portal-account-create"
                         type="button"
+                        size="sm"
                         disabled={!supplierEnabled}
                         onClick={() => setCreating(true)}
                     >
                         <PlusIcon data-icon="inline-start" aria-hidden />
                         开通账号
                     </Button>
-                )}
-            </div>
+                ) : undefined
+            }
+        >
+            {!supplierEnabled && (
+                <p className="text-xs text-muted-foreground">
+                    供应商已停用，暂不能开通新账号。
+                </p>
+            )}
             {query.isSuccess && query.data.total === 0 ? (
                 <BusinessEmptyState
                     kind="no-data"
@@ -153,40 +148,43 @@ export function SupplierAccountsSection({
                     className="py-12"
                 />
             ) : (
-                <ListWorkSurface
-                    ariaLabel="门户账号列表"
-                    selectionBar={
-                        <span className="text-xs text-muted-foreground">
-                            共 {query.data?.total ?? 0} 个账号
-                        </span>
-                    }
-                    table={
-                        <DataTable
-                            id="supplier-portal-admin-accounts-table"
-                            data={query.data?.items ?? []}
-                            columns={columns}
-                            getRowId={(row) => row.account_id}
-                            pagination={pagination}
-                            onPaginationChange={setPagination}
-                            rowCount={query.data?.total ?? 0}
-                            showPagination={
-                                (query.data?.total ?? 0) >
-                                    pagination.pageSize ||
-                                pagination.pageIndex > 0
-                            }
-                            loading={query.isFetching}
-                            errorState={
-                                query.isError ? (
-                                    <PortalError
-                                        error={query.error}
-                                        retry={() => void query.refetch()}
-                                        id="supplier-portal-admin-accounts-retry"
-                                    />
-                                ) : undefined
-                            }
-                        />
-                    }
-                />
+                <div data-slot="detail-inline-table">
+                    <ListWorkSurface
+                        ariaLabel="门户账号列表"
+                        className="rounded-none border-x-0"
+                        selectionBar={
+                            <span className="text-xs text-muted-foreground">
+                                共 {query.data?.total ?? 0} 个账号
+                            </span>
+                        }
+                        table={
+                            <DataTable
+                                id="supplier-portal-admin-accounts-table"
+                                data={query.data?.items ?? []}
+                                columns={columns}
+                                getRowId={(row) => row.account_id}
+                                pagination={pagination}
+                                onPaginationChange={setPagination}
+                                rowCount={query.data?.total ?? 0}
+                                showPagination={
+                                    (query.data?.total ?? 0) >
+                                        pagination.pageSize ||
+                                    pagination.pageIndex > 0
+                                }
+                                loading={query.isFetching}
+                                errorState={
+                                    query.isError ? (
+                                        <PortalError
+                                            error={query.error}
+                                            retry={() => void query.refetch()}
+                                            id="supplier-portal-admin-accounts-retry"
+                                        />
+                                    ) : undefined
+                                }
+                            />
+                        }
+                    />
+                </div>
             )}
             {canCreate && creating && (
                 <SupplierAccountCreateDialog
@@ -228,6 +226,6 @@ export function SupplierAccountsSection({
                     onClose={() => setEditing(null)}
                 />
             )}
-        </section>
+        </DetailWorkspaceSection>
     )
 }

@@ -1,11 +1,13 @@
 "use client"
+
+import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import { PurchasePaymentArrangement } from "@/features/purchase-orders/components/purchase-payment-arrangement"
 import { SalesInquiryDetailPage } from "@/features/sales-inquiries/pages/sales-inquiry-detail-page"
 import { WorkspaceApprovalReworkActions } from "./workspace-approval-rework"
 import { WorkspaceRejectionNotice } from "./workspace-rejection-notice"
 import { useWorkspaceTaskPage } from "@/components/business/workspace-task-pane"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
-import { WorkspaceTaskPane } from "@/components/business"
+import { DetailWorkspaceChrome } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { WorkspaceTaskHeaderActions } from "./workspace-task-context"
@@ -82,7 +84,7 @@ export function WorkspaceTaskSurface({
                 item.handlerKey === "document_approval"))
     ) {
         return (
-            <WorkspaceTaskPane
+            <WorkspaceProcessingPane
                 header={
                     <WorkspaceTaskIdentityHeader
                         item={item}
@@ -157,7 +159,7 @@ export function WorkspaceTaskSurface({
                     }
                     onTaskCompleted={() => onTaskCompleted?.(item.workItemId)}
                 />
-            </WorkspaceTaskPane>
+            </WorkspaceProcessingPane>
         )
     }
 
@@ -199,7 +201,7 @@ export function WorkspaceTaskSurface({
         item.businessObjectType === "supplier_portal_request"
     ) {
         return (
-            <WorkspaceTaskPane
+            <WorkspaceProcessingPane
                 header={<WorkspaceTaskIdentityHeader item={item} />}
                 aria-label="供应商申请确认任务"
             >
@@ -209,7 +211,7 @@ export function WorkspaceTaskSurface({
                     embedded
                     onTaskCompleted={onTaskCompleted}
                 />
-            </WorkspaceTaskPane>
+            </WorkspaceProcessingPane>
         )
     }
 
@@ -231,22 +233,24 @@ export function WorkspaceTaskSurface({
         item.businessObjectType === "purchase_order"
     ) {
         return (
-            <WorkspaceTaskPane
+            <WorkspaceProcessingPane
                 header={
-                    <>
-                        <div className="min-w-0 space-y-2">
-                            <p className="text-xs font-medium text-muted-foreground">
-                                {item.workItemTypeLabel}
-                            </p>
-                            <h1 className="break-words text-page-title font-semibold tracking-tight">
-                                {item.counterpartyName || "采购付款安排"}
-                            </h1>
-                            <p className="break-all text-xs text-muted-foreground">
+                    <DetailWorkspaceChrome
+                        title={item.counterpartyName || "采购付款安排"}
+                        meta={
+                            <span className="wrap-anywhere">
                                 {item.objectTitle}
-                            </p>
-                        </div>
-                        <WorkspaceTaskHeaderActions item={item} />
-                    </>
+                            </span>
+                        }
+                        titleExtra={
+                            <span className="text-xs text-muted-foreground">
+                                {item.workItemTypeLabel}
+                            </span>
+                        }
+                        secondaryActions={
+                            <WorkspaceTaskHeaderActions item={item} />
+                        }
+                    />
                 }
             >
                 <PurchasePaymentArrangement
@@ -255,7 +259,7 @@ export function WorkspaceTaskSurface({
                     workItemId={item.workItemId}
                     onTaskCompleted={onTaskCompleted}
                 />
-            </WorkspaceTaskPane>
+            </WorkspaceProcessingPane>
         )
     }
 
@@ -394,7 +398,7 @@ export function WorkspaceTaskSurface({
         item.workItemType !== "APPROVAL_INSTANCE"
     ) {
         return (
-            <WorkspaceTaskPane
+            <WorkspaceProcessingPane
                 header={<WorkspaceTaskIdentityHeader item={item} />}
                 aria-label="当前任务"
             >
@@ -404,7 +408,7 @@ export function WorkspaceTaskSurface({
                         该事项暂不支持在当前面板直接处理，请前往对应业务模块办理，或联系管理员。
                     </AlertDescription>
                 </Alert>
-            </WorkspaceTaskPane>
+            </WorkspaceProcessingPane>
         )
     }
 

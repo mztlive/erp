@@ -1,4 +1,5 @@
 "use client"
+import { DetailWorkspaceSection } from "@/components/business/detail-workspace"
 import Image from "next/image"
 import { useEffect, useState } from "react"
 import type {
@@ -96,10 +97,7 @@ export function PortalReviewImages({
     )
     if (!unique.length) return null
     return (
-        <section className="space-y-3">
-            <h2 className="text-section-title font-semibold tracking-tight">
-                供应商提报图片及资料
-            </h2>
+        <DetailWorkspaceSection title="供应商提报图片及资料">
             <div className="flex flex-wrap gap-3">
                 {unique.map((row) => (
                     <ReviewImage
@@ -110,6 +108,6 @@ export function PortalReviewImages({
                     />
                 ))}
             </div>
-        </section>
+        </DetailWorkspaceSection>
     )
 }

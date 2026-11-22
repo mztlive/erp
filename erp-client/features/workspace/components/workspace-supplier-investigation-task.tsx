@@ -1,6 +1,7 @@
 "use client"
 
-import { WorkspaceTaskPane } from "@/components/business"
+import { WorkspaceProcessingPane } from "./workspace-processing-layout"
+
 import { SupplierOrderCenterPage } from "@/features/supplier-orders/pages/supplier-order-center-page"
 
 import type { WorkspaceWorkItem } from "../types"
@@ -15,7 +16,7 @@ export function WorkspaceSupplierInvestigationTask({
     onTaskCompleted?: (workItemId: string) => void
 }) {
     return (
-        <WorkspaceTaskPane
+        <WorkspaceProcessingPane
             header={<WorkspaceTaskIdentityHeader item={item} />}
             aria-label="当前供应商履约异常调查任务"
         >
@@ -26,6 +27,6 @@ export function WorkspaceSupplierInvestigationTask({
                 embedded
                 onTaskCompleted={onTaskCompleted}
             />
-        </WorkspaceTaskPane>
+        </WorkspaceProcessingPane>
     )
 }

@@ -76,7 +76,10 @@ export function InquiryRequirementTable({
                         onRetry={() => void skuDetails.refetch()}
                     />
                 )}
-                <div className="min-w-0 overflow-hidden rounded-lg border [&>[data-slot=table-container]]:max-h-[65vh]">
+                <div
+                    data-slot="detail-inline-table"
+                    className="min-w-0 border-y border-border/70 [&>[data-slot=table-container]]:max-h-[65vh]"
+                >
                     <Table
                         className={
                             procurement

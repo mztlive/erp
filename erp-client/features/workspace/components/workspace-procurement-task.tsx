@@ -1,9 +1,14 @@
 "use client"
 
+import { WorkspaceProcessingPane } from "./workspace-processing-layout"
+
 import { useState } from "react"
 import { FileTextIcon } from "lucide-react"
 
-import { WorkspaceTaskPane } from "@/components/business"
+import {
+    DetailWorkspaceChrome,
+    DetailWorkspaceMeta,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { PurchaseOrderCreatePage } from "@/features/purchase-orders/pages/purchase-order-create-page"
 import { useCreationBasesQuery } from "@/features/purchase-orders/hooks/queries"
@@ -33,82 +38,72 @@ export function WorkspaceProcurementTask({
         (basis) => basis.salesOrderId === item.businessObjectId,
     )
     return (
-        <WorkspaceTaskPane
+        <WorkspaceProcessingPane
             className="@container/document"
             header={
-                <>
-                    <div className="min-w-0 space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <h2 className="text-section-title font-semibold tracking-tight">
-                                供给分配
-                            </h2>
-                            {item.counterpartyName ? (
-                                <span className="text-body-compact font-medium">
-                                    {item.counterpartyName}
-                                </span>
-                            ) : null}
-                            <span className="num text-xs text-muted-foreground">
-                                {stripDocumentNumberPrefix(item.stableNumber)}
-                            </span>
-                            <StatusBadge
-                                label={item.statusLabel}
-                                tone={item.statusTone}
-                            />
-                            {isBlockedWorkItem(item) ? (
-                                <StatusBadge label="受阻" tone="warning" />
-                            ) : item.dueBucket === "overdue" ? (
-                                <StatusBadge
-                                    label="已超期"
-                                    tone="destructive"
-                                />
-                            ) : null}
-                        </div>
-                        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                            <span className="text-xs text-muted-foreground">
-                                采购处理人{" "}
-                                <span className="text-foreground">
-                                    {item.ownerUserLabel}
-                                </span>
-                            </span>
-                            {item.dueAt ? (
-                                <span className="text-xs text-muted-foreground">
-                                    截止时间 {item.dueAtLabel}
-                                </span>
-                            ) : null}
-                            {order?.contractNumber ? (
-                                <span className="text-xs text-muted-foreground">
-                                    合同{" "}
-                                    <span className="text-foreground">
-                                        {order.contractNumber}
-                                    </span>
-                                </span>
-                            ) : null}
-                            {order?.salesOwnerName ? (
-                                <span className="text-xs text-muted-foreground">
-                                    销售负责人{" "}
-                                    <span className="text-foreground">
-                                        {order.salesOwnerName}
-                                    </span>
-                                </span>
-                            ) : null}
-                        </div>
-                    </div>
-                    <WorkspaceTaskHeaderActions
-                        item={item}
-                        contextLabel="任务详情"
-                    >
-                        <Button
-                            id={`workspace-procurement-sales-preview-${toAutomationIdSegment(item.workItemId)}`}
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setPreviewTaskId(item.workItemId)}
+                <DetailWorkspaceChrome
+                    title="供给分配"
+                    primaryStatus={{
+                        label: item.statusLabel,
+                        tone: item.statusTone,
+                    }}
+                    titleExtra={
+                        isBlockedWorkItem(item) ? (
+                            <StatusBadge label="受阻" tone="warning" />
+                        ) : item.dueBucket === "overdue" ? (
+                            <StatusBadge label="已超期" tone="destructive" />
+                        ) : null
+                    }
+                    meta={
+                        <DetailWorkspaceMeta
+                            items={[
+                                item.counterpartyName,
+                                <span
+                                    key="number"
+                                    className="num"
+                                    data-workspace-document-number={
+                                        stripDocumentNumberPrefix(
+                                            item.stableNumber,
+                                        ) || undefined
+                                    }
+                                >
+                                    {stripDocumentNumberPrefix(
+                                        item.stableNumber,
+                                    )}
+                                </span>,
+                                `采购处理人 ${item.ownerUserLabel}`,
+                                item.dueAt
+                                    ? `截止时间 ${item.dueAtLabel}`
+                                    : null,
+                                order?.contractNumber
+                                    ? `合同 ${order.contractNumber}`
+                                    : null,
+                                order?.salesOwnerName
+                                    ? `销售负责人 ${order.salesOwnerName}`
+                                    : null,
+                            ]}
+                        />
+                    }
+                    secondaryActions={
+                        <WorkspaceTaskHeaderActions
+                            item={item}
+                            contextLabel="任务详情"
                         >
-                            <FileTextIcon aria-hidden="true" />
-                            预览销售单
-                        </Button>
-                    </WorkspaceTaskHeaderActions>
-                </>
+                            <Button
+                                id={`workspace-procurement-sales-preview-${toAutomationIdSegment(item.workItemId)}`}
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                    setPreviewTaskId(item.workItemId)
+                                }
+                            >
+                                <FileTextIcon aria-hidden="true" />
+                                预览销售单
+                            </Button>
+                        </WorkspaceTaskHeaderActions>
+                    }
+                />
             }
             aria-label="当前供给分配任务"
         >
@@ -136,6 +131,6 @@ export function WorkspaceProcurementTask({
                     setPreviewTaskId(open ? item.workItemId : null)
                 }
             />
-        </WorkspaceTaskPane>
+        </WorkspaceProcessingPane>
     )
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { OptionCombobox, surfaceInsetClassName } from "@/components/business"
+import { OptionCombobox } from "@/components/business"
 import { CompanySearchCombobox } from "@/features/companies/company-search-combobox"
 import {
     parsePeriodicTerm,
@@ -23,7 +23,6 @@ import {
     SUPPLIER_RATING_OPTIONS,
 } from "@/features/master-data/lib/resource-fields"
 import { supplierPaymentTermOptionsFor } from "@/lib/business-options"
-import { cn } from "@/lib/utils"
 
 export function SupplierEditorCommercialSection({
     values,
@@ -210,12 +209,7 @@ export function SupplierEditorCommercialSection({
                     </FieldShell>
                 </div>
 
-                <div
-                    className={cn(
-                        surfaceInsetClassName,
-                        "grid gap-4 p-4 sm:grid-cols-3",
-                    )}
-                >
+                <div className="grid gap-4 border-t border-border/60 pt-4 sm:grid-cols-3">
                     <FieldShell>
                         <Label htmlFor="supplier-initial-score">
                             {masterDataCopy.fInitialScore}

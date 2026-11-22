@@ -22,10 +22,12 @@ export function IntegrationItemSummary({
     item,
     headingRef,
     onRefresh,
+    flat,
 }: {
     item: IntegrationResolutionItemView
     headingRef: React.RefObject<HTMLHeadingElement | null>
     onRefresh: () => void
+    flat?: boolean
 }) {
     const recovered = hasAuthenticationRecovery(item)
     const terminal =
@@ -45,7 +47,11 @@ export function IntegrationItemSummary({
                         id="integration-item-title"
                         ref={headingRef}
                         tabIndex={-1}
-                        className="break-words text-body-compact font-semibold outline-none"
+                        className={
+                            flat
+                                ? "scroll-mt-32 break-words text-section-title font-semibold tracking-tight outline-none"
+                                : "break-words text-body-compact font-semibold outline-none"
+                        }
                     >
                         {[item.identity.number, item.businessObject.title]
                             .filter(Boolean)
@@ -61,17 +67,19 @@ export function IntegrationItemSummary({
                     </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                    <BusinessStatusBadge
-                        context="detail"
-                        label={item.status.label}
-                        tone={
-                            item.workItem?.status === "CLOSED"
-                                ? "neutral"
-                                : terminal
-                                  ? "success"
-                                  : "info"
-                        }
-                    />
+                    {!flat && (
+                        <BusinessStatusBadge
+                            context="detail"
+                            label={item.status.label}
+                            tone={
+                                item.workItem?.status === "CLOSED"
+                                    ? "neutral"
+                                    : terminal
+                                      ? "success"
+                                      : "info"
+                            }
+                        />
+                    )}
                     <Button
                         id="integration-item-summary-refresh"
                         type="button"
@@ -231,6 +239,11 @@ export function IntegrationItemSummary({
             {item.difference ? (
                 <>
                     <BusinessDiffPanel
+                        className={
+                            flat
+                                ? "rounded-none border-x-0 border-border/60 [&_th:first-child]:pl-0 [&_td:first-child]:pl-0 [&>header]:px-0"
+                                : undefined
+                        }
                         title="双方数据核对"
                         caption="外部账单与系统记录对照"
                         fieldColumnLabel="对照项"

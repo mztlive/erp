@@ -159,7 +159,12 @@ export function PortalTermsForm({
         offering?.writable === false
     return (
         <form
-            className="space-y-5 rounded-xl border bg-card p-5"
+            className={
+                sku
+                    ? "space-y-5 rounded-xl border bg-card p-5"
+                    : "flex flex-col gap-5"
+            }
+            data-slot={sku ? undefined : "detail-form-grid"}
             onSubmit={(event) => {
                 event.preventDefault()
                 void form.handleSubmit()

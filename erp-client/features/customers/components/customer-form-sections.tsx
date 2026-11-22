@@ -3,7 +3,12 @@
 import * as React from "react"
 import { PlusIcon } from "lucide-react"
 
-import { DocumentSection } from "@/components/business"
+import {
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
+} from "@/components/business"
+import { FieldGroup } from "@/components/ui/field"
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { CustomerFormDefaultFlag } from "@/features/customers/components/customer-form-default-flag"
 import {
@@ -52,13 +57,14 @@ export function FormSection({
         )
     }
     return (
-        <DocumentSection
+        <DetailWorkspaceSection
             title={title}
-            description={description}
-            action={action}
+            subtitle={description}
+            actions={action}
+            width="form"
         >
             {children}
-        </DocumentSection>
+        </DetailWorkspaceSection>
     )
 }
 
@@ -84,7 +90,12 @@ export function ContactRowsSection({
                             id="customers-form-contacts-add"
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant={grouped ? "ghost" : "outline"}
+                            className={
+                                grouped
+                                    ? detailWorkspaceStyles.subtleButton
+                                    : undefined
+                            }
                             onClick={() =>
                                 field.pushValue({
                                     draftId:
@@ -127,9 +138,21 @@ export function ContactRowsSection({
                                         _row.draftId ??
                                         `contact-${index}`
                                     }
-                                    className="space-y-2 rounded-lg border border-border p-3"
+                                    className={cn(
+                                        "space-y-2",
+                                        grouped
+                                            ? "border-t border-border/60 py-3 first:border-t-0 first:pt-0"
+                                            : "rounded-lg border border-border p-3",
+                                    )}
                                 >
-                                    <div className="grid gap-2 sm:grid-cols-2">
+                                    <FieldGroup
+                                        data-slot={
+                                            grouped
+                                                ? "detail-form-grid"
+                                                : "field-group"
+                                        }
+                                        className="grid gap-2 sm:grid-cols-2"
+                                    >
                                         <form.AppField
                                             name={`contacts[${index}].name`}
                                         >
@@ -185,7 +208,7 @@ export function ContactRowsSection({
                                                 />
                                             )}
                                         </form.AppField>
-                                    </div>
+                                    </FieldGroup>
                                     <div className="flex items-center justify-between gap-2">
                                         <form.AppField
                                             name={`contacts[${index}].isDefault`}
@@ -245,7 +268,12 @@ export function AddressRowsSection({
                             id="customers-form-addresses-add"
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant={grouped ? "ghost" : "outline"}
+                            className={
+                                grouped
+                                    ? detailWorkspaceStyles.subtleButton
+                                    : undefined
+                            }
                             onClick={() =>
                                 field.pushValue({
                                     draftId:
@@ -286,9 +314,21 @@ export function AddressRowsSection({
                                         _row.draftId ??
                                         `address-${index}`
                                     }
-                                    className="space-y-2 rounded-lg border border-border p-3"
+                                    className={cn(
+                                        "space-y-2",
+                                        grouped
+                                            ? "border-t border-border/60 py-3 first:border-t-0 first:pt-0"
+                                            : "rounded-lg border border-border p-3",
+                                    )}
                                 >
-                                    <div className="grid gap-2 sm:grid-cols-2">
+                                    <FieldGroup
+                                        data-slot={
+                                            grouped
+                                                ? "detail-form-grid"
+                                                : "field-group"
+                                        }
+                                        className="grid gap-2 sm:grid-cols-2"
+                                    >
                                         <form.AppField
                                             name={`addresses[${index}].addressType`}
                                         >
@@ -326,7 +366,7 @@ export function AddressRowsSection({
                                                 />
                                             )}
                                         </form.AppField>
-                                    </div>
+                                    </FieldGroup>
                                     <div className="flex items-center justify-between gap-2">
                                         <form.AppField
                                             name={`addresses[${index}].isDefault`}

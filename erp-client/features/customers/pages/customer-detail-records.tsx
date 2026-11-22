@@ -4,12 +4,8 @@ import { cn } from "@/lib/utils"
 
 /**
  * 说明列表嵌在分区里时不再自带底边。
- * DocumentSummary 与 DocumentSection 各画一条 border-b 会叠成双分割线。
  */
 export const embeddedSummaryClassName = "border-0 bg-transparent py-0"
-
-/** 正文内缩，分割线仍与页签下划线同宽。 */
-export const detailSectionClassName = "px-4"
 
 export function DetailRecordColumns({
     children,

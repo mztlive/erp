@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useRef, useState, type ReactNode } from "react"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
 import {
@@ -8,6 +8,7 @@ import {
     MoneyValue,
     SensitiveValue,
     WorkspaceTaskFooter,
+    detailWorkspaceStyles,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
@@ -42,18 +43,29 @@ import type {
 } from "../types"
 import { RequestDraftDialog } from "./request-draft-dialog"
 import { RequestPaymentExecution } from "./request-payment-execution"
-import { RequestDetailContent } from "./request-detail-content"
+import {
+    RequestDetailContent,
+    RequestDetailWorkspaceContent,
+} from "./request-detail-content"
+
+type RequestDetailChrome = (slots: {
+    tabs?: ReactNode
+    secondaryActions?: ReactNode
+    primaryAction?: ReactNode
+}) => ReactNode
 
 export function RequestDetail({
     request,
     task,
     onDecisionApplied,
     onTaskCompleted,
+    renderChrome,
 }: {
     request: PaymentRequest
     task?: PaymentTaskContext
     onDecisionApplied?: (view: ApprovalCommandView) => void
     onTaskCompleted?: () => void
+    renderChrome?: RequestDetailChrome
 }) {
     const [editOpen, setEditOpen] = useState(false)
     const [submitOpen, setSubmitOpen] = useState(false)
@@ -99,50 +111,126 @@ export function RequestDetail({
             />
         )
     }
-    return (
-        <div className="space-y-6">
-            <RequestDetailContent
-                request={request}
-                embedded={Boolean(task)}
-                showHistory
-                workItemId={scopedWorkItemId}
-                account={
-                    request.execution_method.type === "bank_transfer" &&
-                    request.payment_recipient &&
-                    isApprovalTask &&
-                    task &&
-                    hasPermission(
-                        profile.data?.permissions,
-                        "party_bank_account:reveal",
-                    ) ? (
-                        <SensitiveValue
-                            id="ppr-review-recipient-account"
-                            label="收款账号"
-                            maskedValue={
-                                request.payment_recipient
-                                    ?.account_number_masked ?? "—"
-                            }
-                            onReveal={() =>
-                                reveal.mutateAsync({ request, task })
-                            }
-                        />
-                    ) : (
-                        <span className="num">
-                            {request.payment_recipient?.account_number_masked ??
-                                "—"}
-                        </span>
-                    )
+    const account =
+        request.execution_method.type === "bank_transfer" &&
+        request.payment_recipient &&
+        isApprovalTask &&
+        task &&
+        hasPermission(
+            profile.data?.permissions,
+            "party_bank_account:reveal",
+        ) ? (
+            <SensitiveValue
+                id="ppr-review-recipient-account"
+                label="收款账号"
+                maskedValue={
+                    request.payment_recipient?.account_number_masked ?? "—"
                 }
-                approval={
-                    approval ? (
-                        <ApprovalReadonly
-                            approval={approval}
-                            id="ppr-approval-readonly"
-                            presentation="history"
-                        />
-                    ) : null
-                }
+                onReveal={() => reveal.mutateAsync({ request, task })}
             />
+        ) : (
+            <span className="num">
+                {request.payment_recipient?.account_number_masked ?? "—"}
+            </span>
+        )
+    const approvalHistory = approval ? (
+        <ApprovalReadonly
+            approval={approval}
+            id="ppr-approval-readonly"
+            presentation="history"
+        />
+    ) : null
+    const secondaryActions = (
+        <>
+            {actions.has("EDIT") && (
+                <Button
+                    id="ppr-detail-edit"
+                    variant={renderChrome ? "ghost" : "outline"}
+                    size={renderChrome ? "sm" : undefined}
+                    className={
+                        renderChrome
+                            ? detailWorkspaceStyles.quietButton
+                            : undefined
+                    }
+                    disabled={submitUnsettled}
+                    onClick={() => setEditOpen(true)}
+                >
+                    修改申请
+                </Button>
+            )}
+            {actions.has("WITHDRAW") && (
+                <Button
+                    id="ppr-detail-withdraw"
+                    variant={renderChrome ? "ghost" : "outline"}
+                    size={renderChrome ? "sm" : undefined}
+                    className={
+                        renderChrome
+                            ? detailWorkspaceStyles.quietDangerButton
+                            : undefined
+                    }
+                    disabled={submitUnsettled}
+                    onClick={() => setReasonAction("withdraw")}
+                >
+                    撤回申请
+                </Button>
+            )}
+            {actions.has("CLOSE") && (
+                <Button
+                    id="ppr-detail-close"
+                    variant={renderChrome ? "ghost" : "outline"}
+                    size={renderChrome ? "sm" : undefined}
+                    className={
+                        renderChrome
+                            ? detailWorkspaceStyles.quietDangerButton
+                            : undefined
+                    }
+                    disabled={submitUnsettled}
+                    onClick={() => setReasonAction("close")}
+                >
+                    {closeLabel}
+                </Button>
+            )}
+        </>
+    )
+    const primaryAction = (actions.has("SUBMIT") || submitUnknown) && (
+        <Button
+            id="ppr-detail-submit"
+            size={renderChrome ? "sm" : undefined}
+            className={renderChrome ? "px-3.5" : undefined}
+            disabled={command.isPending}
+            onClick={() => setSubmitOpen(true)}
+        >
+            {submitUnknown ? "查询本次提交结果" : "提交财务审核"}
+        </Button>
+    )
+    const submitStatus = submitUnknown && (
+        <p role="status" className="text-xs text-muted-foreground">
+            提交结果暂无法确认，请再次确认本次提交以查询上次提交结果。
+        </p>
+    )
+    const content = renderChrome ? (
+        <RequestDetailWorkspaceContent
+            request={request}
+            account={account}
+            approval={approvalHistory}
+            alerts={submitStatus}
+            renderChrome={(tabs) =>
+                renderChrome({ tabs, secondaryActions, primaryAction })
+            }
+        />
+    ) : (
+        <RequestDetailContent
+            request={request}
+            embedded={Boolean(task)}
+            showHistory
+            workItemId={scopedWorkItemId}
+            account={account}
+            approval={approvalHistory}
+        />
+    )
+    const details = (
+        <>
+            {content}
             {isApprovalTask && task && approval && (
                 <WorkspaceTaskFooter>
                     <ApprovalActionBar
@@ -171,50 +259,11 @@ export function RequestDetail({
                     />
                 </WorkspaceTaskFooter>
             )}
-            {!isPaymentTask && (
+            {!renderChrome && !isPaymentTask && (
                 <WorkspaceTaskFooter>
                     <div className="flex flex-wrap justify-end gap-2">
-                        {actions.has("EDIT") && (
-                            <Button
-                                id="ppr-detail-edit"
-                                variant="outline"
-                                disabled={submitUnsettled}
-                                onClick={() => setEditOpen(true)}
-                            >
-                                修改申请
-                            </Button>
-                        )}
-                        {actions.has("WITHDRAW") && (
-                            <Button
-                                id="ppr-detail-withdraw"
-                                variant="outline"
-                                disabled={submitUnsettled}
-                                onClick={() => setReasonAction("withdraw")}
-                            >
-                                撤回申请
-                            </Button>
-                        )}
-                        {actions.has("CLOSE") && (
-                            <Button
-                                id="ppr-detail-close"
-                                variant="outline"
-                                disabled={submitUnsettled}
-                                onClick={() => setReasonAction("close")}
-                            >
-                                {closeLabel}
-                            </Button>
-                        )}
-                        {(actions.has("SUBMIT") || submitUnknown) && (
-                            <Button
-                                id="ppr-detail-submit"
-                                disabled={command.isPending}
-                                onClick={() => setSubmitOpen(true)}
-                            >
-                                {submitUnknown
-                                    ? "查询本次提交结果"
-                                    : "提交财务审核"}
-                            </Button>
-                        )}
+                        {secondaryActions}
+                        {primaryAction}
                     </div>
                 </WorkspaceTaskFooter>
             )}
@@ -289,11 +338,7 @@ export function RequestDetail({
                     }
                 }}
             />
-            {submitUnknown && (
-                <p role="status" className="text-xs text-muted-foreground">
-                    提交结果暂无法确认，请再次确认本次提交以查询上次提交结果。
-                </p>
-            )}
+            {!renderChrome && submitStatus}
             {reasonAction && (
                 <ReasonCommandDialog
                     request={request}
@@ -301,8 +346,9 @@ export function RequestDetail({
                     onClose={() => setReasonAction(null)}
                 />
             )}
-        </div>
+        </>
     )
+    return renderChrome ? details : <div className="space-y-6">{details}</div>
 }
 function ReasonCommandDialog({
     request,

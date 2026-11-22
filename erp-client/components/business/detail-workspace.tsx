@@ -28,6 +28,7 @@ export type DetailWorkspaceTabItem = Readonly<{
     label: React.ReactNode
     title?: string
     badge?: React.ReactNode
+    triggerId?: string
 }>
 
 /**
@@ -133,9 +134,10 @@ export function DetailWorkspaceTabs({
                     <TabsTrigger
                         key={item.id}
                         id={
-                            tabIdPrefix
+                            item.triggerId ??
+                            (tabIdPrefix
                                 ? `${tabIdPrefix}-${toAutomationIdSegment(item.id)}`
-                                : undefined
+                                : undefined)
                         }
                         value={item.id}
                         title={item.title}

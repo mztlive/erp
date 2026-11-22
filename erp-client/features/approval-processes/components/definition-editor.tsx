@@ -4,7 +4,10 @@ import { reportOperationProblem } from "@/lib/system-feedback"
 
 import * as React from "react"
 import { BellIcon, PlusIcon } from "lucide-react"
-import { DraftSaveIndicator } from "@/components/business"
+import {
+    DetailWorkspaceSection,
+    DraftSaveIndicator,
+} from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
@@ -229,7 +232,7 @@ export function DefinitionEditor({
                         <DirtyObserver dirty={dirty} onChange={onDirtyChange} />
                     )}
                 </form.Subscribe>
-                <div className="space-y-4 p-4 sm:p-6">
+                <DetailWorkspaceSection>
                     <form.Subscribe
                         selector={(state) =>
                             [
@@ -443,8 +446,8 @@ export function DefinitionEditor({
                             )
                         }}
                     </form.Subscribe>
-                </div>
-                <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card px-4 py-3 sm:px-6">
+                </DetailWorkspaceSection>
+                <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 bg-card py-3">
                     {saveState === "idle" ? (
                         <form.Subscribe
                             selector={(state) =>

@@ -1,7 +1,10 @@
 "use client"
 
-import { PlusIcon } from "lucide-react"
+import { LockIcon, PlusIcon } from "lucide-react"
 
+import { detailWorkspaceStyles } from "@/components/business"
+import { FieldGroup } from "@/components/ui/field"
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { CustomerFormDefaultFlag } from "@/features/customers/components/customer-form-default-flag"
 import {
@@ -33,7 +36,12 @@ export function BankAccountRowsSection({
                             id="customers-form-bank-add"
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant={grouped ? "ghost" : "outline"}
+                            className={
+                                grouped
+                                    ? detailWorkspaceStyles.subtleButton
+                                    : undefined
+                            }
                             onClick={() =>
                                 field.pushValue({
                                     draftId: createCustomerFormDraftId("bank"),
@@ -74,9 +82,35 @@ export function BankAccountRowsSection({
                                         _row.draftId ??
                                         `bank-${index}`
                                     }
-                                    className="space-y-2 rounded-lg border border-border p-3"
+                                    className={cn(
+                                        "space-y-2",
+                                        grouped
+                                            ? "border-t border-border/60 py-3 first:border-t-0 first:pt-0"
+                                            : "rounded-lg border border-border p-3",
+                                    )}
                                 >
-                                    <div className="grid gap-2 sm:grid-cols-2">
+                                    {grouped && _row.existingId ? (
+                                        <div className="mb-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                                            <LockIcon
+                                                className="size-3"
+                                                aria-hidden="true"
+                                            />
+                                            已登记的账户资料不可直接修改
+                                        </div>
+                                    ) : null}
+                                    <FieldGroup
+                                        data-slot={
+                                            grouped
+                                                ? "detail-form-grid"
+                                                : "field-group"
+                                        }
+                                        className={cn(
+                                            "grid gap-2 sm:grid-cols-2",
+                                            grouped &&
+                                                _row.existingId &&
+                                                "[&_[data-slot=input]:disabled]:border-transparent [&_[data-slot=input]:disabled]:bg-muted/45",
+                                        )}
+                                    >
                                         <form.AppField
                                             name={`bankAccounts[${index}].accountName`}
                                         >
@@ -132,7 +166,7 @@ export function BankAccountRowsSection({
                                                 />
                                             )}
                                         </form.AppField>
-                                    </div>
+                                    </FieldGroup>
                                     <div className="flex items-center justify-between gap-2">
                                         <form.AppField
                                             name={`bankAccounts[${index}].isDefault`}

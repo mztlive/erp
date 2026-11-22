@@ -197,7 +197,12 @@ export function PortalCooperationEditor({
         actor?.role !== "maintainer" || mutation.isPending || !!intent.current
     return (
         <form
-            className="space-y-4 rounded-xl border p-5"
+            className={
+                draft
+                    ? "flex flex-col gap-4"
+                    : "space-y-4 rounded-xl border p-5"
+            }
+            data-slot={draft ? "detail-form-grid" : undefined}
             onSubmit={(event) => {
                 event.preventDefault()
                 void form.handleSubmit()

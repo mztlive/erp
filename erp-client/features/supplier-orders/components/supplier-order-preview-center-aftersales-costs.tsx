@@ -4,24 +4,15 @@ import Link from "next/link"
 
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
-    DocumentSection,
+    DetailWorkspaceSection,
     GuardedBusinessAction,
     MoneyValue,
-    surfaceInsetClassName,
 } from "@/components/business"
 import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import { DescriptionList } from "@/components/ui/description-list"
 import type { SupplierOrderDetailView } from "@/features/supplier-orders/types"
 import { formatDateTime } from "@/lib/datetime"
-import { cn } from "@/lib/utils"
 import type { AfterSalesConfirmRequest } from "@/features/supplier-orders/hooks/use-supplier-order-center-actions"
 import {
     FactGap,
@@ -38,9 +29,9 @@ export function AftersalesSection({
     onRequest: (request: AfterSalesConfirmRequest) => void
 }) {
     return (
-        <DocumentSection
+        <DetailWorkspaceSection
             title="售后"
-            description="售后请求 + 余额恢复 / 供应商退款两类记录分别展示"
+            subtitle="售后请求 + 余额恢复 / 供应商退款两类记录分别展示"
         >
             {afterSales.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
@@ -49,106 +40,100 @@ export function AftersalesSection({
             ) : (
                 <div className="space-y-4">
                     {afterSales.map((as) => (
-                        <Card
+                        <section
                             key={as.requestId}
-                            size="sm"
-                            className={cn(
-                                surfaceInsetClassName,
-                                "shadow-none ring-0",
-                            )}
+                            className="flex flex-col gap-3 border-t border-border/60 pt-4"
                         >
-                            <CardHeader className="rounded-t-lg border-b border-grid pb-2">
-                                <CardTitle>{as.requestNo}</CardTitle>
-                                <CardDescription>
+                            <div>
+                                <h3 className="num font-semibold">
+                                    {as.requestNo}
+                                </h3>
+                                <p className="text-xs text-muted-foreground">
                                     {as.scope} · 申请于{" "}
                                     {formatDateTime(
                                         as.requestedAt,
                                         "fullIntl",
                                         "passthrough",
                                     )}
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                                <div className="grid gap-2 sm:grid-cols-2">
-                                    <FactGap
-                                        title="余额/卡券恢复"
-                                        status={as.cardRestore.statusLabel}
-                                        gap={as.cardRestore.gapNote}
-                                    />
-                                    <FactGap
-                                        title="供应商退款"
-                                        status={as.supplierRefund.statusLabel}
-                                        amount={as.supplierRefund.amount}
-                                        gap={as.supplierRefund.gapNote}
-                                    />
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                    <PermissionGuard permission="supplier_fulfillment_order:cancel">
-                                        <GuardedBusinessAction
-                                            id={`supplier-order-center-aftersales-${toAutomationIdSegment(as.requestId)}-cancel`}
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            disabled={
-                                                !as.allowedActions.includes(
-                                                    "CANCEL",
-                                                ) || pending
-                                            }
-                                            reason={
-                                                as.actionBlockers.find(
-                                                    (b) =>
-                                                        b.action === "CANCEL",
-                                                )?.message
-                                            }
-                                            onClick={() =>
-                                                onRequest({
-                                                    requestId: as.requestId,
-                                                    requestNo: as.requestNo,
-                                                    action: "CANCEL",
-                                                })
-                                            }
-                                        >
-                                            提交取消
-                                        </GuardedBusinessAction>
-                                    </PermissionGuard>
-                                    <PermissionGuard permission="supplier_fulfillment_order:refund">
-                                        <GuardedBusinessAction
-                                            id={`supplier-order-center-aftersales-${toAutomationIdSegment(as.requestId)}-refund`}
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            disabled={
-                                                !as.allowedActions.includes(
-                                                    "REFUND",
-                                                ) || pending
-                                            }
-                                            reason={
-                                                as.actionBlockers.find(
-                                                    (b) =>
-                                                        b.action === "REFUND",
-                                                )?.message
-                                            }
-                                            onClick={() =>
-                                                onRequest({
-                                                    requestId: as.requestId,
-                                                    requestNo: as.requestNo,
-                                                    action: "REFUND",
-                                                })
-                                            }
-                                        >
-                                            提交退款
-                                        </GuardedBusinessAction>
-                                    </PermissionGuard>
-                                </div>
-                                <p className="text-tiny text-muted-foreground">
-                                    关联售后申请单：{as.requestNo}
                                 </p>
-                            </CardContent>
-                        </Card>
+                            </div>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                                <FactGap
+                                    title="余额/卡券恢复"
+                                    status={as.cardRestore.statusLabel}
+                                    gap={as.cardRestore.gapNote}
+                                />
+                                <FactGap
+                                    title="供应商退款"
+                                    status={as.supplierRefund.statusLabel}
+                                    amount={as.supplierRefund.amount}
+                                    gap={as.supplierRefund.gapNote}
+                                />
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                <PermissionGuard permission="supplier_fulfillment_order:cancel">
+                                    <GuardedBusinessAction
+                                        id={`supplier-order-center-aftersales-${toAutomationIdSegment(as.requestId)}-cancel`}
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={
+                                            !as.allowedActions.includes(
+                                                "CANCEL",
+                                            ) || pending
+                                        }
+                                        reason={
+                                            as.actionBlockers.find(
+                                                (b) => b.action === "CANCEL",
+                                            )?.message
+                                        }
+                                        onClick={() =>
+                                            onRequest({
+                                                requestId: as.requestId,
+                                                requestNo: as.requestNo,
+                                                action: "CANCEL",
+                                            })
+                                        }
+                                    >
+                                        提交取消
+                                    </GuardedBusinessAction>
+                                </PermissionGuard>
+                                <PermissionGuard permission="supplier_fulfillment_order:refund">
+                                    <GuardedBusinessAction
+                                        id={`supplier-order-center-aftersales-${toAutomationIdSegment(as.requestId)}-refund`}
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={
+                                            !as.allowedActions.includes(
+                                                "REFUND",
+                                            ) || pending
+                                        }
+                                        reason={
+                                            as.actionBlockers.find(
+                                                (b) => b.action === "REFUND",
+                                            )?.message
+                                        }
+                                        onClick={() =>
+                                            onRequest({
+                                                requestId: as.requestId,
+                                                requestNo: as.requestNo,
+                                                action: "REFUND",
+                                            })
+                                        }
+                                    >
+                                        提交退款
+                                    </GuardedBusinessAction>
+                                </PermissionGuard>
+                            </div>
+                            <p className="text-tiny text-muted-foreground">
+                                关联售后申请单：{as.requestNo}
+                            </p>
+                        </section>
                     ))}
                 </div>
             )}
-        </DocumentSection>
+        </DetailWorkspaceSection>
     )
 }
 
@@ -158,9 +143,9 @@ export function CostsSection({
     costs: SupplierOrderDetailView["costs"]
 }) {
     return (
-        <DocumentSection
+        <DetailWorkspaceSection
             title="成本与结算"
-            description="金额按含税/不含税分别标注"
+            subtitle="金额按含税/不含税分别标注"
         >
             <DescriptionList className="gap-y-3">
                 <Item
@@ -246,6 +231,6 @@ export function CostsSection({
                     供应商往来
                 </Button>
             </div>
-        </DocumentSection>
+        </DetailWorkspaceSection>
     )
 }

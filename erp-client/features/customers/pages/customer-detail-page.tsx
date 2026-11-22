@@ -7,13 +7,14 @@ import { FilePlus2Icon, ShoppingCartIcon } from "lucide-react"
 import {
     BusinessFailureState,
     DiscardConfirmDialog,
-    DetailPageHeader,
+    DetailWorkspaceBody,
+    DetailWorkspaceChrome,
+    DetailWorkspaceDirtyBadge,
+    DetailWorkspacePage,
+    DetailWorkspaceSkeleton,
+    detailWorkspaceStyles,
     GuardedBusinessAction,
-    PageHeader,
-    PageScaffold,
-    surfacePanelClassName,
 } from "@/components/business"
-import { cn } from "@/lib/utils"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -54,44 +55,50 @@ export function CustomerDetailPage({
 
     if (query.isPending && !customer) {
         return (
-            <PageScaffold>
-                <PageHeader title="客户详情" description="正在加载客户…" />
-                <div className="space-y-3" aria-busy="true" aria-label="加载中">
-                    <div className="h-16 animate-pulse rounded-lg bg-muted" />
-                    <div className="h-20 animate-pulse rounded-lg bg-muted" />
-                    <div className="h-40 animate-pulse rounded-lg bg-muted" />
-                </div>
-            </PageScaffold>
+            <div
+                className="flex min-w-0 flex-1 flex-col"
+                aria-busy="true"
+                aria-label="加载中"
+            >
+                <DetailWorkspaceSkeleton
+                    title="客户详情"
+                    description="正在加载客户…"
+                />
+            </div>
         )
     }
 
     if (query.isError && !customer) {
         return (
-            <PageScaffold>
-                <PageHeader title="客户详情" />
-                <BusinessFailureState
-                    error={query.error}
-                    action={
-                        <Button
-                            id="customers-detail-retry"
-                            type="button"
-                            onClick={() => void query.refetch()}
-                        >
-                            重试
-                        </Button>
-                    }
-                />
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title="客户详情" />
+                <DetailWorkspaceBody>
+                    <div className="pt-4">
+                        <BusinessFailureState
+                            error={query.error}
+                            action={
+                                <Button
+                                    id="customers-detail-retry"
+                                    type="button"
+                                    onClick={() => void query.refetch()}
+                                >
+                                    重试
+                                </Button>
+                            }
+                        />
+                    </div>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     }
 
     if (!customer) {
         return (
-            <PageScaffold>
-                <PageHeader
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome
                     title="客户不存在或无权访问"
-                    description="未找到该客户。可能编号有误，或当前账号无权查看该客户。"
-                    actions={
+                    meta="未找到该客户。可能编号有误，或当前账号无权查看该客户。"
+                    secondaryActions={
                         <Button
                             id="customers-detail-not-found-back"
                             render={<Link href="/sales/customers" />}
@@ -100,7 +107,7 @@ export function CustomerDetailPage({
                         </Button>
                     }
                 />
-            </PageScaffold>
+            </DetailWorkspacePage>
         )
     }
 
@@ -112,132 +119,167 @@ export function CustomerDetailPage({
     const salesBlocked = !can(customer, "CREATE_SALES_ORDER")
 
     return (
-        <PageScaffold density="compact">
-            <DetailPageHeader
-                back={{
-                    id: "customers-detail-back",
-                    label: "客户列表",
-                    onClick: state.handleBack,
-                }}
-                numberLabel="客户编号"
-                title={customer.currentRevision.legalName}
-                documentNumber={customer.customerNo}
-                version={`v${customer.currentRevision.revisionNo}`}
-                primaryStatus={customer.statusLabel}
-                meta={<CustomerDetailIdentityMeta customer={customer} />}
-                secondaryActions={
-                    <GuardedBusinessAction
-                        id="customers-detail-create-sales-order"
-                        size="sm"
-                        variant="outline"
-                        disabled={salesBlocked}
-                        reason={blocker(customer, "CREATE_SALES_ORDER")}
-                        render={
-                            salesBlocked ? undefined : (
-                                <Link href={createSalesOrderHref} />
-                            )
-                        }
-                    >
-                        <ShoppingCartIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                        />
-                        新建销售单
-                    </GuardedBusinessAction>
+        <DetailWorkspacePage>
+            <Tabs
+                value={activeSection}
+                onValueChange={(next) =>
+                    handleSectionChange(
+                        (next as CustomerSectionId) ?? "overview",
+                    )
                 }
-                primaryAction={
-                    <GuardedBusinessAction
-                        id="customers-detail-upload-contract"
-                        size="sm"
-                        disabled={contractBlocked}
-                        reason={blocker(customer, "UPLOAD_CONTRACT_PDF")}
-                        render={
-                            contractBlocked ? undefined : (
-                                <Link href={uploadContractHref} />
-                            )
-                        }
-                    >
-                        <FilePlus2Icon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                        />
-                        上传合同 PDF
-                    </GuardedBusinessAction>
-                }
-            />
-
-            {editing && (query.isError || !query.data) ? (
-                <Alert variant="warning">
-                    <AlertTitle>最新客户资料暂时不可用</AlertTitle>
-                    <AlertDescription>
-                        当前填写内容已保留。客户资料可能已被其他人更新，保存前建议刷新核对最新资料。
-                        <Button
-                            id="customers-detail-edit-retry"
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => void query.refetch()}
-                        >
-                            重试读取
-                        </Button>
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-
-            {isDisabled ? (
-                <Alert variant="warning">
-                    <AlertTitle>客户已停用</AlertTitle>
-                    <AlertDescription>
-                        该客户已停用，不可新签合同或新建销售单；历史业务单据及往来账款仍可正常查看。
-                        {blocker(customer, "UPLOAD_CONTRACT_PDF") ||
-                        blocker(customer, "CREATE_SALES_ORDER")
-                            ? `（${[
-                                  blocker(customer, "UPLOAD_CONTRACT_PDF"),
-                                  blocker(customer, "CREATE_SALES_ORDER"),
-                              ]
-                                  .filter(Boolean)
-                                  .join("；")}）`
-                            : ""}
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-
-            <CustomerDetailMetrics customer={customer} />
-
-            <div
-                className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
+                className="min-w-0 flex-1 gap-0"
             >
-                <Tabs
-                    value={activeSection}
-                    onValueChange={(next) => {
-                        handleSectionChange(
-                            (next as CustomerSectionId) ?? "overview",
-                        )
+                <DetailWorkspaceChrome
+                    back={{
+                        id: "customers-detail-back",
+                        label: "客户列表",
+                        onClick: state.handleBack,
                     }}
-                >
-                    <TabsList
-                        variant="line"
-                        className="sticky top-0 z-10 w-full justify-start overflow-x-auto rounded-none border-b border-grid bg-card px-4"
-                    >
-                        {SECTION_NAV.map((item) => (
-                            <TabsTrigger
-                                id={`customers-detail-tab-${toAutomationIdSegment(item.id)}`}
-                                key={item.id}
-                                value={item.id}
-                                className="flex-none"
-                            >
-                                {item.label}
-                            </TabsTrigger>
-                        ))}
-                    </TabsList>
+                    numberLabel="客户编号"
+                    title={customer.currentRevision.legalName}
+                    documentNumber={customer.customerNo}
+                    version={`v${customer.currentRevision.revisionNo}`}
+                    primaryStatus={customer.statusLabel}
+                    meta={<CustomerDetailIdentityMeta customer={customer} />}
+                    titleExtra={
+                        editing && state.formDirty ? (
+                            <DetailWorkspaceDirtyBadge />
+                        ) : null
+                    }
+                    secondaryActions={
+                        <GuardedBusinessAction
+                            id="customers-detail-create-sales-order"
+                            size="sm"
+                            variant="ghost"
+                            className={detailWorkspaceStyles.quietButton}
+                            disabled={salesBlocked}
+                            reason={blocker(customer, "CREATE_SALES_ORDER")}
+                            render={
+                                salesBlocked ? undefined : (
+                                    <Link href={createSalesOrderHref} />
+                                )
+                            }
+                        >
+                            <ShoppingCartIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            新建销售单
+                        </GuardedBusinessAction>
+                    }
+                    primaryAction={
+                        <GuardedBusinessAction
+                            id="customers-detail-upload-contract"
+                            size="sm"
+                            variant={editing ? "ghost" : "default"}
+                            className={
+                                editing
+                                    ? detailWorkspaceStyles.quietButton
+                                    : undefined
+                            }
+                            disabled={contractBlocked}
+                            reason={blocker(customer, "UPLOAD_CONTRACT_PDF")}
+                            render={
+                                contractBlocked ? undefined : (
+                                    <Link href={uploadContractHref} />
+                                )
+                            }
+                        >
+                            <FilePlus2Icon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            上传合同 PDF
+                        </GuardedBusinessAction>
+                    }
+                    tabs={
+                        <TabsList
+                            variant="line"
+                            aria-label="客户详情分区"
+                            className={detailWorkspaceStyles.tabsList}
+                        >
+                            {SECTION_NAV.map((item) => (
+                                <TabsTrigger
+                                    id={`customers-detail-tab-${toAutomationIdSegment(item.id)}`}
+                                    key={item.id}
+                                    value={item.id}
+                                    className={detailWorkspaceStyles.tab}
+                                >
+                                    {item.label}
+                                </TabsTrigger>
+                            ))}
+                        </TabsList>
+                    }
+                />
 
-                    <TabsContent value="overview" className="pb-4">
+                <DetailWorkspaceBody
+                    summary={<CustomerDetailMetrics customer={customer} />}
+                    alerts={
+                        <>
+                            {editing && (query.isError || !query.data) ? (
+                                <Alert variant="warning">
+                                    <AlertTitle>
+                                        最新客户资料暂时不可用
+                                    </AlertTitle>
+                                    <AlertDescription>
+                                        当前填写内容已保留。客户资料可能已被其他人更新，保存前建议刷新核对最新资料。
+                                        <Button
+                                            id="customers-detail-edit-retry"
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => void query.refetch()}
+                                        >
+                                            重试读取
+                                        </Button>
+                                    </AlertDescription>
+                                </Alert>
+                            ) : null}
+
+                            {isDisabled ? (
+                                <Alert variant="warning">
+                                    <AlertTitle>客户已停用</AlertTitle>
+                                    <AlertDescription>
+                                        该客户已停用，不可新签合同或新建销售单；历史业务单据及往来账款仍可正常查看。
+                                        {blocker(
+                                            customer,
+                                            "UPLOAD_CONTRACT_PDF",
+                                        ) ||
+                                        blocker(customer, "CREATE_SALES_ORDER")
+                                            ? `（${[
+                                                  blocker(
+                                                      customer,
+                                                      "UPLOAD_CONTRACT_PDF",
+                                                  ),
+                                                  blocker(
+                                                      customer,
+                                                      "CREATE_SALES_ORDER",
+                                                  ),
+                                              ]
+                                                  .filter(Boolean)
+                                                  .join("；")}）`
+                                            : ""}
+                                    </AlertDescription>
+                                </Alert>
+                            ) : null}
+                        </>
+                    }
+                    saveDockOpen={
+                        activeSection === "overview" &&
+                        editing &&
+                        state.formDirty
+                    }
+                >
+                    <TabsContent value="overview" className="min-w-0">
                         <CustomerDetailOverviewTab
                             customer={customer}
                             refetch={() => void query.refetch()}
                             editing={editing}
                             onEditClick={state.startEditing}
                             onFormDirtyChange={state.setFormDirty}
+                            shortcutBlocked={
+                                state.pendingSection != null || assignmentOpen
+                            }
                             onFormCancel={state.cancelEditing}
                             onFormSucceeded={(_customerId, revisionNo) =>
                                 state.completeEditing(revisionNo)
@@ -245,36 +287,36 @@ export function CustomerDetailPage({
                         />
                     </TabsContent>
 
-                    <TabsContent value="related" className="pb-4">
+                    <TabsContent value="related" className="min-w-0">
                         <CustomerDetailRelatedTab
                             customer={customer}
                             refetch={() => void query.refetch()}
                         />
                     </TabsContent>
 
-                    <TabsContent value="settlement" className="pb-4">
+                    <TabsContent value="settlement" className="min-w-0">
                         <CustomerDetailSettlementTab
                             customer={customer}
                             refetch={() => void query.refetch()}
                         />
                     </TabsContent>
 
-                    <TabsContent value="quality" className="pb-4">
+                    <TabsContent value="quality" className="min-w-0">
                         <CustomerDetailQualityTab
                             customer={customer}
                             refetch={() => void query.refetch()}
                         />
                     </TabsContent>
 
-                    <TabsContent value="audit" className="pb-4">
+                    <TabsContent value="audit" className="min-w-0">
                         <CustomerDetailAuditTab
                             customer={customer}
                             refetch={() => void query.refetch()}
                             onManageAssignments={() => setAssignmentOpen(true)}
                         />
                     </TabsContent>
-                </Tabs>
-            </div>
+                </DetailWorkspaceBody>
+            </Tabs>
 
             <CustomerAssignmentDialog
                 customerId={customer.customerId}
@@ -303,6 +345,6 @@ export function CustomerDetailPage({
                 cancelLabel="继续编辑"
                 onConfirm={state.discardPendingAndSwitch}
             />
-        </PageScaffold>
+        </DetailWorkspacePage>
     )
 }

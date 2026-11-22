@@ -4,6 +4,8 @@ import { Fragment } from "react"
 
 import {
     BusinessEmptyState,
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
     MoneyValue,
     QuantityValue,
 } from "@/components/business"
@@ -93,21 +95,13 @@ export function ProposalItems({ proposal }: { proposal: ProposalView }) {
     }
 
     return (
-        <section
-            aria-labelledby="selection-proposal-items-title"
-            className="min-w-0"
+        <DetailWorkspaceSection
+            headingId="selection-proposal-items-title"
+            title={title}
+            subtitle={
+                <span className="num">{proposal.display_lines.length} 款</span>
+            }
         >
-            <div className="mb-4 flex items-baseline gap-3">
-                <h2
-                    id="selection-proposal-items-title"
-                    className="text-section-title font-semibold tracking-tight"
-                >
-                    {title}
-                </h2>
-                <span className="num text-xs text-muted-foreground">
-                    {proposal.display_lines.length} 款
-                </span>
-            </div>
             {proposal.display_lines.length === 0 ? (
                 <BusinessEmptyState
                     kind="no-data"
@@ -115,7 +109,10 @@ export function ProposalItems({ proposal }: { proposal: ProposalView }) {
                     description="该方案尚无可展示的确认明细。"
                 />
             ) : (
-                <div className="overflow-hidden rounded-xl border border-border">
+                <div
+                    data-slot="detail-inline-table"
+                    className={detailWorkspaceStyles.inlineTableWrapper}
+                >
                     <Table
                         data-density="comfortable"
                         className={
@@ -245,6 +242,6 @@ export function ProposalItems({ proposal }: { proposal: ProposalView }) {
                     </Table>
                 </div>
             )}
-        </section>
+        </DetailWorkspaceSection>
     )
 }

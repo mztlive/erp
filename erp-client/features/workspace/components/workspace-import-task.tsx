@@ -1,8 +1,9 @@
 "use client"
 
+import { WorkspaceProcessingPane } from "./workspace-processing-layout"
+
 import * as React from "react"
 
-import { WorkspaceTaskPane } from "@/components/business"
 import { BatchDetailView } from "@/features/import-opening/components/batch-detail-view"
 import type { ImportOpeningUrlState } from "@/features/import-opening/lib/url-state"
 import type { ConfirmationScope } from "@/features/import-opening/types"
@@ -53,7 +54,7 @@ export function WorkspaceImportTask({
     )
 
     return (
-        <WorkspaceTaskPane
+        <WorkspaceProcessingPane
             header={<WorkspaceTaskIdentityHeader item={item} />}
             aria-label="当前导入业务确认任务"
         >
@@ -65,6 +66,6 @@ export function WorkspaceImportTask({
                 embedded
                 onTaskCompleted={onTaskCompleted}
             />
-        </WorkspaceTaskPane>
+        </WorkspaceProcessingPane>
     )
 }

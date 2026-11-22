@@ -3,6 +3,7 @@
 import * as React from "react"
 import { createPortal } from "react-dom"
 import { z } from "zod"
+import { detailWorkspaceStyles } from "@/components/business"
 import { useAppForm, withForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { DatePicker } from "@/components/ui/date-picker"
@@ -61,7 +62,8 @@ export const InquiryDemandHeader = withForm({
                             id="sales-inquiry-description-edit"
                             ref={trigger}
                             type="button"
-                            variant="outline"
+                            variant="ghost"
+                            className={detailWorkspaceStyles.quietButton}
                             size="sm"
                             disabled={disabled}
                             onClick={() => setOpen(true)}

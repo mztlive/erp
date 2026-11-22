@@ -2,15 +2,8 @@
 
 import {
     FormalActionResult,
-    surfacePanelClassName,
+    DetailWorkspaceSection,
 } from "@/components/business"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import { GateRow } from "@/features/import-opening/components/batch-facts"
 import type { ImportBatchView } from "@/features/import-opening/types"
 
@@ -20,14 +13,11 @@ export function ProductionGateCard({ batch }: { batch: ImportBatchView }) {
         (b) => b.action === "START_APPLY",
     )
     return (
-        <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="border-b border-grid">
-                <CardTitle>提交前检查</CardTitle>
-                <CardDescription>
-                    需先完成数据预检与各部门业务核对，才能正式导入系统。
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 pt-4">
+        <DetailWorkspaceSection
+            title="提交前检查"
+            subtitle="需先完成数据预检与各部门业务核对，才能正式导入系统。"
+        >
+            <div className="space-y-3">
                 <GateRow
                     ok={batch.productionGates.validationEnvPassed}
                     label="已完成预检测试并核对通过"
@@ -75,7 +65,7 @@ export function ProductionGateCard({ batch }: { batch: ImportBatchView }) {
                         description="提交时系统会再次核验权限与数据，确认无误后开始导入。"
                     />
                 )}
-            </CardContent>
-        </Card>
+            </div>
+        </DetailWorkspaceSection>
     )
 }

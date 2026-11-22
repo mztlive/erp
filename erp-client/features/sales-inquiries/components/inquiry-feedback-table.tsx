@@ -267,7 +267,10 @@ export function InquiryFeedbackTable({
                         {batchMessage}
                     </p>
                 )}
-                <div className="overflow-hidden rounded-lg border">
+                <div
+                    data-slot="detail-inline-table"
+                    className="min-w-0 border-y border-border/70"
+                >
                     <Table
                         data-density="comfortable"
                         className="min-w-[1232px] table-fixed [--table-cell-inline:0.75rem]"
@@ -280,7 +283,7 @@ export function InquiryFeedbackTable({
                             <col className="w-42" />
                             <col className="w-32" />
                         </colgroup>
-                        <TableHeader className="sticky top-0 z-10 bg-muted">
+                        <TableHeader className="sticky top-0 z-10">
                             <TableRow>
                                 <TableHead className="text-center">
                                     {!readOnly && (

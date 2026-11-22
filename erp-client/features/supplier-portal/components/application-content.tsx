@@ -7,7 +7,12 @@ import {
 } from "@/components/ui/accordion"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { paymentTermLabel } from "@/lib/business-options"
-import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
+import {
+    DetailWorkspaceSection,
+    MoneyValue,
+    QuantityValue,
+    RateValue,
+} from "@/components/business"
 import type { NewProductInput, PortalApplication, PortalTerms } from "../types"
 import { percentageFromRate } from "../lib/forms"
 import { PortalDocument } from "./portal-document"
@@ -102,73 +107,72 @@ export function PortalApplicationContent({
             ? (input as unknown as NewProductInput)
             : undefined
     return (
-        <div className="space-y-5">
-            {application.reason && (
-                <p className="text-body-compact">
-                    申请原因：{application.reason}
-                </p>
-            )}
-            {typeof input.supplier_sku_code === "string" && (
-                <p className="text-body-compact">
-                    供应商订货编码：{input.supplier_sku_code}
-                </p>
-            )}
-            {terms && <PortalTermsContent terms={terms} />}
-            {application.kind === "quote" && (
-                <div className="grid gap-2 text-body-compact md:grid-cols-3">
-                    <p>
-                        可供情况：
-                        {availabilityLabels[
-                            String(input.availability_status)
-                        ] ?? "未填写"}
+        <>
+            <DetailWorkspaceSection title="申请资料" width="form">
+                {application.reason && (
+                    <p className="text-body-compact">
+                        申请原因：{application.reason}
                     </p>
-                    <p>
-                        可供数量：
-                        {input.available_quantity == null ? (
-                            "未提供"
-                        ) : (
-                            <QuantityValue
-                                value={String(input.available_quantity)}
-                                unit=""
+                )}
+                {typeof input.supplier_sku_code === "string" && (
+                    <p className="text-body-compact">
+                        供应商订货编码：{input.supplier_sku_code}
+                    </p>
+                )}
+                {terms && <PortalTermsContent terms={terms} />}
+                {application.kind === "quote" && (
+                    <div className="grid gap-2 text-body-compact md:grid-cols-3">
+                        <p>
+                            可供情况：
+                            {availabilityLabels[
+                                String(input.availability_status)
+                            ] ?? "未填写"}
+                        </p>
+                        <p>
+                            可供数量：
+                            {input.available_quantity == null ? (
+                                "未提供"
+                            ) : (
+                                <QuantityValue
+                                    value={String(input.available_quantity)}
+                                    unit=""
+                                />
+                            )}
+                        </p>
+                        <p>
+                            实际报送：
+                            {timeLabel(
+                                input.availability_reported_at as
+                                    | number
+                                    | undefined,
+                            )}
+                        </p>
+                    </div>
+                )}
+                {application.kind === "cooperation" && (
+                    <p className="text-body-compact">
+                        拟申请付款条件：
+                        {typeof input.payment_term === "string"
+                            ? paymentTermLabel(input.payment_term)
+                            : "未填写"}
+                    </p>
+                )}
+                {product && showImages && (
+                    <div className="flex flex-wrap gap-3">
+                        {product.image_asset_ids?.map((id, index) => (
+                            <PortalImage
+                                key={id}
+                                assetId={id}
+                                source={{ request_id: application.id }}
+                                alt={`商品图片 ${index + 1}`}
+                                className="h-28 w-28 rounded-md object-contain"
                             />
-                        )}
-                    </p>
-                    <p>
-                        实际报送：
-                        {timeLabel(
-                            input.availability_reported_at as
-                                | number
-                                | undefined,
-                        )}
-                    </p>
-                </div>
-            )}
-            {application.kind === "cooperation" && (
-                <p className="text-body-compact">
-                    拟申请付款条件：
-                    {typeof input.payment_term === "string"
-                        ? paymentTermLabel(input.payment_term)
-                        : "未填写"}
-                </p>
-            )}
-            {product && showImages && (
-                <div className="flex flex-wrap gap-3">
-                    {product.image_asset_ids?.map((id, index) => (
-                        <PortalImage
-                            key={id}
-                            assetId={id}
-                            source={{ request_id: application.id }}
-                            alt={`商品图片 ${index + 1}`}
-                            className="h-28 w-28 rounded-md object-contain"
-                        />
-                    ))}
-                </div>
-            )}
+                        ))}
+                    </div>
+                )}
+            </DetailWorkspaceSection>
             {product && showImages && !!product.file_asset_ids?.length && (
-                <section className="space-y-2">
-                    <h2 className="text-section-title font-semibold tracking-tight">
-                        商品资料附件
-                    </h2>
+                <DetailWorkspaceSection title="商品资料附件" width="form">
                     {product.file_asset_ids.map((id, index) => (
                         <PortalDocument
                             key={id}
@@ -178,13 +182,13 @@ export function PortalApplicationContent({
                             label={`商品资料 ${index + 1}`}
                         />
                     ))}
-                </section>
+                </DetailWorkspaceSection>
             )}
             {product && (
-                <section className="space-y-4">
-                    <h2 className="text-section-title font-semibold tracking-tight">
-                        {product.name || "未命名商品"}
-                    </h2>
+                <DetailWorkspaceSection
+                    title={product.name || "未命名商品"}
+                    width="form"
+                >
                     <dl className="grid gap-2 text-body-compact md:grid-cols-2">
                         <div>
                             提报品牌：{product.brand?.raw_name || "未填写"}
@@ -198,7 +202,7 @@ export function PortalApplicationContent({
                     {product.skus?.map((sku, index) => (
                         <section
                             key={sku.row_id}
-                            className="space-y-3 rounded-lg border p-4"
+                            className="flex flex-col gap-3 border-t border-border/60 pt-3"
                         >
                             <h3 className="font-medium">
                                 规格 {index + 1} · {sku.name || "未填写名称"}
@@ -243,13 +247,13 @@ export function PortalApplicationContent({
                             />
                         </section>
                     ))}
-                </section>
+                </DetailWorkspaceSection>
             )}
             {product?.skus?.some((sku) => sku.packaging) && (
-                <section className="space-y-2 rounded-lg border p-4">
-                    <h2 className="text-section-title font-semibold tracking-tight">
-                        供应商确认的包装及报价依据
-                    </h2>
+                <DetailWorkspaceSection
+                    title="供应商确认的包装及报价依据"
+                    width="form"
+                >
                     {product.skus
                         .filter((sku) => sku.packaging)
                         .map((sku) => (
@@ -281,13 +285,10 @@ export function PortalApplicationContent({
                                 </p>
                             </div>
                         ))}
-                </section>
+                </DetailWorkspaceSection>
             )}
             {application.decisions?.length ? (
-                <section className="space-y-2">
-                    <h2 className="text-section-title font-semibold tracking-tight">
-                        处理记录
-                    </h2>
+                <DetailWorkspaceSection title="处理记录" width="form">
                     {application.decisions.map((decision, index) => (
                         <p key={index} className="text-body-compact">
                             {statusLabels[decision.decision] ??
@@ -298,13 +299,10 @@ export function PortalApplicationContent({
                             {timeLabel(decision.at)}
                         </p>
                     ))}
-                </section>
+                </DetailWorkspaceSection>
             ) : null}
             {showHistory && !!application.submissions?.length && (
-                <section className="space-y-3">
-                    <h2 className="text-section-title font-semibold tracking-tight">
-                        历次提交记录
-                    </h2>
+                <DetailWorkspaceSection title="历次提交记录" width="form">
                     <Accordion>
                         {application.submissions.map((submission, index) => {
                             const key = String(
@@ -343,13 +341,10 @@ export function PortalApplicationContent({
                             )
                         })}
                     </Accordion>
-                </section>
+                </DetailWorkspaceSection>
             )}
             {application.result && (
-                <section className="space-y-2 rounded-lg border bg-muted/30 p-4">
-                    <h2 className="text-section-title font-semibold tracking-tight">
-                        实际处理结果
-                    </h2>
+                <DetailWorkspaceSection title="实际处理结果" width="form">
                     <p className="text-body-compact">
                         {application.result.summary ??
                             (application.kind === "new_product"
@@ -373,8 +368,8 @@ export function PortalApplicationContent({
                                 : "复用已有规格，保留原上架状态"}
                         </p>
                     ))}
-                </section>
+                </DetailWorkspaceSection>
             )}
-        </div>
+        </>
     )
 }

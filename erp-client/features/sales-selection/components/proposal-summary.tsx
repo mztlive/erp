@@ -1,11 +1,6 @@
 "use client"
 
-import Link from "next/link"
-import { useAccountProfileQuery } from "@/features/auth/queries"
-import { hasPermission } from "@/lib/permissions"
-
-import { MetricItem, MoneyValue } from "@/components/business"
-import { Button } from "@/components/ui/button"
+import { DetailWorkspaceMetricItem, MoneyValue } from "@/components/business"
 import { formatBookInstant } from "@/features/sales-selection/lib/presentation"
 import {
     SUBMIT_MODE_LABEL,
@@ -13,12 +8,6 @@ import {
 } from "@/features/sales-selection/types"
 
 export function ProposalSummary({ proposal }: { proposal: ProposalView }) {
-    const account = useAccountProfileQuery()
-    const canCreate = hasPermission(
-        account.data?.permissions,
-        "sales_order:create",
-    )
-    const showCreate = proposal.submit_mode === "BY_QUANTITY" && canCreate
     const isPackage = proposal.form === "PACKAGE"
     const isRange = proposal.submit_mode === "MALL_REDEEM"
     const count = proposal.display_lines.length
@@ -26,17 +15,15 @@ export function ProposalSummary({ proposal }: { proposal: ProposalView }) {
     const countDescription = `共 ${count} 款${isPackage ? "套餐" : "商品"}`
 
     return (
-        <aside
-            aria-label="方案摘要"
-            className="order-first min-w-0 border-b border-border pb-6 sm:grid sm:grid-cols-2 sm:gap-x-6 xl:order-last xl:block xl:border-b-0 xl:border-l xl:pb-0 xl:pl-8"
-        >
-            <MetricItem
+        <div className="min-w-0 sm:grid sm:grid-cols-2 sm:gap-x-6 xl:block">
+            <DetailWorkspaceMetricItem
+                emphasis="primary"
                 label={isRange ? "确认内容" : "方案合计"}
                 value={
                     isRange ? (
                         "可选范围"
                     ) : (
-                        <MoneyValue value={proposal.total_amount} size="hero" />
+                        <MoneyValue value={proposal.total_amount} />
                     )
                 }
                 detail={
@@ -45,7 +32,7 @@ export function ProposalSummary({ proposal }: { proposal: ProposalView }) {
                         : countDescription
                 }
             />
-            <dl className="mt-6 space-y-5 border-t border-border pt-6 text-body-compact sm:mt-0 sm:border-t-0 sm:pt-0 xl:mt-6 xl:border-t xl:pt-6">
+            <dl className="mt-6 space-y-5 border-t border-border/60 pt-6 text-body-compact sm:mt-0 sm:border-t-0 sm:pt-0 xl:mt-6 xl:border-t xl:pt-6">
                 <div className="flex items-baseline justify-between gap-4">
                     <dt className="text-muted-foreground">{countLabel}</dt>
                     <dd className="num font-medium">{count} 款</dd>
@@ -65,7 +52,7 @@ export function ProposalSummary({ proposal }: { proposal: ProposalView }) {
             </dl>
             {proposal.recipient && (
                 <section
-                    className="mt-6 space-y-2 border-t border-border pt-6 text-body-compact"
+                    className="mt-6 space-y-2 border-t border-border/60 pt-6 text-body-compact"
                     aria-label="收件信息"
                 >
                     <h2 className="text-section-title font-semibold tracking-tight">
@@ -84,35 +71,6 @@ export function ProposalSummary({ proposal }: { proposal: ProposalView }) {
                     </p>
                 </section>
             )}
-            {showCreate && (
-                <Button
-                    id="selection-proposal-create-order"
-                    className="mt-8 w-full sm:col-span-2"
-                    render={
-                        <Link
-                            href={`/sales/orders?mode=create&selectionProposalId=${encodeURIComponent(proposal.id)}`}
-                        />
-                    }
-                >
-                    创建销售单
-                </Button>
-            )}
-            <Button
-                variant={showCreate ? "outline" : "default"}
-                id="selection-proposal-open-book"
-                className={
-                    showCreate
-                        ? "mt-3 w-full sm:col-span-2"
-                        : "mt-8 w-full sm:col-span-2"
-                }
-                render={
-                    <Link
-                        href={`/sales/selection/${encodeURIComponent(proposal.booklet_id)}`}
-                    />
-                }
-            >
-                查看来源选品册
-            </Button>
-        </aside>
+        </div>
     )
 }

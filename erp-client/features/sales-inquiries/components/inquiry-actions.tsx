@@ -5,7 +5,10 @@ import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import * as React from "react"
 import { FilePenLineIcon, UserRoundCogIcon } from "lucide-react"
 import { useStore } from "@tanstack/react-form"
-import { FormalActionConfirmDialog } from "@/components/business"
+import {
+    detailWorkspaceStyles,
+    FormalActionConfirmDialog,
+} from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { MultiOptionCombobox } from "@/components/business/multi-option-combobox"
 import { Button } from "@/components/ui/button"
@@ -62,6 +65,7 @@ export function InquiryActions({
     disabled = false,
     disabledReason,
     renderActions,
+    workspace = false,
     feedbackRound,
     feedbackDirty = false,
     beforePublish,
@@ -79,10 +83,12 @@ export function InquiryActions({
     feedbackDirty?: boolean
     beforePublish?: () => Promise<InquiryPublishContext | null>
     onPublishingChange?: (publishing: boolean) => void
+    workspace?: boolean
     renderActions?: (
         primaryActions: React.ReactNode,
         secondaryActions: React.ReactNode,
         assignmentActions: React.ReactNode,
+        alerts: React.ReactNode,
     ) => React.ReactNode
 }) {
     const [action, setAction] = React.useState<InquiryAction | null>(null)
@@ -268,70 +274,74 @@ export function InquiryActions({
         permissionForAction(item).every((code) =>
             hasPermission(permissions, code),
         )
-    const renderButton = (item: InquiryAction) => (
-        <PermissionGuard key={item} permission={permissionForAction(item)}>
-            <Button
-                key={item}
-                id={`sales-inquiry-action-${item}`}
-                type="button"
-                variant={
-                    ["close", "reassign", "supplement", "reinquire"].includes(
-                        item,
-                    )
-                        ? "outline"
-                        : "default"
-                }
-                disabled={
-                    disabled ||
-                    (feedbackDirty && item !== "publish") ||
-                    (item === "publish" && !beforePublish) ||
-                    isSubmitting ||
-                    ((item === "accept" || item === "reinquire") &&
-                        feedbackRound != null &&
-                        feedbackRound !== inquiry.feedback_round) ||
-                    command.isPending ||
-                    command.unresolved ||
-                    !command.ready ||
-                    (procurement && !task)
-                }
-                title={
-                    disabled || (feedbackDirty && item !== "publish")
-                        ? (disabledReason ?? "请先保存当前修改后再操作")
-                        : (item === "accept" || item === "reinquire") &&
+    const renderButton = (item: InquiryAction) => {
+        const quiet =
+            workspace && ["close", "reassign", "supplement"].includes(item)
+        const variant = quiet
+            ? "ghost"
+            : ["close", "reassign", "supplement", "reinquire"].includes(item)
+              ? "outline"
+              : "default"
+        return (
+            <PermissionGuard key={item} permission={permissionForAction(item)}>
+                <Button
+                    key={item}
+                    id={`sales-inquiry-action-${item}`}
+                    type="button"
+                    variant={variant}
+                    className={
+                        quiet
+                            ? item === "close"
+                                ? detailWorkspaceStyles.quietDangerButton
+                                : detailWorkspaceStyles.quietButton
+                            : undefined
+                    }
+                    disabled={
+                        disabled ||
+                        (feedbackDirty && item !== "publish") ||
+                        (item === "publish" && !beforePublish) ||
+                        isSubmitting ||
+                        ((item === "accept" || item === "reinquire") &&
                             feedbackRound != null &&
-                            feedbackRound !== inquiry.feedback_round
-                          ? "请切回最新一轮反馈后再操作"
-                          : undefined
-                }
-                onClick={() => {
-                    setAction(item)
-                    setError(null)
-                }}
-            >
-                {item === "supplement" && (
-                    <FilePenLineIcon
-                        aria-hidden="true"
-                        data-icon="inline-start"
-                    />
-                )}
-                {item === "reassign" && (
-                    <UserRoundCogIcon
-                        aria-hidden="true"
-                        data-icon="inline-start"
-                    />
-                )}
-                {ACTION_LABEL[item]}
-            </Button>
-        </PermissionGuard>
-    )
-    return (
-        <div
-            className={
-                renderActions
-                    ? "flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden"
-                    : "space-y-3"
-            }
-        >
+                            feedbackRound !== inquiry.feedback_round) ||
+                        command.isPending ||
+                        command.unresolved ||
+                        !command.ready ||
+                        (procurement && !task)
+                    }
+                    title={
+                        disabled || (feedbackDirty && item !== "publish")
+                            ? (disabledReason ?? "请先保存当前修改后再操作")
+                            : (item === "accept" || item === "reinquire") &&
+                                feedbackRound != null &&
+                                feedbackRound !== inquiry.feedback_round
+                              ? "请切回最新一轮反馈后再操作"
+                              : undefined
+                    }
+                    onClick={() => {
+                        setAction(item)
+                        setError(null)
+                    }}
+                >
+                    {item === "supplement" && (
+                        <FilePenLineIcon
+                            aria-hidden="true"
+                            data-icon="inline-start"
+                        />
+                    )}
+                    {item === "reassign" && (
+                        <UserRoundCogIcon
+                            aria-hidden="true"
+                            data-icon="inline-start"
+                        />
+                    )}
+                    {ACTION_LABEL[item]}
+                </Button>
+            </PermissionGuard>
+        )
+    }
+    const alerts = (
+        <>
             {command.unresolved && (
                 <Alert variant="warning" className="shrink-0">
                     <AlertDescription>
@@ -360,6 +370,19 @@ export function InquiryActions({
                     <AlertDescription>{error}</AlertDescription>
                 </Alert>
             )}
+        </>
+    )
+    return (
+        <div
+            className={
+                workspace
+                    ? "flex min-h-0 min-w-0 flex-1 flex-col"
+                    : renderActions
+                      ? "flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden"
+                      : "space-y-3"
+            }
+        >
+            {!workspace && alerts}
             {renderActions ? (
                 renderActions(
                     actions
@@ -379,6 +402,7 @@ export function InquiryActions({
                                 item === "reassign" || item === "supplement",
                         )
                         .map(renderButton),
+                    workspace ? alerts : null,
                 )
             ) : (
                 <div className="flex flex-wrap gap-2">

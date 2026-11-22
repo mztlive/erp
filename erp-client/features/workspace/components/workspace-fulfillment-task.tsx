@@ -1,5 +1,8 @@
 "use client"
 
+import { WorkspaceTaskPane } from "@/components/business/workspace-task-pane"
+import { WorkspaceProcessingPane } from "./workspace-processing-layout"
+
 import * as React from "react"
 import { z } from "zod"
 
@@ -35,7 +38,6 @@ import {
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { displayName } from "@/lib/display-name"
-import { WorkspaceTaskPane } from "@/components/business"
 
 import { displayText } from "@/features/fulfillment-operations/lib/readable-label"
 import { fulfillmentTaskTitle } from "../lib/fulfillment-title"
@@ -106,8 +108,9 @@ export function WorkspaceFulfillmentTask({
             section.label === "当前采购负责人",
     )
 
+    const Pane = deliveryDialog ? WorkspaceTaskPane : WorkspaceProcessingPane
     return (
-        <WorkspaceTaskPane
+        <Pane
             className={
                 deliveryDialog
                     ? "h-auto min-h-0 flex-1 overflow-hidden"
@@ -257,7 +260,7 @@ export function WorkspaceFulfillmentTask({
                     />
                 </div>
             )}
-        </WorkspaceTaskPane>
+        </Pane>
     )
 }
 

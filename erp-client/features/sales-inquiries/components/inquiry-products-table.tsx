@@ -71,7 +71,10 @@ export function InquiryProductsTable({
                     onRetry={() => void details.refetch()}
                 />
             )}
-            <div className="min-h-0 flex-1 overflow-hidden rounded-lg border [&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:overflow-auto">
+            <div
+                data-slot="detail-inline-table"
+                className="min-h-0 flex-1 border-y border-border/70 [&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:overflow-auto"
+            >
                 <Table className="min-w-[1200px] table-fixed">
                     <TableHeader className="sticky top-0 z-10">
                         <TableRow>

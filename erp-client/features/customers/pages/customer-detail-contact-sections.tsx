@@ -2,7 +2,7 @@
 
 import {
     BusinessFailureState,
-    DocumentSection,
+    DetailWorkspaceSection,
     SensitiveValue,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
@@ -14,7 +14,6 @@ import {
     DetailRecordColumn,
     DetailRecordColumns,
     DetailRecordRow,
-    detailSectionClassName,
     periodLabel,
 } from "@/features/customers/pages/customer-detail-records"
 
@@ -28,10 +27,7 @@ export function CustomerDetailContactSections({
 }) {
     return (
         <>
-            <DocumentSection
-                className={detailSectionClassName}
-                title="联系与地址"
-            >
+            <DetailWorkspaceSection title="联系与地址">
                 {customer.partitions.contacts === "error" ? (
                     <BusinessFailureState
                         kind="system"
@@ -145,12 +141,9 @@ export function CustomerDetailContactSections({
                         </DetailRecordColumn>
                     </DetailRecordColumns>
                 )}
-            </DocumentSection>
+            </DetailWorkspaceSection>
 
-            <DocumentSection
-                className={detailSectionClassName}
-                title="银行账户"
-            >
+            <DetailWorkspaceSection title="银行账户">
                 {customer.bankAccounts.length === 0 ? (
                     <p className="text-xs text-muted-foreground">
                         暂无银行账户
@@ -185,7 +178,7 @@ export function CustomerDetailContactSections({
                         ))}
                     </div>
                 )}
-            </DocumentSection>
+            </DetailWorkspaceSection>
         </>
     )
 }

@@ -10,12 +10,14 @@ import Link from "next/link"
 
 import {
     BusinessFailureState,
-    PageHeader,
-    PageScaffold,
-    surfacePanelClassName,
+    DetailWorkspaceBody,
+    DetailWorkspaceChrome,
+    DetailWorkspacePage,
+    DetailWorkspaceSection,
+    DetailWorkspaceSkeleton,
+    detailWorkspaceStyles,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
 import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
 import { hasPermission } from "@/lib/permissions"
 import { AccessPasswordDialog } from "@/features/sales-selection/components/access-password-dialog"
@@ -96,26 +98,23 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
 
     if (detailQuery.isPending) {
         return (
-            <PageScaffold density="compact">
-                <PageHeader title="选品册" description="正在加载选品册…" />
-                <div className="space-y-3" aria-busy="true" aria-label="加载中">
-                    <Skeleton className="h-16 w-full rounded-lg" />
-                    <Skeleton className="h-20 w-full rounded-xl" />
-                    <Skeleton className="h-96 w-full rounded-xl" />
-                </div>
-            </PageScaffold>
+            <DetailWorkspaceSkeleton
+                title="选品册"
+                description="正在加载选品册…"
+            />
         )
     }
 
     if (detailQuery.isError || !detail) {
         return (
-            <PageScaffold density="compact">
-                <PageHeader
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome
                     title="选品册"
-                    actions={
+                    secondaryActions={
                         <Button
                             id="sales-selection-detail-back-error"
-                            variant="outline"
+                            variant="ghost"
+                            className={detailWorkspaceStyles.quietButton}
                             size="sm"
                             render={<Link href="/sales/selection" />}
                         >
@@ -123,14 +122,18 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                         </Button>
                     }
                 />
-                <BusinessFailureState
-                    id="sales-selection-detail-retry"
-                    title="选品册加载失败"
-                    error={detailQuery.error}
-                    description="可能是选品册不存在，或当前账号无权查看。"
-                    onRetry={() => void detailQuery.refetch()}
-                />
-            </PageScaffold>
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <BusinessFailureState
+                            id="sales-selection-detail-retry"
+                            title="选品册加载失败"
+                            error={detailQuery.error}
+                            description="可能是选品册不存在，或当前账号无权查看。"
+                            onRetry={() => void detailQuery.refetch()}
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     }
 
@@ -158,7 +161,7 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
             : undefined
 
     return (
-        <PageScaffold density="compact">
+        <DetailWorkspacePage>
             <BookDetailHeader
                 detail={detail}
                 pending={pending}
@@ -168,26 +171,38 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                 onEdit={() => setEditing(true)}
                 onCopy={canCopy ? () => setCopying(true) : undefined}
             />
-            {canCopy && copying ? (
-                <BookCopyDialog
-                    source={detail}
-                    onClose={() => setCopying(false)}
-                    onCopied={(copied) => {
-                        setCopying(false)
-                        router.push(`/sales/selection/${bookIdentity(copied)}`)
-                    }}
-                />
-            ) : null}
-
-            <section
-                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4"
-                aria-label="选品册访问密码"
-            >
-                <div className="space-y-1">
-                    <h2 className="text-section-title font-semibold tracking-tight">
-                        访问密码
-                    </h2>
-                    <p className="text-xs text-muted-foreground">
+            <DetailWorkspaceBody>
+                <DetailWorkspaceSection
+                    title="访问密码"
+                    ariaLabel="选品册访问密码"
+                    width="form"
+                    actions={
+                        canMaintain ? (
+                            <Button
+                                id="sales-selection-detail-access-password"
+                                variant="ghost"
+                                className={detailWorkspaceStyles.subtleButton}
+                                size="sm"
+                                disabled={
+                                    pending || Boolean(passwordDisabledReason)
+                                }
+                                title={passwordDisabledReason}
+                                aria-describedby={
+                                    passwordDisabledReason
+                                        ? "sales-selection-detail-access-password-wait"
+                                        : undefined
+                                }
+                                onClick={() => setPasswordEditing(true)}
+                            >
+                                {detail.access_password_set
+                                    ? "修改密码"
+                                    : "设置密码"}
+                            </Button>
+                        ) : null
+                    }
+                    contentClassName="space-y-2"
+                >
+                    <p className="text-body-compact text-muted-foreground">
                         {detail.access_password_set
                             ? "客户需验证访问密码后查看选品册。"
                             : "该选品册尚未设置密码，客户无法查看商品。请设置密码后发给客户。"}
@@ -200,93 +215,22 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                             {passwordDisabledReason}
                         </p>
                     )}
-                </div>
-                {canMaintain && (
-                    <Button
-                        id="sales-selection-detail-access-password"
-                        variant="outline"
-                        size="sm"
-                        disabled={pending || Boolean(passwordDisabledReason)}
-                        title={passwordDisabledReason}
-                        aria-describedby={
-                            passwordDisabledReason
-                                ? "sales-selection-detail-access-password-wait"
-                                : undefined
-                        }
-                        onClick={() => setPasswordEditing(true)}
-                    >
-                        {detail.access_password_set ? "修改密码" : "设置密码"}
-                    </Button>
-                )}
-            </section>
-            <AccessPasswordDialog
-                open={passwordEditing && canMaintain}
-                onOpenChange={setPasswordEditing}
-                busy={pending || !canMaintain}
-                disabledReason={passwordDisabledReason}
-                onSubmit={async (password) => {
-                    if (!canMaintain || pending || passwordDisabledReason)
-                        return
-                    await operations.accessPassword.mutateAsync({
-                        bookId: activeBookId,
-                        expected_version: detail.version,
-                        idempotency_key: createIdempotencyKey(),
-                        access_password: password,
-                    })
-                }}
-            />
-            <BookDetailVoucherPanel detail={detail} />
-
-            {canPrepare && editing ? (
-                <ReprepareDialog
-                    key={detail.version}
-                    detail={detail}
-                    onClose={() => setEditing(false)}
-                />
-            ) : null}
-            {priceEditing &&
-            detail.status === "PENDING_PUBLISH" &&
-            canMaintain &&
-            detail.batch_id ? (
-                <PriceEditDialog
-                    item={priceEditing.item}
-                    batchId={detail.batch_id}
-                    version={detail.version}
-                    busy={pending}
-                    onClose={() => setPriceEditing(null)}
-                    onSubmit={(input) =>
-                        operations.updatePrices.mutateAsync({
-                            bookId: activeBookId,
-                            ...input,
-                        })
-                    }
-                />
-            ) : null}
-
-            {/* 流程推进向导横幅 */}
-            <BookWorkflowBanner
-                detail={detail}
-                pending={pending}
-                operations={operations}
-                canPrepare={canPrepare}
-                canCopyLink={canCopyLink}
-                canOpenProposal={canOpenProposal}
-                onEdit={canPrepare ? () => setEditing(true) : undefined}
-            />
-
-            {/* 全宽商品与套餐陈列工作面 */}
-            <div
-                className={cn(
-                    surfacePanelClassName,
-                    "min-w-0 overflow-hidden rounded-xl border border-border p-5",
-                )}
-            >
-                <PreviewGrid
-                    summary={
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-                            <h2 className="text-section-title font-semibold text-foreground tracking-tight">
-                                陈列预览
-                            </h2>
+                </DetailWorkspaceSection>
+                <BookDetailVoucherPanel detail={detail} />
+                <DetailWorkspaceSection ariaLabel="选品流程">
+                    <BookWorkflowBanner
+                        detail={detail}
+                        pending={pending}
+                        operations={operations}
+                        canPrepare={canPrepare}
+                        canCopyLink={canCopyLink}
+                        canOpenProposal={canOpenProposal}
+                        onEdit={canPrepare ? () => setEditing(true) : undefined}
+                    />
+                </DetailWorkspaceSection>
+                <DetailWorkspaceSection title="陈列预览">
+                    <PreviewGrid
+                        summary={
                             <dl
                                 aria-label="陈列指标"
                                 className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
@@ -324,88 +268,145 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                                     </div>
                                 ) : null}
                             </dl>
-                        </div>
-                    }
-                    actions={
-                        detail.status === "PENDING_PUBLISH" &&
-                        canMaintain &&
-                        visibleItems.length > 0 ? (
-                            <Button
-                                id="selection-prices-markup"
-                                variant="outline"
-                                size="sm"
-                                disabled={pending || !detail.batch_id}
-                                onClick={() => setPriceEditing({})}
-                            >
-                                统一加价
-                            </Button>
-                        ) : null
-                    }
-                    emptyState={emptyState}
-                    items={visibleItems.map((item) => ({
-                        ...item,
-                        item_id: item.item_id || item.id || "",
-                        kind: item.kind ?? "SINGLE_SKU",
-                        price_gross: item.price_gross || item.price || "0",
-                    }))}
-                    priceEditor={
-                        detail.status === "PENDING_PUBLISH" &&
-                        canMaintain &&
-                        detail.batch_id
-                            ? {
-                                  batchId: detail.batch_id,
-                                  version: detail.version,
-                                  onSubmit: (input) =>
-                                      operations.updatePrices.mutateAsync({
+                        }
+                        actions={
+                            detail.status === "PENDING_PUBLISH" &&
+                            canMaintain &&
+                            visibleItems.length > 0 ? (
+                                <Button
+                                    id="selection-prices-markup"
+                                    variant="ghost"
+                                    className={
+                                        detailWorkspaceStyles.subtleButton
+                                    }
+                                    size="sm"
+                                    disabled={pending || !detail.batch_id}
+                                    onClick={() => setPriceEditing({})}
+                                >
+                                    统一加价
+                                </Button>
+                            ) : null
+                        }
+                        emptyState={emptyState}
+                        items={visibleItems.map((item) => ({
+                            ...item,
+                            item_id: item.item_id || item.id || "",
+                            kind: item.kind ?? "SINGLE_SKU",
+                            price_gross: item.price_gross || item.price || "0",
+                        }))}
+                        priceEditor={
+                            detail.status === "PENDING_PUBLISH" &&
+                            canMaintain &&
+                            detail.batch_id
+                                ? {
+                                      batchId: detail.batch_id,
+                                      version: detail.version,
+                                      onSubmit: (input) =>
+                                          operations.updatePrices.mutateAsync({
+                                              bookId: activeBookId,
+                                              ...input,
+                                          }),
+                                  }
+                                : undefined
+                        }
+                        selectionForm={detail.selection_form}
+                        tiers={detail.tiers}
+                        pending={pending}
+                        onEditPrice={
+                            detail.status === "PENDING_PUBLISH" &&
+                            canMaintain &&
+                            detail.batch_id
+                                ? (item) => setPriceEditing({ item })
+                                : undefined
+                        }
+                        deletingItemId={
+                            operations.deleteItem.isPending
+                                ? operations.deleteItem.variables?.itemId
+                                : undefined
+                        }
+                        regeneratingTierIds={
+                            operations.regenerate.isPending
+                                ? operations.regenerate.variables?.tier_ids
+                                : undefined
+                        }
+                        onRegenerateTier={
+                            canPrepare && detail.status === "PENDING_PUBLISH"
+                                ? (tierId) =>
+                                      void operations.regenerate.mutateAsync({
                                           bookId: activeBookId,
-                                          ...input,
-                                      }),
-                              }
-                            : undefined
-                    }
-                    selectionForm={detail.selection_form}
-                    tiers={detail.tiers}
-                    pending={pending}
-                    onEditPrice={
-                        detail.status === "PENDING_PUBLISH" &&
-                        canMaintain &&
-                        detail.batch_id
-                            ? (item) => setPriceEditing({ item })
-                            : undefined
-                    }
-                    deletingItemId={
-                        operations.deleteItem.isPending
-                            ? operations.deleteItem.variables?.itemId
-                            : undefined
-                    }
-                    regeneratingTierIds={
-                        operations.regenerate.isPending
-                            ? operations.regenerate.variables?.tier_ids
-                            : undefined
-                    }
-                    onRegenerateTier={
-                        canPrepare && detail.status === "PENDING_PUBLISH"
-                            ? (tierId) =>
-                                  void operations.regenerate.mutateAsync({
-                                      bookId: activeBookId,
-                                      tier_ids: [tierId],
-                                      expected_version: detail.version,
-                                      idempotency_key: createIdempotencyKey(),
-                                  })
-                            : undefined
-                    }
-                    onDelete={
-                        canMaintain && detail.status === "PENDING_PUBLISH"
-                            ? (itemId) =>
-                                  void operations.deleteItem.mutateAsync({
-                                      bookId: activeBookId,
-                                      itemId,
-                                      expected_version: detail.version,
-                                  })
-                            : undefined
+                                          tier_ids: [tierId],
+                                          expected_version: detail.version,
+                                          idempotency_key:
+                                              createIdempotencyKey(),
+                                      })
+                                : undefined
+                        }
+                        onDelete={
+                            canMaintain && detail.status === "PENDING_PUBLISH"
+                                ? (itemId) =>
+                                      void operations.deleteItem.mutateAsync({
+                                          bookId: activeBookId,
+                                          itemId,
+                                          expected_version: detail.version,
+                                      })
+                                : undefined
+                        }
+                    />
+                </DetailWorkspaceSection>
+            </DetailWorkspaceBody>
+
+            {canCopy && copying ? (
+                <BookCopyDialog
+                    source={detail}
+                    onClose={() => setCopying(false)}
+                    onCopied={(copied) => {
+                        setCopying(false)
+                        router.push(`/sales/selection/${bookIdentity(copied)}`)
+                    }}
+                />
+            ) : null}
+
+            <AccessPasswordDialog
+                open={passwordEditing && canMaintain}
+                onOpenChange={setPasswordEditing}
+                busy={pending || !canMaintain}
+                disabledReason={passwordDisabledReason}
+                onSubmit={async (password) => {
+                    if (!canMaintain || pending || passwordDisabledReason)
+                        return
+                    await operations.accessPassword.mutateAsync({
+                        bookId: activeBookId,
+                        expected_version: detail.version,
+                        idempotency_key: createIdempotencyKey(),
+                        access_password: password,
+                    })
+                }}
+            />
+            {canPrepare && editing ? (
+                <ReprepareDialog
+                    key={detail.version}
+                    detail={detail}
+                    onClose={() => setEditing(false)}
+                />
+            ) : null}
+            {priceEditing &&
+            detail.status === "PENDING_PUBLISH" &&
+            canMaintain &&
+            detail.batch_id ? (
+                <PriceEditDialog
+                    item={priceEditing.item}
+                    batchId={detail.batch_id}
+                    version={detail.version}
+                    busy={pending}
+                    onClose={() => setPriceEditing(null)}
+                    onSubmit={(input) =>
+                        operations.updatePrices.mutateAsync({
+                            bookId: activeBookId,
+                            ...input,
+                        })
                     }
                 />
-            </div>
+            ) : null}
 
             <BookDetailInfoSheet
                 open={infoOpen}
@@ -414,6 +415,6 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                 pending={pending}
                 operations={operations}
             />
-        </PageScaffold>
+        </DetailWorkspacePage>
     )
 }

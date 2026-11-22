@@ -19,9 +19,12 @@ import { DeleteAdminDialog } from "../components/accounts/delete-admin-dialog"
 import { ToggleAdminStatusDialog } from "../components/accounts/toggle-admin-status-dialog"
 import {
     BusinessFailureState,
-    DetailPageHeader,
-    PageScaffold,
-    surfacePanelClassName,
+    DetailWorkspaceBody,
+    DetailWorkspaceChrome,
+    DetailWorkspaceMeta,
+    DetailWorkspacePage,
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
 } from "@/components/business"
 import { Alert, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -76,28 +79,48 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
     const [notice, setNotice] = React.useState<string | null>(null)
     if (accounts.isPending && !account)
         return (
-            <PageScaffold>
-                <p role="status">正在读取人员资料…</p>
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <p
+                            role="status"
+                            className="text-body-compact text-muted-foreground"
+                        >
+                            正在读取人员资料…
+                        </p>
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     if (accounts.isError && !profileSnapshot)
         return (
-            <PageScaffold>
-                <BusinessFailureState
-                    error={accounts.error}
-                    onRetry={() => void accounts.refetch()}
-                    id="account-detail-retry"
-                />
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <BusinessFailureState
+                            error={accounts.error}
+                            onRetry={() => void accounts.refetch()}
+                            id="account-detail-retry"
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     if (!account)
         return (
-            <PageScaffold>
-                <p>账号不存在或无权查看。</p>
-                <Link id="account-detail-missing-back" href="/system/accounts">
-                    返回人员账号
-                </Link>
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <p>账号不存在或无权查看。</p>
+                        <Link
+                            id="account-detail-missing-back"
+                            href="/system/accounts"
+                        >
+                            返回人员账号
+                        </Link>
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     const person = org.data?.people.find((row) => row.id === account.id)
     const departmentLabel = org.isError
@@ -133,146 +156,175 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
           : isActive && profile.data?.userid === account.id
             ? "不能停用当前登录账号"
             : undefined
+    const canCheckAccess = can("data_scope:list")
+    const activeTab = tab === "check" && !canCheckAccess ? "basic" : tab
     return (
-        <PageScaffold density="compact" className="gap-3">
-            <DetailPageHeader
-                className="space-y-2"
-                back={{
-                    id: "account-detail-back",
-                    label: "人员账号",
-                    href: "/system/accounts",
-                }}
-                title={account.name}
-                numberLabel="登录账号"
-                documentNumber={account.account}
-                primaryStatus={adminAccountStatusBadge(account.status)}
-                meta={
-                    <>
-                        <span>所属部门：{departmentLabel}</span>
-                        <span>
-                            {singleRole
-                                ? `角色：${singleRole.name}`
-                                : `${account.role_ids.length} 个角色`}
-                        </span>
-                    </>
-                }
-                secondaryActions={
-                    (canDelete || canToggleStatus) && (
-                        <DropdownMenu>
-                            <DropdownMenuTrigger
-                                id="account-detail-more"
-                                render={<Button variant="ghost" size="sm" />}
-                            >
-                                <EllipsisIcon
-                                    data-icon="inline-start"
-                                    aria-hidden
-                                />
-                                更多
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56">
-                                {canToggleStatus && (
-                                    <DropdownMenuItem
-                                        id="account-detail-toggle-status"
-                                        disabled={Boolean(statusDisabledReason)}
-                                        aria-describedby={
-                                            statusDisabledReason
-                                                ? "account-detail-status-reason"
-                                                : undefined
-                                        }
-                                        onClick={() => setTogglingStatus(true)}
-                                    >
-                                        {isActive ? (
-                                            <BanIcon aria-hidden />
-                                        ) : (
-                                            <CircleCheckIcon aria-hidden />
+        <DetailWorkspacePage>
+            <Tabs
+                value={activeTab}
+                onValueChange={(next) => setTab(String(next))}
+                className="min-w-0 flex-1 gap-0"
+            >
+                <DetailWorkspaceChrome
+                    back={{
+                        id: "account-detail-back",
+                        label: "人员账号",
+                        href: "/system/accounts",
+                    }}
+                    title={account.name}
+                    numberLabel="登录账号"
+                    documentNumber={account.account}
+                    primaryStatus={adminAccountStatusBadge(account.status)}
+                    meta={
+                        <DetailWorkspaceMeta
+                            items={[
+                                `所属部门：${departmentLabel}`,
+                                singleRole
+                                    ? `角色：${singleRole.name}`
+                                    : `${account.role_ids.length} 个角色`,
+                            ]}
+                        />
+                    }
+                    secondaryActions={
+                        (canDelete || canToggleStatus) && (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger
+                                    id="account-detail-more"
+                                    render={
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className={
+                                                detailWorkspaceStyles.quietButton
+                                            }
+                                        />
+                                    }
+                                >
+                                    <EllipsisIcon
+                                        data-icon="inline-start"
+                                        aria-hidden
+                                    />
+                                    更多
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                    align="end"
+                                    className="w-56"
+                                >
+                                    {canToggleStatus && (
+                                        <DropdownMenuItem
+                                            id="account-detail-toggle-status"
+                                            disabled={Boolean(
+                                                statusDisabledReason,
+                                            )}
+                                            aria-describedby={
+                                                statusDisabledReason
+                                                    ? "account-detail-status-reason"
+                                                    : undefined
+                                            }
+                                            onClick={() =>
+                                                setTogglingStatus(true)
+                                            }
+                                        >
+                                            {isActive ? (
+                                                <BanIcon aria-hidden />
+                                            ) : (
+                                                <CircleCheckIcon aria-hidden />
+                                            )}
+                                            {isActive ? "停用账号" : "启用账号"}
+                                        </DropdownMenuItem>
+                                    )}
+                                    {canToggleStatus &&
+                                        statusDisabledReason && (
+                                            <p
+                                                id="account-detail-status-reason"
+                                                className="px-2 py-1.5 text-xs text-muted-foreground"
+                                            >
+                                                {statusDisabledReason}
+                                            </p>
                                         )}
-                                        {isActive ? "停用账号" : "启用账号"}
-                                    </DropdownMenuItem>
-                                )}
-                                {canToggleStatus && statusDisabledReason && (
-                                    <p
-                                        id="account-detail-status-reason"
-                                        className="px-2 py-1.5 text-xs text-muted-foreground"
-                                    >
-                                        {statusDisabledReason}
-                                    </p>
-                                )}
-                                {canDelete && (
-                                    <DropdownMenuItem
-                                        id="account-detail-delete"
-                                        variant="destructive"
-                                        disabled={Boolean(deleteDisabledReason)}
-                                        aria-describedby={
-                                            deleteDisabledReason
-                                                ? "account-detail-delete-reason"
-                                                : undefined
-                                        }
-                                        onClick={() => setDeleting(true)}
-                                    >
-                                        <Trash2Icon aria-hidden />
-                                        删除账号
-                                    </DropdownMenuItem>
-                                )}
-                                {canDelete && deleteDisabledReason && (
-                                    <p
-                                        id="account-detail-delete-reason"
-                                        className="px-2 py-1.5 text-xs text-muted-foreground"
-                                    >
-                                        {deleteDisabledReason}
-                                    </p>
-                                )}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    )
-                }
-            />
-            {notice && (
-                <Alert variant="success">
-                    <CircleCheckIcon aria-hidden="true" />
-                    <AlertTitle>{notice}</AlertTitle>
-                </Alert>
-            )}
-            <div className={surfacePanelClassName}>
-                <Tabs
-                    value={tab}
-                    onValueChange={(next) => setTab(String(next))}
-                >
-                    <TabsList
-                        variant="line"
-                        className="w-full justify-start overflow-x-auto border-b border-grid px-4"
-                        aria-label="人员设置分区"
-                    >
-                        <TabsTrigger
-                            id="account-detail-basic-tab"
-                            value="basic"
+                                    {canDelete && (
+                                        <DropdownMenuItem
+                                            id="account-detail-delete"
+                                            variant="destructive"
+                                            disabled={Boolean(
+                                                deleteDisabledReason,
+                                            )}
+                                            aria-describedby={
+                                                deleteDisabledReason
+                                                    ? "account-detail-delete-reason"
+                                                    : undefined
+                                            }
+                                            onClick={() => setDeleting(true)}
+                                        >
+                                            <Trash2Icon aria-hidden />
+                                            删除账号
+                                        </DropdownMenuItem>
+                                    )}
+                                    {canDelete && deleteDisabledReason && (
+                                        <p
+                                            id="account-detail-delete-reason"
+                                            className="px-2 py-1.5 text-xs text-muted-foreground"
+                                        >
+                                            {deleteDisabledReason}
+                                        </p>
+                                    )}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        )
+                    }
+                    tabs={
+                        <TabsList
+                            variant="line"
+                            className={detailWorkspaceStyles.tabsList}
+                            aria-label="人员设置分区"
                         >
-                            基本资料
-                        </TabsTrigger>
-                        <TabsTrigger
-                            id="account-detail-permissions-tab"
-                            value="permissions"
-                        >
-                            操作权限
-                        </TabsTrigger>
-                        <TabsTrigger
-                            id="account-detail-access-tab"
-                            value="access"
-                        >
-                            数据范围
-                        </TabsTrigger>
-                        {can("data_scope:list") && (
                             <TabsTrigger
-                                id="account-detail-check-tab"
-                                value="check"
+                                id="account-detail-basic-tab"
+                                className={detailWorkspaceStyles.tab}
+                                value="basic"
                             >
-                                访问检查
+                                基本资料
                             </TabsTrigger>
-                        )}
-                    </TabsList>
+                            <TabsTrigger
+                                id="account-detail-permissions-tab"
+                                className={detailWorkspaceStyles.tab}
+                                value="permissions"
+                            >
+                                操作权限
+                            </TabsTrigger>
+                            <TabsTrigger
+                                id="account-detail-access-tab"
+                                className={detailWorkspaceStyles.tab}
+                                value="access"
+                            >
+                                数据范围
+                            </TabsTrigger>
+                            {canCheckAccess && (
+                                <TabsTrigger
+                                    id="account-detail-check-tab"
+                                    className={detailWorkspaceStyles.tab}
+                                    value="check"
+                                >
+                                    访问检查
+                                </TabsTrigger>
+                            )}
+                        </TabsList>
+                    }
+                />
+                <DetailWorkspaceBody
+                    alerts={
+                        notice ? (
+                            <Alert variant="success">
+                                <CircleCheckIcon aria-hidden="true" />
+                                <AlertTitle>{notice}</AlertTitle>
+                            </Alert>
+                        ) : null
+                    }
+                >
                     <TabsContent
                         value="basic"
                         keepMounted
-                        className="space-y-4 p-4 data-[hidden]:hidden"
+                        className="data-[hidden]:hidden"
                     >
                         <AccountProfileOverview
                             account={account}
@@ -298,17 +350,19 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                             onPasswordChange={() => setEditing("password")}
                         />
                         {org.isError && (
-                            <BusinessFailureState
-                                id="account-profile-org-retry"
-                                error={org.error}
-                                onRetry={() => void org.refetch()}
-                            />
+                            <DetailWorkspaceSection width="form">
+                                <BusinessFailureState
+                                    id="account-profile-org-retry"
+                                    error={org.error}
+                                    onRetry={() => void org.refetch()}
+                                />
+                            </DetailWorkspaceSection>
                         )}
                     </TabsContent>
                     <TabsContent
                         value="permissions"
                         keepMounted
-                        className="p-4 data-[hidden]:hidden"
+                        className="data-[hidden]:hidden"
                     >
                         <AccountOperationPermissions
                             key={accountId}
@@ -320,7 +374,7 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                     <TabsContent
                         value="access"
                         keepMounted
-                        className="space-y-4 p-4 data-[hidden]:hidden"
+                        className="data-[hidden]:hidden"
                     >
                         <PersonalBusinessPermissions
                             key={accountId}
@@ -330,31 +384,33 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                             name={account.name}
                             units={org.data?.units ?? []}
                             ready={org.isSuccess}
-                            canRead={can("data_scope:list")}
+                            canRead={canCheckAccess}
                             canCreate={
                                 can("data_scope:create") &&
                                 can("org_unit:manage")
                             }
                         />
                         {org.isError && (
-                            <BusinessFailureState
-                                id="account-detail-scope-org-retry"
-                                error={org.error}
-                                onRetry={() => void org.refetch()}
-                            />
+                            <DetailWorkspaceSection width="form">
+                                <BusinessFailureState
+                                    id="account-detail-scope-org-retry"
+                                    error={org.error}
+                                    onRetry={() => void org.refetch()}
+                                />
+                            </DetailWorkspaceSection>
                         )}
                     </TabsContent>
-                    {can("data_scope:list") && (
+                    {canCheckAccess && (
                         <TabsContent
                             value="check"
                             keepMounted
-                            className="p-4 data-[hidden]:hidden"
+                            className="data-[hidden]:hidden"
                         >
                             <AccessCheckPanel accountId={accountId} />
                         </TabsContent>
                     )}
-                </Tabs>
-            </div>
+                </DetailWorkspaceBody>
+            </Tabs>
             {profileSnapshot && (
                 <AccountProfileEditor
                     key={accountId}
@@ -422,6 +478,6 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                     onDeleted={() => router.push("/system/accounts")}
                 />
             )}
-        </PageScaffold>
+        </DetailWorkspacePage>
     )
 }

@@ -2,6 +2,9 @@
 
 import * as React from "react"
 import {
+    DetailWorkspaceBody,
+    DetailWorkspacePage,
+    DetailWorkspaceSkeleton,
     PageScaffold,
     workspaceEmbeddedScaffoldClassName,
 } from "@/components/business"
@@ -193,7 +196,11 @@ export function IntegrationErrorsPage({
     }
 
     if (focusLoading) {
-        return <IntegrationPageSkeleton focus />
+        return embedded ? (
+            <IntegrationPageSkeleton focus />
+        ) : (
+            <DetailWorkspaceSkeleton title="外部同步异常与对账" />
+        )
     }
 
     if (queueQuery.isError && !focusMode) {
@@ -212,6 +219,7 @@ export function IntegrationErrorsPage({
             <IntegrationPageFailure
                 title="外部同步异常与对账"
                 description="任务加载失败"
+                detail={!embedded}
                 error={detailItemQuery.error}
                 onRetry={() => void detailItemQuery.refetch()}
             />
@@ -221,6 +229,7 @@ export function IntegrationErrorsPage({
     if (focusError) {
         return (
             <IntegrationNotFound
+                detail={!embedded}
                 view={urlState.view}
                 queueContextId={urlState.queueContextId}
                 onRetry={() => void detailItemQuery.refetch()}
@@ -228,15 +237,62 @@ export function IntegrationErrorsPage({
         )
     }
 
+    const actionResult = (
+        <IntegrationActionResult
+            lastResult={lastResult}
+            actionError={actionError}
+            autoNext={autoNext}
+            resultRef={actions.resultRef}
+            detailWorkspace={focusMode && !embedded}
+            onNext={() => {
+                const next = neighbor(1)
+                if (next) goToItem(next)
+            }}
+        />
+    )
+    const workspace = (
+        <IntegrationErrorWorkspace
+            items={items}
+            item={item}
+            focusMode={focusMode}
+            detailWorkspace={focusMode && !embedded}
+            urlState={urlState}
+            positionIndex={positionIndex}
+            positionTotal={positionTotal}
+            panelErrorClass={panelErrorClass}
+            actions={actions}
+            goToItem={goToItem}
+            neighbor={neighbor}
+            replaceUrl={replaceUrl}
+            onClearFilters={clearQueueFilters}
+            emptyReason={view?.emptyReason}
+        />
+    )
+
+    if (focusMode && !embedded) {
+        return (
+            <DetailWorkspacePage>
+                <IntegrationDetailNav
+                    item={item}
+                    updatedAt={view?.context.updatedAt}
+                    view={urlState.view}
+                    queueContextId={urlState.queueContextId}
+                    onRefresh={actions.refresh}
+                />
+                <DetailWorkspaceBody
+                    alerts={lastResult || actionError ? actionResult : null}
+                >
+                    {workspace}
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
+        )
+    }
+
     return (
         <PageScaffold
-            density={embedded || focusMode ? "compact" : "default"}
+            density={embedded ? "compact" : "default"}
             className={
-                embedded
-                    ? workspaceEmbeddedScaffoldClassName
-                    : focusMode
-                      ? undefined
-                      : styles.page
+                embedded ? workspaceEmbeddedScaffoldClassName : styles.page
             }
         >
             {!embedded && !focusMode ? (
@@ -244,16 +300,6 @@ export function IntegrationErrorsPage({
                     focusMode={focusMode}
                     itemNumber={item?.identity.number}
                     updatedAt={view?.context.updatedAt}
-                />
-            ) : null}
-
-            {focusMode && !embedded ? (
-                <IntegrationDetailNav
-                    itemNumber={item?.identity.number}
-                    updatedAt={view?.context.updatedAt}
-                    view={urlState.view}
-                    queueContextId={urlState.queueContextId}
-                    onRefresh={actions.refresh}
                 />
             ) : null}
 
@@ -283,32 +329,8 @@ export function IntegrationErrorsPage({
                 </p>
             ) : null}
 
-            <IntegrationActionResult
-                lastResult={lastResult}
-                actionError={actionError}
-                autoNext={autoNext}
-                resultRef={actions.resultRef}
-                onNext={() => {
-                    const next = neighbor(1)
-                    if (next) goToItem(next)
-                }}
-            />
-
-            <IntegrationErrorWorkspace
-                items={items}
-                item={item}
-                focusMode={focusMode}
-                urlState={urlState}
-                positionIndex={positionIndex}
-                positionTotal={positionTotal}
-                panelErrorClass={panelErrorClass}
-                actions={actions}
-                goToItem={goToItem}
-                neighbor={neighbor}
-                replaceUrl={replaceUrl}
-                onClearFilters={clearQueueFilters}
-                emptyReason={view?.emptyReason}
-            />
+            {actionResult}
+            {workspace}
         </PageScaffold>
     )
 }

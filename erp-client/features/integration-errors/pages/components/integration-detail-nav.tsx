@@ -1,26 +1,42 @@
-import { DataFreshness, DetailPageHeader } from "@/components/business"
+import {
+    DataFreshness,
+    DetailWorkspaceChrome,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
 import { freshnessText } from "@/lib/ui-text"
 import { RefreshCwIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import type { IntegrationView } from "../../types"
+import { integrationStatusTone } from "../../lib/presentation"
+import type {
+    IntegrationResolutionItemView,
+    IntegrationView,
+} from "../../types"
 
 export function IntegrationDetailNav({
-    itemNumber,
+    item,
     updatedAt,
     view,
     queueContextId,
     onRefresh,
 }: {
-    itemNumber?: string
+    item?: IntegrationResolutionItemView
     updatedAt?: string
     view: IntegrationView
     queueContextId: string
     onRefresh: () => void
 }) {
     return (
-        <DetailPageHeader
-            title={itemNumber ?? "外部同步异常与对账"}
+        <DetailWorkspaceChrome
+            title={item?.identity.number ?? "外部同步异常与对账"}
+            primaryStatus={
+                item
+                    ? {
+                          label: item.status.label,
+                          tone: integrationStatusTone(item),
+                      }
+                    : undefined
+            }
             back={{
                 id: "integration-detail-nav-back",
                 label: "返回队列",
@@ -34,13 +50,13 @@ export function IntegrationDetailNav({
                     dateTime={updatedAt}
                 />
             }
-            primaryAction={
+            secondaryActions={
                 <Button
                     id="integration-detail-nav-refresh"
                     type="button"
                     size="sm"
                     variant="ghost"
-                    className="text-muted-foreground"
+                    className={detailWorkspaceStyles.quietButton}
                     onClick={onRefresh}
                 >
                     <RefreshCwIcon data-icon="inline-start" aria-hidden />

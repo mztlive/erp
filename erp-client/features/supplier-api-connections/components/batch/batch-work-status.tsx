@@ -22,7 +22,13 @@ export function BatchWorkStatus({
               ? "正在核对商品与供给"
               : "正在检查全批一致性"
     return (
-        <div className="space-y-4 rounded-lg border p-5">
+        <div
+            className={
+                inCatalog
+                    ? "space-y-4 rounded-lg border p-5"
+                    : "flex flex-col gap-4"
+            }
+        >
             <div role="status" aria-live="polite" className="space-y-2">
                 <p className="font-medium">
                     {work.status === "FAILED" ? "本次处理已中断" : label}

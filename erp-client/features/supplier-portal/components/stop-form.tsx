@@ -72,7 +72,8 @@ export function PortalStopForm({ draft }: { draft: PortalApplication }) {
     const locked = !editable || mutation.isPending || intent.current !== null
     return (
         <form
-            className="space-y-4 rounded-xl border bg-card p-5"
+            className="flex flex-col gap-4"
+            data-slot="detail-form-grid"
             onSubmit={(event) => {
                 event.preventDefault()
                 void form.handleSubmit()

@@ -180,7 +180,10 @@ function FeeQuoteTable({ feedback }: { feedback: InquiryFeedback }) {
             </p>
         )
     return (
-        <div className="overflow-hidden rounded-lg border">
+        <div
+            data-slot="detail-inline-table"
+            className="min-w-0 border-y border-border/70"
+        >
             <Table>
                 <TableHeader>
                     <TableRow>

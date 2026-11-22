@@ -1,6 +1,9 @@
 "use client"
 
-import { DocumentAttachmentList } from "@/components/business"
+import {
+    DetailWorkspaceSection,
+    DocumentAttachmentList,
+} from "@/components/business"
 import type { ContractCenterView } from "@/features/contracts/types"
 
 /** 附件分区：合同 PDF 电子档列表。 */
@@ -10,7 +13,7 @@ export function ContractDetailAttachments({
     contract: ContractCenterView
 }) {
     return (
-        <div className="space-y-3">
+        <DetailWorkspaceSection width="form">
             <DocumentAttachmentList
                 title="合同 PDF 电子档"
                 openLabel="下载"
@@ -33,6 +36,6 @@ export function ContractDetailAttachments({
                     onOpen: undefined,
                 }))}
             />
-        </div>
+        </DetailWorkspaceSection>
     )
 }

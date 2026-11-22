@@ -1,21 +1,25 @@
 "use client"
 
+import type { ComponentProps, ReactNode } from "react"
 import { ArrowLeftIcon, TriangleAlertIcon } from "lucide-react"
 
 import {
     BusinessEmptyState,
     BusinessFailureState,
+    DetailWorkspaceBody,
+    DetailWorkspaceChrome,
+    DetailWorkspacePage,
+    DetailWorkspaceSection,
+    DetailWorkspaceSkeleton,
+    DetailWorkspaceTabs,
+    detailWorkspaceStyles,
     DocumentHeader,
     ImportStageIndicator,
-    PageHeader,
     PageScaffold,
-    surfacePanelClassName,
     workspaceEmbeddedScaffoldClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
     AuditSection,
     ConfirmSection,
@@ -93,29 +97,31 @@ export function BatchDetailView({
     const batch = detailQuery.data
     const section = urlState.section
 
-    if (detailQuery.isPending) {
-        return (
+    const wrap = (children: ReactNode) =>
+        embedded ? (
             <PageScaffold
-                density={embedded ? "compact" : "default"}
-                className={
-                    embedded ? workspaceEmbeddedScaffoldClassName : undefined
-                }
+                density="compact"
+                className={workspaceEmbeddedScaffoldClassName}
             >
-                <div className="h-10 w-48 animate-pulse rounded-lg bg-muted" />
-                <div className="h-24 animate-pulse rounded-lg bg-muted" />
-                <div className="h-40 animate-pulse rounded-lg bg-muted" />
+                {children}
             </PageScaffold>
+        ) : (
+            <DetailWorkspacePage>{children}</DetailWorkspacePage>
+        )
+
+    if (detailQuery.isPending) {
+        if (!embedded) return <DetailWorkspaceSkeleton title="导入批次" />
+        return wrap(
+            <div
+                className="h-40 animate-pulse rounded-lg bg-muted"
+                aria-busy="true"
+            />,
         )
     }
 
     if (detailQuery.isError) {
-        return (
-            <PageScaffold
-                density={embedded ? "compact" : "default"}
-                className={
-                    embedded ? workspaceEmbeddedScaffoldClassName : undefined
-                }
-            >
+        return wrap(
+            <DetailWorkspaceSection width="form">
                 <BusinessFailureState
                     title="批次加载失败"
                     error={detailQuery.error}
@@ -131,18 +137,13 @@ export function BatchDetailView({
                         </Button>
                     }
                 />
-            </PageScaffold>
+            </DetailWorkspaceSection>,
         )
     }
 
     if (!batch) {
-        return (
-            <PageScaffold
-                density={embedded ? "compact" : "default"}
-                className={
-                    embedded ? workspaceEmbeddedScaffoldClassName : undefined
-                }
-            >
+        return wrap(
+            <DetailWorkspaceSection width="form">
                 <BusinessEmptyState
                     kind="no-data"
                     title="批次不存在"
@@ -169,7 +170,7 @@ export function BatchDetailView({
                         </Button>
                     }
                 />
-            </PageScaffold>
+            </DetailWorkspaceSection>,
         )
     }
 
@@ -178,23 +179,67 @@ export function BatchDetailView({
         (b) => b.action === "CONFIRM_SCOPE",
     )
     const workItemTypeMissing = !batch.productionGates.workItemTypeRegistered
+    const identity = {
+        title: batch.sourceSystem.name,
+        documentNumber: batch.batchNo,
+        primaryStatus: {
+            label: BATCH_STATUS_LABEL[batch.status],
+            tone: BATCH_STATUS_TONE[batch.status],
+        },
+        version: batch.version,
+        meta: (
+            <span>
+                {ENVIRONMENT_LABEL[batch.environment]} · 基准日{" "}
+                {batch.baselineDate}
+            </span>
+        ),
+        statuses: [
+            {
+                id: "env",
+                label: "环境",
+                status: {
+                    label: ENVIRONMENT_LABEL[batch.environment],
+                    tone:
+                        batch.environment === "PRODUCTION"
+                            ? "destructive"
+                            : "info",
+                },
+            },
+            {
+                id: "baseline",
+                label: "基准日",
+                status: { label: batch.baselineDate, tone: "neutral" },
+            },
+            {
+                id: "rule",
+                label: "规则版本",
+                status: { label: batch.importRuleVersion, tone: "neutral" },
+            },
+            {
+                id: "stage",
+                label: "当前阶段",
+                status: {
+                    label: PIPELINE_STAGE_LABEL[batch.stage],
+                    tone: "info",
+                },
+            },
+        ],
+    } satisfies ComponentProps<typeof DetailWorkspaceChrome>
 
-    return (
-        <PageScaffold
-            density={embedded ? "compact" : "default"}
-            className={
-                embedded ? workspaceEmbeddedScaffoldClassName : undefined
-            }
-        >
-            {!embedded ? (
-                <PageHeader
-                    variant="object-chrome"
-                    actions={
+    return wrap(
+        <>
+            {embedded ? (
+                <DocumentHeader density="compact" {...identity} />
+            ) : (
+                <DetailWorkspaceChrome
+                    {...identity}
+                    secondaryActions={
                         <Button
                             id="operations-import-batch-detail-back"
                             type="button"
                             variant="ghost"
                             size="sm"
+                            className={detailWorkspaceStyles.quietButton}
                             onClick={() =>
                                 replaceUrl({
                                     ...urlState,
@@ -209,191 +254,146 @@ export function BatchDetailView({
                                 })
                             }
                         >
-                            <ArrowLeftIcon className="size-4" />
+                            <ArrowLeftIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
                             返回批次列表
                         </Button>
                     }
+                    tabs={
+                        <DetailWorkspaceTabs
+                            value={section}
+                            onValueChange={(value) =>
+                                patchUrl({ section: value as BatchSection })
+                            }
+                            items={SECTION_TABS.map((tab) => ({
+                                ...tab,
+                                triggerId: `operations-import-batch-detail-section-${tab.id}-trigger`,
+                            }))}
+                        />
+                    }
                 />
-            ) : null}
-
-            <DocumentHeader
-                density="compact"
-                title={batch.sourceSystem.name}
-                documentNumber={batch.batchNo}
-                primaryStatus={{
-                    label: BATCH_STATUS_LABEL[batch.status],
-                    tone: BATCH_STATUS_TONE[batch.status],
-                }}
-                version={batch.version}
-                meta={
-                    <span className="text-muted-foreground">
-                        {ENVIRONMENT_LABEL[batch.environment]} · 基准日{" "}
-                        {batch.baselineDate}
-                    </span>
-                }
-                statuses={[
-                    {
-                        id: "env",
-                        label: "环境",
-                        status: {
-                            label: ENVIRONMENT_LABEL[batch.environment],
-                            tone:
-                                batch.environment === "PRODUCTION"
-                                    ? "destructive"
-                                    : "info",
-                        },
-                    },
-                    {
-                        id: "baseline",
-                        label: "基准日",
-                        status: {
-                            label: batch.baselineDate,
-                            tone: "neutral",
-                        },
-                    },
-                    {
-                        id: "rule",
-                        label: "规则版本",
-                        status: {
-                            label: batch.importRuleVersion,
-                            tone: "neutral",
-                        },
-                    },
-                    {
-                        id: "stage",
-                        label: "当前阶段",
-                        status: {
-                            label: PIPELINE_STAGE_LABEL[batch.stage],
-                            tone: "info",
-                        },
-                    },
-                ]}
-            />
-
-            {/* 批次身份摘要：导入数据类型、预检版本、来源系统等（环境/基准日/规则版本见页头） */}
-            <Card size="sm" className={surfacePanelClassName}>
-                <CardContent className="grid gap-3 pt-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <Fact
-                        label="导入数据类型"
-                        value={formatObjectSet(batch.sourceObjectSet)}
-                    />
-                    <Fact label="预检版本" value={batch.trialVersion} mono />
-                    <Fact label="来源系统" value={batch.sourceSystem.name} />
-                    <Fact label="发起人" value={batch.initiatorLabel} />
-                    <Fact
-                        label="更新时间"
-                        value={formatDateTime(
-                            batch.updatedAt,
-                            "dateStyle",
-                            "passthrough",
-                        )}
-                    />
-                </CardContent>
-            </Card>
-
-            {!batch.formalDataFormed ? (
-                <Alert variant="warning">
-                    <TriangleAlertIcon />
-                    <AlertTitle>尚未形成业务数据</AlertTitle>
-                    <AlertDescription>
-                        {batch.notFormalDataMessage}
-                    </AlertDescription>
-                </Alert>
-            ) : (
-                <Alert variant="success">
-                    <AlertTitle>期初数据已写入系统（部分或全部）</AlertTitle>
-                    <AlertDescription>
-                        {batch.notFormalDataMessage}
-                    </AlertDescription>
-                </Alert>
             )}
 
-            <ImportStageIndicator
-                stages={stageStates}
-                stageLabels={importStageLabels}
-                aria-label="导入流程进度"
-            />
+            <DetailWorkspaceBody
+                summary={
+                    <div className="grid gap-3 py-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <Fact
+                            label="导入数据类型"
+                            value={formatObjectSet(batch.sourceObjectSet)}
+                        />
+                        <Fact
+                            label="预检版本"
+                            value={batch.trialVersion}
+                            mono
+                        />
+                        <Fact
+                            label="来源系统"
+                            value={batch.sourceSystem.name}
+                        />
+                        <Fact label="发起人" value={batch.initiatorLabel} />
+                        <Fact
+                            label="更新时间"
+                            value={formatDateTime(
+                                batch.updatedAt,
+                                "dateStyle",
+                                "passthrough",
+                            )}
+                        />
+                    </div>
+                }
+                alerts={
+                    !batch.formalDataFormed ? (
+                        <Alert variant="warning">
+                            <TriangleAlertIcon />
+                            <AlertTitle>尚未形成业务数据</AlertTitle>
+                            <AlertDescription>
+                                {batch.notFormalDataMessage}
+                            </AlertDescription>
+                        </Alert>
+                    ) : (
+                        <Alert variant="success">
+                            <AlertTitle>
+                                期初数据已写入系统（部分或全部）
+                            </AlertTitle>
+                            <AlertDescription>
+                                {batch.notFormalDataMessage}
+                            </AlertDescription>
+                        </Alert>
+                    )
+                }
+            >
+                <DetailWorkspaceSection>
+                    <ImportStageIndicator
+                        stages={stageStates}
+                        stageLabels={importStageLabels}
+                        aria-label="导入流程进度"
+                    />
+                </DetailWorkspaceSection>
 
-            {!embedded ? (
-                <Tabs
-                    value={section}
-                    onValueChange={(v) => {
-                        if (v == null) return
-                        patchUrl({ section: v as BatchSection })
-                    }}
-                >
-                    <TabsList
-                        variant="line"
-                        className="flex h-auto w-full flex-wrap border-b border-border"
-                    >
-                        {SECTION_TABS.map((tab) => (
-                            <TabsTrigger
-                                key={tab.id}
-                                id={`operations-import-batch-detail-section-${tab.id}-trigger`}
-                                value={tab.id}
-                            >
-                                {tab.label}
-                            </TabsTrigger>
-                        ))}
-                    </TabsList>
-                </Tabs>
-            ) : null}
+                {section === "overview" ? (
+                    <OverviewSection
+                        batch={batch}
+                        onGoSection={(s) => patchUrl({ section: s })}
+                    />
+                ) : null}
 
-            {section === "overview" ? (
-                <OverviewSection
-                    batch={batch}
-                    onGoSection={(s) => patchUrl({ section: s })}
-                />
-            ) : null}
+                {section === "files" ? <FilesSection batch={batch} /> : null}
 
-            {section === "files" ? <FilesSection batch={batch} /> : null}
+                {section === "trial" ? (
+                    <TrialSection
+                        batch={batch}
+                        urlState={urlState}
+                        patchUrl={patchUrl}
+                        issueQuery={issueQuery}
+                    />
+                ) : null}
 
-            {section === "trial" ? (
-                <TrialSection
-                    batch={batch}
-                    urlState={urlState}
-                    patchUrl={patchUrl}
-                    issueQuery={issueQuery}
-                />
-            ) : null}
+                {section === "confirm" ? (
+                    <ConfirmSection
+                        batch={batch}
+                        workItemTypeMissing={workItemTypeMissing}
+                        confirmBlocked={confirmBlocked}
+                        onTaskCompleted={onTaskCompleted}
+                    />
+                ) : null}
 
-            {section === "confirm" ? (
-                <ConfirmSection
-                    batch={batch}
-                    workItemTypeMissing={workItemTypeMissing}
-                    confirmBlocked={confirmBlocked}
-                    onTaskCompleted={onTaskCompleted}
-                />
-            ) : null}
+                {section === "progress" ? (
+                    <ProgressSection batch={batch} />
+                ) : null}
 
-            {section === "progress" ? <ProgressSection batch={batch} /> : null}
+                {section === "result" ? (
+                    <ResultSection
+                        batch={batch}
+                        onOpenRepair={(id) =>
+                            patchUrl({
+                                batchId: id,
+                                section: "progress",
+                                page: 1,
+                            })
+                        }
+                    />
+                ) : null}
 
-            {section === "result" ? (
-                <ResultSection
-                    batch={batch}
-                    onOpenRepair={(id) =>
-                        patchUrl({ batchId: id, section: "progress", page: 1 })
-                    }
-                />
-            ) : null}
+                {section === "audit" ? <AuditSection batch={batch} /> : null}
 
-            {section === "audit" ? <AuditSection batch={batch} /> : null}
+                {!embedded ? (
+                    <ImportExecutionActions
+                        batch={batch}
+                        onGoSection={(nextSection) =>
+                            patchUrl({ section: nextSection })
+                        }
+                    />
+                ) : null}
 
-            {!embedded ? (
-                <ImportExecutionActions
-                    batch={batch}
-                    onGoSection={(nextSection) =>
-                        patchUrl({ section: nextSection })
-                    }
-                />
-            ) : null}
-
-            {/* 生产应用门禁：仅提交应用前阶段展示 */}
-            {!embedded &&
-            batch.stage !== "RESULT" &&
-            batch.stage !== "APPLY" ? (
-                <ProductionGateCard batch={batch} />
-            ) : null}
-        </PageScaffold>
+                {/* 生产应用门禁：仅提交应用前阶段展示 */}
+                {!embedded &&
+                batch.stage !== "RESULT" &&
+                batch.stage !== "APPLY" ? (
+                    <ProductionGateCard batch={batch} />
+                ) : null}
+            </DetailWorkspaceBody>
+        </>,
     )
 }

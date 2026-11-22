@@ -1,6 +1,6 @@
 "use client"
 
-import { MoneyValue } from "@/components/business"
+import { MoneyValue, detailWorkspaceStyles } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { getErrorMessage } from "@/lib/api"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -11,17 +11,30 @@ import type { PaymentRequest } from "../types"
 export function RequestPaymentHistory({
     request,
     workItemId,
+    detailWorkspace = false,
 }: {
     request: PaymentRequest
     workItemId?: string
+    detailWorkspace?: boolean
 }) {
     const download = useRequestDownloadMutation()
+    const Heading = detailWorkspace ? "h2" : "h3"
     return (
         <section
-            className="space-y-4 border-t pt-5"
+            className={
+                detailWorkspace ? "space-y-4" : "space-y-4 border-t pt-5"
+            }
             aria-label="实际付款与回单"
         >
-            <h3 className="font-medium">实际付款与回单</h3>
+            <Heading
+                className={
+                    detailWorkspace
+                        ? detailWorkspaceStyles.sectionTitle
+                        : "font-medium"
+                }
+            >
+                实际付款与回单
+            </Heading>
             {request.payments.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                     尚未登记实际付款。
@@ -30,7 +43,11 @@ export function RequestPaymentHistory({
                 request.payments.map((payment) => (
                     <article
                         key={payment.payment_id}
-                        className="space-y-3 rounded-lg border p-4 text-body-compact"
+                        className={
+                            detailWorkspace
+                                ? "space-y-3 border-t border-border/60 pt-4 text-body-compact"
+                                : "space-y-3 rounded-lg border p-4 text-body-compact"
+                        }
                     >
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <p className="num font-medium">
@@ -124,11 +141,23 @@ export function RequestPaymentHistory({
             )}
             {request.credit_uses.length > 0 && (
                 <section className="space-y-3">
-                    <h3 className="font-medium">留抵抵扣记录</h3>
+                    <Heading
+                        className={
+                            detailWorkspace
+                                ? detailWorkspaceStyles.sectionTitle
+                                : "font-medium"
+                        }
+                    >
+                        留抵抵扣记录
+                    </Heading>
                     {request.credit_uses.map((use) => (
                         <div
                             key={use.id}
-                            className="flex flex-wrap justify-between gap-2 rounded-lg border p-4 text-body-compact"
+                            className={
+                                detailWorkspace
+                                    ? "flex flex-wrap justify-between gap-2 border-t border-border/60 pt-3 text-body-compact"
+                                    : "flex flex-wrap justify-between gap-2 rounded-lg border p-4 text-body-compact"
+                            }
                         >
                             <span>
                                 {request.lines.find(

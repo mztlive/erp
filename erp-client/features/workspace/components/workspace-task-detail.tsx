@@ -1,6 +1,9 @@
 "use client"
 
-import { workspaceTaskSurfaceClassName } from "@/components/business"
+import {
+    DetailWorkspaceBody,
+    workspaceTaskSurfaceClassName,
+} from "@/components/business"
 import { cn } from "@/lib/utils"
 
 import { WorkspaceTaskSurfaceBoundary } from "./workspace-task-surface-boundary"
@@ -16,21 +19,23 @@ import {
  */
 export function WorkspaceTaskDetail(props: WorkspaceTaskDetailProps) {
     return (
-        <section
-            data-slot="workspace-task-surface"
-            className={cn(
-                workspaceTaskSurfaceClassName,
-                "relative flex h-full min-h-0 flex-1 flex-col",
-            )}
-            aria-label="当前工作台任务"
-        >
-            <div className="min-h-0 flex-1">
-                <WorkspaceTaskSurfaceBoundary
-                    workItemId={props.item.workItemId}
-                >
-                    <WorkspaceTaskSurface {...props} />
-                </WorkspaceTaskSurfaceBoundary>
-            </div>
-        </section>
+        <DetailWorkspaceBody className="flex min-h-0 flex-col overflow-hidden">
+            <section
+                data-slot="workspace-task-surface"
+                className={cn(
+                    workspaceTaskSurfaceClassName,
+                    "relative flex h-full min-h-0 flex-1 flex-col",
+                )}
+                aria-label="当前工作台任务"
+            >
+                <div className="min-h-0 flex-1">
+                    <WorkspaceTaskSurfaceBoundary
+                        workItemId={props.item.workItemId}
+                    >
+                        <WorkspaceTaskSurface {...props} />
+                    </WorkspaceTaskSurfaceBoundary>
+                </div>
+            </section>
+        </DetailWorkspaceBody>
     )
 }

@@ -14,6 +14,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { RequiredMark } from "@/components/ui/required-mark"
 import { Textarea } from "@/components/ui/textarea"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 
@@ -55,10 +56,11 @@ export function SupplierSaveReasonDialog({
                         {isCreate
                             ? "创建说明"
                             : masterDataCopy.fieldChangeReason}
-                        <span className="text-destructive">*</span>
+                        <RequiredMark />
                     </Label>
                     <Textarea
                         id="supplier-save-reason"
+                        aria-required="true"
                         value={reason}
                         onChange={(event) => onReasonChange(event.target.value)}
                         rows={3}

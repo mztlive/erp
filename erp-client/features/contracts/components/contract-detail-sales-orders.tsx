@@ -4,8 +4,9 @@ import Link from "next/link"
 
 import {
     BusinessStatusBadge,
-    DocumentSection,
+    DetailWorkspaceSection,
     MoneyValue,
+    detailWorkspaceStyles,
     taxAmountToneClass,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -28,9 +29,9 @@ export function ContractDetailSalesOrders({
     contract: ContractCenterView
 }) {
     return (
-        <DocumentSection
+        <DetailWorkspaceSection
             title="关联销售单"
-            description={
+            subtitle={
                 <>
                     追溯每张销售单使用的合同版本；金额仅作单据摘要。统计截至{" "}
                     <span className="num">
@@ -44,7 +45,10 @@ export function ContractDetailSalesOrders({
                     暂无关联销售单。
                 </p>
             ) : (
-                <div className="overflow-hidden rounded-lg border border-border">
+                <div
+                    data-slot="detail-inline-table"
+                    className={detailWorkspaceStyles.inlineTableWrapper}
+                >
                     <Table data-density="compact">
                         <TableHeader>
                             <TableRow>
@@ -109,6 +113,6 @@ export function ContractDetailSalesOrders({
                     </Table>
                 </div>
             )}
-        </DocumentSection>
+        </DetailWorkspaceSection>
     )
 }

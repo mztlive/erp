@@ -5,8 +5,11 @@ import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { BanIcon, SaveIcon } from "lucide-react"
 
 import {
-    DetailPageHeader,
-    type DetailPageHeaderProps,
+    DetailWorkspaceChrome,
+    DetailWorkspaceDirtyBadge,
+    DetailWorkspaceMeta,
+    detailWorkspaceStyles,
+    type DetailWorkspaceChromeProps,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
@@ -17,7 +20,8 @@ import type { MasterDataCenterView } from "@/features/master-data/types"
 export function SupplierEditorDocumentHeader({
     back,
     formId,
-    showSave,
+    dirty,
+    tabs,
     title,
     isCreate,
     data,
@@ -29,8 +33,9 @@ export function SupplierEditorDocumentHeader({
     onDisable,
 }: {
     formId: string
-    showSave: boolean
-    back: DetailPageHeaderProps["back"]
+    dirty: boolean
+    tabs: React.ReactNode
+    back: DetailWorkspaceChromeProps["back"]
     title: string
     isCreate: boolean
     data: MasterDataCenterView | null | undefined
@@ -42,7 +47,7 @@ export function SupplierEditorDocumentHeader({
     onDisable: () => void
 }) {
     return (
-        <DetailPageHeader
+        <DetailWorkspaceChrome
             back={back}
             numberLabel="供应商编号"
             title={title}
@@ -61,24 +66,25 @@ export function SupplierEditorDocumentHeader({
             version={
                 !isCreate && data ? data.currentRevision.revisionNo : undefined
             }
+            titleExtra={dirty ? <DetailWorkspaceDirtyBadge /> : null}
+            tabs={tabs}
             meta={
-                <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                    <span>
-                        企业主体{" "}
-                        <span className="font-medium text-foreground">
-                            {values.company.trim() || "待填写"}
-                        </span>
-                    </span>
-                    <span className="text-border" aria-hidden="true">
-                        ·
-                    </span>
-                    <span>
-                        联系人{" "}
-                        <span className="font-medium text-foreground">
-                            {values.contactName.trim() || "待填写"}
-                        </span>
-                    </span>
-                </span>
+                <DetailWorkspaceMeta
+                    items={[
+                        <span key="company">
+                            企业主体{" "}
+                            <span className="font-medium text-foreground">
+                                {values.company.trim() || "待填写"}
+                            </span>
+                        </span>,
+                        <span key="contact">
+                            联系人{" "}
+                            <span className="font-medium text-foreground">
+                                {values.contactName.trim() || "待填写"}
+                            </span>
+                        </span>,
+                    ]}
+                />
             }
             secondaryActions={
                 !isCreate && data ? (
@@ -87,7 +93,8 @@ export function SupplierEditorDocumentHeader({
                             id="master-data-supplier-document-header-disable"
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant="ghost"
+                            className={detailWorkspaceStyles.quietDangerButton}
                             disabled={!canDisable}
                             title={disableBlocker?.message}
                             onClick={onDisable}
@@ -99,26 +106,19 @@ export function SupplierEditorDocumentHeader({
                 ) : null
             }
             primaryAction={
-                showSave ? (
-                    <PermissionGuard
-                        permission={
-                            isCreate ? "supplier:create" : "supplier:update"
-                        }
-                    >
+                isCreate ? (
+                    <PermissionGuard permission="supplier:create">
                         <LoadingButton
                             id="master-data-supplier-document-header-submit"
                             type="submit"
                             form={formId}
                             size="sm"
+                            className="px-3.5"
                             loading={pending}
                             disabled={!canEdit || pending}
                         >
                             <SaveIcon data-icon="inline-start" aria-hidden />
-                            {pending
-                                ? "提交中…"
-                                : isCreate
-                                  ? masterDataCopy.createSubmit
-                                  : masterDataCopy.reviseSubmit}
+                            {pending ? "提交中…" : "创建供应商"}
                         </LoadingButton>
                     </PermissionGuard>
                 ) : null

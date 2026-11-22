@@ -6,17 +6,10 @@ import { ExternalLinkIcon, TriangleAlertIcon } from "lucide-react"
 import {
     MetricItem,
     MetricStrip,
-    surfacePanelClassName,
+    DetailWorkspaceSection,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import type {
     BatchSection,
     ImportBatchView,
@@ -32,15 +25,12 @@ export function OverviewSection({
     onGoSection: (s: BatchSection) => void
 }) {
     return (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-            <Card size="sm" className={surfacePanelClassName}>
-                <CardHeader className="border-b border-grid">
-                    <CardTitle>预检摘要</CardTitle>
-                    <CardDescription>
-                        此处展示本次数据预检的整体统计结果，具体异常可在明细中筛选查看。
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-4">
+        <div className="min-w-0">
+            <DetailWorkspaceSection
+                title="预检摘要"
+                subtitle="此处展示本次数据预检的整体统计结果，具体异常可在明细中筛选查看。"
+            >
+                <div>
                     <MetricStrip
                         variant="plain"
                         columns={4}
@@ -80,17 +70,14 @@ export function OverviewSection({
                             责任确认
                         </Button>
                     </div>
-                </CardContent>
-            </Card>
+                </div>
+            </DetailWorkspaceSection>
 
-            <Card size="sm" className={surfacePanelClassName}>
-                <CardHeader className="border-b border-grid">
-                    <CardTitle>期初口径</CardTitle>
-                    <CardDescription>
-                        以下为本批次导入数据的口径说明，仅供核对参考。
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3 pt-4">
+            <DetailWorkspaceSection
+                title="期初口径"
+                subtitle="以下为本批次导入数据的口径说明，仅供核对参考。"
+            >
+                <div className="space-y-3">
                     {batch.openingPolicyHints.map((hint) => (
                         <div
                             key={hint.objectCode}
@@ -115,11 +102,11 @@ export function OverviewSection({
                             <ExternalLinkIcon className="size-4" />
                         </Button>
                     ) : null}
-                </CardContent>
-            </Card>
+                </div>
+            </DetailWorkspaceSection>
 
             {batch.invalidation ? (
-                <Alert variant="warning" className="lg:col-span-2">
+                <Alert variant="warning">
                     <TriangleAlertIcon />
                     <AlertTitle>旧确认已失效</AlertTitle>
                     <AlertDescription>

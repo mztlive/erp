@@ -14,7 +14,10 @@ import {
     SparklesIcon,
 } from "lucide-react"
 
-import { DetailPageHeader } from "@/components/business"
+import {
+    DetailWorkspaceChrome,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
@@ -166,12 +169,13 @@ export function BookDetailHeader({
     })()
 
     const secondaryActions = (
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <>
             <Button
                 id="sales-selection-detail-info"
                 type="button"
                 size="sm"
-                variant="outline"
+                variant="ghost"
+                className={detailWorkspaceStyles.quietButton}
                 aria-haspopup="dialog"
                 onClick={onOpenInfo}
             >
@@ -183,7 +187,8 @@ export function BookDetailHeader({
                     id="sales-selection-detail-copy"
                     type="button"
                     size="sm"
-                    variant="outline"
+                    variant="ghost"
+                    className={detailWorkspaceStyles.quietButton}
                     disabled={pending || detail.status === "PREPARING"}
                     title={
                         detail.status === "PREPARING"
@@ -203,7 +208,8 @@ export function BookDetailHeader({
                             id="selection-draft-edit"
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant="ghost"
+                            className={detailWorkspaceStyles.quietButton}
                             disabled={pending}
                             onClick={onEdit}
                         >
@@ -220,7 +226,8 @@ export function BookDetailHeader({
                             loading={operations.void.isPending}
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant="ghost"
+                            className={detailWorkspaceStyles.quietDangerButton}
                             disabled={pending}
                             onClick={() =>
                                 void operations.void.mutateAsync({
@@ -250,7 +257,8 @@ export function BookDetailHeader({
                             }
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant="ghost"
+                            className={detailWorkspaceStyles.quietButton}
                             disabled={pending}
                             onClick={() =>
                                 void operations.regenerate.mutateAsync({
@@ -271,7 +279,8 @@ export function BookDetailHeader({
                             id="sales-selection-detail-reprepare"
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant="ghost"
+                            className={detailWorkspaceStyles.quietButton}
                             disabled={pending}
                             onClick={onEdit}
                         >
@@ -288,7 +297,8 @@ export function BookDetailHeader({
                             loading={operations.void.isPending}
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant="ghost"
+                            className={detailWorkspaceStyles.quietButton}
                             disabled={pending}
                             onClick={() =>
                                 void operations.void.mutateAsync({
@@ -314,7 +324,8 @@ export function BookDetailHeader({
                             loading={operations.replaceLink.isPending}
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant="ghost"
+                            className={detailWorkspaceStyles.quietButton}
                             disabled={pending}
                             onClick={() =>
                                 void operations.replaceLink.mutateAsync({
@@ -336,7 +347,8 @@ export function BookDetailHeader({
                             loading={operations.close.isPending}
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant="ghost"
+                            className={detailWorkspaceStyles.quietDangerButton}
                             disabled={pending}
                             onClick={() =>
                                 void operations.close.mutateAsync({
@@ -356,7 +368,8 @@ export function BookDetailHeader({
                     loading={operations.revoke.isPending}
                     type="button"
                     size="sm"
-                    variant="outline"
+                    variant="ghost"
+                    className={detailWorkspaceStyles.quietDangerButton}
                     disabled={pending}
                     onClick={() =>
                         void operations.revoke.mutateAsync({ bookId, ...key })
@@ -374,7 +387,8 @@ export function BookDetailHeader({
                     id="sales-selection-detail-open-proposal"
                     type="button"
                     size="sm"
-                    variant="outline"
+                    variant="ghost"
+                    className={detailWorkspaceStyles.quietButton}
                     render={
                         <Link
                             href={`/sales/selection/proposals/${detail.proposal_id}`}
@@ -384,11 +398,11 @@ export function BookDetailHeader({
                     查看销售方案 {detail.proposal_no}
                 </Button>
             ) : null}
-        </div>
+        </>
     )
 
     return (
-        <DetailPageHeader
+        <DetailWorkspaceChrome
             back={{
                 id: "sales-selection-detail-back",
                 label: "选品册列表",

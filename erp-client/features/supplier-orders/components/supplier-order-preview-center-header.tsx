@@ -1,9 +1,14 @@
 "use client"
 
+import type { ReactNode } from "react"
 import Link from "next/link"
 import { ExternalLinkIcon } from "lucide-react"
 
-import { DetailPageHeader, GuardedBusinessAction } from "@/components/business"
+import {
+    DetailWorkspaceChrome,
+    detailWorkspaceStyles,
+    GuardedBusinessAction,
+} from "@/components/business"
 import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { Button } from "@/components/ui/button"
 import type { SupplierOrderDetailView } from "@/features/supplier-orders/types"
@@ -19,6 +24,7 @@ export function SupplierOrderCenterHeader({
     replayPending,
     onQueryResult,
     onReplayClick,
+    tabs,
 }: {
     order: SupplierOrderDetailView["order"]
     canQuery: boolean
@@ -30,111 +36,112 @@ export function SupplierOrderCenterHeader({
     replayPending: boolean
     onQueryResult: () => void
     onReplayClick: () => void
+    tabs: ReactNode
 }) {
     return (
-        <>
-            <DetailPageHeader
-                back={{
-                    id: "supplier-order-center-header-back-list",
-                    label: "供应商订单列表",
-                    href: "/supplier-api/orders",
-                }}
-                title={order.supplierName}
-                documentNumber={order.orderNo}
-                primaryStatus={{
-                    label: order.fulfillmentLabel,
-                    tone: order.fulfillmentTone,
-                }}
-                meta={
-                    <span className="text-muted-foreground">
-                        供应商单号 {order.externalOrderNo ?? "尚未返回"}
-                    </span>
-                }
-                statuses={[
-                    {
-                        id: "supplier",
-                        label: "供应商",
-                        status: { label: order.supplierName, tone: "neutral" },
+        <DetailWorkspaceChrome
+            tabs={tabs}
+            back={{
+                id: "supplier-order-center-header-back-list",
+                label: "供应商订单列表",
+                href: "/supplier-api/orders",
+            }}
+            title={order.supplierName}
+            documentNumber={order.orderNo}
+            primaryStatus={{
+                label: order.fulfillmentLabel,
+                tone: order.fulfillmentTone,
+            }}
+            meta={
+                <span className="text-muted-foreground">
+                    供应商单号 {order.externalOrderNo ?? "尚未返回"}
+                </span>
+            }
+            statuses={[
+                {
+                    id: "supplier",
+                    label: "供应商",
+                    status: { label: order.supplierName, tone: "neutral" },
+                },
+                {
+                    id: "external",
+                    label: "外部单号",
+                    status: {
+                        label: order.externalOrderNo ?? "尚未返回",
+                        tone: order.externalOrderNo ? "info" : "neutral",
                     },
-                    {
-                        id: "external",
-                        label: "外部单号",
-                        status: {
-                            label: order.externalOrderNo ?? "尚未返回",
-                            tone: order.externalOrderNo ? "info" : "neutral",
-                        },
-                    },
-                ]}
-                primaryAction={
-                    isResultUnknown ? (
+                },
+            ]}
+            primaryAction={
+                isResultUnknown ? (
+                    <PermissionGuard permission="supplier_fulfillment_order:investigate">
+                        <GuardedBusinessAction
+                            id="supplier-order-center-header-query-result"
+                            loading={queryPending}
+                            type="button"
+                            size="sm"
+                            disabled={!canQuery || queryPending}
+                            reason={
+                                !canQuery
+                                    ? (actionBlockers.find(
+                                          (b) => b.action === "QUERY_RESULT",
+                                      )?.message ?? "当前不可查询")
+                                    : undefined
+                            }
+                            onClick={onQueryResult}
+                        >
+                            {queryPending ? "查询中…" : "查询原结果"}
+                        </GuardedBusinessAction>
+                    </PermissionGuard>
+                ) : undefined
+            }
+            secondaryActions={
+                <>
+                    {isResultUnknown ? (
                         <PermissionGuard permission="supplier_fulfillment_order:investigate">
                             <GuardedBusinessAction
-                                id="supplier-order-center-header-query-result"
-                                loading={queryPending}
+                                id="supplier-order-center-header-replay"
                                 type="button"
                                 size="sm"
-                                disabled={!canQuery || queryPending}
+                                variant="ghost"
+                                className={detailWorkspaceStyles.quietButton}
+                                disabled={!canReplay || replayPending}
                                 reason={
-                                    !canQuery
-                                        ? (actionBlockers.find(
-                                              (b) =>
-                                                  b.action === "QUERY_RESULT",
-                                          )?.message ?? "当前不可查询")
-                                        : undefined
+                                    canReplay
+                                        ? "已确认无结果，可安全重发"
+                                        : (actionBlockers.find(
+                                              (b) => b.action === "REPLAY",
+                                          )?.message ??
+                                          "需先查询确认无结果后，方可重发")
                                 }
-                                onClick={onQueryResult}
+                                onClick={onReplayClick}
                             >
-                                {queryPending ? "查询中…" : "查询原结果"}
+                                安全重发
                             </GuardedBusinessAction>
                         </PermissionGuard>
-                    ) : undefined
-                }
-                secondaryActions={
-                    <>
-                        {isResultUnknown ? (
-                            <PermissionGuard permission="supplier_fulfillment_order:investigate">
-                                <GuardedBusinessAction
-                                    id="supplier-order-center-header-replay"
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={!canReplay || replayPending}
-                                    reason={
-                                        canReplay
-                                            ? "已确认无结果，可安全重发"
-                                            : (actionBlockers.find(
-                                                  (b) => b.action === "REPLAY",
-                                              )?.message ??
-                                              "需先查询确认无结果后，方可重发")
-                                    }
-                                    onClick={onReplayClick}
-                                >
-                                    安全重发
-                                </GuardedBusinessAction>
-                            </PermissionGuard>
-                        ) : null}
-                        {allowedActions.includes("ESCALATE_W29") ? (
-                            <PermissionGuard permission="integration_error_task:list">
-                                <Button
-                                    id="supplier-order-center-header-escalate"
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    render={
-                                        <Link href="/governance/integration-errors" />
-                                    }
-                                >
-                                    转接口错误中心
-                                    <ExternalLinkIcon
-                                        data-icon="inline-end"
-                                        aria-hidden="true"
-                                    />
-                                </Button>
-                            </PermissionGuard>
-                        ) : null}
-                    </>
-                }
-            />
-        </>
+                    ) : null}
+                    {allowedActions.includes("ESCALATE_W29") ? (
+                        <PermissionGuard permission="integration_error_task:list">
+                            <Button
+                                id="supplier-order-center-header-escalate"
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className={detailWorkspaceStyles.quietButton}
+                                render={
+                                    <Link href="/governance/integration-errors" />
+                                }
+                            >
+                                转接口错误中心
+                                <ExternalLinkIcon
+                                    data-icon="inline-end"
+                                    aria-hidden="true"
+                                />
+                            </Button>
+                        </PermissionGuard>
+                    ) : null}
+                </>
+            }
+        />
     )
 }

@@ -6,7 +6,7 @@ import {
     BusinessEmptyState,
     BusinessFailureState,
     BusinessStatusBadge,
-    DocumentSection,
+    DetailWorkspaceSection,
     DocumentSummary,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -17,7 +17,6 @@ import {
     DetailRecordColumn,
     DetailRecordColumns,
     DetailRecordRow,
-    detailSectionClassName,
     embeddedSummaryClassName,
 } from "@/features/customers/pages/customer-detail-records"
 
@@ -68,10 +67,9 @@ export function CustomerDetailRelatedTab({
     refetch: () => void
 }) {
     return (
-        <DocumentSection
-            className={detailSectionClassName}
+        <DetailWorkspaceSection
             title="合同与销售"
-            action={
+            actions={
                 <div className="flex flex-wrap gap-2">
                     <Button
                         id="customers-detail-related-view-contracts"
@@ -131,7 +129,7 @@ export function CustomerDetailRelatedTab({
                     />
                 </DetailRecordColumns>
             )}
-        </DocumentSection>
+        </DetailWorkspaceSection>
     )
 }
 
@@ -145,11 +143,10 @@ export function CustomerDetailSettlementTab({
     const receivableHref = `/finance/customer-accounts?customerId=${encodeURIComponent(customer.customerId)}`
 
     return (
-        <DocumentSection
-            className={detailSectionClassName}
+        <DetailWorkspaceSection
             title="票款摘要"
-            description="仅展示回款与开票汇总，办理核销或开票请前往「客户往来」。"
-            action={
+            subtitle="仅展示回款与开票汇总，办理核销或开票请前往「客户往来」。"
+            actions={
                 <Button
                     id="customers-detail-settlement-open-accounts"
                     type="button"
@@ -219,6 +216,6 @@ export function CustomerDetailSettlementTab({
                     className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                 />
             )}
-        </DocumentSection>
+        </DetailWorkspaceSection>
     )
 }

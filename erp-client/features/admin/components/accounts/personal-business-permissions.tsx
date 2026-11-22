@@ -1,6 +1,9 @@
 "use client"
 import * as React from "react"
-import { BusinessFailureState } from "@/components/business"
+import {
+    BusinessFailureState,
+    DetailWorkspaceSection,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { actionLabel, resourceLabel } from "@/lib/permission-catalog"
 import type { OrgUnit } from "@/features/organization/types"
@@ -52,9 +55,9 @@ export function PersonalBusinessPermissions({
                 )))
 
     return (
-        <section
-            className="min-w-0 space-y-4 text-body-compact"
-            aria-label="人员数据范围"
+        <DetailWorkspaceSection
+            ariaLabel="人员数据范围"
+            contentClassName="text-body-compact"
         >
             {notice && (
                 <p role="status" className="rounded-md bg-muted p-3">
@@ -175,6 +178,6 @@ export function PersonalBusinessPermissions({
                         </ul>
                     </details>
                 )}
-        </section>
+        </DetailWorkspaceSection>
     )
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { DocumentSection, DocumentSummary } from "@/components/business"
+import { DetailWorkspaceSection, DocumentSummary } from "@/components/business"
 import type { ContractCenterView } from "@/features/contracts/types"
 
 /** 结算与开票分区：当前修订的结构化记录。 */
@@ -12,12 +12,14 @@ export function ContractDetailSettlement({
     const rev = contract.currentRevision
 
     return (
-        <DocumentSection
+        <DetailWorkspaceSection
             title="结算与开票"
-            description="当前合同约定的结算与开票条款，新建销售单时将默认带入。"
+            width="form"
+            subtitle="当前合同约定的结算与开票条款，新建销售单时将默认带入。"
         >
             <DocumentSummary
                 columns="two"
+                className="border-0 py-0"
                 items={[
                     {
                         id: "party",
@@ -53,6 +55,6 @@ export function ContractDetailSettlement({
                     },
                 ]}
             />
-        </DocumentSection>
+        </DetailWorkspaceSection>
     )
 }

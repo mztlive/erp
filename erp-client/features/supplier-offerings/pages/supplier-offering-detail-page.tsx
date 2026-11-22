@@ -4,24 +4,23 @@ import { useState } from "react"
 import { useSearchParams } from "next/navigation"
 import {
     BusinessFailureState,
-    PageScaffold,
-    surfacePanelClassName,
+    DetailWorkspaceBody,
+    DetailWorkspaceChrome,
+    DetailWorkspaceMeta,
+    DetailWorkspacePage,
+    DetailWorkspaceSection,
+    DetailWorkspaceTabs,
 } from "@/components/business"
-import { DetailPageHeader } from "@/components/business/detail-page-header"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
-import { cn } from "@/lib/utils"
 import { useSupplierOfferingQuery } from "../hooks/queries"
 import { offeringListHref } from "../lib/detail"
-import { statusVariant } from "../lib/presentation"
 import { OFFERING_STATUS_LABELS } from "../types"
 import type { OfferingStatusIntent } from "../lib/offering-status"
 import {
-    OfferingIdentityCard,
+    OfferingIdentitySection,
     OfferingSummary,
-    OfferingTermsCard,
+    OfferingTermsSection,
 } from "../components/offering-overview"
 import { OfferingDeliverySection } from "../components/delivery-templates/offering-delivery-section"
 import { OfferingHistory } from "../components/offering-history"
@@ -55,142 +54,133 @@ export function SupplierOfferingDetailPage({
         href: returnTo,
         label: taskMode ? "供应停止核对" : "供应商供给",
     }
-    if (query.isPending)
+    if (query.isPending || query.isError || !offering)
         return (
-            <PageScaffold density="compact">
-                <DetailPageHeader title="供给资料" back={back} />
-                <p role="status" className="text-xs text-muted-foreground">
-                    正在加载供给资料…
-                </p>
-            </PageScaffold>
-        )
-    if (query.isError || !offering)
-        return (
-            <PageScaffold density="compact">
-                <DetailPageHeader title="供给资料" back={back} />
-                <BusinessFailureState
-                    title="供给资料无法读取"
-                    error={query.error ?? undefined}
-                    onRetry={() => void query.refetch()}
-                />
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title="供给资料" back={back} />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        {query.isPending ? (
+                            <p
+                                role="status"
+                                className="text-xs text-muted-foreground"
+                            >
+                                正在加载供给资料…
+                            </p>
+                        ) : (
+                            <BusinessFailureState
+                                title="供给资料无法读取"
+                                error={query.error ?? undefined}
+                                onRetry={() => void query.refetch()}
+                            />
+                        )}
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     return (
-        <PageScaffold density="compact">
-            <div className="min-w-0 space-y-5">
-                <DetailPageHeader
-                    title={offering.sku_name || offering.sku_no || "供给资料"}
-                    back={back}
-                    titleExtra={
-                        <Badge variant={statusVariant(offering.status)}>
-                            {OFFERING_STATUS_LABELS[offering.status]}
-                        </Badge>
-                    }
-                    meta={
-                        <>
-                            <span>
-                                {offering.supplier_name ||
-                                    offering.supplier_no ||
-                                    "供应商"}
-                            </span>
-                            <span className="num">
-                                订货编码 {offering.supplier_sku_code}
-                            </span>
-                            {offering.specification ? (
-                                <span>{offering.specification}</span>
-                            ) : null}
-                        </>
-                    }
-                    primaryAction={
-                        taskMode ? undefined : (
-                            <SupplierOfferingDetailActions
-                                offering={offering}
-                                canRevise={
-                                    canViewCosts &&
-                                    hasPermission(
-                                        account.data?.permissions,
-                                        "supplier_offering:update",
-                                    )
-                                }
-                                canAvailability={hasPermission(
+        <DetailWorkspacePage>
+            <DetailWorkspaceChrome
+                title={offering.sku_name || offering.sku_no || "供给资料"}
+                back={back}
+                primaryStatus={{
+                    label: OFFERING_STATUS_LABELS[offering.status],
+                    tone:
+                        offering.status === "ACTIVE"
+                            ? "success"
+                            : offering.status === "STOPPED"
+                              ? "destructive"
+                              : "neutral",
+                }}
+                documentNumber={offering.supplier_sku_code}
+                numberLabel="订货编码"
+                meta={
+                    <DetailWorkspaceMeta
+                        items={[
+                            offering.supplier_name ||
+                                offering.supplier_no ||
+                                "供应商",
+                            offering.specification,
+                        ]}
+                    />
+                }
+                primaryAction={
+                    taskMode ? undefined : (
+                        <SupplierOfferingDetailActions
+                            offering={offering}
+                            canRevise={
+                                canViewCosts &&
+                                hasPermission(
                                     account.data?.permissions,
-                                    "supplier_offering_availability:update",
-                                )}
-                                idPrefix="supplier-offering-detail"
-                                onReviseOffering={() => setDialog("revise")}
-                                onUpdateAvailability={() =>
-                                    setDialog("availability")
-                                }
-                                onChangeStatus={setIntent}
-                            />
-                        )
-                    }
-                />
-                <OfferingSummary
-                    offering={offering}
-                    canViewCosts={canViewCosts}
-                />
-                <Tabs
-                    value={section}
-                    onValueChange={(value) => {
-                        if (value) setSection(String(value))
-                    }}
-                    className={cn(surfacePanelClassName, "min-w-0 gap-0")}
-                >
-                    <TabsList
-                        variant="line"
-                        aria-label="供给资料分区"
-                        className="h-auto w-full justify-start gap-6 rounded-none border-b border-border bg-card px-4 md:px-6"
-                    >
-                        <TabsTrigger
-                            id="supplier-offering-detail-tab-current"
-                            value="current"
-                            className="h-11 rounded-none px-0"
-                        >
-                            当前供给
-                        </TabsTrigger>
-                        <TabsTrigger
-                            id="supplier-offering-detail-tab-history"
-                            value="history"
-                            className="h-11 rounded-none px-0"
-                        >
-                            条款历史
-                        </TabsTrigger>
-                    </TabsList>
-                    <TabsContent
-                        value="current"
-                        className="min-w-0 bg-muted/20 p-4 md:p-6"
-                    >
-                        <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
-                            <div className="min-w-0 space-y-5">
-                                <OfferingDeliverySection
-                                    offering={offering}
-                                    canEdit={
-                                        !taskMode &&
-                                        hasPermission(
-                                            account.data?.permissions,
-                                            "supplier_offering:update",
-                                        )
-                                    }
-                                />
-                                <OfferingTermsCard
-                                    offering={offering}
-                                    canViewCosts={canViewCosts}
-                                />
-                            </div>
-                            <OfferingIdentityCard offering={offering} />
-                        </div>
-                    </TabsContent>
-                    <TabsContent value="history" className="min-w-0 p-4 md:p-6">
-                        {section === "history" ? (
-                            <OfferingHistory
-                                offeringId={offeringId}
-                                canViewCosts={canViewCosts}
-                            />
-                        ) : null}
-                    </TabsContent>
-                </Tabs>
-            </div>
+                                    "supplier_offering:update",
+                                )
+                            }
+                            canAvailability={hasPermission(
+                                account.data?.permissions,
+                                "supplier_offering_availability:update",
+                            )}
+                            idPrefix="supplier-offering-detail"
+                            onReviseOffering={() => setDialog("revise")}
+                            onUpdateAvailability={() =>
+                                setDialog("availability")
+                            }
+                            onChangeStatus={setIntent}
+                        />
+                    )
+                }
+                tabs={
+                    <DetailWorkspaceTabs
+                        value={section}
+                        onValueChange={setSection}
+                        items={[
+                            { id: "current", label: "当前供给" },
+                            { id: "history", label: "条款历史" },
+                        ]}
+                        ariaLabel="供给资料分区"
+                        tabIdPrefix="supplier-offering-detail-tab"
+                    />
+                }
+            />
+            <DetailWorkspaceBody
+                summary={
+                    <OfferingSummary
+                        offering={offering}
+                        canViewCosts={canViewCosts}
+                    />
+                }
+                sidebar={
+                    section === "current" ? (
+                        <OfferingIdentitySection offering={offering} />
+                    ) : undefined
+                }
+                sidebarLabel="供给资料"
+            >
+                {section === "current" ? (
+                    <>
+                        <OfferingDeliverySection
+                            offering={offering}
+                            canEdit={
+                                !taskMode &&
+                                hasPermission(
+                                    account.data?.permissions,
+                                    "supplier_offering:update",
+                                )
+                            }
+                        />
+                        <OfferingTermsSection
+                            offering={offering}
+                            canViewCosts={canViewCosts}
+                        />
+                    </>
+                ) : (
+                    <DetailWorkspaceSection>
+                        <OfferingHistory
+                            offeringId={offeringId}
+                            canViewCosts={canViewCosts}
+                        />
+                    </DetailWorkspaceSection>
+                )}
+            </DetailWorkspaceBody>
             {dialog === "revise" ? (
                 <ReviseOfferingDialog
                     offering={offering}
@@ -216,6 +206,6 @@ export function SupplierOfferingDetailPage({
                     }}
                 />
             ) : null}
-        </PageScaffold>
+        </DetailWorkspacePage>
     )
 }

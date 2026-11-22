@@ -317,9 +317,9 @@ export function DefinitionFlowCanvas({
     return (
         <section
             aria-label="审批流程自由画布"
-            className="min-w-0 overflow-hidden rounded-lg border border-border bg-card"
+            className="min-w-0 overflow-hidden border-y border-border/60"
         >
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 py-2.5">
                 <div className="flex min-w-0 items-center gap-2">
                     <h3 className="font-medium">审批流程</h3>
                     <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
@@ -620,7 +620,7 @@ export function DefinitionFlowCanvas({
                     </aside>
                 ) : null}
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 py-2 text-xs text-muted-foreground">
                 <p role="status" aria-live="polite" className="min-w-0">
                     {layout.storageWarning
                         ? "浏览器未能保存画布布局，本次仍可编辑；审批配置请保存草稿。"

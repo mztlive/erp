@@ -4,7 +4,12 @@ import { Fragment, useMemo, useState } from "react"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
-import { MoneyValue } from "@/components/business"
+import {
+    DetailWorkspaceSection,
+    MoneyValue,
+    detailWorkspaceStyles,
+} from "@/components/business"
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -104,9 +109,11 @@ function OrderBasis({ line, draft }: { line: RequestLine; draft: boolean }) {
 export function RequestOrderDetails({
     request,
     compact = false,
+    detailWorkspace = false,
 }: {
     request: PaymentRequest
     compact?: boolean
+    detailWorkspace?: boolean
 }) {
     const [collapsed, setCollapsed] = useState<Set<string>>(
         () =>
@@ -133,22 +140,30 @@ export function RequestOrderDetails({
     const draft = request.status === "draft"
     const showLineProgress = !compact || request.lines.length > 1
     const columnCount = showLineProgress ? 5 : 3
-    return (
-        <section className="space-y-4" aria-label="逐采购申请与付款进度">
-            <div className="flex items-center justify-between gap-3">
-                <h3 className="text-body-compact font-semibold">采购单明细</h3>
-                <span className="text-xs text-muted-foreground">
-                    共 {request.lines.length} 笔
-                </span>
-            </div>
+    const count = `共 ${request.lines.length} 笔`
+    const content = (
+        <>
             <p className="text-xs text-muted-foreground">
                 {draft
                     ? "以下为保存草稿时核对的生效来源，提交时将再次校验。"
                     : "展开采购单，核对提交时依据与当前付款、履约进度。"}
             </p>
-            <div className="overflow-hidden rounded-lg border border-border">
+            <div
+                data-slot={detailWorkspace ? "detail-inline-table" : undefined}
+                className={
+                    detailWorkspace
+                        ? detailWorkspaceStyles.inlineTableWrapper
+                        : "overflow-hidden rounded-lg border border-border"
+                }
+            >
                 <Table
-                    className={`${showLineProgress ? "min-w-[600px]" : "min-w-[360px]"} table-fixed [--table-cell-inline:1rem] [--table-cell-block:0.75rem]`}
+                    className={cn(
+                        "table-fixed",
+                        showLineProgress ? "min-w-[600px]" : "min-w-[360px]",
+                        detailWorkspace
+                            ? "[&_:is(th,td):first-child]:ps-0"
+                            : "[--table-cell-inline:1rem] [--table-cell-block:0.75rem]",
+                    )}
                 >
                     <TableHeader>
                         <TableRow>
@@ -308,6 +323,23 @@ export function RequestOrderDetails({
                     </TableBody>
                 </Table>
             </div>
+        </>
+    )
+    return detailWorkspace ? (
+        <DetailWorkspaceSection
+            title="采购单明细"
+            subtitle={count}
+            ariaLabel="逐采购申请与付款进度"
+        >
+            {content}
+        </DetailWorkspaceSection>
+    ) : (
+        <section className="space-y-4" aria-label="逐采购申请与付款进度">
+            <div className="flex items-center justify-between gap-3">
+                <h3 className="text-body-compact font-semibold">采购单明细</h3>
+                <span className="text-xs text-muted-foreground">{count}</span>
+            </div>
+            {content}
         </section>
     )
 }

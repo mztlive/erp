@@ -1,7 +1,10 @@
 "use client"
 
 import { useRouter } from "@/lib/navigation"
-import type { InterfaceErrorClass } from "@/components/business"
+import {
+    DetailWorkspaceSection,
+    type InterfaceErrorClass,
+} from "@/components/business"
 import { cn } from "@/lib/utils"
 import { useWorkspaceTaskPane } from "@/components/business/workspace-task-pane"
 
@@ -23,6 +26,7 @@ export function IntegrationErrorWorkspace({
     items,
     item,
     focusMode,
+    detailWorkspace,
     urlState,
     positionIndex,
     positionTotal,
@@ -37,6 +41,7 @@ export function IntegrationErrorWorkspace({
     items: IntegrationResolutionItemView[]
     item: IntegrationResolutionItemView | undefined
     focusMode: boolean
+    detailWorkspace?: boolean
     urlState: IntegrationUrlState
     positionIndex: number
     positionTotal: number
@@ -56,12 +61,104 @@ export function IntegrationErrorWorkspace({
         if (next) goToItem(next)
     }
 
-    if (emptyReason === "no_scope") {
-        return <IntegrationEmptyScope />
+    if (emptyReason === "no_scope" || items.length === 0) {
+        const empty =
+            emptyReason === "no_scope" ? (
+                <IntegrationEmptyScope />
+            ) : (
+                <IntegrationEmptyQueue onClearFilters={onClearFilters} />
+            )
+        return detailWorkspace ? (
+            <DetailWorkspaceSection>{empty}</DetailWorkspaceSection>
+        ) : (
+            empty
+        )
     }
-    if (items.length === 0) {
-        return <IntegrationEmptyQueue onClearFilters={onClearFilters} />
-    }
+
+    const content = item ? (
+        <>
+            <IntegrationDetailWorkflow
+                item={item}
+                positionIndex={positionIndex}
+                positionTotal={positionTotal}
+                responsibilityStatus={actions.responsibilityStatus}
+                formalPending={actions.formalPending}
+                focusMode={focusMode}
+                detailWorkspace={detailWorkspace}
+                panelErrorClass={panelErrorClass}
+                headingRef={actions.headingRef}
+                onBack={() => {
+                    if (focusMode) {
+                        router.push(
+                            `/governance/integration-errors?view=${urlState.view}&queueContextId=${encodeURIComponent(urlState.queueContextId)}`,
+                        )
+                    } else {
+                        replaceUrl({
+                            taskId: null,
+                            differenceId: null,
+                        })
+                    }
+                }}
+                onProcess={() => {
+                    actions.focusFirstAction()
+                }}
+                onProcessNext={nextItem}
+                onRefresh={actions.refresh}
+            />
+
+            <IntegrationActionZone
+                item={item}
+                can={actions.can}
+                formalPending={actions.formalPending}
+                resolvePending={actions.resolvePending}
+                pendingTaskAction={actions.pendingTaskAction}
+                pendingDirectAction={actions.pendingDirectAction}
+                responsibilityStatus={actions.responsibilityStatus}
+                comment={actions.comment}
+                onCommentChange={actions.setComment}
+                replacementTaskId={actions.replacementTaskId}
+                onReplacementTaskIdChange={actions.setReplacementTaskId}
+                reconReasonId={actions.reconReasonId}
+                onReconReasonIdChange={actions.setReconReasonId}
+                reasonMismatches={actions.reasonMismatches}
+                onTaskAction={(kind) => void actions.runTaskAction(kind)}
+                onDirectAction={(kind) => void actions.handleDirectAction(kind)}
+                onRequestTerminal={actions.setTerminalConfirm}
+                onResolve={() => void actions.handleResolve()}
+                actionZoneRef={actions.actionZoneRef}
+                detailWorkspace={detailWorkspace}
+            />
+            {detailWorkspace ? (
+                <DetailWorkspaceSection>
+                    <IntegrationEvidencePanel item={item} flat />
+                </DetailWorkspaceSection>
+            ) : (
+                <IntegrationEvidencePanel item={item} />
+            )}
+
+            {actions.terminalConfirm ? (
+                <IntegrationTerminalConfirmation
+                    confirm={actions.terminalConfirm}
+                    item={item}
+                    pending={actions.formalPending}
+                    onConfirmKind={async (kind) => {
+                        if (kind === "CLOSE_DUPLICATE") {
+                            await actions.handleClose("CLOSE_DUPLICATE")
+                        } else if (kind === "CLOSE_MISROUTED") {
+                            await actions.handleClose("CLOSE_MISROUTED")
+                        } else {
+                            await actions.handleDirectTerminal(kind)
+                        }
+                    }}
+                    onClose={() => actions.setTerminalConfirm(null)}
+                />
+            ) : null}
+        </>
+    ) : (
+        <IntegrationEmptySelection />
+    )
+
+    if (detailWorkspace) return content
 
     return (
         <div
@@ -87,90 +184,7 @@ export function IntegrationErrorWorkspace({
                         "rounded-xl border border-border/60 bg-card shadow-xs",
                 )}
             >
-                {item ? (
-                    <>
-                        <IntegrationDetailWorkflow
-                            item={item}
-                            positionIndex={positionIndex}
-                            positionTotal={positionTotal}
-                            responsibilityStatus={actions.responsibilityStatus}
-                            formalPending={actions.formalPending}
-                            focusMode={focusMode}
-                            panelErrorClass={panelErrorClass}
-                            headingRef={actions.headingRef}
-                            onBack={() => {
-                                if (focusMode) {
-                                    router.push(
-                                        `/governance/integration-errors?view=${urlState.view}&queueContextId=${encodeURIComponent(urlState.queueContextId)}`,
-                                    )
-                                } else {
-                                    replaceUrl({
-                                        taskId: null,
-                                        differenceId: null,
-                                    })
-                                }
-                            }}
-                            onProcess={() => {
-                                actions.focusFirstAction()
-                            }}
-                            onProcessNext={nextItem}
-                            onRefresh={actions.refresh}
-                        />
-
-                        <IntegrationActionZone
-                            item={item}
-                            can={actions.can}
-                            formalPending={actions.formalPending}
-                            resolvePending={actions.resolvePending}
-                            pendingTaskAction={actions.pendingTaskAction}
-                            pendingDirectAction={actions.pendingDirectAction}
-                            responsibilityStatus={actions.responsibilityStatus}
-                            comment={actions.comment}
-                            onCommentChange={actions.setComment}
-                            replacementTaskId={actions.replacementTaskId}
-                            onReplacementTaskIdChange={
-                                actions.setReplacementTaskId
-                            }
-                            reconReasonId={actions.reconReasonId}
-                            onReconReasonIdChange={actions.setReconReasonId}
-                            reasonMismatches={actions.reasonMismatches}
-                            onTaskAction={(kind) =>
-                                void actions.runTaskAction(kind)
-                            }
-                            onDirectAction={(kind) =>
-                                void actions.handleDirectAction(kind)
-                            }
-                            onRequestTerminal={actions.setTerminalConfirm}
-                            onResolve={() => void actions.handleResolve()}
-                            actionZoneRef={actions.actionZoneRef}
-                        />
-                        <IntegrationEvidencePanel item={item} />
-
-                        {actions.terminalConfirm ? (
-                            <IntegrationTerminalConfirmation
-                                confirm={actions.terminalConfirm}
-                                item={item}
-                                pending={actions.formalPending}
-                                onConfirmKind={async (kind) => {
-                                    if (kind === "CLOSE_DUPLICATE") {
-                                        await actions.handleClose(
-                                            "CLOSE_DUPLICATE",
-                                        )
-                                    } else if (kind === "CLOSE_MISROUTED") {
-                                        await actions.handleClose(
-                                            "CLOSE_MISROUTED",
-                                        )
-                                    } else {
-                                        await actions.handleDirectTerminal(kind)
-                                    }
-                                }}
-                                onClose={() => actions.setTerminalConfirm(null)}
-                            />
-                        ) : null}
-                    </>
-                ) : (
-                    <IntegrationEmptySelection />
-                )}
+                {content}
             </div>
         </div>
     )

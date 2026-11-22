@@ -5,12 +5,11 @@ import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import Link from "next/link"
 
 import {
-    DocumentSection,
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
     RevisionTimeline,
     SensitiveValue,
-    surfaceInsetClassName,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { revealMasterDataSensitive } from "@/features/master-data/api"
 import { masterDataRevisionEntry } from "@/features/master-data/components/shared/revision-timeline-item"
@@ -18,7 +17,6 @@ import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { formatEffectiveRange } from "@/features/master-data/lib/filter"
 import type { MasterDataCenterView } from "@/features/master-data/types"
 import { formatDateTime } from "@/lib/datetime"
-import { cn } from "@/lib/utils"
 
 /** 概览：编号、版本、变更原因与各资源字段；敏感字段按权限短时查看。 */
 export function ObjectCenterOverviewSection({
@@ -29,10 +27,11 @@ export function ObjectCenterOverviewSection({
     canRevealSensitive: boolean
 }) {
     return (
-        <DocumentSection
+        <DetailWorkspaceSection
             id="md-section-overview"
             title={masterDataCopy.centerOverview}
-            description={masterDataCopy.centerOverviewDesc}
+            width="form"
+            subtitle={masterDataCopy.centerOverviewDesc}
         >
             <dl className="grid gap-x-8 gap-y-6 text-body-compact sm:grid-cols-2 [&>div]:min-w-0 [&_dd]:mt-1 [&_dd]:break-words [&_dd]:leading-6">
                 <div>
@@ -119,12 +118,7 @@ export function ObjectCenterOverviewSection({
 
             <PermissionGuard permission="stock_balance:list">
                 {data.warehouseStockSummary ? (
-                    <div
-                        className={cn(
-                            surfaceInsetClassName,
-                            "mt-4 space-y-2 p-3 text-body-compact",
-                        )}
-                    >
+                    <div className="flex flex-col items-start gap-2 border-t border-border/60 pt-4">
                         <p className="text-xs text-muted-foreground">
                             {data.warehouseStockSummary.policyNote}
                         </p>
@@ -141,8 +135,8 @@ export function ObjectCenterOverviewSection({
                         <Button
                             id="master-data-shared-object-center-sections-button-1"
                             size="sm"
-                            variant="secondary"
-                            className="rounded-lg shadow-none"
+                            variant="ghost"
+                            className={detailWorkspaceStyles.subtleButton}
                             render={
                                 <Link
                                     href={data.warehouseStockSummary.w10Href}
@@ -154,7 +148,7 @@ export function ObjectCenterOverviewSection({
                     </div>
                 ) : null}
             </PermissionGuard>
-        </DocumentSection>
+        </DetailWorkspaceSection>
     )
 }
 
@@ -165,10 +159,11 @@ export function ObjectCenterVersionsSection({
     data: MasterDataCenterView
 }) {
     return (
-        <DocumentSection
+        <DetailWorkspaceSection
             id="md-section-versions"
             title={masterDataCopy.centerVersions}
-            description={masterDataCopy.centerVersionsDesc}
+            width="form"
+            subtitle={masterDataCopy.centerVersionsDesc}
         >
             <RevisionTimeline
                 revisions={data.revisionTimeline.map((rev) =>
@@ -181,7 +176,7 @@ export function ObjectCenterVersionsSection({
                     }),
                 )}
             />
-        </DocumentSection>
+        </DetailWorkspaceSection>
     )
 }
 
@@ -192,22 +187,20 @@ export function ObjectCenterAuditSection({
     data: MasterDataCenterView
 }) {
     return (
-        <DocumentSection
+        <DetailWorkspaceSection
             id="md-section-audit"
             title={masterDataCopy.centerAudit}
-            description={masterDataCopy.centerAuditDesc}
+            width="form"
+            subtitle={masterDataCopy.centerAuditDesc}
         >
             {data.auditEvents.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                     {masterDataCopy.centerNoAudit}
                 </p>
             ) : (
-                <ul className="space-y-2 text-body-compact">
+                <ul className="divide-y divide-border/60">
                     {data.auditEvents.map((event) => (
-                        <li
-                            key={event.id}
-                            className={cn(surfaceInsetClassName, "px-3 py-2")}
-                        >
+                        <li key={event.id} className="py-2 first:pt-0">
                             <div className="flex flex-wrap gap-2">
                                 <span className="num text-xs text-muted-foreground">
                                     {formatDateTime(
@@ -217,7 +210,9 @@ export function ObjectCenterAuditSection({
                                     )}
                                 </span>
                                 <span>{event.actor}</span>
-                                <Badge variant="outline">{event.action}</Badge>
+                                <span className="text-xs text-muted-foreground">
+                                    {event.action}
+                                </span>
                             </div>
                             <div className="mt-1 text-muted-foreground">
                                 {event.detail}
@@ -226,6 +221,6 @@ export function ObjectCenterAuditSection({
                     ))}
                 </ul>
             )}
-        </DocumentSection>
+        </DetailWorkspaceSection>
     )
 }

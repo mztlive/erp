@@ -3,7 +3,11 @@
 import Link from "next/link"
 import { ArrowUpRightIcon, KeyRoundIcon, PencilIcon } from "lucide-react"
 
-import { BusinessFailureState } from "@/components/business"
+import {
+    BusinessFailureState,
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { formatDateTime } from "@/lib/datetime"
@@ -12,10 +16,6 @@ import { adminAccountStatusBadge } from "../../lib/account-status"
 import type { useRolesQuery } from "../../hooks/queries"
 import type { AdminAccount } from "../../types"
 
-/**
- * 人员资料只读视图：身份摘要、角色和账号安全合并在同一块档案卡内，
- * 避免宽屏下多张短卡片并排造成的大片留白。
- */
 export function AccountProfileOverview({
     account,
     roles,
@@ -43,28 +43,20 @@ export function AccountProfileOverview({
     const initial = Array.from(account.name.trim())[0]?.toUpperCase() ?? "?"
 
     return (
-        <section
-            aria-labelledby="account-profile-title"
-            className="space-y-4 text-body-compact"
-        >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 space-y-1">
-                    <h2
-                        id="account-profile-title"
-                        className="text-section-title font-semibold tracking-tight text-foreground"
-                    >
-                        账号资料
-                    </h2>
-                    <p className="text-xs text-muted-foreground">
-                        人员姓名、所属部门与角色统一保存后生效。
-                    </p>
-                </div>
-                {canEdit ? (
+        <DetailWorkspaceSection
+            title="账号资料"
+            headingId="account-profile-title"
+            subtitle="人员姓名、所属部门与角色统一保存后生效。"
+            width="form"
+            contentClassName="text-body-compact"
+            actions={
+                canEdit ? (
                     <Button
                         id="account-profile-edit"
                         type="button"
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
+                        className={detailWorkspaceStyles.subtleButton}
                         disabled={Boolean(editDisabledReason)}
                         title={editDisabledReason ?? "编辑账号资料"}
                         onClick={onEdit}
@@ -75,11 +67,11 @@ export function AccountProfileOverview({
                         />
                         编辑资料
                     </Button>
-                ) : null}
-            </div>
-
-            <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
-                <div className="flex flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center">
+                ) : null
+            }
+        >
+            <div>
+                <div className="flex flex-col gap-4 pb-5 lg:flex-row lg:items-center">
                     <div className="flex min-w-0 items-center gap-3 lg:w-64 lg:shrink-0">
                         <span
                             aria-hidden="true"
@@ -131,10 +123,10 @@ export function AccountProfileOverview({
                     </dl>
                 </div>
 
-                <div className="grid border-t border-border/70 bg-muted/30 sm:grid-cols-2 sm:divide-x sm:divide-border/70">
+                <div className="grid border-t border-border/60 sm:grid-cols-2 sm:divide-x sm:divide-border/60">
                     <section
                         aria-labelledby="account-profile-roles-title"
-                        className="min-w-0 space-y-2 px-5 py-4"
+                        className="min-w-0 space-y-2 py-5 sm:pr-5"
                     >
                         <div className="flex items-center justify-between gap-2">
                             <h3
@@ -164,7 +156,7 @@ export function AccountProfileOverview({
                                 正在读取角色…
                             </p>
                         ) : !roleCount ? (
-                            <div className="rounded-lg border border-dashed border-border px-3 py-3">
+                            <div className="py-2">
                                 <p className="font-medium">尚未分配角色</p>
                                 <p className="mt-1 text-xs text-muted-foreground">
                                     没有角色的账号无法执行任何业务操作。
@@ -232,7 +224,7 @@ export function AccountProfileOverview({
 
                     <section
                         aria-labelledby="account-profile-security-title"
-                        className="min-w-0 space-y-2 border-t border-border/70 px-5 py-4 sm:border-t-0"
+                        className="min-w-0 space-y-2 border-t border-border/60 py-5 sm:border-t-0 sm:pl-5"
                     >
                         <h3
                             id="account-profile-security-title"
@@ -251,8 +243,11 @@ export function AccountProfileOverview({
                                 <Button
                                     id="account-detail-password"
                                     type="button"
-                                    variant="outline"
+                                    variant="ghost"
                                     size="sm"
+                                    className={
+                                        detailWorkspaceStyles.subtleButton
+                                    }
                                     onClick={onPasswordChange}
                                 >
                                     <KeyRoundIcon
@@ -266,6 +261,6 @@ export function AccountProfileOverview({
                     </section>
                 </div>
             </div>
-        </section>
+        </DetailWorkspaceSection>
     )
 }

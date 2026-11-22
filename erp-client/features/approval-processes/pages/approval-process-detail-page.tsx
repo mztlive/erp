@@ -14,10 +14,14 @@ import {
     DiscardConfirmDialog,
     BusinessEmptyState,
     BusinessFailureState,
-    PageHeader,
-    DetailPageHeader,
-    PageScaffold,
-    surfacePanelClassName,
+    DetailWorkspaceBody,
+    DetailWorkspaceChrome,
+    DetailWorkspaceDirtyBadge,
+    DetailWorkspaceMeta,
+    DetailWorkspacePage,
+    DetailWorkspaceSection,
+    DetailWorkspaceTabs,
+    detailWorkspaceStyles,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
@@ -26,9 +30,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
-import { cn } from "@/lib/utils"
 
 import { CreateDraftDialog } from "../components/create-draft-dialog"
 import { DefinitionReadView } from "../components/definition-read-view"
@@ -157,95 +159,117 @@ export function ApprovalProcessDetailPage({
 
     if (!documentType) {
         return (
-            <PageScaffold>
-                <PageHeader title="审批流程配置" />
-                <BusinessFailureState
-                    kind="validation"
-                    title="单据类型无效"
-                    description="地址中的单据类型不在固定目录中。"
-                    action={
-                        <Button
-                            id="governance-approval-processes-detail-invalid-back"
-                            type="button"
-                            render={<Link href="/system/approval-processes" />}
-                        >
-                            返回目录
-                        </Button>
-                    }
-                />
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title="审批流程配置" />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <BusinessFailureState
+                            kind="validation"
+                            title="单据类型无效"
+                            description="地址中的单据类型不在固定目录中。"
+                            action={
+                                <Button
+                                    id="governance-approval-processes-detail-invalid-back"
+                                    type="button"
+                                    render={
+                                        <Link href="/system/approval-processes" />
+                                    }
+                                >
+                                    返回目录
+                                </Button>
+                            }
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     }
 
     if (unknownParams) {
         return (
-            <PageScaffold>
-                <PageHeader title="审批流程配置" />
-                <BusinessFailureState
-                    kind="validation"
-                    title="查询条件无效"
-                    description="地址中的查看参数无法识别。"
-                    action={
-                        <Button
-                            id="governance-approval-processes-detail-unknown-clear"
-                            type="button"
-                            onClick={() =>
-                                router.replace(
-                                    `/system/approval-processes/${documentType}`,
-                                )
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title="审批流程配置" />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <BusinessFailureState
+                            kind="validation"
+                            title="查询条件无效"
+                            description="地址中的查看参数无法识别。"
+                            action={
+                                <Button
+                                    id="governance-approval-processes-detail-unknown-clear"
+                                    type="button"
+                                    onClick={() =>
+                                        router.replace(
+                                            `/system/approval-processes/${documentType}`,
+                                        )
+                                    }
+                                >
+                                    清除查看条件
+                                </Button>
                             }
-                        >
-                            清除查看条件
-                        </Button>
-                    }
-                />
-            </PageScaffold>
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     }
 
     if (profileQuery.data && !canReadCatalog(profileQuery.data.permissions)) {
         return (
-            <PageScaffold>
-                <PageHeader title="审批流程配置" />
-                <BusinessFailureState
-                    kind="permission"
-                    title="权限不足"
-                    description="当前账号不能查看审批流程定义。"
-                    action={
-                        <Button
-                            id="governance-approval-processes-detail-permission-back"
-                            type="button"
-                            render={<Link href="/system/approval-processes" />}
-                        >
-                            返回目录
-                        </Button>
-                    }
-                />
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title="审批流程配置" />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <BusinessFailureState
+                            kind="permission"
+                            title="权限不足"
+                            description="当前账号不能查看审批流程定义。"
+                            action={
+                                <Button
+                                    id="governance-approval-processes-detail-permission-back"
+                                    type="button"
+                                    render={
+                                        <Link href="/system/approval-processes" />
+                                    }
+                                >
+                                    返回目录
+                                </Button>
+                            }
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     }
 
     if (catalogItem?.approval_requirement === "NO_APPROVAL") {
         return (
-            <PageScaffold>
-                <PageHeader
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome
                     title={typeTitle}
-                    description="无需审批 / 不适用"
-                    actions={
+                    meta="无需审批 / 不适用"
+                    secondaryActions={
                         <Button
                             id="governance-approval-processes-detail-no-approval-back"
                             type="button"
-                            variant="outline"
+                            variant="ghost"
+                            size="sm"
+                            className={detailWorkspaceStyles.quietButton}
                             render={<Link href="/system/approval-processes" />}
                         >
                             返回目录
                         </Button>
                     }
                 />
-                <p className="text-xs text-muted-foreground">
-                    该单据类型不配置审批流程，也没有新建、编辑、发布或停用入口。
-                </p>
-            </PageScaffold>
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <p className="text-body-compact text-muted-foreground">
+                            该单据类型不配置审批流程，也没有新建、编辑、发布或停用入口。
+                        </p>
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     }
 
@@ -289,15 +313,41 @@ export function ApprovalProcessDetailPage({
             </Button>
         ) : null
 
+    const draftAction =
+        draft && urlState.view !== "draft" ? (
+            <Button
+                id="governance-approval-processes-detail-continue-draft"
+                type="button"
+                size="sm"
+                variant={canEdit ? "default" : "ghost"}
+                className={
+                    canEdit ? undefined : detailWorkspaceStyles.quietButton
+                }
+                onClick={() =>
+                    navigate(
+                        `/system/approval-processes/${rawDocumentType}${buildDetailSearchParams({ view: "draft" })}`,
+                    )
+                }
+            >
+                <PencilLineIcon aria-hidden data-icon="inline-start" />
+                {canEdit ? "继续编辑草稿" : "查看草稿"}
+            </Button>
+        ) : null
+
     return (
-        <PageScaffold density="compact">
-            <DetailPageHeader
+        <DetailWorkspacePage>
+            <DetailWorkspaceChrome
                 back={{
                     id: "governance-approval-processes-detail-back",
                     label: "审批流程目录",
                     onClick: () => navigate("/system/approval-processes"),
                 }}
                 title={typeTitle}
+                titleExtra={
+                    editingDraft && editorDirty ? (
+                        <DetailWorkspaceDirtyBadge />
+                    ) : null
+                }
                 primaryStatus={
                     detailQuery.data
                         ? {
@@ -322,69 +372,66 @@ export function ApprovalProcessDetailPage({
                           : undefined
                 }
                 meta={
-                    <>
-                        {detailQuery.data ? (
-                            <span>
-                                {versionLabel(
-                                    detailQuery.data.definition_version,
-                                )}
-                            </span>
-                        ) : null}
-                        <span>
-                            {catalogItem
+                    <DetailWorkspaceMeta
+                        items={[
+                            detailQuery.data ? (
+                                <span key="version" className="num">
+                                    {versionLabel(
+                                        detailQuery.data.definition_version,
+                                    )}
+                                </span>
+                            ) : null,
+                            catalogItem
                                 ? approvalRequirementLabel(
                                       catalogItem.approval_requirement,
                                   )
-                                : "审批流程"}
-                        </span>
-                    </>
+                                : "审批流程",
+                        ]}
+                    />
                 }
                 secondaryActions={
-                    canRetire && published && urlState.view === "current" ? (
-                        <DropdownMenu>
-                            <DropdownMenuTrigger
-                                id="governance-approval-processes-detail-more"
-                                render={<Button variant="outline" size="sm" />}
-                            >
-                                <EllipsisIcon
-                                    aria-hidden
-                                    data-icon="inline-start"
-                                />
-                                更多操作
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                    id="governance-approval-processes-detail-retire"
-                                    variant="destructive"
-                                    onClick={() => setRetireOpen(true)}
+                    <>
+                        {canRetire &&
+                        published &&
+                        urlState.view === "current" ? (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger
+                                    id="governance-approval-processes-detail-more"
+                                    render={
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className={
+                                                detailWorkspaceStyles.quietButton
+                                            }
+                                        />
+                                    }
                                 >
-                                    <ArchiveIcon aria-hidden />
-                                    停用当前版本
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    ) : null
+                                    <EllipsisIcon
+                                        aria-hidden
+                                        data-icon="inline-start"
+                                    />
+                                    更多操作
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                        id="governance-approval-processes-detail-retire"
+                                        variant="destructive"
+                                        onClick={() => setRetireOpen(true)}
+                                    >
+                                        <ArchiveIcon aria-hidden />
+                                        停用当前版本
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        ) : null}
+                        {!canEdit ? draftAction : null}
+                    </>
                 }
                 primaryAction={
                     <>
-                        {draft && urlState.view !== "draft" ? (
-                            <Button
-                                id="governance-approval-processes-detail-continue-draft"
-                                type="button"
-                                size="sm"
-                                onClick={() =>
-                                    navigate(
-                                        `/system/approval-processes/${rawDocumentType}${buildDetailSearchParams({ view: "draft" })}`,
-                                    )
-                                }
-                            >
-                                <PencilLineIcon
-                                    aria-hidden
-                                    data-icon="inline-start"
-                                />
-                                {canEdit ? "继续编辑草稿" : "查看草稿"}
-                            </Button>
-                        ) : canCreate && !draft ? (
+                        {canEdit ? draftAction : null}
+                        {canCreate && !draft ? (
                             <Button
                                 id="governance-approval-processes-detail-create-draft"
                                 type="button"
@@ -410,63 +457,51 @@ export function ApprovalProcessDetailPage({
                             : null}
                     </>
                 }
-            />
-
-            <div className={cn(surfacePanelClassName, "min-w-0")}>
-                <Tabs
-                    value={urlState.view}
-                    onValueChange={(next) => {
-                        if (
-                            next === "current" ||
-                            next === "draft" ||
-                            next === "history"
-                        ) {
-                            if (next !== urlState.view)
+                tabs={
+                    <DetailWorkspaceTabs
+                        value={urlState.view}
+                        ariaLabel="审批流程版本"
+                        tabIdPrefix="governance-approval-processes-detail-tab"
+                        onValueChange={(next) => {
+                            if (
+                                (next === "current" ||
+                                    next === "draft" ||
+                                    next === "history") &&
+                                next !== urlState.view
+                            ) {
                                 navigate(
                                     `/system/approval-processes/${rawDocumentType}${buildDetailSearchParams({ view: next })}`,
                                 )
-                        }
-                    }}
-                >
-                    <TabsList
-                        variant="line"
-                        className="h-auto w-full flex-wrap justify-start gap-6 rounded-none border-b border-border bg-card px-4 py-0 sm:px-6"
-                    >
-                        <TabsTrigger
-                            id="governance-approval-processes-detail-tab-current"
-                            value="current"
-                            className="flex-none"
-                        >
-                            当前版本
-                            {published ? (
-                                <span className="num text-xs text-muted-foreground">
-                                    v{published.definition_version}
-                                </span>
-                            ) : null}
-                        </TabsTrigger>
-                        <TabsTrigger
-                            id="governance-approval-processes-detail-tab-draft"
-                            value="draft"
-                            className="flex-none"
-                        >
-                            草稿
-                            {draft ? (
-                                <span className="num text-xs text-muted-foreground">
-                                    v{draft.definition_version}
-                                </span>
-                            ) : null}
-                        </TabsTrigger>
-                        <TabsTrigger
-                            id="governance-approval-processes-detail-tab-history"
-                            value="history"
-                            className="flex-none"
-                        >
-                            历史版本
-                        </TabsTrigger>
-                    </TabsList>
-                </Tabs>
+                            }
+                        }}
+                        items={[
+                            {
+                                id: "current",
+                                label: "当前版本",
+                                badge: published ? (
+                                    <span className="num text-xs text-muted-foreground">
+                                        v{published.definition_version}
+                                    </span>
+                                ) : null,
+                            },
+                            {
+                                id: "draft",
+                                label: "草稿",
+                                badge: draft ? (
+                                    <span className="num text-xs text-muted-foreground">
+                                        v{draft.definition_version}
+                                    </span>
+                                ) : null,
+                            },
+                            { id: "history", label: "历史版本" },
+                        ]}
+                    />
+                }
+            />
+
+            <DetailWorkspaceBody>
                 {catalogQuery.isError || versionsQuery.isError ? (
-                    <div className="p-6">
+                    <DetailWorkspaceSection width="form">
                         <BusinessFailureState
                             kind="system"
                             title="流程版本加载失败"
@@ -488,14 +523,16 @@ export function ApprovalProcessDetailPage({
                                 </Button>
                             }
                         />
-                    </div>
+                    </DetailWorkspaceSection>
                 ) : catalogQuery.isPending || versionsQuery.isPending ? (
-                    <p
-                        role="status"
-                        className="p-6 text-xs text-muted-foreground"
-                    >
-                        正在加载流程版本…
-                    </p>
+                    <DetailWorkspaceSection width="form">
+                        <p
+                            role="status"
+                            className="text-xs text-muted-foreground"
+                        >
+                            正在加载流程版本…
+                        </p>
+                    </DetailWorkspaceSection>
                 ) : null}
 
                 {missing &&
@@ -503,7 +540,7 @@ export function ApprovalProcessDetailPage({
                 !versionsQuery.isPending &&
                 !versionsQuery.isError &&
                 urlState.view === "current" ? (
-                    <div className="p-4">
+                    <DetailWorkspaceSection width="form">
                         <BusinessFailureState
                             kind="business"
                             title="配置缺失"
@@ -520,73 +557,75 @@ export function ApprovalProcessDetailPage({
                                 ) : null
                             }
                         />
-                    </div>
+                    </DetailWorkspaceSection>
                 ) : null}
 
                 {urlState.view === "current" && !published && draft ? (
-                    <BusinessEmptyState
-                        kind="no-data"
-                        title="尚未发布审批流程"
-                        description="已有一份草稿，发布后用于新建单据。"
-                        className="rounded-none border-0 bg-transparent p-6 shadow-none ring-0"
-                        action={
-                            <Button
-                                id="governance-approval-processes-detail-open-draft"
-                                type="button"
-                                variant="outline"
-                                onClick={() => replaceView("draft")}
-                            >
-                                打开草稿
-                            </Button>
-                        }
-                    />
+                    <DetailWorkspaceSection width="form">
+                        <BusinessEmptyState
+                            kind="no-data"
+                            title="尚未发布审批流程"
+                            description="已有一份草稿，发布后用于新建单据。"
+                            className="rounded-none border-0 bg-transparent px-0 shadow-none ring-0"
+                            action={
+                                <Button
+                                    id="governance-approval-processes-detail-open-draft"
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => replaceView("draft")}
+                                >
+                                    打开草稿
+                                </Button>
+                            }
+                        />
+                    </DetailWorkspaceSection>
                 ) : null}
                 {urlState.view === "history" &&
                 urlState.version &&
                 !historyTarget &&
                 !versionsQuery.isPending ? (
-                    <p
-                        role="status"
-                        className="p-6 text-xs text-muted-foreground"
-                    >
-                        所选版本不存在，请选择其它版本。
-                    </p>
+                    <DetailWorkspaceSection width="form">
+                        <p
+                            role="status"
+                            className="text-xs text-muted-foreground"
+                        >
+                            所选版本不存在，请选择其它版本。
+                        </p>
+                    </DetailWorkspaceSection>
                 ) : null}
                 {urlState.view === "draft" &&
                 !draft &&
                 !versionsQuery.isPending &&
                 !versionsQuery.isError ? (
-                    <BusinessEmptyState
-                        kind="no-data"
-                        title="当前没有草稿"
-                        description={
-                            canCreate
-                                ? "请先创建草稿后再编辑。"
-                                : "你没有创建草稿的权限。"
-                        }
-                        className="rounded-none border-0 bg-transparent p-6 shadow-none ring-0"
-                        action={
-                            canCreate ? (
-                                <Button
-                                    id="governance-approval-processes-detail-empty-create"
-                                    type="button"
-                                    variant="secondary"
-                                    className="rounded-lg shadow-none"
-                                    onClick={() => setCreateOpen(true)}
-                                >
-                                    新建草稿
-                                </Button>
-                            ) : null
-                        }
-                    />
+                    <DetailWorkspaceSection width="form">
+                        <BusinessEmptyState
+                            kind="no-data"
+                            title="当前没有草稿"
+                            description={
+                                canCreate
+                                    ? "请先创建草稿后再编辑。"
+                                    : "你没有创建草稿的权限。"
+                            }
+                            className="rounded-none border-0 bg-transparent px-0 shadow-none ring-0"
+                            action={
+                                canCreate ? (
+                                    <Button
+                                        id="governance-approval-processes-detail-empty-create"
+                                        type="button"
+                                        variant="secondary"
+                                        className="rounded-lg shadow-none"
+                                        onClick={() => setCreateOpen(true)}
+                                    >
+                                        新建草稿
+                                    </Button>
+                                ) : null
+                            }
+                        />
+                    </DetailWorkspaceSection>
                 ) : null}
 
                 {urlState.view === "history" ? (
-                    <div
-                        className={
-                            showEditor ? "border-b border-grid" : undefined
-                        }
-                    >
+                    <DetailWorkspaceSection>
                         <VersionHistory
                             id="governance-approval-processes-detail-history"
                             versions={versionsQuery.data ?? []}
@@ -602,22 +641,24 @@ export function ApprovalProcessDetailPage({
                                 )
                             }
                         />
-                    </div>
+                    </DetailWorkspaceSection>
                 ) : null}
 
                 {targetId &&
                 detailQuery.isFetching &&
                 (detailQuery.isPending || detailQuery.isPlaceholderData) ? (
-                    <div
-                        role="status"
-                        className="p-6 text-body-compact text-muted-foreground"
-                    >
-                        正在加载审批流程…
-                    </div>
+                    <DetailWorkspaceSection width="form">
+                        <p
+                            role="status"
+                            className="text-body-compact text-muted-foreground"
+                        >
+                            正在加载审批流程…
+                        </p>
+                    </DetailWorkspaceSection>
                 ) : null}
 
                 {detailQuery.isError ? (
-                    <div className="p-4">
+                    <DetailWorkspaceSection width="form">
                         <BusinessFailureState
                             kind="system"
                             title="审批流程加载失败"
@@ -634,7 +675,7 @@ export function ApprovalProcessDetailPage({
                                 </Button>
                             }
                         />
-                    </div>
+                    </DetailWorkspaceSection>
                 ) : null}
 
                 {showEditor && detailQuery.data ? (
@@ -663,7 +704,7 @@ export function ApprovalProcessDetailPage({
                         />
                     )
                 ) : null}
-            </div>
+            </DetailWorkspaceBody>
 
             <DiscardConfirmDialog
                 id="governance-approval-processes-discard"
@@ -715,7 +756,7 @@ export function ApprovalProcessDetailPage({
                     onOpenChange={setRetireOpen}
                 />
             ) : null}
-        </PageScaffold>
+        </DetailWorkspacePage>
     )
 }
 

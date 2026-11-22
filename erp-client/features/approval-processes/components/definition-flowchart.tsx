@@ -40,9 +40,19 @@ export function DefinitionFlowchart({
     return (
         <section
             aria-label="审批流程图"
-            className="min-w-0 overflow-hidden rounded-lg border border-border bg-muted/30"
+            className={cn(
+                "min-w-0 overflow-hidden",
+                overview
+                    ? "border-y border-border/60"
+                    : "rounded-lg border border-border bg-muted/30",
+            )}
         >
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-card px-4 py-3">
+            <div
+                className={cn(
+                    "flex flex-wrap items-center justify-between gap-2 border-b bg-card py-3",
+                    overview ? "border-border/60" : "border-border px-4",
+                )}
+            >
                 <h3 className="flex items-center gap-2 font-medium">
                     <GitBranchIcon className="size-4 text-muted-foreground" />
                     审批流程

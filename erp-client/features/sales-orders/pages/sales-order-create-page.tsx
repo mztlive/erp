@@ -8,8 +8,11 @@ import { useSelectionOrderBasis } from "@/features/sales-orders/hooks/use-select
 
 import {
     BusinessFailureState,
-    PageHeader,
-    PageScaffold,
+    DetailWorkspaceBody,
+    DetailWorkspaceChrome,
+    DetailWorkspacePage,
+    DetailWorkspaceSection,
+    DetailWorkspaceSkeleton,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { SalesOrderCreateForm } from "@/features/sales-orders/components/sales-order-create-form"
@@ -56,79 +59,80 @@ export function SalesOrderCreatePage({
     if (account.isPending || account.isError || !canEdit) {
         const title = initialSalesOrderId ? "继续编辑草稿" : "新建销售单"
         return (
-            <PageScaffold>
-                <PageHeader title={title} />
-                {account.isPending ? (
-                    <p role="status" className="text-xs text-muted-foreground">
-                        正在核对权限…
-                    </p>
-                ) : account.isError ? (
-                    <BusinessFailureState
-                        error={account.error}
-                        onRetry={() => void account.refetch()}
-                    />
-                ) : (
-                    <BusinessFailureState
-                        kind="permission"
-                        description="当前账号不能执行此操作。"
-                    />
-                )}
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title={title} />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        {account.isPending ? (
+                            <p
+                                role="status"
+                                className="text-xs text-muted-foreground"
+                            >
+                                正在核对权限…
+                            </p>
+                        ) : account.isError ? (
+                            <BusinessFailureState
+                                error={account.error}
+                                onRetry={() => void account.refetch()}
+                            />
+                        ) : (
+                            <BusinessFailureState
+                                kind="permission"
+                                description="当前账号不能执行此操作。"
+                            />
+                        )}
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     }
 
     if (initialSalesOrderId) {
         if (resumeQuery.isPending) {
             return (
-                <PageScaffold>
-                    <PageHeader
-                        title="继续编辑草稿"
-                        description="正在加载已保存的内容…"
-                    />
-                    <div
-                        className="space-y-3"
-                        aria-busy="true"
-                        aria-label="加载中"
-                    >
-                        <div className="h-16 animate-pulse rounded-lg bg-muted" />
-                        <div className="h-40 animate-pulse rounded-lg bg-muted" />
-                    </div>
-                </PageScaffold>
+                <DetailWorkspaceSkeleton
+                    title="继续编辑草稿"
+                    description="正在加载已保存的内容…"
+                />
             )
         }
         if (resumeQuery.isError) {
             return (
-                <PageScaffold>
-                    <PageHeader title="草稿加载失败" />
-                    <BusinessFailureState
-                        error={resumeQuery.error}
-                        onRetry={() => void resumeQuery.refetch()}
-                        retryLabel="重新加载"
-                        details={
-                            <Button
-                                id="sales-orders-create-resume-back"
-                                type="button"
-                                variant="outline"
-                                render={
-                                    <Link
-                                        href={`/sales/orders/${initialSalesOrderId}`}
-                                    />
+                <DetailWorkspacePage>
+                    <DetailWorkspaceChrome title="草稿加载失败" />
+                    <DetailWorkspaceBody>
+                        <DetailWorkspaceSection width="form">
+                            <BusinessFailureState
+                                error={resumeQuery.error}
+                                onRetry={() => void resumeQuery.refetch()}
+                                retryLabel="重新加载"
+                                details={
+                                    <Button
+                                        id="sales-orders-create-resume-back"
+                                        type="button"
+                                        variant="outline"
+                                        render={
+                                            <Link
+                                                href={`/sales/orders/${initialSalesOrderId}`}
+                                            />
+                                        }
+                                    >
+                                        返回销售单详情
+                                    </Button>
                                 }
-                            >
-                                返回销售单详情
-                            </Button>
-                        }
-                    />
-                </PageScaffold>
+                            />
+                        </DetailWorkspaceSection>
+                    </DetailWorkspaceBody>
+                </DetailWorkspacePage>
             )
         }
         if (!resumeQuery.data) {
             return (
-                <PageScaffold>
-                    <PageHeader
+                <DetailWorkspacePage>
+                    <DetailWorkspaceChrome
                         title="草稿加载失败"
-                        description="这张草稿可能已被提交、作废，或暂时无法访问。"
-                        actions={
+                        meta="这张草稿可能已被提交、作废，或暂时无法访问。"
+                        primaryAction={
                             <Button
                                 id="sales-orders-create-resume-back"
                                 type="button"
@@ -143,7 +147,7 @@ export function SalesOrderCreatePage({
                             </Button>
                         }
                     />
-                </PageScaffold>
+                </DetailWorkspacePage>
             )
         }
         return (
@@ -170,17 +174,15 @@ export function SalesOrderCreatePage({
     if (initialSelectionProposalId) {
         if (basisQuery.isPending)
             return (
-                <PageScaffold>
-                    <PageHeader
-                        title="从销售方案创建销售单"
-                        description="正在读取客户和商品明细…"
-                    />
-                </PageScaffold>
+                <DetailWorkspaceSkeleton
+                    title="从销售方案创建销售单"
+                    description="正在读取客户和商品明细…"
+                />
             )
         if (basisQuery.isError || !basisQuery.data)
             return (
-                <PageScaffold>
-                    <PageHeader title="销售方案暂不可用于开单" />
+                <DetailWorkspacePage>
+                    <DetailWorkspaceChrome title="销售方案暂不可用于开单" />
                     <BusinessFailureState
                         error={basisQuery.error}
                         onRetry={() => void basisQuery.refetch()}
@@ -199,7 +201,7 @@ export function SalesOrderCreatePage({
                             </Button>
                         }
                     />
-                </PageScaffold>
+                </DetailWorkspacePage>
             )
         return (
             <SalesOrderCreateForm

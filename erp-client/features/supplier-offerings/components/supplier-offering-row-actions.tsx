@@ -8,6 +8,7 @@ import {
     PlayIcon,
 } from "lucide-react"
 
+import { detailWorkspaceStyles } from "@/components/business/detail-workspace"
 import { GuardedBusinessAction } from "@/components/business"
 import { TableRowActions } from "@/components/business/table-row-actions"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -104,7 +105,7 @@ export function SupplierOfferingRowActions({
     )
 }
 
-/** 详情页头操作：状态动作与更新可供用描边按钮，修订条款为主按钮放最右。 */
+/** 详情页头操作：状态动作与更新可供用静默按钮，修订条款为主按钮放最右。 */
 export function SupplierOfferingDetailActions({
     offering,
     onUpdateAvailability,
@@ -131,7 +132,8 @@ export function SupplierOfferingDetailActions({
                     id={`${idPrefix}-${rowId}-update-availability`}
                     type="button"
                     size="sm"
-                    variant="outline"
+                    variant="ghost"
+                    className={detailWorkspaceStyles.quietButton}
                     onClick={onUpdateAvailability}
                     disabled={offering.source_type === "API"}
                     reason={
@@ -156,7 +158,12 @@ export function SupplierOfferingDetailActions({
                               id={`${idPrefix}-${rowId}-${intent.actionId}`}
                               type="button"
                               size="sm"
-                              variant="outline"
+                              variant="ghost"
+                              className={
+                                  intent.destructive
+                                      ? detailWorkspaceStyles.quietDangerButton
+                                      : detailWorkspaceStyles.quietButton
+                              }
                               disabled={blocker != null}
                               reason={blocker ?? undefined}
                               onClick={() => onChangeStatus(intent)}

@@ -4,16 +4,14 @@ import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
 import {
-    PageScaffold,
+    DetailWorkspaceBody,
+    DetailWorkspacePage,
+    DetailWorkspaceSection,
+    DetailWorkspaceTabs,
     SequentialProcessBar,
-    surfaceInsetClassName,
-    surfacePanelClassName,
-    objectSectionPanelClassName,
-    workspaceEmbeddedScaffoldClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CrossEntryBanner } from "@/features/supplier-settlements/components/cross-entry-banner"
 import { DifferencesWorkspace } from "@/features/supplier-settlements/components/differences-workspace"
 import { SettlementCenterAudit } from "@/features/supplier-settlements/components/settlement-center-audit"
@@ -46,9 +44,7 @@ import {
     SECTIONS,
     type SettlementSection,
 } from "@/features/supplier-settlements/types"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
-import { cn } from "@/lib/utils"
 
 function SettlementCenter({
     statementId,
@@ -109,12 +105,7 @@ function SettlementCenter({
     const st = detail.statement
 
     return (
-        <PageScaffold
-            density="compact"
-            className={
-                embedded ? workspaceEmbeddedScaffoldClassName : undefined
-            }
-        >
+        <DetailWorkspacePage>
             <SettlementCenterDocumentHeader
                 statement={st}
                 immutableFactsAsOf={detail.freshness.immutableFactsAsOf}
@@ -125,175 +116,187 @@ function SettlementCenter({
                 onRefresh={actions.onRefresh}
                 onSubmitReview={() => actions.setSubmitOpen(true)}
                 embedded={embedded}
-            />
-
-            {returnTo ? <CrossEntryBanner returnTo={returnTo} /> : null}
-
-            {detail.workItem ? (
-                <WorkspaceTaskFooter inline={!embedded}>
-                    <div className="flex flex-wrap items-center gap-2">
-                        {embedded ? (
-                            canReview && (
-                                <Button
-                                    id="supplier-settlements-center-confirm-task"
-                                    disabled={
-                                        actions.responsibilityStatus !==
-                                            "assigned_to_me" ||
-                                        !actions.allowed.has("CONFIRM") ||
-                                        actions.decisionMutation.isPending
-                                    }
-                                    onClick={() => actions.setConfirmOpen(true)}
-                                >
-                                    确认结算
-                                </Button>
-                            )
-                        ) : (
-                            <SequentialProcessBar
-                                id="supplier-settlements-center-process-bar"
-                                current={1}
-                                total={1}
-                                responsibilityStatus={
-                                    actions.responsibilityStatus
-                                }
-                                processLabel="确认结算"
-                                showProcess={canReview}
-                                processDisabled={
-                                    !actions.allowed.has("CONFIRM")
-                                }
-                                showProcessNext={false}
-                                pending={actions.decisionMutation.isPending}
-                                onBack={onBack}
-                                onProcess={() => actions.setConfirmOpen(true)}
-                                onProcessNext={() => undefined}
-                            />
-                        )}
-                        {canReview &&
-                        actions.responsibilityStatus === "assigned_to_me" &&
-                        actions.allowed.has("REJECT") ? (
-                            <Button
-                                id="supplier-settlements-center-reject-trigger"
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled={actions.decisionMutation.isPending}
-                                onClick={() => actions.setRejectOpen(true)}
-                            >
-                                驳回复核
-                            </Button>
-                        ) : null}
-                    </div>
-                </WorkspaceTaskFooter>
-            ) : detail.workItemBlocker ? (
-                <Alert variant="warning">
-                    <AlertTitle>当前无法办理结算复核</AlertTitle>
-                    <AlertDescription>
-                        {detail.workItemBlocker.message}
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-
-            <SettlementCenterBlockersAlert blockers={detail.actionBlockers} />
-
-            <SettlementCenterResultPanel
-                result={actions.result}
-                resultRef={actions.resultRef}
-            />
-
-            <SettlementCenterTotals detail={detail} />
-
-            <div
-                className={cn(
-                    surfaceInsetClassName,
-                    "px-3 py-2 text-xs text-muted-foreground",
-                )}
-            >
-                <span className="font-medium text-foreground">来源数据 </span>
-                更新时间 {formatDateTime(st.sourceAsOf, "default")}
-                {st.externalBillNo ? (
-                    <>
-                        {" "}
-                        · 账单 {st.externalBillNo}（第{" "}
-                        {String(st.externalBillVersion ?? "").replace(
-                            /^v/i,
-                            "",
-                        )}{" "}
-                        版）
-                    </>
-                ) : null}
-                <span className="ml-2">以下数据仅供参考，不进入结算结果</span>
-            </div>
-
-            <div
-                className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
-            >
-                <Tabs
-                    value={section}
-                    onValueChange={(v) =>
-                        patchUrl({ section: v as SettlementSection })
-                    }
-                >
-                    <TabsList
-                        variant="line"
-                        className="sticky top-0 z-10 h-auto w-full flex-wrap justify-start gap-6 overflow-x-auto rounded-none border-b border-border bg-card px-0 py-0"
-                    >
-                        {SECTIONS.map((s) => (
-                            <TabsTrigger
-                                key={s}
-                                value={s}
-                                id={`supplier-settlements-center-tab-${toAutomationIdSegment(s)}`}
-                            >
-                                {SECTION_LABEL[s]}
-                                {s === "differences" &&
+                tabs={
+                    <DetailWorkspaceTabs
+                        value={section}
+                        onValueChange={(value) =>
+                            patchUrl({ section: value as SettlementSection })
+                        }
+                        items={SECTIONS.map((id) => ({
+                            id,
+                            label: SECTION_LABEL[id],
+                            badge:
+                                id === "differences" &&
                                 detail.differenceSummary.blocking > 0
                                     ? ` (${detail.differenceSummary.blocking})`
-                                    : null}
-                            </TabsTrigger>
-                        ))}
-                    </TabsList>
-                </Tabs>
-                <div className={objectSectionPanelClassName}>
+                                    : undefined,
+                        }))}
+                        ariaLabel="结算单分区"
+                        tabIdPrefix="supplier-settlements-center-tab"
+                    />
+                }
+            />
+            <DetailWorkspaceBody
+                summary={<SettlementCenterTotals detail={detail} />}
+                alerts={
+                    <>
+                        {returnTo ? (
+                            <CrossEntryBanner returnTo={returnTo} />
+                        ) : null}
+
+                        {detail.workItem ? (
+                            <WorkspaceTaskFooter inline={!embedded}>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    {embedded ? (
+                                        canReview && (
+                                            <Button
+                                                id="supplier-settlements-center-confirm-task"
+                                                disabled={
+                                                    actions.responsibilityStatus !==
+                                                        "assigned_to_me" ||
+                                                    !actions.allowed.has(
+                                                        "CONFIRM",
+                                                    ) ||
+                                                    actions.decisionMutation
+                                                        .isPending
+                                                }
+                                                onClick={() =>
+                                                    actions.setConfirmOpen(true)
+                                                }
+                                            >
+                                                确认结算
+                                            </Button>
+                                        )
+                                    ) : (
+                                        <SequentialProcessBar
+                                            id="supplier-settlements-center-process-bar"
+                                            current={1}
+                                            total={1}
+                                            responsibilityStatus={
+                                                actions.responsibilityStatus
+                                            }
+                                            processLabel="确认结算"
+                                            showProcess={canReview}
+                                            processDisabled={
+                                                !actions.allowed.has("CONFIRM")
+                                            }
+                                            showProcessNext={false}
+                                            pending={
+                                                actions.decisionMutation
+                                                    .isPending
+                                            }
+                                            onBack={onBack}
+                                            onProcess={() =>
+                                                actions.setConfirmOpen(true)
+                                            }
+                                            onProcessNext={() => undefined}
+                                        />
+                                    )}
+                                    {canReview &&
+                                    actions.responsibilityStatus ===
+                                        "assigned_to_me" &&
+                                    actions.allowed.has("REJECT") ? (
+                                        <Button
+                                            id="supplier-settlements-center-reject-trigger"
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={
+                                                actions.decisionMutation
+                                                    .isPending
+                                            }
+                                            onClick={() =>
+                                                actions.setRejectOpen(true)
+                                            }
+                                        >
+                                            驳回复核
+                                        </Button>
+                                    ) : null}
+                                </div>
+                            </WorkspaceTaskFooter>
+                        ) : detail.workItemBlocker ? (
+                            <Alert variant="warning">
+                                <AlertTitle>当前无法办理结算复核</AlertTitle>
+                                <AlertDescription>
+                                    {detail.workItemBlocker.message}
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
+
+                        <SettlementCenterBlockersAlert
+                            blockers={detail.actionBlockers}
+                        />
+
+                        <SettlementCenterResultPanel
+                            result={actions.result}
+                            resultRef={actions.resultRef}
+                        />
+                    </>
+                }
+            >
+                <DetailWorkspaceSection contentClassName="space-y-1">
+                    <div className="text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">
+                            来源数据{" "}
+                        </span>
+                        更新时间 {formatDateTime(st.sourceAsOf, "default")}
+                        {st.externalBillNo ? (
+                            <>
+                                {" "}
+                                · 账单 {st.externalBillNo}（第{" "}
+                                {String(st.externalBillVersion ?? "").replace(
+                                    /^v/i,
+                                    "",
+                                )}{" "}
+                                版）
+                            </>
+                        ) : null}
+                        <span className="ml-2">
+                            以下数据仅供参考，不进入结算结果
+                        </span>
+                    </div>
+
                     <p className="text-xs text-muted-foreground">
                         快捷键 d 可直达差异处理
                     </p>
+                </DetailWorkspaceSection>
+                {section === "overview" ? (
+                    <SettlementCenterOverview
+                        detail={detail}
+                        patchUrl={patchUrl}
+                    />
+                ) : null}
 
-                    {section === "overview" ? (
-                        <SettlementCenterOverview
-                            detail={detail}
-                            patchUrl={patchUrl}
-                        />
-                    ) : null}
+                {section === "items" ? (
+                    <SettlementCenterItems
+                        items={detail.items}
+                        statementId={statementId}
+                    />
+                ) : null}
 
-                    {section === "items" ? (
-                        <SettlementCenterItems
-                            items={detail.items}
-                            statementId={statementId}
-                        />
-                    ) : null}
+                {section === "differences" ? (
+                    <DifferencesWorkspace
+                        differences={detail.differences}
+                        activeDiff={actions.activeDiff}
+                        onSelect={(id) => patchUrl({ diff: id })}
+                        allowed={actions.allowed}
+                        onResolve={() => actions.setResolveOpen(true)}
+                        onEvidence={() => actions.setEvidenceOpen(true)}
+                    />
+                ) : null}
 
-                    {section === "differences" ? (
-                        <DifferencesWorkspace
-                            differences={detail.differences}
-                            activeDiff={actions.activeDiff}
-                            onSelect={(id) => patchUrl({ diff: id })}
-                            allowed={actions.allowed}
-                            onResolve={() => actions.setResolveOpen(true)}
-                            onEvidence={() => actions.setEvidenceOpen(true)}
-                        />
-                    ) : null}
+                {section === "review" ? (
+                    <SettlementCenterReview detail={detail} />
+                ) : null}
 
-                    {section === "review" ? (
-                        <SettlementCenterReview detail={detail} />
-                    ) : null}
+                {section === "payable" ? (
+                    <SettlementCenterPayable payable={detail.payable} />
+                ) : null}
 
-                    {section === "payable" ? (
-                        <SettlementCenterPayable payable={detail.payable} />
-                    ) : null}
-
-                    {section === "audit" ? (
-                        <SettlementCenterAudit events={detail.auditEvents} />
-                    ) : null}
-                </div>
-            </div>
+                {section === "audit" ? (
+                    <SettlementCenterAudit events={detail.auditEvents} />
+                ) : null}
+            </DetailWorkspaceBody>
 
             <SettlementResolveDialog
                 open={actions.resolveOpen}
@@ -348,7 +351,7 @@ function SettlementCenter({
                 pending={actions.decisionMutation.isPending}
                 onSubmit={actions.onReject}
             />
-        </PageScaffold>
+        </DetailWorkspacePage>
     )
 }
 

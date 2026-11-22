@@ -1,5 +1,6 @@
 import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
 import * as React from "react"
+import { DetailWorkspaceSection } from "@/components/business"
 import { ChevronDownIcon, InfoIcon } from "lucide-react"
 import type { ResponsibilityStatus } from "@/components/business/workflow-actions"
 import { Button } from "@/components/ui/button"
@@ -37,6 +38,7 @@ export function IntegrationActionZone({
     onRequestTerminal,
     onResolve,
     actionZoneRef,
+    detailWorkspace,
 }: {
     item: IntegrationResolutionItemView
     can: (action: IntegrationActionKind) => boolean
@@ -59,6 +61,7 @@ export function IntegrationActionZone({
     onRequestTerminal: (confirm: TerminalConfirm) => void
     onResolve: () => void
     actionZoneRef: React.Ref<HTMLDivElement>
+    detailWorkspace?: boolean
 }) {
     const assignedDisabled =
         responsibilityStatus !== "assigned_to_me" || formalPending
@@ -84,15 +87,26 @@ export function IntegrationActionZone({
 
     if (terminal) return null
 
-    return (
+    const content = (
         <div
             ref={actionZoneRef}
             role="region"
             aria-labelledby="integration-action-heading"
-            className="space-y-4 border-t border-grid pt-5"
+            className={
+                detailWorkspace
+                    ? "scroll-mt-32 space-y-4"
+                    : "space-y-4 border-t border-grid pt-5"
+            }
         >
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h3 id="integration-action-heading" className="font-semibold">
+                <h3
+                    id="integration-action-heading"
+                    className={
+                        detailWorkspace
+                            ? "text-section-title font-semibold tracking-tight"
+                            : "font-semibold"
+                    }
+                >
                     {can("RESOLVE") ? "确认处理" : "处理异常"}
                 </h3>
                 {can("RESOLVE") ? (
@@ -139,7 +153,12 @@ export function IntegrationActionZone({
                             aria-hidden
                         />
                     </summary>
-                    <div className="mt-3 max-w-2xl space-y-2">
+                    <div
+                        data-slot={
+                            detailWorkspace ? "detail-form-grid" : undefined
+                        }
+                        className="mt-3 max-w-2xl space-y-2"
+                    >
                         <Label htmlFor="integration-action-comment">
                             处理说明
                         </Label>
@@ -318,5 +337,10 @@ export function IntegrationActionZone({
                 />
             ) : null}
         </div>
+    )
+    return detailWorkspace ? (
+        <DetailWorkspaceSection>{content}</DetailWorkspaceSection>
+    ) : (
+        content
     )
 }

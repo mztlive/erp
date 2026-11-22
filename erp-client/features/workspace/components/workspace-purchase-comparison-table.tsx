@@ -176,10 +176,11 @@ export function WorkspacePurchaseComparisonTable({
                 </TableToolbar>
                 <div
                     id={`${prefix}-table-scroll`}
+                    data-slot="detail-inline-table"
                     ref={scrollRef}
                     role="region"
                     aria-label="采购与销售明细，可滚动查看"
-                    className="max-h-[36rem] overflow-auto rounded-lg border border-grid outline-none focus-visible:ring-2 focus-visible:ring-info [&>[data-slot=table-container]]:overflow-visible"
+                    className="max-h-[36rem] overflow-auto border-y border-border/70 outline-none focus-visible:ring-2 focus-visible:ring-info [&>[data-slot=table-container]]:overflow-visible"
                 >
                     <Table className="min-w-[1120px]">
                         <TableCaption className="sr-only">

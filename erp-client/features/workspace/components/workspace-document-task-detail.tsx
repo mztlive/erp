@@ -1,5 +1,7 @@
 "use client"
 
+import { WorkspaceProcessingPane } from "./workspace-processing-layout"
+
 import { BusinessFailureState } from "@/components/business"
 import { useEffect, useState, type ReactNode } from "react"
 import { useMutation } from "@tanstack/react-query"
@@ -25,14 +27,14 @@ import { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-app
 import { useRecoveryOptionsQuery } from "@/features/approval-workflow/queries"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import {
+    DetailWorkspaceChrome,
+    DetailWorkspaceMeta,
+    DetailWorkspaceSection,
     IconActionButton,
     taxAmountToneClass,
-    WorkspaceTaskPane,
-    workspaceTaskSurfacePadClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
     DescriptionDetails,
@@ -368,144 +370,159 @@ export function WorkspaceDocumentTaskDetail({
     ) : null
 
     return (
-        <WorkspaceTaskPane
+        <WorkspaceProcessingPane
             className={cn(
                 "@container/document",
                 purchaseApproval && "purchase-approval-surface",
             )}
             header={
-                <>
-                    <div className="min-w-0 space-y-2">
-                        {(!purchaseApproval || rework) && (
-                            <div className="flex flex-wrap items-center gap-2">
+                <DetailWorkspaceChrome
+                    title={canReadSensitive ? headerTitle : "业务详情"}
+                    primaryStatus={
+                        !purchaseApproval || rework
+                            ? {
+                                  label:
+                                      rework && item.status === "OPEN"
+                                          ? item.workItemTypeLabel
+                                          : item.statusLabel,
+                                  tone: item.statusTone,
+                              }
+                            : undefined
+                    }
+                    titleExtra={
+                        (!purchaseApproval || rework) && (
+                            <>
                                 {rework ? (
                                     <WorkspaceDocumentBadge item={item} />
                                 ) : (
-                                    <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+                                    <span className="text-xs text-muted-foreground">
                                         {item.workItemTypeLabel}
                                     </span>
                                 )}
-                                <StatusBadge
-                                    label={
-                                        rework && item.status === "OPEN"
-                                            ? item.workItemTypeLabel
-                                            : item.statusLabel
-                                    }
-                                    tone={item.statusTone}
-                                />
                                 {salesApproval &&
-                                instance?.currentNodeName &&
-                                (instance.status === "RUNNING" ||
-                                    instance.status === "BLOCKED") ? (
-                                    <Badge
-                                        variant="warning"
-                                        aria-label={`当前审批：${instance.currentNodeName}`}
+                                    instance?.currentNodeName &&
+                                    (instance.status === "RUNNING" ||
+                                        instance.status === "BLOCKED") && (
+                                        <StatusBadge
+                                            tone="warning"
+                                            label={instance.currentNodeName}
+                                            aria-label={`当前审批：${instance.currentNodeName}`}
+                                        />
+                                    )}
+                            </>
+                        )
+                    }
+                    meta={
+                        <DetailWorkspaceMeta
+                            items={[
+                                rework && submission ? (
+                                    <span
+                                        key="number"
+                                        className="num select-all"
+                                        data-workspace-document-number={
+                                            documentNumber || undefined
+                                        }
                                     >
-                                        {instance.currentNodeName}
-                                    </Badge>
-                                ) : null}
-                            </div>
-                        )}
-                        <h2 className="break-words text-section-title font-semibold tracking-tight">
-                            {canReadSensitive ? headerTitle : "业务详情"}
-                        </h2>
-                        {rework && submission ? (
-                            <div className="flex flex-wrap gap-x-6 gap-y-1 text-body-compact text-muted-foreground">
-                                <p className="min-w-0 break-all">
-                                    单号：
-                                    <span className="num text-foreground select-all">
-                                        {documentNumber || "未提供"}
+                                        单号：{documentNumber || "未提供"}
                                     </span>
-                                </p>
-                                <p>提交版本 {submission.subject_version}</p>
-                            </div>
-                        ) : !rework ? (
-                            <p className="break-all text-xs text-muted-foreground">
-                                {documentNumber}
-                            </p>
-                        ) : null}
-                        {fullPage && showCurrentAssignee ? (
-                            <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
-                                <p>
-                                    {reworkTask
-                                        ? "当前处理人："
-                                        : "当前审批人："}
-                                    <span className="text-foreground">
-                                        {reworkTask?.ownerUserLabel ||
-                                            instance?.currentAssigneeName ||
-                                            item.ownerUserLabel ||
-                                            "—"}
+                                ) : !rework && documentNumber ? (
+                                    <span
+                                        key="number"
+                                        className="num"
+                                        data-workspace-document-number={
+                                            documentNumber
+                                        }
+                                    >
+                                        {documentNumber}
                                     </span>
-                                </p>
-                                {item.dueAt ? (
-                                    <p>截止时间：{item.dueAtLabel}</p>
-                                ) : null}
-                            </div>
-                        ) : null}
-                    </div>
-                    <WorkspaceTaskHeaderActions item={headerItem}>
-                        {item.workItemType === "FULFILLMENT_OPERATION" ? (
-                            <WorkspaceFulfillmentReassignAction
-                                item={item}
-                                onReassigned={() =>
-                                    onTaskCompleted?.(item.workItemId)
-                                }
-                            />
-                        ) : null}
-                        {canReadPaper &&
-                        !(
-                            approvalDocument &&
-                            item.businessObjectType === "customer_receipt"
-                        ) &&
-                        !purchaseApproval &&
-                        !salesApproval &&
-                        (approvalDocument || currentPaperKind) ? (
-                            <IconActionButton
-                                id={`workspace-task-detail-read-${toAutomationIdSegment(item.workItemId)}`}
-                                label={readActionLabel}
-                                testId={`work-item-read-document-${item.workItemId}`}
-                                onClick={() =>
-                                    setPaper(
-                                        approvalDocument && instanceId
-                                            ? {
-                                                  kind: "approval_snapshot",
-                                                  objectId: instanceId,
-                                                  title: documentNumber,
-                                              }
-                                            : currentPaperKind
-                                              ? {
-                                                    kind: currentPaperKind,
-                                                    objectId:
-                                                        item.businessObjectId,
-                                                    title: item.stableNumber,
-                                                }
-                                              : null,
-                                    )
-                                }
-                            >
-                                <FileTextIcon aria-hidden="true" />
-                            </IconActionButton>
-                        ) : null}
-                        {canOpenDocument && documentHref ? (
-                            <IconActionButton
-                                id={`workspace-task-detail-open-${toAutomationIdSegment(item.workItemId)}`}
-                                label={
-                                    canReadPaper
-                                        ? openActionLabel
-                                        : readActionLabel
-                                }
-                                testId={`work-item-open-document-${item.workItemId}`}
-                                href={documentHref}
-                            >
-                                {canReadPaper ? (
-                                    <ArrowUpRightIcon aria-hidden="true" />
-                                ) : (
+                                ) : null,
+                                rework && submission
+                                    ? `提交版本 ${submission.subject_version}`
+                                    : null,
+                                fullPage && showCurrentAssignee ? (
+                                    <span key="assignee">
+                                        {reworkTask
+                                            ? "当前处理人："
+                                            : "当前审批人："}
+                                        <span className="text-foreground">
+                                            {reworkTask?.ownerUserLabel ||
+                                                instance?.currentAssigneeName ||
+                                                item.ownerUserLabel ||
+                                                "—"}
+                                        </span>
+                                    </span>
+                                ) : null,
+                                fullPage && showCurrentAssignee && item.dueAt
+                                    ? `截止时间：${item.dueAtLabel}`
+                                    : null,
+                            ]}
+                        />
+                    }
+                    secondaryActions={
+                        <WorkspaceTaskHeaderActions item={headerItem}>
+                            {item.workItemType === "FULFILLMENT_OPERATION" ? (
+                                <WorkspaceFulfillmentReassignAction
+                                    item={item}
+                                    onReassigned={() =>
+                                        onTaskCompleted?.(item.workItemId)
+                                    }
+                                />
+                            ) : null}
+                            {canReadPaper &&
+                            !(
+                                approvalDocument &&
+                                item.businessObjectType === "customer_receipt"
+                            ) &&
+                            !purchaseApproval &&
+                            !salesApproval &&
+                            (approvalDocument || currentPaperKind) ? (
+                                <IconActionButton
+                                    id={`workspace-task-detail-read-${toAutomationIdSegment(item.workItemId)}`}
+                                    label={readActionLabel}
+                                    testId={`work-item-read-document-${item.workItemId}`}
+                                    onClick={() =>
+                                        setPaper(
+                                            approvalDocument && instanceId
+                                                ? {
+                                                      kind: "approval_snapshot",
+                                                      objectId: instanceId,
+                                                      title: documentNumber,
+                                                  }
+                                                : currentPaperKind
+                                                  ? {
+                                                        kind: currentPaperKind,
+                                                        objectId:
+                                                            item.businessObjectId,
+                                                        title: item.stableNumber,
+                                                    }
+                                                  : null,
+                                        )
+                                    }
+                                >
                                     <FileTextIcon aria-hidden="true" />
-                                )}
-                            </IconActionButton>
-                        ) : null}
-                    </WorkspaceTaskHeaderActions>
-                </>
+                                </IconActionButton>
+                            ) : null}
+                            {canOpenDocument && documentHref ? (
+                                <IconActionButton
+                                    id={`workspace-task-detail-open-${toAutomationIdSegment(item.workItemId)}`}
+                                    label={
+                                        canReadPaper
+                                            ? openActionLabel
+                                            : readActionLabel
+                                    }
+                                    testId={`work-item-open-document-${item.workItemId}`}
+                                    href={documentHref}
+                                >
+                                    {canReadPaper ? (
+                                        <ArrowUpRightIcon aria-hidden="true" />
+                                    ) : (
+                                        <FileTextIcon aria-hidden="true" />
+                                    )}
+                                </IconActionButton>
+                            ) : null}
+                        </WorkspaceTaskHeaderActions>
+                    }
+                />
             }
             headerSupplement={
                 salesApproval && fullPage && instance ? (
@@ -552,14 +569,14 @@ export function WorkspaceDocumentTaskDetail({
                         title="原单资料读取失败"
                         error={materials.error}
                         onRetry={() => void materials.refetch()}
-                        className={workspaceTaskSurfacePadClassName}
+                        className="my-4"
                     />
                 ) : null}
                 {item.documentSummaryResolved &&
                 !item.summarySections?.length &&
                 !item.briefLines?.length ? (
                     <p
-                        className="px-5 py-4 text-xs text-muted-foreground"
+                        className="py-4 text-xs text-muted-foreground"
                         role="status"
                     >
                         此次提交的单据摘要暂不可用。
@@ -571,7 +588,7 @@ export function WorkspaceDocumentTaskDetail({
                         id={`workspace-source-materials-${toAutomationIdSegment(item.workItemId)}`}
                         error={sourceSales.error}
                         onRetry={() => void sourceSales.refetch()}
-                        className={workspaceTaskSurfacePadClassName}
+                        className="my-4"
                     />
                 ) : null}
 
@@ -580,7 +597,7 @@ export function WorkspaceDocumentTaskDetail({
                         id={`workspace-materials-${toAutomationIdSegment(item.workItemId)}`}
                         error={documentFacts.error}
                         onRetry={() => void documentFacts.refetch()}
-                        className={workspaceTaskSurfacePadClassName}
+                        className="my-4"
                     />
                 ) : null}
 
@@ -688,7 +705,7 @@ export function WorkspaceDocumentTaskDetail({
                         {!receiptApproval &&
                         !deliveryBrief &&
                         visibleDocumentFields.length > 0 ? (
-                            <DetailBlock>
+                            <DetailBlock width="form">
                                 <FieldGrid
                                     sections={visibleDocumentFields}
                                     returnTo={returnTo}
@@ -835,7 +852,7 @@ export function WorkspaceDocumentTaskDetail({
                     if (!open) setPaper(null)
                 }}
             />
-        </WorkspaceTaskPane>
+        </WorkspaceProcessingPane>
     )
 }
 
@@ -845,32 +862,23 @@ function DetailBlock({
     description,
     children,
     compact = false,
+    width = "full",
 }: {
     title?: string
     compact?: boolean
+    width?: "form" | "full"
     description?: string
     children: ReactNode
 }) {
     return (
-        <section
-            className={cn(
-                workspaceTaskSurfacePadClassName,
-                "flex flex-col border-b border-grid last:border-b-0",
-                compact ? "gap-2 py-3" : "gap-3 py-4",
-            )}
+        <DetailWorkspaceSection
+            title={title}
+            width={width}
+            subtitle={description}
+            className={compact ? "py-3 first:pt-3 last:pb-3" : undefined}
         >
-            {title ? (
-                <header className="flex items-baseline gap-2">
-                    <h3 className="font-medium">{title}</h3>
-                    {description ? (
-                        <p className="text-xs text-muted-foreground">
-                            {description}
-                        </p>
-                    ) : null}
-                </header>
-            ) : null}
             {children}
-        </section>
+        </DetailWorkspaceSection>
     )
 }
 

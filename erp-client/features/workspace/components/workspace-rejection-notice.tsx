@@ -39,7 +39,7 @@ export function WorkspaceRejectionNotice({
         rejection?.decisionReason?.trim() ||
         item.approval?.lastRejectReason?.trim()
     return (
-        <div className="space-y-3 px-7 py-5">
+        <div className="space-y-3 py-5">
             <Alert variant="destructive">
                 <AlertTitle>本次审批已驳回</AlertTitle>
                 <AlertDescription className="space-y-2">

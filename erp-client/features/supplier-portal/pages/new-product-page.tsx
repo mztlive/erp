@@ -175,11 +175,13 @@ export function PortalNewProductPage() {
 }
 export function PortalNewProductEditor({
     draft,
+    inDetailWorkspace = false,
     onSaved,
     onUnresolvedChange,
     idPrefix = "supplier-portal-new-product",
 }: {
     draft?: PortalApplication
+    inDetailWorkspace?: boolean
     onSaved?: (application: PortalApplication) => void
     idPrefix?: string
     onUnresolvedChange?: (unresolved: boolean) => void
@@ -385,7 +387,12 @@ export function PortalNewProductEditor({
             .map((row) => ({ value: row.id, label: row.path ?? row.name }))
     return (
         <form
-            className="space-y-6 rounded-xl border bg-card p-5"
+            className={
+                inDetailWorkspace
+                    ? "flex flex-col gap-6"
+                    : "space-y-6 rounded-xl border bg-card p-5"
+            }
+            data-slot={inDetailWorkspace ? "detail-form-grid" : undefined}
             onSubmit={(event) => {
                 event.preventDefault()
                 void form.handleSubmit().catch(setError)
@@ -654,7 +661,11 @@ export function PortalNewProductEditor({
                             return (
                                 <section
                                     key={sku.rowId}
-                                    className="space-y-4 rounded-lg border p-4"
+                                    className={
+                                        inDetailWorkspace
+                                            ? "flex flex-col gap-4 border-t border-border/60 pt-4"
+                                            : "space-y-4 rounded-lg border p-4"
+                                    }
                                 >
                                     <div className="flex items-center justify-between">
                                         <h3 className="font-medium">

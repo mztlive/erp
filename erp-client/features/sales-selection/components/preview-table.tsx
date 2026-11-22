@@ -299,6 +299,7 @@ export function PreviewTable({
                 </p>
                 <DataTable
                     id="selection-preview-table"
+                    className="min-w-0 [&_[data-slot=data-table-surface]]:rounded-none [&_[data-slot=data-table-surface]]:border-x-0"
                     data={[...items]}
                     columns={columns}
                     getRowId={(item) => item.item_id}

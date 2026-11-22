@@ -3,7 +3,10 @@ import * as React from "react"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
 import { OptionCombobox } from "@/components/business/option-combobox"
-import { BusinessFailureState } from "@/components/business"
+import {
+    BusinessFailureState,
+    DetailWorkspaceSection,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { actionLabel, resourceLabel } from "@/lib/permission-catalog"
 import { registeredResources } from "@/features/organization/lib/scope-payload"
@@ -55,22 +58,19 @@ export function AccessCheckPanel({ accountId }: { accountId: string }) {
         },
     })
     return (
-        <section
-            className="space-y-4 text-body-compact"
-            aria-labelledby="account-access-check-title"
+        <DetailWorkspaceSection
+            title="检查访问权限"
+            headingId="account-access-check-title"
+            width="form"
+            contentClassName="text-body-compact"
         >
-            <h2
-                id="account-access-check-title"
-                className="text-section-title font-semibold tracking-tight"
-            >
-                检查访问权限
-            </h2>
             <p className="text-xs text-muted-foreground">
                 检查此人能否执行所选操作。
                 {canListOrders &&
                     "未选择单据时，只检查权限配置；选择销售单后，可进一步确认此人能否查看或修改这张单据。"}
             </p>
             <form
+                data-slot="detail-form-grid"
                 className="space-y-3"
                 onSubmit={(event) => {
                     event.preventDefault()
@@ -212,6 +212,6 @@ export function AccessCheckPanel({ accountId }: { accountId: string }) {
             ) : input && query.data ? (
                 <AccessCheckResult input={input} result={query.data} />
             ) : null}
-        </section>
+        </DetailWorkspaceSection>
     )
 }

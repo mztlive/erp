@@ -5,20 +5,21 @@ import { ArrowLeftIcon } from "lucide-react"
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    PageScaffold,
+    DetailWorkspaceBody,
+    DetailWorkspaceChrome,
+    DetailWorkspacePage,
+    DetailWorkspaceSection,
+    DetailWorkspaceSkeleton,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 
 function SettlementCenterLoading() {
     return (
-        <PageScaffold>
-            <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
-            <div className="h-24 animate-pulse rounded-lg bg-muted" />
-            <div className="h-96 animate-pulse rounded-lg bg-muted" />
-            <p className="text-xs text-muted-foreground">
-                正在加载结算单，请稍候…
-            </p>
-        </PageScaffold>
+        <DetailWorkspaceSkeleton
+            title="供应商结算单"
+            description="正在加载结算单，请稍候…"
+            summary
+        />
     )
 }
 
@@ -32,54 +33,64 @@ function SettlementCenterError({
     onRetry: () => void
 }) {
     return (
-        <PageScaffold>
-            <Button
-                id="supplier-settlements-center-error-back"
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={onBack}
-            >
-                <ArrowLeftIcon className="size-4" />
-                返回列表
-            </Button>
-            <BusinessFailureState
-                title="结算单加载失败"
-                error={error}
-                action={
+        <DetailWorkspacePage>
+            <DetailWorkspaceChrome title="供应商结算单" />
+            <DetailWorkspaceBody>
+                <DetailWorkspaceSection width="form">
                     <Button
-                        id="supplier-settlements-center-error-retry"
+                        id="supplier-settlements-center-error-back"
                         type="button"
-                        onClick={onRetry}
+                        variant="ghost"
+                        size="sm"
+                        onClick={onBack}
                     >
-                        重试
+                        <ArrowLeftIcon className="size-4" />
+                        返回列表
                     </Button>
-                }
-            />
-        </PageScaffold>
+                    <BusinessFailureState
+                        title="结算单加载失败"
+                        error={error}
+                        action={
+                            <Button
+                                id="supplier-settlements-center-error-retry"
+                                type="button"
+                                onClick={onRetry}
+                            >
+                                重试
+                            </Button>
+                        }
+                    />
+                </DetailWorkspaceSection>
+            </DetailWorkspaceBody>
+        </DetailWorkspacePage>
     )
 }
 
 function SettlementCenterEmpty({ onBack }: { onBack: () => void }) {
     return (
-        <PageScaffold>
-            <Button
-                id="supplier-settlements-center-empty-back"
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={onBack}
-            >
-                <ArrowLeftIcon className="size-4" />
-                返回列表
-            </Button>
-            <BusinessEmptyState
-                kind="no-data"
-                className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                title="结算单不存在"
-                description="该结算单不存在或已被作废。可返回列表重新选择，或检查分享链接是否正确。"
-            />
-        </PageScaffold>
+        <DetailWorkspacePage>
+            <DetailWorkspaceChrome title="供应商结算单" />
+            <DetailWorkspaceBody>
+                <DetailWorkspaceSection width="form">
+                    <Button
+                        id="supplier-settlements-center-empty-back"
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={onBack}
+                    >
+                        <ArrowLeftIcon className="size-4" />
+                        返回列表
+                    </Button>
+                    <BusinessEmptyState
+                        kind="no-data"
+                        className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+                        title="结算单不存在"
+                        description="该结算单不存在或已被作废。可返回列表重新选择，或检查分享链接是否正确。"
+                    />
+                </DetailWorkspaceSection>
+            </DetailWorkspaceBody>
+        </DetailWorkspacePage>
     )
 }
 

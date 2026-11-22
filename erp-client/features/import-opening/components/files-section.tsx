@@ -2,15 +2,8 @@
 
 import * as React from "react"
 
-import { surfacePanelClassName } from "@/components/business"
+import { DetailWorkspaceSection } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Fact } from "@/features/import-opening/components/batch-facts"
 import type { ImportBatchView } from "@/features/import-opening/types"
@@ -28,15 +21,12 @@ function formatBytes(n: number) {
 export function FilesSection({ batch }: { batch: ImportBatchView }) {
     const [previewAsset, setPreviewAsset] = React.useState<string | null>(null)
     return (
-        <div className="grid gap-4 lg:grid-cols-2">
-            <Card size="sm" className={surfacePanelClassName}>
-                <CardHeader className="border-b border-grid">
-                    <CardTitle>导入源文件</CardTitle>
-                    <CardDescription>
-                        展示本次上传的期初数据文件基本信息与检查状态。
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3 pt-4 text-body-compact">
+        <div className="min-w-0">
+            <DetailWorkspaceSection
+                title="导入源文件"
+                subtitle="展示本次上传的期初数据文件基本信息与检查状态。"
+            >
+                <div className="space-y-3 text-body-compact">
                     {batch.inputAsset ? (
                         <>
                             <Fact
@@ -90,18 +80,14 @@ export function FilesSection({ batch }: { batch: ImportBatchView }) {
                     <p className="text-xs text-muted-foreground">
                         请按标准模板整理数据，避免包含系统无关字段。
                     </p>
-                </CardContent>
-            </Card>
+                </div>
+            </DetailWorkspaceSection>
 
-            <Card size="sm" className={surfacePanelClassName}>
-                <CardHeader className="border-b border-grid">
-                    <CardTitle>导入结果与异常报告</CardTitle>
-                    <CardDescription>
-                        导入成功记录长期保存；失败明细保留 30 天，导出文件保留 7
-                        天。
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3 pt-4">
+            <DetailWorkspaceSection
+                title="导入结果与异常报告"
+                subtitle="导入成功记录长期保存；失败明细保留 30 天，导出文件保留 7 天。"
+            >
+                <div className="space-y-3">
                     {batch.resultAssets.length === 0 ? (
                         <p className="text-xs text-muted-foreground">
                             暂无结果文件。
@@ -139,8 +125,8 @@ export function FilesSection({ batch }: { batch: ImportBatchView }) {
                             </div>
                         ))
                     )}
-                </CardContent>
-            </Card>
+                </div>
+            </DetailWorkspaceSection>
         </div>
     )
 }

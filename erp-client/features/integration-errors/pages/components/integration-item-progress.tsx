@@ -10,6 +10,7 @@ export function IntegrationItemProgress({
     responsibilityStatus,
     formalPending,
     focusMode,
+    flat,
     onBack,
     onProcess,
     onProcessNext,
@@ -22,6 +23,7 @@ export function IntegrationItemProgress({
     responsibilityStatus: ResponsibilityStatus
     formalPending: boolean
     focusMode: boolean
+    flat?: boolean
     onBack: () => void
     onProcess: () => void
     onProcessNext: () => void
@@ -33,6 +35,11 @@ export function IntegrationItemProgress({
     return (
         <SequentialProcessBar
             id={id}
+            className={
+                flat
+                    ? "rounded-none border-t-0 border-border/60 shadow-none"
+                    : undefined
+            }
             idPrefix={idPrefix ?? "integration-item-progress"}
             current={positionIndex}
             total={positionTotal}

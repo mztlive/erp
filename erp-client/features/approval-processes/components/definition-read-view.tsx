@@ -1,6 +1,7 @@
 "use client"
 
 import { GitBranchIcon, LockKeyholeIcon } from "lucide-react"
+import { DetailWorkspaceSection } from "@/components/business"
 import { rejectionPolicyCopy } from "../labels"
 import { toEditorNode } from "../draft-nodes"
 import type { DefinitionDetailView } from "../types"
@@ -24,16 +25,16 @@ export function DefinitionReadView({
               : "此草稿尚未发布，暂不用于新建单据。"
 
     return (
-        <section aria-label="审批流程详情" className="space-y-4 p-4 sm:p-6">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="min-w-0 break-words text-section-title font-semibold tracking-tight">
-                    {detail.name}
-                </h2>
+        <DetailWorkspaceSection
+            ariaLabel="审批流程详情"
+            title={detail.name}
+            actions={
                 <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
                     <LockKeyholeIcon aria-hidden className="size-3.5" />
                     只读
                 </span>
-            </div>
+            }
+        >
             <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
                 <DefinitionFlowchart
                     id="governance-approval-processes-detail-read-flow"
@@ -42,18 +43,18 @@ export function DefinitionReadView({
                 />
                 <aside
                     aria-label="流程配置与规则"
-                    className="min-w-0 divide-y divide-border rounded-lg border border-border bg-card"
+                    className="min-w-0 divide-y divide-border/60 border-t border-border/60 xl:self-stretch xl:border-t-0 xl:border-l xl:pl-5"
                 >
-                    <div className="space-y-2 rounded-t-lg bg-muted/30 p-4">
+                    <div className="space-y-2 py-4 xl:pt-0">
                         <h3 className="font-medium">版本说明</h3>
                         <p className="text-xs text-muted-foreground">
                             {versionDescription}
                         </p>
                     </div>
-                    <div className="p-4">
+                    <div className="py-4">
                         <CopyRuleSummary detail={detail} embedded />
                     </div>
-                    <div className="space-y-3 p-4">
+                    <div className="space-y-3 py-4">
                         <h3 className="flex items-center gap-2 font-medium">
                             <GitBranchIcon
                                 aria-hidden
@@ -78,6 +79,6 @@ export function DefinitionReadView({
                     </div>
                 </aside>
             </div>
-        </section>
+        </DetailWorkspaceSection>
     )
 }

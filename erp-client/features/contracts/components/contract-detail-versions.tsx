@@ -1,8 +1,7 @@
 "use client"
 
-import { DocumentSection, surfaceInsetClassName } from "@/components/business"
+import { DetailWorkspaceSection } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
 import { CONTRACT_AUDIT_ACTION_LABEL } from "@/features/contracts/types"
 import type { ContractCenterView } from "@/features/contracts/types"
 
@@ -13,24 +12,25 @@ export function ContractDetailVersions({
     contract: ContractCenterView
 }) {
     return (
-        <div className="grid gap-8 lg:grid-cols-2 lg:gap-10">
-            <DocumentSection
+        <>
+            <DetailWorkspaceSection
+                width="form"
                 title="版本时间线"
-                description="每个版本对应已上传的签署 PDF。"
+                subtitle="每个版本对应已上传的签署 PDF。"
             >
                 {contract.revisionTimeline.length === 0 ? (
                     <p className="text-body-compact leading-relaxed text-muted-foreground">
                         尚无已确认修订。
                     </p>
                 ) : (
-                    <ol className="space-y-3" aria-label="合同修订时间线">
+                    <ol
+                        className="divide-y divide-border/60"
+                        aria-label="合同修订时间线"
+                    >
                         {contract.revisionTimeline.map((item) => (
                             <li
                                 key={item.revisionId}
-                                className={cn(
-                                    surfaceInsetClassName,
-                                    "px-4 py-3",
-                                )}
+                                className="py-3 first:pt-0"
                             >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div className="flex items-center gap-2">
@@ -72,26 +72,24 @@ export function ContractDetailVersions({
                         ))}
                     </ol>
                 )}
-            </DocumentSection>
+            </DetailWorkspaceSection>
 
-            <DocumentSection
+            <DetailWorkspaceSection
+                width="form"
                 title="审计时间线"
-                description="PDF 上传、版本归档、终止与下载等处理动作。"
+                subtitle="PDF 上传、版本归档、终止与下载等处理动作。"
             >
                 {contract.auditTimeline.length === 0 ? (
                     <p className="text-body-compact leading-relaxed text-muted-foreground">
                         暂无审计记录。
                     </p>
                 ) : (
-                    <ol className="space-y-3" aria-label="合同审计时间线">
+                    <ol
+                        className="divide-y divide-border/60"
+                        aria-label="合同审计时间线"
+                    >
                         {contract.auditTimeline.map((event) => (
-                            <li
-                                key={event.id}
-                                className={cn(
-                                    surfaceInsetClassName,
-                                    "px-4 py-3",
-                                )}
-                            >
+                            <li key={event.id} className="py-3 first:pt-0">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <span className="text-body-compact font-medium">
                                         {CONTRACT_AUDIT_ACTION_LABEL[
@@ -109,7 +107,7 @@ export function ContractDetailVersions({
                         ))}
                     </ol>
                 )}
-            </DocumentSection>
-        </div>
+            </DetailWorkspaceSection>
+        </>
     )
 }

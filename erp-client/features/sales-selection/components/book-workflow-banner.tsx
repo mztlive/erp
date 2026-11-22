@@ -219,7 +219,7 @@ export function BookWorkflowBanner({
             ) : null}
 
             {/* 阶段向导步进条 */}
-            <div className="hidden rounded-xl border border-border bg-card px-6 py-3.5 sm:block">
+            <div className="hidden sm:block">
                 <nav aria-label="选品流程进度">
                     <ol className="flex items-center justify-between gap-2">
                         {WORKFLOW_STEPS.map((step, idx) => {
@@ -490,14 +490,14 @@ export function BookWorkflowBanner({
             ) : null}
 
             {isTerminal ? (
-                <div className="rounded-xl border border-border bg-muted/40 p-4">
-                    <p className="text-body-compact font-semibold text-foreground">
+                <Alert variant="info">
+                    <AlertTitle>
                         该选品册已{detail.status === "CLOSED" ? "关闭" : "作废"}
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
+                    </AlertTitle>
+                    <AlertDescription>
                         该选品册已结束，仅支持查看历史商品清单，不可再修改或重新发布。
-                    </p>
-                </div>
+                    </AlertDescription>
+                </Alert>
             ) : null}
         </div>
     )

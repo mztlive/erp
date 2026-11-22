@@ -2,8 +2,13 @@
 
 import * as React from "react"
 
-import { DiscardConfirmDialog } from "@/components/business"
-import { useAppForm, applyApiFormError } from "@/components/form"
+import {
+    DetailWorkspaceSaveDock,
+    DiscardConfirmDialog,
+    detailWorkspaceStyles,
+} from "@/components/business"
+import { useAppForm, applyApiFormError, FormError } from "@/components/form"
+import { FieldGroup } from "@/components/ui/field"
 import { useSelector } from "@tanstack/react-form"
 import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 import {
@@ -26,6 +31,7 @@ import {
 import {
     buildDefaults,
     buildFormSubmission,
+    countCustomerFormChanges,
     newIdempotencyKey,
     type FormValues,
 } from "@/features/customers/components/customer-form-values"
@@ -56,9 +62,10 @@ export function CustomerForm({
     onCancel,
     onSucceeded,
     onDirtyChange,
+    shortcutBlocked = false,
 }: {
     mode: "create" | "edit"
-    /** 页面内编辑按分区展示（DocumentSection）；对话框内用紧凑布局。 */
+    /** 页面内编辑按详情工作面分区展示；对话框内用紧凑布局。 */
     grouped?: boolean
     /** mode="edit" 必传。 */
     customer?: CustomerCenterView
@@ -67,6 +74,7 @@ export function CustomerForm({
     onSucceeded: (customerId: string, revisionNo?: number) => void
     /** 表单是否含未保存输入（详情页用于拦截分区切换）。 */
     onDirtyChange?: (isDirty: boolean) => void
+    shortcutBlocked?: boolean
 }) {
     const createMutation = useCreateCustomerMutation()
     const saveMutation = useSaveCustomerDetailsMutation()
@@ -159,7 +167,11 @@ export function CustomerForm({
         },
     })
 
-    const dirty = useSelector(form.store, (state) => state.isDirty)
+    const changeCount = useSelector(form.store, (state) =>
+        grouped ? countCustomerFormChanges(defaults, state.values) : 0,
+    )
+    const isDirty = useSelector(form.store, (state) => state.isDirty)
+    const dirty = grouped ? changeCount > 0 : isDirty
     const [discardOpen, setDiscardOpen] = React.useState(false)
 
     React.useEffect(() => {
@@ -187,15 +199,60 @@ export function CustomerForm({
                 : "创建客户"
             : saveMutation.isPending
               ? "保存中…"
-              : "保存修改"
+              : "保存更新"
+
+    React.useEffect(() => {
+        if (!grouped || !dirty) return
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (
+                event.defaultPrevented ||
+                event.isComposing ||
+                event.altKey ||
+                event.shiftKey ||
+                !(event.metaKey || event.ctrlKey) ||
+                event.key.toLowerCase() !== "s" ||
+                (event.target instanceof Element &&
+                    event.target.closest(
+                        '[role="dialog"], [role="alertdialog"]',
+                    ))
+            )
+                return
+
+            event.preventDefault()
+            if (
+                !event.repeat &&
+                !shortcutBlocked &&
+                !conflictOpen &&
+                !discardOpen &&
+                !isPending &&
+                result?.outcome !== "succeeded" &&
+                form.state.canSubmit &&
+                !form.state.isSubmitting
+            )
+                void form.handleSubmit()
+        }
+        window.addEventListener("keydown", onKeyDown)
+        return () => window.removeEventListener("keydown", onKeyDown)
+    }, [
+        conflictOpen,
+        dirty,
+        discardOpen,
+        form,
+        grouped,
+        isPending,
+        result?.outcome,
+        shortcutBlocked,
+    ])
 
     return (
         <form
             noValidate
-            className={grouped ? "space-y-4" : "flex flex-col gap-4"}
+            className={grouped ? "min-w-0" : "flex flex-col gap-4"}
             onSubmit={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
+                if (grouped && (!dirty || isPending || form.state.isSubmitting))
+                    return
                 void form.handleSubmit()
             }}
         >
@@ -204,8 +261,25 @@ export function CustomerForm({
                     grouped={grouped}
                     title="客户基本资料"
                     description="修改仅对后续新业务生效，不影响已创建的合同和销售单"
+                    action={
+                        !dirty && result?.outcome !== "succeeded" ? (
+                            <Button
+                                id="customers-form-cancel"
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className={detailWorkspaceStyles.quietButton}
+                                onClick={onCancel}
+                            >
+                                取消
+                            </Button>
+                        ) : undefined
+                    }
                 >
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    <FieldGroup
+                        data-slot="detail-form-grid"
+                        className="grid gap-4 sm:grid-cols-2"
+                    >
                         <form.AppField
                             name="legalName"
                             children={(field) => (
@@ -273,7 +347,7 @@ export function CustomerForm({
                                 )}
                             />
                         </div>
-                    </div>
+                    </FieldGroup>
                 </FormSection>
             ) : (
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -379,19 +453,58 @@ export function CustomerForm({
                 }}
             />
 
-            <CustomerFormActionBar
-                form={form}
-                result={result}
-                isPending={isPending}
-                isSubmitting={isSubmitting}
-                submitLabel={submitLabel}
-                dirty={dirty}
-                onCancel={onCancel}
-                onDiscardRequest={
-                    mode === "edit" ? () => setDiscardOpen(true) : undefined
-                }
-                onResetSession={resetSession}
-            />
+            {grouped && result?.outcome !== "succeeded" ? (
+                <form.AppForm>
+                    <FormError className="max-w-4xl pb-3" />
+                    <DetailWorkspaceSaveDock
+                        open={dirty}
+                        changeCount={changeCount}
+                        actions={
+                            <>
+                                {dirty ? (
+                                    <Button
+                                        id="customers-form-cancel"
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        className={
+                                            detailWorkspaceStyles.quietButton
+                                        }
+                                        disabled={isPending}
+                                        onClick={() => setDiscardOpen(true)}
+                                    >
+                                        取消修改
+                                    </Button>
+                                ) : null}
+                                <form.SubmitButton
+                                    id="customers-form-submit"
+                                    size="sm"
+                                    className="px-3.5"
+                                    label={submitLabel}
+                                    showError={false}
+                                    aria-keyshortcuts="Meta+S Control+S"
+                                    disabled={!dirty || isPending}
+                                    loading={isSubmitting}
+                                />
+                            </>
+                        }
+                    />
+                </form.AppForm>
+            ) : (
+                <CustomerFormActionBar
+                    form={form}
+                    result={result}
+                    isPending={isPending}
+                    isSubmitting={isSubmitting}
+                    submitLabel={submitLabel}
+                    dirty={dirty}
+                    onCancel={onCancel}
+                    onDiscardRequest={
+                        mode === "edit" ? () => setDiscardOpen(true) : undefined
+                    }
+                    onResetSession={resetSession}
+                />
+            )}
 
             {mode === "edit" && result?.outcome === "conflict" ? (
                 <Button

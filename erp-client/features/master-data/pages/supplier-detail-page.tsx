@@ -11,8 +11,10 @@ import Link from "next/link"
 
 import {
     BusinessFailureState,
-    PageHeader,
-    PageScaffold,
+    DetailWorkspaceBody,
+    DetailWorkspaceChrome,
+    DetailWorkspacePage,
+    DetailWorkspaceSkeleton,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { SupplierEditorForm } from "@/features/master-data/components/supplier/supplier-editor-form"
@@ -25,76 +27,76 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
         editor
 
     if (isCreate && accountQuery.isPending) {
-        return (
-            <PageScaffold density="compact">
-                <PageHeader title="新建供应商" />
-                <div
-                    className="h-40 animate-pulse rounded-lg bg-muted"
-                    aria-busy
-                />
-            </PageScaffold>
-        )
+        return <DetailWorkspaceSkeleton title="新建供应商" />
     }
 
     if (isCreate && !canCreate) {
         return (
-            <PageScaffold density="compact">
-                <PageHeader title="新建供应商" />
-                <BusinessFailureState
-                    kind="permission"
-                    error={accountQuery.error}
-                    description="当前账号没有创建供应商的权限。"
-                />
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title="新建供应商" />
+                <DetailWorkspaceBody>
+                    <div className="pt-4">
+                        <BusinessFailureState
+                            kind="permission"
+                            error={accountQuery.error}
+                            description="当前账号没有创建供应商的权限。"
+                        />
+                    </div>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     }
 
     if (!isCreate && detailQuery.isPending) {
         return (
-            <PageScaffold density="compact">
-                <PageHeader
-                    title="供应商详情"
-                    description={masterDataCopy.centerLoading}
-                />
-                <div
-                    className="h-40 animate-pulse rounded-lg bg-muted"
-                    aria-busy
-                />
-            </PageScaffold>
+            <DetailWorkspaceSkeleton
+                title="供应商详情"
+                description={masterDataCopy.centerLoading}
+            />
         )
     }
 
     if (!isCreate && (detailQuery.isError || !data)) {
         return (
-            <PageScaffold density="compact">
-                <PageHeader title="供应商详情" />
-                <BusinessFailureState
-                    error={detailQuery.isError ? detailQuery.error : undefined}
-                    description={
-                        detailQuery.isError
-                            ? masterDataCopy.centerLoadFail
-                            : masterDataCopy.centerMissingDesc
-                    }
-                    action={
-                        detailQuery.isError ? (
-                            <Button
-                                id="master-data-supplier-detail-retry"
-                                type="button"
-                                onClick={() => void detailQuery.refetch()}
-                            >
-                                重试
-                            </Button>
-                        ) : (
-                            <Button
-                                id="master-data-supplier-detail-back-list"
-                                render={<Link href={listHref} />}
-                            >
-                                {masterDataCopy.actionBackList}
-                            </Button>
-                        )
-                    }
-                />
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title="供应商详情" />
+                <DetailWorkspaceBody>
+                    <div className="pt-4">
+                        <BusinessFailureState
+                            error={
+                                detailQuery.isError
+                                    ? detailQuery.error
+                                    : undefined
+                            }
+                            description={
+                                detailQuery.isError
+                                    ? masterDataCopy.centerLoadFail
+                                    : masterDataCopy.centerMissingDesc
+                            }
+                            action={
+                                detailQuery.isError ? (
+                                    <Button
+                                        id="master-data-supplier-detail-retry"
+                                        type="button"
+                                        onClick={() =>
+                                            void detailQuery.refetch()
+                                        }
+                                    >
+                                        重试
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        id="master-data-supplier-detail-back-list"
+                                        render={<Link href={listHref} />}
+                                    >
+                                        {masterDataCopy.actionBackList}
+                                    </Button>
+                                )
+                            }
+                        />
+                    </div>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     }
 

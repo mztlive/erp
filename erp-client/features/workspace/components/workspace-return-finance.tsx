@@ -1,7 +1,9 @@
 "use client"
+
+import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import { WorkspaceTaskPane, WorkspaceTaskFooter } from "@/components/business"
+import { WorkspaceTaskFooter } from "@/components/business"
 import { MoneyValue } from "@/components/business/values"
 import { Button } from "@/components/ui/button"
 import { getErrorMessage } from "@/lib/api"
@@ -109,7 +111,7 @@ export function WorkspaceReturnFinance({
     )
     const busy = flow.refundSubmitPending
     return (
-        <WorkspaceTaskPane
+        <WorkspaceProcessingPane
             header={
                 <WorkspaceTaskIdentityHeader
                     item={item}
@@ -482,7 +484,7 @@ export function WorkspaceReturnFinance({
                     onResult={setResult}
                 />
             )}
-        </WorkspaceTaskPane>
+        </WorkspaceProcessingPane>
     )
 }
 

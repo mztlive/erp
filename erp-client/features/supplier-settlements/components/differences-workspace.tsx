@@ -8,13 +8,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
+import { DetailWorkspaceSection } from "@/components/business/detail-workspace"
 import { Separator } from "@/components/ui/separator"
 import type { SettlementDifferenceView } from "@/features/supplier-settlements/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -49,16 +43,8 @@ export function DifferencesWorkspace({
 
     return (
         <div className="grid gap-4 xl:grid-cols-[16rem_minmax(0,1fr)]">
-            <Card
-                size="sm"
-                className={cn(surfaceInsetClassName, "shadow-none ring-0")}
-            >
-                <CardHeader className="rounded-t-lg border-b border-grid py-3">
-                    <CardTitle className="text-section-title font-semibold tracking-tight">
-                        差异列表
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-1 p-2">
+            <DetailWorkspaceSection title="差异列表">
+                <div className="flex flex-col gap-1">
                     {differences.map((d) => (
                         <button
                             key={d.differenceId}
@@ -67,7 +53,7 @@ export function DifferencesWorkspace({
                             className={cn(
                                 "flex w-full flex-col rounded-md px-2 py-2 text-left text-body-compact hover:bg-foreground/5",
                                 activeDiff?.differenceId === d.differenceId
-                                    ? "bg-card font-medium shadow-sm ring-1 ring-foreground/10"
+                                    ? "bg-muted font-medium text-foreground"
                                     : "text-muted-foreground",
                             )}
                             onClick={() => onSelect(d.differenceId)}
@@ -90,38 +76,17 @@ export function DifferencesWorkspace({
                             ) : null}
                         </button>
                     ))}
-                </CardContent>
-            </Card>
+                </div>
+            </DetailWorkspaceSection>
 
             {activeDiff ? (
                 <div className="space-y-4">
-                    <Card
-                        size="sm"
-                        className={cn(
-                            surfaceInsetClassName,
-                            "shadow-none ring-0",
-                        )}
-                    >
-                        <CardHeader className="rounded-t-lg border-b border-grid py-3">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div>
-                                    <CardTitle className="text-section-title font-semibold tracking-tight">
-                                        {activeDiff.typeLabel}
-                                    </CardTitle>
-                                    <CardDescription>
-                                        {activeDiff.amountDirectionLabel}
-                                        {activeDiff.amountGross ? (
-                                            <span className="mt-1 block text-body-compact font-semibold text-warning-soft-foreground">
-                                                <MoneyValue
-                                                    value={
-                                                        activeDiff.amountGross
-                                                    }
-                                                    taxBasis="gross"
-                                                />
-                                            </span>
-                                        ) : null}
-                                    </CardDescription>
-                                </div>
+                    <DetailWorkspaceSection
+                        className="border-t border-border/60 xl:border-t-0 xl:border-l xl:pl-5"
+                        title={activeDiff.typeLabel}
+                        actions={
+                            <>
+                                {" "}
                                 <BusinessStatusBadge
                                     context="list"
                                     label={activeDiff.statusLabel}
@@ -133,149 +98,150 @@ export function DifferencesWorkspace({
                                 {activeDiff.blocking ? (
                                     <Badge variant="destructive">阻塞</Badge>
                                 ) : null}
-                            </div>
-                        </CardHeader>
-                        <CardContent className="space-y-3 pt-4">
-                            <div className="grid gap-2 sm:grid-cols-2 text-body-compact">
-                                <div
-                                    className={cn(surfaceInsetClassName, "p-3")}
-                                >
-                                    <div className="text-xs text-muted-foreground">
-                                        ERP 侧
-                                    </div>
-                                    <div>{activeDiff.erpSideLabel}</div>
-                                    {activeDiff.erpSideAmount ? (
-                                        <MoneyValue
-                                            value={activeDiff.erpSideAmount}
-                                            taxBasis="gross"
-                                        />
-                                    ) : null}
-                                </div>
-                                <div
-                                    className={cn(surfaceInsetClassName, "p-3")}
-                                >
-                                    <div className="text-xs text-muted-foreground">
-                                        供应商侧
-                                    </div>
-                                    <div>{activeDiff.supplierSideLabel}</div>
-                                    {activeDiff.supplierSideAmount ? (
-                                        <MoneyValue
-                                            value={
-                                                activeDiff.supplierSideAmount
-                                            }
-                                            taxBasis="gross"
-                                        />
-                                    ) : null}
-                                </div>
-                            </div>
-
-                            <BusinessDiffPanel
-                                title="左右证据对比"
-                                caption="字段级证据；原值只读不可为消差改写"
-                                changes={activeDiff.leftFields.map((c) => ({
-                                    id: c.id,
-                                    field: c.field,
-                                    before: c.before,
-                                    after: c.after,
-                                    note: c.note,
-                                }))}
+                            </>
+                        }
+                        subtitle={activeDiff.amountDirectionLabel}
+                    >
+                        {activeDiff.amountGross ? (
+                            <MoneyValue
+                                className="text-warning-soft-foreground"
+                                value={activeDiff.amountGross}
+                                taxBasis="gross"
                             />
+                        ) : null}
 
-                            <div>
-                                <h4 className="mb-2 text-body-compact font-medium">
-                                    已登记证据
-                                </h4>
-                                {activeDiff.evidence.length === 0 ? (
-                                    <p className="text-xs text-muted-foreground">
-                                        尚无采购/供应商证据
-                                        {activeDiff.requiresProcurementEvidence
-                                            ? "（本差异需要采购协同）"
-                                            : ""}
-                                    </p>
-                                ) : (
-                                    <ul className="space-y-2">
-                                        {activeDiff.evidence.map((e) => (
-                                            <li
-                                                key={e.evidenceId}
-                                                className={cn(
-                                                    surfaceInsetClassName,
-                                                    "px-3 py-2 text-body-compact",
+                        <div className="grid gap-2 sm:grid-cols-2 text-body-compact">
+                            <div className={cn(surfaceInsetClassName, "p-3")}>
+                                <div className="text-xs text-muted-foreground">
+                                    ERP 侧
+                                </div>
+                                <div>{activeDiff.erpSideLabel}</div>
+                                {activeDiff.erpSideAmount ? (
+                                    <MoneyValue
+                                        value={activeDiff.erpSideAmount}
+                                        taxBasis="gross"
+                                    />
+                                ) : null}
+                            </div>
+                            <div className={cn(surfaceInsetClassName, "p-3")}>
+                                <div className="text-xs text-muted-foreground">
+                                    供应商侧
+                                </div>
+                                <div>{activeDiff.supplierSideLabel}</div>
+                                {activeDiff.supplierSideAmount ? (
+                                    <MoneyValue
+                                        value={activeDiff.supplierSideAmount}
+                                        taxBasis="gross"
+                                    />
+                                ) : null}
+                            </div>
+                        </div>
+
+                        <BusinessDiffPanel
+                            title="左右证据对比"
+                            caption="字段级证据；原值只读不可为消差改写"
+                            changes={activeDiff.leftFields.map((c) => ({
+                                id: c.id,
+                                field: c.field,
+                                before: c.before,
+                                after: c.after,
+                                note: c.note,
+                            }))}
+                        />
+
+                        <div>
+                            <h4 className="mb-2 text-body-compact font-medium">
+                                已登记证据
+                            </h4>
+                            {activeDiff.evidence.length === 0 ? (
+                                <p className="text-xs text-muted-foreground">
+                                    尚无采购/供应商证据
+                                    {activeDiff.requiresProcurementEvidence
+                                        ? "（本差异需要采购协同）"
+                                        : ""}
+                                </p>
+                            ) : (
+                                <ul className="space-y-2">
+                                    {activeDiff.evidence.map((e) => (
+                                        <li
+                                            key={e.evidenceId}
+                                            className={cn(
+                                                surfaceInsetClassName,
+                                                "px-3 py-2 text-body-compact",
+                                            )}
+                                        >
+                                            <div className="font-medium">
+                                                {e.label} · {e.by.displayName}
+                                            </div>
+                                            <div className="text-muted-foreground">
+                                                {e.comment}
+                                            </div>
+                                            <div className="text-xs text-muted-foreground">
+                                                {formatDateTime(
+                                                    e.at,
+                                                    "default",
                                                 )}
-                                            >
-                                                <div className="font-medium">
-                                                    {e.label} ·{" "}
-                                                    {e.by.displayName}
-                                                </div>
-                                                <div className="text-muted-foreground">
-                                                    {e.comment}
-                                                </div>
-                                                <div className="text-xs text-muted-foreground">
-                                                    {formatDateTime(
-                                                        e.at,
-                                                        "default",
-                                                    )}
-                                                </div>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                            </div>
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
 
-                            {activeDiff.resolution ? (
-                                <Alert variant="success">
-                                    <AlertTitle>
-                                        结论：
-                                        {activeDiff.resolution.resolutionLabel}
-                                    </AlertTitle>
-                                    <AlertDescription>
-                                        {activeDiff.resolution.by.displayName} ·{" "}
-                                        {formatDateTime(
-                                            activeDiff.resolution.at,
-                                            "default",
-                                        )}{" "}
-                                        · 成本预览{" "}
-                                        <MoneyValue
-                                            value={
-                                                activeDiff.resolution
-                                                    .costImpactPreview ?? "0.00"
-                                            }
-                                            taxBasis="gross"
-                                        />
-                                    </AlertDescription>
-                                </Alert>
+                        {activeDiff.resolution ? (
+                            <Alert variant="success">
+                                <AlertTitle>
+                                    结论：
+                                    {activeDiff.resolution.resolutionLabel}
+                                </AlertTitle>
+                                <AlertDescription>
+                                    {activeDiff.resolution.by.displayName} ·{" "}
+                                    {formatDateTime(
+                                        activeDiff.resolution.at,
+                                        "default",
+                                    )}{" "}
+                                    · 成本预览{" "}
+                                    <MoneyValue
+                                        value={
+                                            activeDiff.resolution
+                                                .costImpactPreview ?? "0.00"
+                                        }
+                                        taxBasis="gross"
+                                    />
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
+
+                        <Separator />
+                        <div className="flex flex-wrap gap-2">
+                            {allowed.has("APPEND_EVIDENCE") ? (
+                                <Button
+                                    id="supplier-settlements-differences-append-evidence"
+                                    type="button"
+                                    size="sm"
+                                    onClick={onEvidence}
+                                >
+                                    追加采购证据
+                                </Button>
                             ) : null}
-
-                            <Separator />
-                            <div className="flex flex-wrap gap-2">
-                                {allowed.has("APPEND_EVIDENCE") ? (
-                                    <Button
-                                        id="supplier-settlements-differences-append-evidence"
-                                        type="button"
-                                        size="sm"
-                                        onClick={onEvidence}
-                                    >
-                                        追加采购证据
-                                    </Button>
-                                ) : null}
-                                {allowed.has("RESOLVE_DIFFERENCE") &&
-                                activeDiff.status === "PENDING" ? (
-                                    <Button
-                                        id="supplier-settlements-differences-resolve"
-                                        type="button"
-                                        size="sm"
-                                        onClick={onResolve}
-                                    >
-                                        登记结论
-                                    </Button>
-                                ) : null}
-                                {!allowed.has("RESOLVE_DIFFERENCE") ? (
-                                    <span className="text-xs text-muted-foreground">
-                                        当前不可登记差异结论
-                                    </span>
-                                ) : null}
-                            </div>
-                        </CardContent>
-                    </Card>
+                            {allowed.has("RESOLVE_DIFFERENCE") &&
+                            activeDiff.status === "PENDING" ? (
+                                <Button
+                                    id="supplier-settlements-differences-resolve"
+                                    type="button"
+                                    size="sm"
+                                    onClick={onResolve}
+                                >
+                                    登记结论
+                                </Button>
+                            ) : null}
+                            {!allowed.has("RESOLVE_DIFFERENCE") ? (
+                                <span className="text-xs text-muted-foreground">
+                                    当前不可登记差异结论
+                                </span>
+                            ) : null}
+                        </div>
+                    </DetailWorkspaceSection>
                 </div>
             ) : null}
         </div>

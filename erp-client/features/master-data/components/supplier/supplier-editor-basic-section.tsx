@@ -4,6 +4,7 @@ import * as React from "react"
 
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { RequiredMark } from "@/components/ui/required-mark"
 import {
     FieldShell,
     SectionPanel,
@@ -42,10 +43,12 @@ export function SupplierEditorBasicSection({
             <div className="grid gap-4 sm:grid-cols-2">
                 <FieldShell>
                     <Label htmlFor="master-data-supplier-basic-name">
-                        名称<span className="text-destructive">*</span>
+                        名称
+                        <RequiredMark />
                     </Label>
                     <Input
                         id="master-data-supplier-basic-name"
+                        aria-required="true"
                         value={values.name}
                         onChange={(e) => setFieldValue("name", e.target.value)}
                         placeholder="供应商名称"
@@ -55,10 +58,11 @@ export function SupplierEditorBasicSection({
                 <FieldShell>
                     <Label htmlFor="master-data-supplier-basic-company">
                         {masterDataCopy.fCompany}
-                        <span className="text-destructive">*</span>
+                        <RequiredMark />
                     </Label>
                     <Input
                         id="master-data-supplier-basic-company"
+                        aria-required="true"
                         value={values.company}
                         onChange={(e) =>
                             setFieldValue("company", e.target.value)

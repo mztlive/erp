@@ -6,14 +6,14 @@ import { useSearchParams } from "next/navigation"
 
 import {
     BusinessFailureState,
-    PageScaffold,
-    surfacePanelClassName,
-    objectSectionPanelClassName,
-    workspaceEmbeddedScaffoldClassName,
+    DetailWorkspaceBody,
+    DetailWorkspaceChrome,
+    DetailWorkspacePage,
+    DetailWorkspaceSection,
+    DetailWorkspaceTabs,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { clearAddressReveal } from "@/features/supplier-orders/api/index"
 import {
@@ -26,8 +26,6 @@ import {
     useSupplierOrderDetailQuery,
 } from "@/features/supplier-orders/hooks/queries"
 import { SECTION_LABEL, SECTIONS } from "@/features/supplier-orders/types"
-import { toAutomationIdSegment } from "@/lib/automation-id"
-import { cn } from "@/lib/utils"
 import { hasPermission } from "@/lib/permissions"
 import { SupplierOrderExecutionSetup } from "../components/supplier-order-execution-setup"
 import { SupplierOrderExecutionProgress } from "../components/supplier-order-execution-progress"
@@ -66,7 +64,6 @@ export function SupplierOrderCenterPage({
     supplierOrderId,
     section: sectionProp,
     workItemId: workItemIdProp,
-    embedded = false,
     onTaskCompleted,
 }: {
     supplierOrderId: string
@@ -146,80 +143,79 @@ export function SupplierOrderCenterPage({
 
     if (query.isPending) {
         return (
-            <PageScaffold
-                density="compact"
-                className={
-                    embedded ? workspaceEmbeddedScaffoldClassName : undefined
-                }
-            >
-                <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
-                <div className="h-28 animate-pulse rounded-lg bg-muted" />
-                <div className="h-64 animate-pulse rounded-lg bg-muted" />
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title="供应商订单" />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <div aria-busy="true" className="flex flex-col gap-4">
+                            <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
+                            <div className="h-28 animate-pulse rounded-lg bg-muted" />
+                            <div className="h-64 animate-pulse rounded-lg bg-muted" />
+                        </div>
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     }
 
     if (query.isError) {
         return (
-            <PageScaffold
-                density="compact"
-                className={
-                    embedded ? workspaceEmbeddedScaffoldClassName : undefined
-                }
-            >
-                <BusinessFailureState
-                    title="供应商订单加载失败"
-                    error={query.error}
-                    action={
-                        <Button
-                            id="supplier-order-center-error-retry"
-                            type="button"
-                            onClick={() => void query.refetch()}
-                        >
-                            重试
-                        </Button>
-                    }
-                />
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title="供应商订单" />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <BusinessFailureState
+                            title="供应商订单加载失败"
+                            error={query.error}
+                            action={
+                                <Button
+                                    id="supplier-order-center-error-retry"
+                                    type="button"
+                                    onClick={() => void query.refetch()}
+                                >
+                                    重试
+                                </Button>
+                            }
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     }
 
     if (!detail) {
         return (
-            <PageScaffold
-                density="compact"
-                className={
-                    embedded ? workspaceEmbeddedScaffoldClassName : undefined
-                }
-            >
-                <Alert variant="warning">
-                    <AlertTitle>未找到供应商订单</AlertTitle>
-                    <AlertDescription>
-                        该订单不存在或当前角色无权访问。
-                        <Button
-                            id="supplier-order-center-not-found-back"
-                            type="button"
-                            variant="link"
-                            className="px-1"
-                            render={<Link href="/supplier-api/orders" />}
-                        >
-                            返回列表
-                        </Button>
-                    </AlertDescription>
-                </Alert>
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title="供应商订单" />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <Alert variant="warning">
+                            <AlertTitle>未找到供应商订单</AlertTitle>
+                            <AlertDescription>
+                                该订单不存在或当前角色无权访问。
+                                <Button
+                                    id="supplier-order-center-not-found-back"
+                                    type="button"
+                                    variant="link"
+                                    className="px-1"
+                                    render={
+                                        <Link href="/supplier-api/orders" />
+                                    }
+                                >
+                                    返回列表
+                                </Button>
+                            </AlertDescription>
+                        </Alert>
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     }
 
     const o = detail.order
 
     return (
-        <PageScaffold
-            density="compact"
-            className={
-                embedded ? workspaceEmbeddedScaffoldClassName : undefined
-            }
-        >
+        <DetailWorkspacePage>
             <SupplierOrderCenterHeader
                 order={o}
                 canQuery={derivation.canQuery}
@@ -233,133 +229,131 @@ export function SupplierOrderCenterPage({
                 onReplayClick={() => {
                     if (derivation.canReplay) actions.setReplayOpen(true)
                 }}
-            />
-
-            <WorkItemProcessPanel
-                workItem={detail.workItem}
-                workItemBlocker={detail.workItemBlocker}
-                responsibilityStatus={derivation.responsibilityStatus}
-                canCompleteTask={derivation.canCompleteTask}
-                pending={completeTaskMutation.isPending}
-                onProcess={() => task.setCompleteOpen(true)}
-            />
-
-            <SupplierOrderExecutionSetup
-                orderId={supplierOrderId}
-                addressSummary={
-                    detail.address.revealed ?? detail.address.masked
+                tabs={
+                    <DetailWorkspaceTabs
+                        value={activeSection}
+                        onValueChange={(value) =>
+                            setSection(resolveSection(value))
+                        }
+                        items={SECTIONS.map((id) => ({
+                            id,
+                            label: SECTION_LABEL[id],
+                        }))}
+                        ariaLabel="供应商订单分区"
+                        tabIdPrefix="supplier-order-center-tab"
+                    />
                 }
-                canEdit={hasPermission(
-                    profileQuery.data?.permissions,
-                    "supplier_fulfillment_order:submit",
-                )}
             />
+            <DetailWorkspaceBody
+                alerts={
+                    <>
+                        <WorkItemProcessPanel
+                            workItem={detail.workItem}
+                            workItemBlocker={detail.workItemBlocker}
+                            responsibilityStatus={
+                                derivation.responsibilityStatus
+                            }
+                            canCompleteTask={derivation.canCompleteTask}
+                            pending={completeTaskMutation.isPending}
+                            onProcess={() => task.setCompleteOpen(true)}
+                        />
 
-            <StatusAlertsPanel
-                order={o}
-                lastInvestigation={detail.lastInvestigation}
-                noQueryCapability={derivation.noQueryCapability}
-                trackingError={detail.trackingError}
-            />
+                        <SupplierOrderExecutionSetup
+                            orderId={supplierOrderId}
+                            addressSummary={
+                                detail.address.revealed ?? detail.address.masked
+                            }
+                            canEdit={hasPermission(
+                                profileQuery.data?.permissions,
+                                "supplier_fulfillment_order:submit",
+                            )}
+                        />
 
-            {detail.workItem ? (
-                <WorkItemCard workItem={detail.workItem} orderNo={o.orderNo} />
-            ) : null}
-
-            {result ? (
-                <ResultPanel
-                    result={result}
-                    order={o}
-                    costs={detail.costs}
-                    onClose={() => setResult(null)}
-                />
-            ) : null}
-
-            <div
-                className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
-            >
-                <Tabs
-                    value={activeSection}
-                    onValueChange={(v) => setSection(resolveSection(v))}
-                >
-                    <TabsList
-                        variant="line"
-                        className="sticky top-0 z-10 h-auto w-full flex-wrap justify-start gap-6 overflow-x-auto rounded-none border-b border-grid bg-card px-0 py-0"
-                    >
-                        {SECTIONS.map((s) => (
-                            <TabsTrigger
-                                key={s}
-                                value={s}
-                                id={`supplier-order-center-tab-${toAutomationIdSegment(s)}`}
-                            >
-                                {SECTION_LABEL[s]}
-                            </TabsTrigger>
-                        ))}
-                    </TabsList>
-                </Tabs>
-
-                <div className={objectSectionPanelClassName}>
-                    {activeSection === "overview" ? (
-                        <OverviewSection
+                        <StatusAlertsPanel
                             order={o}
-                            purchaseOrderId={detail.purchaseOrderId}
-                            purchaseOrderNo={detail.purchaseOrderNo}
+                            lastInvestigation={detail.lastInvestigation}
+                            noQueryCapability={derivation.noQueryCapability}
+                            trackingError={detail.trackingError}
                         />
-                    ) : null}
 
-                    {activeSection === "items" ? (
-                        <ItemsSection
-                            items={detail.items}
-                            totalQuantity={derivation.totalQuantity}
-                            totalCostGross={derivation.totalCostGross}
-                        />
-                    ) : null}
+                        {detail.workItem ? (
+                            <WorkItemCard
+                                workItem={detail.workItem}
+                                orderNo={o.orderNo}
+                            />
+                        ) : null}
 
-                    {activeSection === "fulfillment" ? (
-                        <div className="space-y-6">
+                        {result ? (
+                            <ResultPanel
+                                result={result}
+                                order={o}
+                                costs={detail.costs}
+                                onClose={() => setResult(null)}
+                            />
+                        ) : null}
+                    </>
+                }
+            >
+                {activeSection === "overview" ? (
+                    <OverviewSection
+                        order={o}
+                        purchaseOrderId={detail.purchaseOrderId}
+                        purchaseOrderNo={detail.purchaseOrderNo}
+                    />
+                ) : null}
+
+                {activeSection === "items" ? (
+                    <ItemsSection
+                        items={detail.items}
+                        totalQuantity={derivation.totalQuantity}
+                        totalCostGross={derivation.totalCostGross}
+                    />
+                ) : null}
+
+                {activeSection === "fulfillment" ? (
+                    <>
+                        <DetailWorkspaceSection>
                             <SupplierOrderExecutionProgress
                                 orderId={supplierOrderId}
                             />
-                            <FulfillmentSection
-                                logistics={detail.logistics}
-                                address={detail.address}
-                                statusHistory={detail.statusHistory}
-                                canReveal={derivation.canReveal}
-                                revealPending={revealMutation.isPending}
-                                onReveal={() =>
-                                    void orderActions.handleReveal()
-                                }
-                                onHide={() => {
-                                    void clearAddressReveal(
-                                        supplierOrderId,
-                                    ).then(() => void query.refetch())
-                                }}
-                            />
-                        </div>
-                    ) : null}
-
-                    {activeSection === "aftersales" ? (
-                        <AftersalesSection
-                            afterSales={detail.afterSales}
-                            pending={afterSalesMutation.isPending}
-                            onRequest={orderActions.setAfterSalesConfirm}
+                        </DetailWorkspaceSection>
+                        <FulfillmentSection
+                            logistics={detail.logistics}
+                            address={detail.address}
+                            statusHistory={detail.statusHistory}
+                            canReveal={derivation.canReveal}
+                            revealPending={revealMutation.isPending}
+                            onReveal={() => void orderActions.handleReveal()}
+                            onHide={() => {
+                                void clearAddressReveal(supplierOrderId).then(
+                                    () => void query.refetch(),
+                                )
+                            }}
                         />
-                    ) : null}
+                    </>
+                ) : null}
 
-                    {activeSection === "costs" ? (
-                        <CostsSection costs={detail.costs} />
-                    ) : null}
+                {activeSection === "aftersales" ? (
+                    <AftersalesSection
+                        afterSales={detail.afterSales}
+                        pending={afterSalesMutation.isPending}
+                        onRequest={orderActions.setAfterSalesConfirm}
+                    />
+                ) : null}
 
-                    {activeSection === "audit" ? (
-                        <AuditSection
-                            orderId={supplierOrderId}
-                            detail={detail}
-                            noteMutation={noteMutation}
-                            setResult={setResult}
-                        />
-                    ) : null}
-                </div>
-            </div>
+                {activeSection === "costs" ? (
+                    <CostsSection costs={detail.costs} />
+                ) : null}
+
+                {activeSection === "audit" ? (
+                    <AuditSection
+                        orderId={supplierOrderId}
+                        detail={detail}
+                        noteMutation={noteMutation}
+                        setResult={setResult}
+                    />
+                ) : null}
+            </DetailWorkspaceBody>
 
             <SupplierOrderCenterDialogs
                 order={o}
@@ -386,6 +380,6 @@ export function SupplierOrderCenterPage({
                     }
                 }}
             />
-        </PageScaffold>
+        </DetailWorkspacePage>
     )
 }

@@ -118,7 +118,7 @@ export function BatchCategoryMappings({
     return (
         <section
             ref={sectionRef}
-            className="min-w-0 scroll-mt-4 rounded-lg border"
+            className="min-w-0 scroll-mt-48"
             aria-labelledby="supplier-catalog-batch-category-title"
         >
             <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">

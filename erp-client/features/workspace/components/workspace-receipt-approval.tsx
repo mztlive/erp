@@ -1,9 +1,6 @@
 "use client"
 
-import {
-    BusinessFailureState,
-    workspaceTaskSurfacePadClassName,
-} from "@/components/business"
+import { BusinessFailureState } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
     Table,
@@ -17,14 +14,10 @@ import { ApprovalMaterialFiles } from "@/features/approval-workflow/components/a
 import { displayActorName } from "@/features/approval-workflow/display"
 import { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-approval-materials"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { cn } from "@/lib/utils"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceMoney } from "./workspace-money"
 
-const sectionClass = cn(
-    workspaceTaskSurfacePadClassName,
-    "space-y-3 border-b border-grid py-4",
-)
+const sectionClass = "space-y-3 border-b border-border/60 py-6"
 const primaryFields = new Set([
     "回款金额",
     "到账日",

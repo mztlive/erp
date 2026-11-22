@@ -11,7 +11,7 @@ import {
     FormalActionResult,
     SequentialProcessBar,
     StatusTrackSummary,
-    surfacePanelClassName,
+    DetailWorkspaceSection,
 } from "@/components/business"
 import type { ResponsibilityStatus } from "@/components/business/workflow-actions"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -22,13 +22,6 @@ import {
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import type { SupplierOrderDetailView } from "@/features/supplier-orders/types"
 import {
     WORK_ITEM_STATUS_LABEL,
@@ -215,19 +208,13 @@ export function WorkItemCard({
     orderNo: string
 }) {
     return (
-        <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="rounded-t-lg border-b border-grid pb-2">
-                <CardTitle>
-                    {WORK_ITEM_TYPE_LABEL[workItem.workItemType]}
-                </CardTitle>
-                <CardDescription>
-                    关联订单 {orderNo}
-                    {workItem.ownerUser
-                        ? ` · 当前处理人 ${workItem.ownerUser.displayName}`
-                        : ""}
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+        <DetailWorkspaceSection
+            title={WORK_ITEM_TYPE_LABEL[workItem.workItemType]}
+            subtitle={`关联订单 ${orderNo}${workItem.ownerUser ? ` · 当前处理人 ${workItem.ownerUser.displayName}` : ""}`}
+            className="py-3 first:pt-3 last:pb-3"
+            contentClassName="space-y-2"
+        >
+            <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
                 <span>
                     状态{" "}
                     <BusinessStatusBadge
@@ -243,8 +230,8 @@ export function WorkItemCard({
                 <span>
                     查询原结果和再次提交不会完成任务；只有确认处理结果才会完成
                 </span>
-            </CardContent>
-        </Card>
+            </div>
+        </DetailWorkspaceSection>
     )
 }
 

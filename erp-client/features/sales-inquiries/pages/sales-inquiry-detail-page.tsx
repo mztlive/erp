@@ -10,6 +10,12 @@ import { UploadIcon } from "lucide-react"
 import {
     BusinessFailureState,
     DetailPageHeader,
+    DetailWorkspaceBody,
+    DetailWorkspaceChrome,
+    DetailWorkspacePage,
+    DetailWorkspaceSection,
+    DetailWorkspaceSkeleton,
+    detailWorkspaceStyles,
     PageScaffold,
     QuickPreviewSheet,
 } from "@/components/business"
@@ -135,7 +141,12 @@ export function SalesInquiryDetailPage({
         return () => cancelAnimationFrame(frame)
     }, [embedded, mutating, onTaskCompleted, router, taskFinished, taskKey])
     if (!profile.data)
-        return (
+        return inquiryId && !embedded ? (
+            <DetailWorkspaceSkeleton
+                title={procurement ? "采购询价" : "销售询价"}
+                description="正在核对账号权限…"
+            />
+        ) : (
             <p className="p-6" role="status">
                 正在核对账号权限…
             </p>
@@ -198,33 +209,64 @@ export function SalesInquiryDetailPage({
             </PageScaffold>
         )
     if (taskFinished) return null
-    if (query.isError)
-        return (
-            <div className="space-y-4 p-6">
-                <BusinessFailureState
-                    id="sales-inquiry-detail-retry"
-                    title="询价资料加载失败"
-                    error={query.error}
-                    onRetry={() => void query.refetch()}
-                />
-                <Link
-                    id="sales-inquiry-error-back"
-                    href={
-                        procurement
-                            ? "/procurement/inquiries"
-                            : "/sales/inquiries"
-                    }
-                    className={buttonVariants({ variant: "outline" })}
-                >
-                    返回询价列表
-                </Link>
-            </div>
+    const detailTitle = procurement ? "采购询价" : "销售询价"
+    if (query.isError) {
+        const back = (
+            <Link
+                id="sales-inquiry-error-back"
+                href={
+                    procurement ? "/procurement/inquiries" : "/sales/inquiries"
+                }
+                className={buttonVariants(
+                    embedded
+                        ? { variant: "outline" }
+                        : {
+                              variant: "ghost",
+                              size: "sm",
+                              className: detailWorkspaceStyles.quietButton,
+                          },
+                )}
+            >
+                返回询价列表
+            </Link>
         )
+        const failure = (
+            <BusinessFailureState
+                id="sales-inquiry-detail-retry"
+                title="询价资料加载失败"
+                error={query.error}
+                onRetry={() => void query.refetch()}
+            />
+        )
+        return embedded ? (
+            <div className="space-y-4 p-6">
+                {failure}
+                {back}
+            </div>
+        ) : (
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome
+                    title={detailTitle}
+                    secondaryActions={back}
+                />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        {failure}
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
+        )
+    }
     if (!query.data)
-        return (
+        return embedded ? (
             <p className="p-6" role="status">
                 正在读取询价资料…
             </p>
+        ) : (
+            <DetailWorkspaceSkeleton
+                title={detailTitle}
+                description="正在读取询价资料…"
+            />
         )
     return (
         <InquiryDetailContent
@@ -512,8 +554,18 @@ function InquiryDetailContent({
                 )}
         </>
     )
+    const Header = embedded ? DetailPageHeader : DetailWorkspaceChrome
+    const feedbackFooter = canProcess ? (
+        <div
+            ref={setFeedbackFooterContainer}
+            data-slot="inquiry-feedback-footer"
+            hidden={!feedbackVisible}
+            className={embedded ? "shrink-0" : "shrink-0 [&>div]:bg-card"}
+        />
+    ) : null
     const body = (
         <InquiryActions
+            workspace={!embedded}
             inquiry={inquiry}
             procurement={procurement}
             task={
@@ -548,99 +600,107 @@ function InquiryDetailContent({
                 primaryActions,
                 secondaryActions,
                 assignmentActions,
-            ) => (
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-hidden">
-                    <div className="shrink-0 space-y-5">
-                        <DetailPageHeader
-                            title={inquiry.customer_name}
-                            documentNumber={inquiry.inquiry_no}
-                            numberLabel="询价单号"
-                            version={`需求第 ${inquiry.requirement_version} 版 · 反馈第 ${inquiry.feedback_round} 轮`}
-                            primaryStatus={{
-                                label: INQUIRY_STATUS_LABEL[inquiry.status],
-                                tone:
-                                    inquiry.status === "confirmed"
-                                        ? "success"
-                                        : inquiry.status === "closed"
-                                          ? "neutral"
-                                          : "info",
-                            }}
-                            back={
-                                embedded
-                                    ? undefined
-                                    : {
-                                          id: "sales-inquiry-detail-back",
-                                          href: procurement
-                                              ? "/procurement/inquiries"
-                                              : "/sales/inquiries",
-                                          label: "返回询价列表",
-                                      }
-                            }
-                            secondaryActions={
-                                <>
-                                    <div
-                                        ref={setHistoryActionsContainer}
-                                        className="flex items-center"
-                                    />
-                                    {assignmentActions}
-                                    {canEdit && (
-                                        <div ref={setDemandActionsContainer} />
-                                    )}
-                                    {secondaryActions}
-                                </>
-                            }
-                            primaryAction={
-                                !procurement &&
-                                inquiry.status === "closed" &&
-                                hasPermission(
-                                    permissions,
-                                    "sales_inquiry:create",
-                                ) &&
-                                hasPermission(
-                                    permissions,
-                                    "sellable_sku:list",
-                                ) ? (
-                                    <Link
-                                        id="sales-inquiry-copy-new"
-                                        href={`/sales/inquiries/new?copyFrom=${encodeURIComponent(inquiry.id)}`}
-                                        className={buttonVariants({
-                                            size: "sm",
-                                        })}
-                                    >
-                                        复制为新询价
-                                    </Link>
-                                ) : undefined
-                            }
-                            meta={
-                                canEdit ? undefined : (
-                                    <span>
-                                        询价截止：
-                                        {inquiryDate(inquiry.deadline_at)}
-                                    </span>
-                                )
-                            }
-                            summary={
-                                canEdit ? (
-                                    <div ref={setDemandDetailsContainer} />
-                                ) : (
-                                    <div className="flex flex-wrap items-start gap-x-8 gap-y-2 rounded-lg bg-muted/40 px-4 py-3">
-                                        <p className="flex min-w-0 gap-2 text-xs text-muted-foreground">
-                                            <span className="shrink-0">
-                                                {productFeedback &&
-                                                productFeedback.requirement_version !==
-                                                    inquiry.requirement_version
-                                                    ? "当前需求说明"
-                                                    : "需求说明"}
-                                            </span>
-                                            <span className="min-w-0 whitespace-pre-wrap wrap-anywhere">
-                                                {inquiry.draft.note || "未填写"}
-                                            </span>
-                                        </p>
-                                        {feeOwner}
-                                    </div>
-                                )
-                            }
-                        />
+                actionAlerts,
+            ) => {
+                const renderHeader = (tabs?: React.ReactNode) => (
+                    <Header
+                        {...(embedded ? {} : { tabs })}
+                        title={inquiry.customer_name}
+                        documentNumber={inquiry.inquiry_no}
+                        numberLabel="询价单号"
+                        version={`需求第 ${inquiry.requirement_version} 版 · 反馈第 ${inquiry.feedback_round} 轮`}
+                        primaryStatus={{
+                            label: INQUIRY_STATUS_LABEL[inquiry.status],
+                            tone:
+                                inquiry.status === "confirmed"
+                                    ? "success"
+                                    : inquiry.status === "closed"
+                                      ? "neutral"
+                                      : "info",
+                        }}
+                        back={
+                            embedded
+                                ? undefined
+                                : {
+                                      id: "sales-inquiry-detail-back",
+                                      href: procurement
+                                          ? "/procurement/inquiries"
+                                          : "/sales/inquiries",
+                                      label: "返回询价列表",
+                                  }
+                        }
+                        secondaryActions={
+                            <>
+                                <div
+                                    ref={setHistoryActionsContainer}
+                                    className="flex items-center"
+                                />
+                                {assignmentActions}
+                                {canEdit && (
+                                    <div ref={setDemandActionsContainer} />
+                                )}
+                                {secondaryActions}
+                            </>
+                        }
+                        primaryAction={
+                            !procurement &&
+                            inquiry.status === "closed" &&
+                            hasPermission(
+                                permissions,
+                                "sales_inquiry:create",
+                            ) &&
+                            hasPermission(permissions, "sellable_sku:list") ? (
+                                <Link
+                                    id="sales-inquiry-copy-new"
+                                    href={`/sales/inquiries/new?copyFrom=${encodeURIComponent(inquiry.id)}`}
+                                    className={buttonVariants({
+                                        size: "sm",
+                                    })}
+                                >
+                                    复制为新询价
+                                </Link>
+                            ) : undefined
+                        }
+                        meta={
+                            canEdit ? undefined : (
+                                <span>
+                                    询价截止：
+                                    {inquiryDate(inquiry.deadline_at)}
+                                </span>
+                            )
+                        }
+                        summary={
+                            canEdit ? (
+                                <div ref={setDemandDetailsContainer} />
+                            ) : (
+                                <div
+                                    className={
+                                        embedded
+                                            ? "flex flex-wrap items-start gap-x-8 gap-y-2 rounded-lg bg-muted/40 px-4 py-3"
+                                            : "flex flex-wrap items-start gap-x-8 gap-y-2"
+                                    }
+                                >
+                                    <p className="flex min-w-0 gap-2 text-xs text-muted-foreground">
+                                        <span className="shrink-0">
+                                            {productFeedback &&
+                                            productFeedback.requirement_version !==
+                                                inquiry.requirement_version
+                                                ? "当前需求说明"
+                                                : "需求说明"}
+                                        </span>
+                                        <span className="min-w-0 whitespace-pre-wrap wrap-anywhere">
+                                            {inquiry.draft.note || "未填写"}
+                                        </span>
+                                    </p>
+                                    {feeOwner}
+                                </div>
+                            )
+                        }
+                    />
+                )
+                const alerts = (
+                    <>
+                        {actionAlerts}
                         {procurement &&
                             !task &&
                             inquiry.feedbacks.length > 0 && (
@@ -685,252 +745,283 @@ function InquiryDetailContent({
                             </Alert>
                         )}
                         {canEdit && feeOwner}
-                    </div>
-                    <InquiryDetailTabs
-                        feedbackActions={
-                            <>
-                                {canProcess &&
-                                    task &&
-                                    hasPermission(
-                                        permissions,
-                                        "supplier_offering:list",
-                                    ) &&
-                                    hasPermission(
-                                        permissions,
-                                        "sellable_sku:list",
-                                    ) && (
-                                        <SupplierQuoteExportButton
-                                            request={{
-                                                inquiryId: inquiry.id,
-                                                taskId: task.id,
-                                                version: inquiry.version,
-                                                taskVersion: task.version,
-                                            }}
-                                            userId={userId}
-                                            onRefresh={onSaved}
-                                        />
-                                    )}
-                                {canProcess &&
-                                    task &&
-                                    "work_items" in inquiry &&
-                                    hasPermission(
-                                        permissions,
-                                        "procurement_inquiry:internal_quote",
-                                    ) &&
-                                    hasPermission(
-                                        permissions,
-                                        "supplier_offering:list",
-                                    ) &&
-                                    hasPermission(
-                                        permissions,
-                                        "sellable_sku:list",
-                                    ) && (
-                                        <SupplierQuoteImportButton
-                                            inquiry={inquiry}
-                                            task={task}
-                                            userId={userId}
-                                            onSaved={onSaved}
-                                        />
-                                    )}
-                            </>
-                        }
-                        onFeedbackVisibilityChange={setFeedbackVisible}
-                        inquiry={inquiry}
-                        procurement={procurement}
-                        actionsContainer={historyActionsContainer}
-                        feeCount={selectedFeedback?.data.fees.length ?? 0}
-                        salesProducts={
-                            !procurement && "sales_owner_user_id" in inquiry ? (
-                                <SalesInquiryProducts
-                                    inquiry={inquiry}
-                                    chosenRound={chosenRound}
-                                    onRoundChange={setChosenRound}
-                                    revision={
-                                        revising ? (
-                                            <InquiryDemandEditor
-                                                inquiry={inquiry}
-                                                userId={userId}
-                                                permissions={permissions}
-                                                storageScope={`${inquiry.id}:reinquiry-demand`}
-                                                onSaved={onSaved}
-                                                revision={{
-                                                    onCancel: () =>
-                                                        setRevising(false),
-                                                    onSubmitted: () => {
-                                                        setRevising(false)
-                                                        onSaved()
-                                                    },
-                                                }}
-                                            />
-                                        ) : undefined
-                                    }
-                                    demand={renderDemand(primaryActions)}
-                                    footer={renderSalesActions(primaryActions)}
-                                />
-                            ) : undefined
-                        }
-                        feedback={
-                            <div className="space-y-6">
-                                {"work_items" in inquiry && (
-                                    <InquiryReinquiryNotice inquiry={inquiry} />
-                                )}
-                                {canProcess && "work_items" in inquiry && (
+                    </>
+                )
+                return (
+                    <>
+                        <InquiryDetailTabs
+                            workspace={!embedded}
+                            renderLayout={(navigation, panels) =>
+                                embedded ? (
                                     <>
-                                        <InquiryFeedbackEditor
-                                            ref={feedbackEditor}
-                                            publishing={publishing}
-                                            footerContainer={
-                                                feedbackFooterContainer
-                                            }
-                                            onDirtyChange={setFeedbackDirty}
-                                            inquiry={inquiry}
-                                            task={task}
-                                            userId={userId}
-                                            onSaved={onSaved}
-                                            footerActions={primaryActions}
-                                            onInternalQuote={
-                                                hasPermission(
-                                                    permissions,
-                                                    "procurement_inquiry:internal_quote",
-                                                )
-                                                    ? setQuoteLineId
-                                                    : undefined
-                                            }
-                                        />
-                                        <QuickPreviewSheet
-                                            idPrefix="procurement-feedback-internal"
-                                            size="preview"
-                                            open={quoteLineId !== null}
-                                            onOpenChange={(open) => {
-                                                if (!open) setQuoteLineId(null)
-                                            }}
-                                            title={
-                                                inquiry.draft.lines.find(
-                                                    (line) =>
-                                                        line.line_id ===
-                                                        quoteLineId,
-                                                )?.product_name ?? "供应商报价"
-                                            }
-                                            description="仅采购可见。采用报价带入含运费供给单价，不代表已选定采购供应商。"
+                                        <div className="shrink-0 space-y-5">
+                                            {renderHeader()}
+                                            {alerts}
+                                        </div>
+                                        {navigation}
+                                        {panels}
+                                    </>
+                                ) : (
+                                    <>
+                                        {renderHeader(navigation)}
+                                        <DetailWorkspaceBody
+                                            alerts={alerts}
+                                            className="flex min-h-0 flex-col overflow-hidden"
                                         >
-                                            {quoteLineId && (
-                                                <InquiryInternalQuotes
-                                                    key={quoteLineId}
+                                            {panels}
+                                        </DetailWorkspaceBody>
+                                        {feedbackFooter}
+                                    </>
+                                )
+                            }
+                            feedbackActions={
+                                <>
+                                    {canProcess &&
+                                        task &&
+                                        hasPermission(
+                                            permissions,
+                                            "supplier_offering:list",
+                                        ) &&
+                                        hasPermission(
+                                            permissions,
+                                            "sellable_sku:list",
+                                        ) && (
+                                            <SupplierQuoteExportButton
+                                                request={{
+                                                    inquiryId: inquiry.id,
+                                                    taskId: task.id,
+                                                    version: inquiry.version,
+                                                    taskVersion: task.version,
+                                                }}
+                                                userId={userId}
+                                                onRefresh={onSaved}
+                                            />
+                                        )}
+                                    {canProcess &&
+                                        task &&
+                                        "work_items" in inquiry &&
+                                        hasPermission(
+                                            permissions,
+                                            "procurement_inquiry:internal_quote",
+                                        ) &&
+                                        hasPermission(
+                                            permissions,
+                                            "supplier_offering:list",
+                                        ) &&
+                                        hasPermission(
+                                            permissions,
+                                            "sellable_sku:list",
+                                        ) && (
+                                            <SupplierQuoteImportButton
+                                                inquiry={inquiry}
+                                                task={task}
+                                                userId={userId}
+                                                onSaved={onSaved}
+                                            />
+                                        )}
+                                </>
+                            }
+                            onFeedbackVisibilityChange={setFeedbackVisible}
+                            inquiry={inquiry}
+                            procurement={procurement}
+                            actionsContainer={historyActionsContainer}
+                            feeCount={selectedFeedback?.data.fees.length ?? 0}
+                            salesProducts={
+                                !procurement &&
+                                "sales_owner_user_id" in inquiry ? (
+                                    <SalesInquiryProducts
+                                        inquiry={inquiry}
+                                        chosenRound={chosenRound}
+                                        onRoundChange={setChosenRound}
+                                        revision={
+                                            revising ? (
+                                                <InquiryDemandEditor
                                                     inquiry={inquiry}
-                                                    task={task}
                                                     userId={userId}
                                                     permissions={permissions}
+                                                    storageScope={`${inquiry.id}:reinquiry-demand`}
                                                     onSaved={onSaved}
-                                                    lineId={quoteLineId}
-                                                    onAdopt={(quote) =>
-                                                        feedbackEditor.current?.adoptQuote(
-                                                            quote,
-                                                        ) ?? false
-                                                    }
+                                                    revision={{
+                                                        onCancel: () =>
+                                                            setRevising(false),
+                                                        onSubmitted: () => {
+                                                            setRevising(false)
+                                                            onSaved()
+                                                        },
+                                                    }}
                                                 />
-                                            )}
-                                        </QuickPreviewSheet>
-                                    </>
-                                )}
-
-                                {!canProcess &&
-                                    (showReadonlyDemand ? (
-                                        renderDemand(primaryActions)
-                                    ) : (
-                                        <InquiryFeedbackResults
-                                            content="products"
+                                            ) : undefined
+                                        }
+                                        demand={renderDemand(primaryActions)}
+                                        footer={renderSalesActions(
+                                            primaryActions,
+                                        )}
+                                    />
+                                ) : undefined
+                            }
+                            feedback={
+                                <div className="space-y-6">
+                                    {"work_items" in inquiry && (
+                                        <InquiryReinquiryNotice
                                             inquiry={inquiry}
-                                            selectedRound={selectedRound}
-                                            onRoundChange={setChosenRound}
                                         />
-                                    ))}
-                            </div>
-                        }
-                        publishedFeedback={
-                            (canProcess || showReadonlyDemand) &&
-                            inquiry.feedbacks.length > 0 ? (
-                                <InquiryFeedbackResults
-                                    content="products"
+                                    )}
+                                    {canProcess && "work_items" in inquiry && (
+                                        <>
+                                            <InquiryFeedbackEditor
+                                                ref={feedbackEditor}
+                                                publishing={publishing}
+                                                footerContainer={
+                                                    feedbackFooterContainer
+                                                }
+                                                onDirtyChange={setFeedbackDirty}
+                                                inquiry={inquiry}
+                                                task={task}
+                                                userId={userId}
+                                                onSaved={onSaved}
+                                                footerActions={primaryActions}
+                                                onInternalQuote={
+                                                    hasPermission(
+                                                        permissions,
+                                                        "procurement_inquiry:internal_quote",
+                                                    )
+                                                        ? setQuoteLineId
+                                                        : undefined
+                                                }
+                                            />
+                                            <QuickPreviewSheet
+                                                idPrefix="procurement-feedback-internal"
+                                                size="preview"
+                                                open={quoteLineId !== null}
+                                                onOpenChange={(open) => {
+                                                    if (!open)
+                                                        setQuoteLineId(null)
+                                                }}
+                                                title={
+                                                    inquiry.draft.lines.find(
+                                                        (line) =>
+                                                            line.line_id ===
+                                                            quoteLineId,
+                                                    )?.product_name ??
+                                                    "供应商报价"
+                                                }
+                                                description="仅采购可见。采用报价带入含运费供给单价，不代表已选定采购供应商。"
+                                            >
+                                                {quoteLineId && (
+                                                    <InquiryInternalQuotes
+                                                        key={quoteLineId}
+                                                        inquiry={inquiry}
+                                                        task={task}
+                                                        userId={userId}
+                                                        permissions={
+                                                            permissions
+                                                        }
+                                                        onSaved={onSaved}
+                                                        lineId={quoteLineId}
+                                                        onAdopt={(quote) =>
+                                                            feedbackEditor.current?.adoptQuote(
+                                                                quote,
+                                                            ) ?? false
+                                                        }
+                                                    />
+                                                )}
+                                            </QuickPreviewSheet>
+                                        </>
+                                    )}
+
+                                    {!canProcess &&
+                                        (showReadonlyDemand ? (
+                                            renderDemand(primaryActions)
+                                        ) : (
+                                            <InquiryFeedbackResults
+                                                content="products"
+                                                inquiry={inquiry}
+                                                selectedRound={selectedRound}
+                                                onRoundChange={setChosenRound}
+                                            />
+                                        ))}
+                                </div>
+                            }
+                            publishedFeedback={
+                                (canProcess || showReadonlyDemand) &&
+                                inquiry.feedbacks.length > 0 ? (
+                                    <InquiryFeedbackResults
+                                        content="products"
+                                        inquiry={inquiry}
+                                        selectedRound={selectedRound}
+                                        onRoundChange={setChosenRound}
+                                        idPrefix="procurement-inquiry-published"
+                                    />
+                                ) : undefined
+                            }
+                            fees={
+                                <InquiryFees
                                     inquiry={inquiry}
                                     selectedRound={selectedRound}
                                     onRoundChange={setChosenRound}
-                                    idPrefix="procurement-inquiry-published"
+                                    userId={userId}
+                                    permissions={permissions}
+                                    procurement={procurement}
+                                    handlingEnabled={
+                                        !procurement || Boolean(task)
+                                    }
+                                    onChanged={onSaved}
                                 />
-                            ) : undefined
-                        }
-                        fees={
-                            <InquiryFees
-                                inquiry={inquiry}
-                                selectedRound={selectedRound}
-                                onRoundChange={setChosenRound}
-                                userId={userId}
-                                permissions={permissions}
-                                procurement={procurement}
-                                handlingEnabled={!procurement || Boolean(task)}
-                                onChanged={onSaved}
-                            />
-                        }
-                    />
-                    <InquiryImportDialog
-                        key={inquiry.id}
-                        open={importOpen}
-                        onOpenChange={setImportOpen}
-                        onPreview={(file) => preview.mutateAsync(file)}
-                        busy={preview.isPending || command.isPending}
-                        disabled={command.unresolved}
-                        onDownloadTemplate={async () => {
-                            const products = await safeTemplate.mutateAsync()
-                            await downloadInquiryCustomerWorkbook(
-                                products,
-                                inquiry.inquiry_no,
-                            )
-                        }}
-                        templateBusy={safeTemplate.isPending}
-                        onConfirm={async (result, confirm_merge_duplicates) => {
-                            await command.run(
-                                `${inquiryPath(false, inquiry.id)}/imports/confirm`,
-                                {
-                                    expected_version: result.expected_version,
-                                    preview_id: result.preview_id,
-                                    input_fingerprint: result.input_fingerprint,
-                                    confirm_merge_duplicates,
-                                },
-                            )
-                            localStorage.removeItem(
-                                inquiryStorageKey(
-                                    userId,
-                                    `${inquiry.id}:demand`,
-                                ),
-                            )
-                            setDirty(false)
-                            setEditorEpoch((value) => value + 1)
-                            onSaved()
-                        }}
-                    />
-                </div>
-            )}
+                            }
+                        />
+                        <InquiryImportDialog
+                            key={inquiry.id}
+                            open={importOpen}
+                            onOpenChange={setImportOpen}
+                            onPreview={(file) => preview.mutateAsync(file)}
+                            busy={preview.isPending || command.isPending}
+                            disabled={command.unresolved}
+                            onDownloadTemplate={async () => {
+                                const products =
+                                    await safeTemplate.mutateAsync()
+                                await downloadInquiryCustomerWorkbook(
+                                    products,
+                                    inquiry.inquiry_no,
+                                )
+                            }}
+                            templateBusy={safeTemplate.isPending}
+                            onConfirm={async (
+                                result,
+                                confirm_merge_duplicates,
+                            ) => {
+                                await command.run(
+                                    `${inquiryPath(false, inquiry.id)}/imports/confirm`,
+                                    {
+                                        expected_version:
+                                            result.expected_version,
+                                        preview_id: result.preview_id,
+                                        input_fingerprint:
+                                            result.input_fingerprint,
+                                        confirm_merge_duplicates,
+                                    },
+                                )
+                                localStorage.removeItem(
+                                    inquiryStorageKey(
+                                        userId,
+                                        `${inquiry.id}:demand`,
+                                    ),
+                                )
+                                setDirty(false)
+                                setEditorEpoch((value) => value + 1)
+                                onSaved()
+                            }}
+                        />
+                    </>
+                )
+            }}
         />
-    )
-    const content = (
-        <>
-            {body}
-            {canProcess && (
-                <div
-                    ref={setFeedbackFooterContainer}
-                    data-slot="inquiry-feedback-footer"
-                    hidden={!feedbackVisible}
-                    className="shrink-0"
-                />
-            )}
-        </>
     )
     return embedded ? (
         <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden p-6">
-            {content}
+            {body}
+            {feedbackFooter}
         </div>
     ) : (
-        <PageScaffold className="mx-auto min-h-0 max-w-[1600px] gap-0 overflow-hidden">
-            {content}
-        </PageScaffold>
+        <DetailWorkspacePage className="min-h-0">{body}</DetailWorkspacePage>
     )
 }

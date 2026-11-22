@@ -1,8 +1,9 @@
 "use client"
 
+import { WorkspaceProcessingPane } from "./workspace-processing-layout"
+
 import * as React from "react"
 
-import { WorkspaceTaskPane } from "@/components/business"
 import { SettlementCenter } from "@/features/supplier-settlements/components/settlement-center"
 import type { SettlementsUrlState } from "@/features/supplier-settlements/lib/url-state"
 
@@ -33,7 +34,7 @@ export function WorkspaceSettlementTask({
     )
 
     return (
-        <WorkspaceTaskPane
+        <WorkspaceProcessingPane
             header={<WorkspaceTaskIdentityHeader item={item} />}
             aria-label="当前供应商结算复核任务"
         >
@@ -46,6 +47,6 @@ export function WorkspaceSettlementTask({
                 embedded
                 onTaskCompleted={onTaskCompleted}
             />
-        </WorkspaceTaskPane>
+        </WorkspaceProcessingPane>
     )
 }

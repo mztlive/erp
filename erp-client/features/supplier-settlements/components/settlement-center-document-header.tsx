@@ -1,10 +1,12 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { RefreshCwIcon, SendIcon } from "lucide-react"
 
 import {
-    DetailPageHeader,
+    DetailWorkspaceChrome,
+    detailWorkspaceStyles,
     GuardedBusinessAction,
     WorkspaceTaskFooter,
 } from "@/components/business"
@@ -23,6 +25,7 @@ function SettlementCenterDocumentHeader({
     onRefresh,
     onSubmitReview,
     embedded = false,
+    tabs,
 }: {
     statement: SettlementDetailView["statement"]
     immutableFactsAsOf: string
@@ -33,61 +36,53 @@ function SettlementCenterDocumentHeader({
     onRefresh: () => void
     onSubmitReview: () => void
     embedded?: boolean
+    tabs: ReactNode
 }) {
     const st = statement
     return (
-        <>
-            <DetailPageHeader
-                back={
-                    embedded
-                        ? undefined
-                        : {
-                              id: "supplier-settlements-center-back",
-                              label: "对账单列表",
-                              onClick: onBack,
-                          }
-                }
-                title={`${st.supplierName} · ${st.periodLabel}`}
-                documentNumber={st.statementNo}
-                primaryStatus={{ label: st.statusLabel, tone: st.statusTone }}
-                version={st.lockVersion}
-                meta={
-                    <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                        <span>
-                            经办{" "}
-                            <span className="font-medium text-foreground">
-                                {st.preparedBy?.displayName ?? "—"}
-                            </span>
-                        </span>
-                        <span className="text-border" aria-hidden="true">
-                            ·
-                        </span>
-                        <span>
-                            复核{" "}
-                            <span className="font-medium text-foreground">
-                                {st.reviewedBy?.displayName ?? "待复核人"}
-                            </span>
-                        </span>
-                        <span className="text-border" aria-hidden="true">
-                            ·
-                        </span>
-                        <span className="text-muted-foreground">
-                            记录 {formatDateTime(immutableFactsAsOf, "default")}
+        <DetailWorkspaceChrome
+            tabs={tabs}
+            back={
+                embedded
+                    ? undefined
+                    : {
+                          id: "supplier-settlements-center-back",
+                          label: "对账单列表",
+                          onClick: onBack,
+                      }
+            }
+            title={`${st.supplierName} · ${st.periodLabel}`}
+            documentNumber={st.statementNo}
+            primaryStatus={{ label: st.statusLabel, tone: st.statusTone }}
+            version={st.lockVersion}
+            meta={
+                <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                    <span>
+                        经办{" "}
+                        <span className="font-medium text-foreground">
+                            {st.preparedBy?.displayName ?? "—"}
                         </span>
                     </span>
-                }
-                primaryAction={
-                    <WorkspaceTaskFooter
-                        fallback={
-                            <SettlementCenterHeaderActions
-                                allowed={allowed}
-                                refreshPending={refreshPending}
-                                submitBlocker={submitBlocker}
-                                onRefresh={onRefresh}
-                                onSubmitReview={onSubmitReview}
-                            />
-                        }
-                    >
+                    <span className="text-border" aria-hidden="true">
+                        ·
+                    </span>
+                    <span>
+                        复核{" "}
+                        <span className="font-medium text-foreground">
+                            {st.reviewedBy?.displayName ?? "待复核人"}
+                        </span>
+                    </span>
+                    <span className="text-border" aria-hidden="true">
+                        ·
+                    </span>
+                    <span className="text-muted-foreground">
+                        记录 {formatDateTime(immutableFactsAsOf, "default")}
+                    </span>
+                </span>
+            }
+            primaryAction={
+                <WorkspaceTaskFooter
+                    fallback={
                         <SettlementCenterHeaderActions
                             allowed={allowed}
                             refreshPending={refreshPending}
@@ -95,10 +90,18 @@ function SettlementCenterDocumentHeader({
                             onRefresh={onRefresh}
                             onSubmitReview={onSubmitReview}
                         />
-                    </WorkspaceTaskFooter>
-                }
-            />
-        </>
+                    }
+                >
+                    <SettlementCenterHeaderActions
+                        allowed={allowed}
+                        refreshPending={refreshPending}
+                        submitBlocker={submitBlocker}
+                        onRefresh={onRefresh}
+                        onSubmitReview={onSubmitReview}
+                    />
+                </WorkspaceTaskFooter>
+            }
+        />
     )
 }
 
@@ -123,7 +126,8 @@ function SettlementCenterHeaderActions({
                         id="supplier-settlements-center-refresh"
                         loading={refreshPending}
                         type="button"
-                        variant="outline"
+                        variant="ghost"
+                        className={detailWorkspaceStyles.quietButton}
                         size="sm"
                         disabled={refreshPending}
                         onClick={() => void onRefresh()}

@@ -10,7 +10,7 @@ import {
 import {
     BusinessFailureState,
     MoneyValue,
-    workspaceTaskSurfacePadClassName,
+    detailWorkspaceStyles,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -22,7 +22,6 @@ import type { ApprovalMaterials } from "@/features/approval-workflow/api/materia
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { displayBusinessText } from "@/lib/display-name"
 import { compareDecimal } from "@/lib/fixed-decimal"
-import { cn } from "@/lib/utils"
 import { useInvoiceApprovalReview } from "../hooks/use-invoice-review"
 import type {
     InvoiceApprovalReview,
@@ -31,10 +30,7 @@ import type {
 import type { WorkspaceWorkItem } from "../types"
 import type { WorkspacePaperTarget } from "./workspace-document-paper-dialog"
 
-const sectionClass = cn(
-    workspaceTaskSurfacePadClassName,
-    "space-y-3 border-b border-grid py-4",
-)
+const sectionClass = "space-y-3 border-b border-border/60 py-6"
 
 /** 当前核对依据和原提交材料分区展示，只消费审批实例授权的接口。 */
 export function WorkspaceInvoiceApproval({
@@ -70,9 +66,9 @@ export function WorkspaceInvoiceApproval({
     return (
         <>
             <section className={sectionClass} aria-label="本次提交的开票资料">
-                <h3 className="text-body-compact font-semibold">
+                <h2 className={detailWorkspaceStyles.sectionTitle}>
                     本次提交的开票资料
-                </h3>
+                </h2>
                 {materials.isPending ? (
                     <Loading>正在读取开票资料…</Loading>
                 ) : materials.isError ? (
@@ -90,9 +86,9 @@ export function WorkspaceInvoiceApproval({
             </section>
             <section className={sectionClass} aria-label="当前票款核对">
                 <header className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-body-compact font-semibold">
+                    <h2 className={detailWorkspaceStyles.sectionTitle}>
                         当前票款核对
-                    </h3>
+                    </h2>
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         {review.data && (
                             <time

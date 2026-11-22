@@ -14,7 +14,7 @@ import {
 import { paymentTermLabel } from "@/lib/business-options"
 
 /**
- * 供应商编辑器右上角保存流程：字段校验 → 变更原因弹窗 → 提交。
+ * 供应商资料保存流程：字段校验 → 变更原因弹窗 → 提交。
  * 从 `SupplierEditorForm` 的 Subscribe 渲染回调中抽出，改为直接订阅表单值。
  */
 export function useSupplierSaveFlow(editor: SupplierEditor) {
@@ -43,7 +43,6 @@ export function useSupplierSaveFlow(editor: SupplierEditor) {
         [form],
     )
 
-    /** 右上角保存：先校验字段，再弹窗填写变更原因。 */
     const requestSave = React.useCallback(
         (event?: React.FormEvent) => {
             event?.preventDefault()

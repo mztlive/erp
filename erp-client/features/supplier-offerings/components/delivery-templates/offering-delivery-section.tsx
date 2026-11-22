@@ -1,17 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { TruckIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
-    Card,
-    CardAction,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
+} from "@/components/business/detail-workspace"
 
 import { useSupplierDeliveryTemplatesQuery } from "../../hooks/queries"
 import type { SupplierOfferingView } from "../../types"
@@ -48,21 +43,13 @@ export function OfferingDeliverySection({
             : (list.find((item) => item.is_default) ?? null))
     const empty = templates.isSuccess && list.length === 0
     return (
-        <Card role="region" aria-labelledby="offering-delivery-title">
-            <CardHeader>
-                <CardTitle
-                    id="offering-delivery-title"
-                    className="flex items-center gap-2"
-                >
-                    <TruckIcon
-                        className="size-4 text-muted-foreground"
-                        aria-hidden
-                    />
-                    配送范围
-                </CardTitle>
-                <CardDescription>{sourceText(offering)}</CardDescription>
-                {canEdit ? (
-                    <CardAction className="flex flex-wrap justify-end gap-2">
+        <DetailWorkspaceSection
+            headingId="offering-delivery-title"
+            title="配送范围"
+            subtitle={sourceText(offering)}
+            actions={
+                canEdit ? (
+                    <>
                         <SupplierDeliveryTemplatesLink
                             id="supplier-offering-detail-delivery-manage"
                             supplierId={offering.supplier_id}
@@ -72,35 +59,35 @@ export function OfferingDeliverySection({
                                 id="supplier-offering-detail-delivery-template"
                                 type="button"
                                 size="sm"
-                                variant="outline"
+                                variant="ghost"
+                                className={detailWorkspaceStyles.subtleButton}
                                 onClick={() => setDialog("assign")}
                             >
                                 更换配送模板
                             </Button>
                         )}
-                    </CardAction>
-                ) : null}
-            </CardHeader>
-            <CardContent className="space-y-4">
-                {templates.isError ? (
+                    </>
+                ) : undefined
+            }
+        >
+            {templates.isError ? (
+                <p className="text-xs text-muted-foreground">
+                    配送规则读取失败，请稍后刷新。
+                </p>
+            ) : templates.isPending ? (
+                <p className="text-xs text-muted-foreground">
+                    正在读取配送规则…
+                </p>
+            ) : (
+                <DeliveryRulesPreview template={template} />
+            )}
+            {empty && canEdit ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed px-4 py-3">
                     <p className="text-xs text-muted-foreground">
-                        配送规则读取失败，请稍后刷新。
+                        该供应商还没有配送模板。新建后可标注不配送地区、集采运费另计地区。
                     </p>
-                ) : templates.isPending ? (
-                    <p className="text-xs text-muted-foreground">
-                        正在读取配送规则…
-                    </p>
-                ) : (
-                    <DeliveryRulesPreview template={template} />
-                )}
-                {empty && canEdit ? (
-                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed px-4 py-3">
-                        <p className="text-xs text-muted-foreground">
-                            该供应商还没有配送模板。新建后可标注不配送地区、集采运费另计地区。
-                        </p>
-                    </div>
-                ) : null}
-            </CardContent>
+                </div>
+            ) : null}
             {dialog === "assign" ? (
                 <AssignDeliveryTemplateDialog
                     offerings={[offering]}
@@ -109,6 +96,6 @@ export function OfferingDeliverySection({
                     }}
                 />
             ) : null}
-        </Card>
+        </DetailWorkspaceSection>
     )
 }

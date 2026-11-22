@@ -1,5 +1,6 @@
 "use client"
 
+import { detailWorkspaceStyles } from "@/components/business/detail-workspace"
 import * as React from "react"
 import {
     ChevronLeftIcon,
@@ -108,8 +109,8 @@ export function BatchPriceTable({
                         </span>
                     ) : null}
                 </TableToolbar>
-                <div className="overflow-hidden rounded-lg border">
-                    <Table data-density="comfortable">
+                <div className={detailWorkspaceStyles.dataTableWrapper}>
+                    <Table data-density="compact">
                         <TableHeader>
                             <TableRow>
                                 <TableHead className="min-w-44">

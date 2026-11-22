@@ -5,17 +5,10 @@ import { z } from "zod"
 import {
     BusinessFailureState,
     FormalActionConfirmDialog,
-    surfacePanelClassName,
+    DetailWorkspaceSection,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import {
     Dialog,
     DialogClose,
@@ -159,14 +152,11 @@ export function ImportExecutionActions({
     if (!visible) return null
 
     return (
-        <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="border-b border-grid">
-                <CardTitle>导入执行</CardTitle>
-                <CardDescription>
-                    期初数据正式写入功能暂未开放。当前预检与部门确认记录已保存；已开始的批次仍可取消未导入的数据。
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 pt-4">
+        <DetailWorkspaceSection
+            title="导入执行"
+            subtitle="期初数据正式写入功能暂未开放。当前预检与部门确认记录已保存；已开始的批次仍可取消未导入的数据。"
+        >
+            <div className="space-y-3">
                 {error ? (
                     <BusinessFailureState
                         title="导入操作未完成"
@@ -209,7 +199,7 @@ export function ImportExecutionActions({
                         </Button>
                     ) : null}
                 </div>
-            </CardContent>
+            </div>
 
             {confirming === "START_APPLY" ? (
                 <FormalActionConfirmDialog
@@ -266,6 +256,6 @@ export function ImportExecutionActions({
                     }}
                 />
             ) : null}
-        </Card>
+        </DetailWorkspaceSection>
     )
 }

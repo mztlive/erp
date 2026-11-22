@@ -9,13 +9,20 @@ import { mapPanelStatus } from "../lib/helpers"
 export function IntegrationErrorResolutionPanel({
     item,
     errorClass,
+    flat,
 }: {
     item: IntegrationResolutionItemView
     errorClass: InterfaceErrorClass
+    flat?: boolean
 }) {
     return (
         <InterfaceErrorResolutionPanel
             errorClass={errorClass}
+            className={
+                flat
+                    ? "rounded-none border-x-0 border-border/60 py-4 shadow-none [--card-spacing:0px]"
+                    : undefined
+            }
             status={mapPanelStatus(item)}
             businessImpact={
                 <span>

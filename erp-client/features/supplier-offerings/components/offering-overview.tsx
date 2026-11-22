@@ -5,12 +5,13 @@ import { ArrowUpRightIcon } from "lucide-react"
 
 import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
 import {
-    DetailSummary,
-    DetailSummaryItem,
-} from "@/components/business/detail-presentation"
-import { Badge } from "@/components/ui/badge"
+    DetailWorkspaceMetrics,
+    DetailWorkspaceMetricItem,
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
+} from "@/components/business/detail-workspace"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
     Table,
     TableBody,
@@ -41,13 +42,13 @@ export function OfferingSummary({
 }) {
     const available = offering.availability_status === "AVAILABLE"
     return (
-        <DetailSummary
-            label="供给摘要"
-            className={canViewCosts ? "lg:grid-cols-4" : undefined}
+        <DetailWorkspaceMetrics
+            ariaLabel="供给摘要"
+            columns={canViewCosts ? 4 : 2}
         >
             {canViewCosts && (
                 <>
-                    <DetailSummaryItem
+                    <DetailWorkspaceMetricItem
                         label="一件代发价（含税）"
                         value={
                             <MoneyValue
@@ -63,7 +64,7 @@ export function OfferingSummary({
                             </>
                         }
                     />
-                    <DetailSummaryItem
+                    <DetailWorkspaceMetricItem
                         label="集采价（含税）"
                         value={
                             <MoneyValue
@@ -91,7 +92,7 @@ export function OfferingSummary({
                             </>
                         }
                     />
-                    <DetailSummaryItem
+                    <DetailWorkspaceMetricItem
                         label="进项税率"
                         value={
                             offering.input_tax_rate != null ? (
@@ -109,7 +110,7 @@ export function OfferingSummary({
                     />
                 </>
             )}
-            <DetailSummaryItem
+            <DetailWorkspaceMetricItem
                 label="当前可供"
                 value={
                     <span className="inline-flex items-center gap-2">
@@ -123,23 +124,26 @@ export function OfferingSummary({
                                 数量未提供
                             </span>
                         )}
-                        <Badge variant={available ? "success" : "outline"}>
-                            {offering.availability_status
-                                ? AVAILABILITY_STATUS_LABELS[
-                                      offering.availability_status
-                                  ]
-                                : "未更新"}
-                        </Badge>
+                        <StatusBadge
+                            tone={available ? "success" : "neutral"}
+                            label={
+                                offering.availability_status
+                                    ? AVAILABILITY_STATUS_LABELS[
+                                          offering.availability_status
+                                      ]
+                                    : "未更新"
+                            }
+                        />
                     </span>
                 }
                 detail={`更新于 ${offeringTime(offering.availability_source_updated_at)}`}
             />
-        </DetailSummary>
+        </DetailWorkspaceMetrics>
     )
 }
 
 /** 当前条款：价格对照表、起订量、有效期与商品能力。 */
-export function OfferingTermsCard({
+export function OfferingTermsSection({
     offering,
     canViewCosts,
 }: {
@@ -161,79 +165,71 @@ export function OfferingTermsCard({
         },
     ]
     return (
-        <Card role="region" aria-labelledby="offering-terms-title">
-            <CardHeader>
-                <CardTitle id="offering-terms-title">
-                    商业条款
-                    <span className="ml-2 text-body-compact font-normal text-muted-foreground">
-                        当前第 {offering.current_revision_no ?? "—"} 版
-                    </span>
-                </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-5">
-                {canViewCosts && (
-                    <div className="overflow-hidden rounded-lg border">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>价格方式</TableHead>
-                                    <TableHead className="text-right">
-                                        含税价
-                                    </TableHead>
-                                    <TableHead className="text-right">
-                                        不含税价
-                                    </TableHead>
+        <DetailWorkspaceSection
+            headingId="offering-terms-title"
+            title="商业条款"
+            subtitle={`当前第 ${offering.current_revision_no ?? "—"} 版`}
+        >
+            {canViewCosts && (
+                <div className={detailWorkspaceStyles.dataTableWrapper}>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>价格方式</TableHead>
+                                <TableHead className="text-right">
+                                    含税价
+                                </TableHead>
+                                <TableHead className="text-right">
+                                    不含税价
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {rows.map((row) => (
+                                <TableRow key={row.key}>
+                                    <TableCell className="font-medium">
+                                        {row.label}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <MoneyValue value={row.gross} />
+                                    </TableCell>
+                                    <TableCell className="text-right text-muted-foreground">
+                                        <MoneyValue value={row.net} />
+                                    </TableCell>
                                 </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {rows.map((row) => (
-                                    <TableRow key={row.key}>
-                                        <TableCell className="font-medium">
-                                            {row.label}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <MoneyValue value={row.gross} />
-                                        </TableCell>
-                                        <TableCell className="text-right text-muted-foreground">
-                                            <MoneyValue value={row.net} />
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </div>
-                )}
-                <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
-                    <OfferingField label="集采起订量">
-                        {offering.bulk_minimum_order_quantity != null ? (
-                            <QuantityValue
-                                value={offering.bulk_minimum_order_quantity}
-                                unit=""
-                            />
-                        ) : (
-                            "未提供"
-                        )}
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+            )}
+            <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+                <OfferingField label="集采起订量">
+                    {offering.bulk_minimum_order_quantity != null ? (
+                        <QuantityValue
+                            value={offering.bulk_minimum_order_quantity}
+                            unit=""
+                        />
+                    ) : (
+                        "未提供"
+                    )}
+                </OfferingField>
+                <OfferingField label="条款有效期">
+                    <span className="num">{offeringValidity(offering)}</span>
+                </OfferingField>
+                {offering.product_capabilities.length > 0 ? (
+                    <OfferingField label="商品能力">
+                        {offering.product_capabilities
+                            .map(capabilityLabel)
+                            .join("、")}
                     </OfferingField>
-                    <OfferingField label="条款有效期">
-                        <span className="num">
-                            {offeringValidity(offering)}
-                        </span>
-                    </OfferingField>
-                    {offering.product_capabilities.length > 0 ? (
-                        <OfferingField label="商品能力">
-                            {offering.product_capabilities
-                                .map(capabilityLabel)
-                                .join("、")}
-                        </OfferingField>
-                    ) : null}
-                </dl>
-            </CardContent>
-        </Card>
+                ) : null}
+            </dl>
+        </DetailWorkspaceSection>
     )
 }
 
 /** 供给身份：公司商品、供应商与订货编码，以及跳转到两端资料。 */
-export function OfferingIdentityCard({
+export function OfferingIdentitySection({
     offering,
 }: {
     offering: SupplierOfferingView
@@ -248,95 +244,86 @@ export function OfferingIdentityCard({
         ? `/master-data/suppliers/${encodeURIComponent(offering.supplier_id)}`
         : null
     return (
-        <Card role="region" aria-labelledby="offering-identity-title">
-            <CardHeader>
-                <CardTitle id="offering-identity-title">供给资料</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-5">
-                <section className="space-y-3">
-                    <h3 className="text-xs font-medium text-muted-foreground">
-                        公司商品
-                    </h3>
-                    <dl className="space-y-3">
-                        <OfferingField label="商品编号">
-                            <span className="num">
-                                {offering.product_no || "—"}
-                            </span>
-                        </OfferingField>
-                        <OfferingField label="SKU 编号">
-                            <span className="num">
-                                {offering.sku_no || "—"}
-                            </span>
-                        </OfferingField>
-                        <OfferingField label="规格">
-                            {offering.specification || "—"}
-                        </OfferingField>
-                    </dl>
-                    {productHref ? (
-                        <Button
-                            id="supplier-offering-detail-open-product"
-                            variant="outline"
-                            size="sm"
-                            className="w-full"
-                            render={<Link href={productHref} />}
-                        >
-                            打开商品资料
-                            <ArrowUpRightIcon
-                                data-icon="inline-end"
-                                aria-hidden
-                            />
-                        </Button>
-                    ) : null}
-                </section>
-                <section className="space-y-3 border-t pt-5">
-                    <h3 className="text-xs font-medium text-muted-foreground">
-                        供应商
-                    </h3>
-                    <dl className="space-y-3">
-                        <OfferingField label="名称">
-                            {offering.supplier_name ||
-                                offering.supplier_no ||
-                                "未提供"}
-                        </OfferingField>
-                        <OfferingField label="订货编码">
-                            <span className="num">
-                                {offering.supplier_sku_code}
-                            </span>
-                        </OfferingField>
-                        <OfferingField label="商品编码">
-                            {offering.supplier_product_code || "未标注"}
-                        </OfferingField>
-                    </dl>
-                    {supplierHref ? (
-                        <Button
-                            id="supplier-offering-detail-open-supplier"
-                            variant="outline"
-                            size="sm"
-                            className="w-full"
-                            render={<Link href={supplierHref} />}
-                        >
-                            打开供应商资料
-                            <ArrowUpRightIcon
-                                data-icon="inline-end"
-                                aria-hidden
-                            />
-                        </Button>
-                    ) : null}
-                </section>
-                <section className="space-y-3 border-t pt-5">
-                    <h3 className="text-xs font-medium text-muted-foreground">
-                        维护
-                    </h3>
-                    <dl className="space-y-3">
-                        <OfferingField label="维护人">
-                            {offering.maintainer_user_name || "未提供"}
-                        </OfferingField>
-                        <OfferingField label="登记来源">
-                            {SOURCE_TYPE_LABELS[offering.source_type]}
-                        </OfferingField>
-                    </dl>
-                </section>
-            </CardContent>
-        </Card>
+        <DetailWorkspaceSection
+            headingId="offering-identity-title"
+            title="供给资料"
+            className="py-0 first:pt-0 last:pb-0"
+        >
+            <section className="space-y-3">
+                <h3 className="text-xs font-medium text-muted-foreground">
+                    公司商品
+                </h3>
+                <dl className="space-y-3">
+                    <OfferingField label="商品编号">
+                        <span className="num">
+                            {offering.product_no || "—"}
+                        </span>
+                    </OfferingField>
+                    <OfferingField label="SKU 编号">
+                        <span className="num">{offering.sku_no || "—"}</span>
+                    </OfferingField>
+                    <OfferingField label="规格">
+                        {offering.specification || "—"}
+                    </OfferingField>
+                </dl>
+                {productHref ? (
+                    <Button
+                        id="supplier-offering-detail-open-product"
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        render={<Link href={productHref} />}
+                    >
+                        打开商品资料
+                        <ArrowUpRightIcon data-icon="inline-end" aria-hidden />
+                    </Button>
+                ) : null}
+            </section>
+            <section className="space-y-3 border-t pt-5">
+                <h3 className="text-xs font-medium text-muted-foreground">
+                    供应商
+                </h3>
+                <dl className="space-y-3">
+                    <OfferingField label="名称">
+                        {offering.supplier_name ||
+                            offering.supplier_no ||
+                            "未提供"}
+                    </OfferingField>
+                    <OfferingField label="订货编码">
+                        <span className="num">
+                            {offering.supplier_sku_code}
+                        </span>
+                    </OfferingField>
+                    <OfferingField label="商品编码">
+                        {offering.supplier_product_code || "未标注"}
+                    </OfferingField>
+                </dl>
+                {supplierHref ? (
+                    <Button
+                        id="supplier-offering-detail-open-supplier"
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        render={<Link href={supplierHref} />}
+                    >
+                        打开供应商资料
+                        <ArrowUpRightIcon data-icon="inline-end" aria-hidden />
+                    </Button>
+                ) : null}
+            </section>
+            <section className="space-y-3 border-t pt-5">
+                <h3 className="text-xs font-medium text-muted-foreground">
+                    维护
+                </h3>
+                <dl className="space-y-3">
+                    <OfferingField label="维护人">
+                        {offering.maintainer_user_name || "未提供"}
+                    </OfferingField>
+                    <OfferingField label="登记来源">
+                        {SOURCE_TYPE_LABELS[offering.source_type]}
+                    </OfferingField>
+                </dl>
+            </section>
+        </DetailWorkspaceSection>
     )
 }

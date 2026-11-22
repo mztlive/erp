@@ -3,6 +3,7 @@ import { useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
+import { DetailWorkspaceSection } from "@/components/business/detail-workspace"
 import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
@@ -367,10 +368,7 @@ export function PortalReviewForm({
         }))
     if (!canReview) {
         return (
-            <section className="space-y-4 rounded-xl border p-5">
-                <h2 className="text-section-title font-semibold tracking-tight">
-                    采购确认
-                </h2>
+            <DetailWorkspaceSection title="采购确认" width="form">
                 <p className="text-xs text-muted-foreground">
                     当前处理人：{task.owner_user?.display_name ?? "待核对"}。
                 </p>
@@ -394,22 +392,14 @@ export function PortalReviewForm({
                     />
                 )}
                 <PortalError error={error} />
-            </section>
+            </DetailWorkspaceSection>
         )
     }
     return (
-        <section className="space-y-4 rounded-xl border p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                    <h2 className="text-section-title font-semibold tracking-tight">
-                        采购确认
-                    </h2>
-                    <p className="text-xs text-muted-foreground">
-                        当前处理人：{task.owner_user?.display_name ?? "待核对"}
-                        。供应商提报资料保持不变，单位、规格含义或报价变化请退回供应商确认。
-                    </p>
-                </div>
-                {canReassign && (
+        <DetailWorkspaceSection
+            title="采购确认"
+            actions={
+                canReassign ? (
                     <Button
                         id="supplier-portal-review-reassign-toggle"
                         variant="outline"
@@ -418,8 +408,13 @@ export function PortalReviewForm({
                     >
                         转交具体处理人
                     </Button>
-                )}
-            </div>
+                ) : undefined
+            }
+        >
+            <p className="text-xs text-muted-foreground">
+                当前处理人：{task.owner_user?.display_name ?? "待核对"}
+                。供应商提报资料保持不变，单位、规格含义或报价变化请退回供应商确认。
+            </p>
             {!canProcess && (
                 <p className="text-xs text-muted-foreground">
                     当前任务仅可查看，请由任务处理人确认。
@@ -539,6 +534,7 @@ export function PortalReviewForm({
                 />
             )}
             <form
+                data-slot="detail-form-grid"
                 className="space-y-5"
                 onSubmit={(event) => {
                     event.preventDefault()
@@ -1303,6 +1299,6 @@ export function PortalReviewForm({
                     </div>
                 </WorkspaceTaskFooter>
             </form>
-        </section>
+        </DetailWorkspaceSection>
     )
 }

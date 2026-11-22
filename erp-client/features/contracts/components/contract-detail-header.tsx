@@ -1,11 +1,16 @@
 "use client"
 
+import type { ReactNode } from "react"
 import Link from "next/link"
 import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { PrinterIcon } from "lucide-react"
 
-import { DetailPageHeader } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import {
+    BusinessStatusBadge,
+    DetailWorkspaceChrome,
+    DetailWorkspaceMeta,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { contractOwnerLabel } from "@/features/contracts/types"
 import type { ContractCenterView } from "@/features/contracts/types"
@@ -13,6 +18,7 @@ import { isExpiringWithin30Days } from "@/features/contracts/lib/contract-detail
 
 type ContractDetailHeaderProps = {
     contract: ContractCenterView
+    tabs: ReactNode
     onPaperOpen: () => void
     onImportRevision?: () => void
     onManageSalesAccess?: () => void
@@ -23,6 +29,7 @@ type ContractDetailHeaderProps = {
  */
 export function ContractDetailHeader({
     contract,
+    tabs,
     onPaperOpen,
     onImportRevision,
     onManageSalesAccess,
@@ -41,7 +48,7 @@ export function ContractDetailHeader({
     const rev = contract.currentRevision
 
     return (
-        <DetailPageHeader
+        <DetailWorkspaceChrome
             back={{
                 id: "card-contracts-detail-header-back",
                 label: "合同列表",
@@ -55,24 +62,24 @@ export function ContractDetailHeader({
                 label: contract.statusLabel,
                 tone: contract.statusTone,
             }}
+            tabs={tabs}
             meta={
-                <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span>
-                        客户{" "}
-                        <span className="font-medium text-foreground">
-                            {contract.customer.displayName}
-                        </span>
-                    </span>
-                    <span aria-hidden="true" className="text-border">
-                        ·
-                    </span>
-                    <span>
-                        负责人{" "}
-                        <span className="font-medium text-foreground">
-                            {contractOwnerLabel(contract.ownerLabel)}
-                        </span>
-                    </span>
-                </span>
+                <DetailWorkspaceMeta
+                    items={[
+                        <span key="customer">
+                            客户{" "}
+                            <span className="font-medium text-foreground">
+                                {contract.customer.displayName}
+                            </span>
+                        </span>,
+                        <span key="owner">
+                            负责人{" "}
+                            <span className="font-medium text-foreground">
+                                {contractOwnerLabel(contract.ownerLabel)}
+                            </span>
+                        </span>,
+                    ]}
+                />
             }
             primaryAction={
                 <PermissionGuard permission="sales_order:create">
@@ -113,7 +120,8 @@ export function ContractDetailHeader({
                             id="contracts-detail-manage-sales-access"
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant="ghost"
+                            className={detailWorkspaceStyles.quietButton}
                             onClick={onManageSalesAccess}
                         >
                             共享销售
@@ -124,7 +132,8 @@ export function ContractDetailHeader({
                             id="contract-detail-import-revision"
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant="ghost"
+                            className={detailWorkspaceStyles.quietButton}
                             onClick={onImportRevision}
                         >
                             导入新版本
@@ -134,7 +143,8 @@ export function ContractDetailHeader({
                         id="card-contracts-detail-header-paper-preview"
                         type="button"
                         size="sm"
-                        variant="outline"
+                        variant="ghost"
+                        className={detailWorkspaceStyles.quietButton}
                         disabled={!canPrint}
                         onClick={onPaperOpen}
                     >
@@ -155,10 +165,10 @@ export function ContractDetailHeader({
                     </span>
                 </span>
                 {expiring ? (
-                    <Badge variant="warning">30 日内将到期</Badge>
+                    <BusinessStatusBadge label="30 日内将到期" tone="warning" />
                 ) : null}
                 {allAttachmentsSafe ? (
-                    <Badge variant="info">PDF 电子档已归档</Badge>
+                    <BusinessStatusBadge label="PDF 电子档已归档" tone="info" />
                 ) : null}
             </div>
             <PermissionGuard permission="sales_order:create">
@@ -168,6 +178,6 @@ export function ContractDetailHeader({
                     </p>
                 ) : null}
             </PermissionGuard>
-        </DetailPageHeader>
+        </DetailWorkspaceChrome>
     )
 }

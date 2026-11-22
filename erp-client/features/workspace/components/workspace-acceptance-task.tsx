@@ -1,11 +1,13 @@
 "use client"
 
+import { WorkspaceProcessingPane } from "./workspace-processing-layout"
+
 import * as React from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { usePathname, useSearchParams } from "next/navigation"
 import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
 
-import { IconActionButton, WorkspaceTaskPane } from "@/components/business"
+import { IconActionButton } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { toast } from "@/components/ui/toast"
 import { AcceptanceWorkspace } from "@/features/sales-orders/components/acceptance-workspace"
@@ -49,7 +51,7 @@ export function WorkspaceAcceptanceTask({
     const readSalesLabel = workspaceReadActionLabel("sales_order")
 
     return (
-        <WorkspaceTaskPane
+        <WorkspaceProcessingPane
             header={
                 <WorkspaceTaskIdentityHeader item={item}>
                     {salesOrderId ? (
@@ -131,6 +133,6 @@ export function WorkspaceAcceptanceTask({
                     if (!open) setPaper(null)
                 }}
             />
-        </WorkspaceTaskPane>
+        </WorkspaceProcessingPane>
     )
 }

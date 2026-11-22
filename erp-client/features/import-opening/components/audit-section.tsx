@@ -3,29 +3,19 @@
 import Link from "next/link"
 import { ExternalLinkIcon } from "lucide-react"
 
-import { surfacePanelClassName } from "@/components/business"
+import { DetailWorkspaceSection } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import { Fact } from "@/features/import-opening/components/batch-facts"
 import type { ImportBatchView } from "@/features/import-opening/types"
 import { versionText } from "@/lib/ui-text"
 
 export function AuditSection({ batch }: { batch: ImportBatchView }) {
     return (
-        <Card size="sm" className={surfacePanelClassName}>
-            <CardHeader className="border-b border-grid">
-                <CardTitle>导入溯源信息</CardTitle>
-                <CardDescription>
-                    记录本批次的数据来源、导入规则版本与核对信息；详细操作日志可在「审计查询」中查看。
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3 pt-4 sm:grid-cols-2">
+        <DetailWorkspaceSection
+            title="导入溯源信息"
+            subtitle="记录本批次的数据来源、导入规则版本与核对信息；详细操作日志可在「审计查询」中查看。"
+        >
+            <div className="grid gap-3 sm:grid-cols-2">
                 <Fact label="批次号" value={batch.batchNo} mono />
                 <Fact label="规则版本" value={batch.importRuleVersion} mono />
                 <Fact label="预检版本" value={batch.trialVersion} mono />
@@ -58,7 +48,7 @@ export function AuditSection({ batch }: { batch: ImportBatchView }) {
                         <ExternalLinkIcon className="size-4" />
                     </Button>
                 </div>
-            </CardContent>
-        </Card>
+            </div>
+        </DetailWorkspaceSection>
     )
 }

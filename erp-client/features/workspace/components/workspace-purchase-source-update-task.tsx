@@ -1,11 +1,12 @@
 "use client"
 
+import { WorkspaceProcessingPane } from "./workspace-processing-layout"
+
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { FileTextIcon } from "lucide-react"
 
-import { WorkspaceTaskPane } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Tooltip,
@@ -55,7 +56,7 @@ export function WorkspacePurchaseSourceUpdateTask({
     ])
 
     return (
-        <WorkspaceTaskPane
+        <WorkspaceProcessingPane
             header={
                 <WorkspaceTaskIdentityHeader
                     item={item}
@@ -116,6 +117,6 @@ export function WorkspacePurchaseSourceUpdateTask({
                 open={previewOpen}
                 onOpenChange={setPreviewOpen}
             />
-        </WorkspaceTaskPane>
+        </WorkspaceProcessingPane>
     )
 }

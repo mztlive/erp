@@ -17,8 +17,9 @@ import { useQueryClient } from "@tanstack/react-query"
 
 import {
     DiscardConfirmDialog,
-    DetailPageHeader,
-    PageScaffold,
+    DetailWorkspaceBody,
+    DetailWorkspaceChrome,
+    DetailWorkspacePage,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { toast } from "@/components/ui/toast"
@@ -761,7 +762,7 @@ export function SalesOrderCreateForm({
                         <div
                             className={
                                 chrome === "page"
-                                    ? "flex min-w-0 flex-1 flex-col rounded-xl border border-grid bg-card"
+                                    ? "flex min-w-0 flex-1 flex-col"
                                     : "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-grid bg-card"
                             }
                         >
@@ -793,7 +794,7 @@ export function SalesOrderCreateForm({
                                         className={
                                             embeddedDraft
                                                 ? "min-w-0 space-y-4 bg-muted/20 p-4 sm:p-5"
-                                                : "min-w-0 space-y-5 p-4 sm:p-5"
+                                                : "min-w-0 space-y-5 py-6"
                                         }
                                         aria-labelledby={
                                             orderBasis === "contract"
@@ -900,7 +901,7 @@ export function SalesOrderCreateForm({
                                         className={
                                             embeddedDraft && showContractSummary
                                                 ? "min-w-0 space-y-4 border-t border-grid p-4 sm:p-5 xl:border-t-0 xl:border-l"
-                                                : "min-w-0 space-y-5 border-t border-grid p-4 sm:p-5"
+                                                : "min-w-0 space-y-5 border-t border-border/60 py-6"
                                         }
                                         aria-labelledby="sales-create-settlement-title"
                                     >
@@ -910,24 +911,37 @@ export function SalesOrderCreateForm({
                                         >
                                             本次销售信息
                                         </h2>
-                                        <SalesOrderCreateHeaderFields
-                                            compact={
-                                                embeddedDraft &&
-                                                showContractSummary
+                                        <div
+                                            data-slot={
+                                                chrome === "page"
+                                                    ? "detail-form-grid"
+                                                    : undefined
                                             }
-                                            form={form}
-                                            natureLocked={natureLocked}
-                                            contractResolved={
-                                                showContractSummary
+                                            className={
+                                                chrome === "page"
+                                                    ? "max-w-4xl"
+                                                    : undefined
                                             }
-                                            settlementSnapshot={
-                                                settlementSnapshot
-                                            }
-                                            applyNature={applyNature}
-                                            onNatureChangeRequest={
-                                                setPendingNature
-                                            }
-                                        />
+                                        >
+                                            <SalesOrderCreateHeaderFields
+                                                compact={
+                                                    embeddedDraft &&
+                                                    showContractSummary
+                                                }
+                                                form={form}
+                                                natureLocked={natureLocked}
+                                                contractResolved={
+                                                    showContractSummary
+                                                }
+                                                settlementSnapshot={
+                                                    settlementSnapshot
+                                                }
+                                                applyNature={applyNature}
+                                                onNatureChangeRequest={
+                                                    setPendingNature
+                                                }
+                                            />
+                                        </div>
                                     </section>
                                 </div>
                                 <SalesOrderCreateLineItemsSection
@@ -1068,8 +1082,8 @@ export function SalesOrderCreateForm({
     if (chrome === "none") return editor
 
     return (
-        <PageScaffold density="compact" className="pb-8">
-            <DetailPageHeader
+        <DetailWorkspacePage className="pb-8">
+            <DetailWorkspaceChrome
                 title={purpose === "create" ? "新建销售单" : "编辑销售单"}
                 documentNumber={submission.draftIdentity?.documentNumber}
                 version={submission.draftIdentity?.version}
@@ -1086,7 +1100,7 @@ export function SalesOrderCreateForm({
                     },
                 }}
             />
-            {editor}
+            <DetailWorkspaceBody>{editor}</DetailWorkspaceBody>
             <DiscardConfirmDialog
                 id="sales-orders-create-leave"
                 open={leaveConfirmOpen}
@@ -1097,6 +1111,6 @@ export function SalesOrderCreateForm({
                     router.push("/sales/orders")
                 }}
             />
-        </PageScaffold>
+        </DetailWorkspacePage>
     )
 }

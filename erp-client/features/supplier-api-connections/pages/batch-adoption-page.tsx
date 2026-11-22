@@ -4,8 +4,10 @@ import * as React from "react"
 import { useParams, useSearchParams } from "@/lib/navigation"
 import {
     BusinessFailureState,
-    DetailPageHeader,
-    PageScaffold,
+    DetailWorkspaceBody,
+    DetailWorkspaceChrome,
+    DetailWorkspacePage,
+    DetailWorkspaceSection,
 } from "@/components/business"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useAdoptionBatchQuery, useBatchPreparationQuery } from "../hooks/batch"
@@ -45,41 +47,66 @@ export function BatchAdoptionPage() {
     const account = useAccountProfileQuery()
     if (!identity.connectionId)
         return (
-            <PageScaffold>
-                <BusinessFailureState
-                    title="缺少供应商连接"
-                    description="请从供应商品库重新打开入库批次。"
-                />
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title="入库批次" />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <BusinessFailureState
+                            title="缺少供应商连接"
+                            description="请从供应商品库重新打开入库批次。"
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     if (preparation.isError)
         return (
-            <PageScaffold>
-                <BusinessFailureState
-                    idPrefix="supplier-catalog-preparation-load"
-                    title="准备进度读取失败"
-                    description={preparation.error.message}
-                    onRetry={() => void preparation.refetch()}
-                />
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title="入库批次" />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <BusinessFailureState
+                            idPrefix="supplier-catalog-preparation-load"
+                            title="准备进度读取失败"
+                            description={preparation.error.message}
+                            onRetry={() => void preparation.refetch()}
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     if (preparation.data && !preparation.data.selection_complete)
         return (
-            <PageScaffold>
-                <DetailPageHeader
-                    title={`入库批次 · ${preparation.data.batch_no}`}
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome
+                    title="入库批次"
+                    documentNumber={preparation.data.batch_no}
+                    numberLabel="批次编号"
                 />
-                <BatchPreparationStatus batch={preparation.data} inWorkspace />
-            </PageScaffold>
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <BatchPreparationStatus
+                            batch={preparation.data}
+                            inWorkspace
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     if (preparation.data?.work && preparation.data.work.status !== "COMPLETED")
         return (
-            <PageScaffold>
-                <DetailPageHeader
-                    title={`入库批次 · ${preparation.data.batch_no}`}
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome
+                    title="入库批次"
+                    documentNumber={preparation.data.batch_no}
+                    numberLabel="批次编号"
                 />
-                <BatchWorkStatus batch={preparation.data} />
-            </PageScaffold>
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <BatchWorkStatus batch={preparation.data} />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     const waitingForResult =
         !query.isError &&
@@ -89,22 +116,35 @@ export function BatchAdoptionPage() {
             query.data?.batch.work?.status !== "COMPLETED")
     if (query.isPending || account.isPending || waitingForResult)
         return (
-            <PageScaffold>
-                <p role="status" className="text-xs text-muted-foreground">
-                    正在恢复已保存的入库批次…
-                </p>
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title="入库批次" />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <p
+                            role="status"
+                            className="text-xs text-muted-foreground"
+                        >
+                            正在恢复已保存的入库批次…
+                        </p>
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     if (query.isError)
         return (
-            <PageScaffold>
-                <BusinessFailureState
-                    idPrefix="supplier-catalog-batch-load"
-                    title="入库批次读取失败"
-                    description={query.error.message}
-                    onRetry={() => void query.refetch()}
-                />
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title="入库批次" />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <BusinessFailureState
+                            idPrefix="supplier-catalog-batch-load"
+                            title="入库批次读取失败"
+                            description={query.error.message}
+                            onRetry={() => void query.refetch()}
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     return (
         <BatchWorkspace

@@ -1,6 +1,7 @@
 "use client"
 
-import { WorkspaceTaskPane } from "@/components/business"
+import { WorkspaceProcessingPane } from "./workspace-processing-layout"
+
 import { SupplyExceptionTaskPanel } from "@/features/supplier-offerings/components/supply-exception-task-panel"
 import { useSupplierSupplyExceptionWorkItemQuery } from "@/features/supplier-offerings/hooks/queries"
 
@@ -18,7 +19,7 @@ export function WorkspaceSupplyExceptionTask({
     const taskQuery = useSupplierSupplyExceptionWorkItemQuery(item.workItemId)
 
     return (
-        <WorkspaceTaskPane
+        <WorkspaceProcessingPane
             header={<WorkspaceTaskIdentityHeader item={item} />}
             aria-label="当前供应停止核对任务"
         >
@@ -31,6 +32,6 @@ export function WorkspaceSupplyExceptionTask({
                 embedded
                 onTaskCompleted={onTaskCompleted}
             />
-        </WorkspaceTaskPane>
+        </WorkspaceProcessingPane>
     )
 }

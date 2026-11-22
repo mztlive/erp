@@ -95,10 +95,10 @@ export function PersonalPolicyWorkspace({
         </ul>
     )
     return (
-        <div className="grid min-w-0 rounded-xl border border-grid lg:grid-cols-[16rem_minmax(0,1fr)]">
+        <div className="grid min-w-0 gap-x-5 border-y border-border/60 lg:grid-cols-[16rem_minmax(0,1fr)]">
             <nav
                 aria-label="选择业务范围"
-                className="min-w-0 border-b border-grid p-3 lg:border-r lg:border-b-0"
+                className="min-w-0 border-b border-border/60 py-3 lg:border-r lg:border-b-0 lg:pr-3"
             >
                 <div className="mb-3 flex items-center justify-between px-1">
                     <h3 className="font-medium">选择业务</h3>

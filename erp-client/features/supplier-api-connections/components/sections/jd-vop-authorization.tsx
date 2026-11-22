@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { KeyRoundIcon } from "lucide-react"
+import { DetailWorkspaceSection } from "@/components/business/detail-workspace"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
@@ -47,20 +47,10 @@ export function JdVopAuthorizationSection({
         void query.refetch()
     }
     return (
-        <section aria-label="京东账号授权" className="space-y-4 p-6">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0 space-y-2">
-                    <h2 className="flex items-center gap-2 text-section-title font-semibold tracking-tight">
-                        <KeyRoundIcon
-                            className="size-4 text-muted-foreground"
-                            aria-hidden="true"
-                        />
-                        京东账号授权
-                    </h2>
-                    <p className="text-xs text-muted-foreground">
-                        授权企业采购账号或配置已有令牌后，可继续测试京东接口连接。
-                    </p>
-                </div>
+        <DetailWorkspaceSection
+            ariaLabel="京东账号授权"
+            title="京东账号授权"
+            actions={
                 <div className="flex flex-wrap gap-2">
                     {canRead && (
                         <LoadingButton
@@ -112,7 +102,11 @@ export function JdVopAuthorizationSection({
                         </Button>
                     )}
                 </div>
-            </div>
+            }
+        >
+            <p className="text-xs text-muted-foreground">
+                授权企业采购账号或配置已有令牌后，可继续测试京东接口连接。
+            </p>
             {!canRead ? (
                 <p className="text-xs text-muted-foreground">
                     当前账号没有查看京东授权状态的权限，请联系管理员。
@@ -216,6 +210,6 @@ export function JdVopAuthorizationSection({
                     }}
                 />
             ) : null}
-        </section>
+        </DetailWorkspaceSection>
     )
 }

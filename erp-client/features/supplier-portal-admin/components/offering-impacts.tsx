@@ -1,5 +1,9 @@
 "use client"
 
+import {
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
+} from "@/components/business/detail-workspace"
 import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
 import { useMemo, useState } from "react"
 import Link from "next/link"
@@ -121,27 +125,25 @@ export function PortalOfferingImpacts({
     )
     if (!enabled || !offeringId) return null
     return (
-        <section className="min-w-0 space-y-4 rounded-xl border bg-card p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                    <h2 className="text-section-title font-semibold tracking-tight">
-                        当前采购与履约影响
-                    </h2>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        表内仅显示当前账号可查看的关联采购单与待处理任务。请核对采购负责人及未完成履约情况；已生效的历史采购单价格、付款条件及供货关系保持原值。
-                    </p>
-                </div>
+        <DetailWorkspaceSection
+            title="当前采购与履约影响"
+            actions={
                 <Button
                     id={`${prefix}-refresh`}
                     type="button"
-                    variant="outline"
+                    variant="ghost"
+                    className={detailWorkspaceStyles.subtleButton}
                     size="sm"
                     disabled={query.isFetching}
                     onClick={() => void query.refetch()}
                 >
                     重新核对影响
                 </Button>
-            </div>
+            }
+        >
+            <p className="text-xs text-muted-foreground">
+                表内仅显示当前账号可查看的关联采购单与待处理任务。请核对采购负责人及未完成履约情况；已生效的历史采购单价格、付款条件及供货关系保持原值。
+            </p>
             {query.data && !query.error && (
                 <>
                     {query.data.warning ? (
@@ -208,6 +210,6 @@ export function PortalOfferingImpacts({
                     />
                 }
             />
-        </section>
+        </DetailWorkspaceSection>
     )
 }

@@ -4,14 +4,14 @@ import { ChevronRightIcon, FileTextIcon } from "lucide-react"
 import {
     BusinessFailureState,
     MoneyValue,
-    workspaceTaskSurfacePadClassName,
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-approval-materials"
 import { displayBusinessText, displayName } from "@/lib/display-name"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { cn } from "@/lib/utils"
 import { WorkspaceSupplierRating } from "./workspace-supplier-rating"
 import { WorkspacePurchaseComparisonTable } from "./workspace-purchase-comparison-table"
 import type { WorkspaceWorkItem } from "../types"
@@ -29,10 +29,6 @@ export function WorkspacePurchaseApproval({
 }) {
     const query = useApprovalMaterials(instanceId, true, item)
     const prefix = `workspace-purchase-approval-${toAutomationIdSegment(instanceId)}`
-    const sectionClass = cn(
-        workspaceTaskSurfacePadClassName,
-        "border-b border-grid py-4",
-    )
     const preview = (view: "all" | "source-sales", revisionId?: string) =>
         onPreview({
             kind: "approval_snapshot",
@@ -44,29 +40,28 @@ export function WorkspacePurchaseApproval({
     if (query.isPending)
         return (
             <>
-                <section
-                    className={sectionClass}
-                    aria-label="供应商与客户"
-                    role="status"
-                >
-                    <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                <DetailWorkspaceSection ariaLabel="供应商与客户">
+                    <p
+                        role="status"
+                        className="flex items-center gap-2 text-xs text-muted-foreground"
+                    >
                         <Spinner />
                         正在读取供应商与客户…
                     </p>
-                </section>
+                </DetailWorkspaceSection>
             </>
         )
     if (query.isError)
         return (
             <>
-                <section className={sectionClass}>
+                <DetailWorkspaceSection>
                     <BusinessFailureState
                         id={`${prefix}-retry`}
                         title="供应商与客户读取失败"
                         error={query.error}
                         onRetry={() => void query.refetch()}
                     />
-                </section>
+                </DetailWorkspaceSection>
             </>
         )
 
@@ -78,17 +73,14 @@ export function WorkspacePurchaseApproval({
     const sources = display.source_sales ?? []
     return (
         <>
-            <section
-                className={cn(
-                    sectionClass,
-                    "grid gap-5 bg-info-soft/30 @min-[720px]/document:grid-cols-2 @min-[720px]/document:gap-6",
-                )}
-                aria-label="供应商与客户"
+            <DetailWorkspaceSection
+                contentClassName="grid gap-5 space-y-0 @min-[720px]/document:grid-cols-2 @min-[720px]/document:gap-6"
+                ariaLabel="供应商与客户"
             >
                 <div className="min-w-0 space-y-3">
-                    <h3 className="font-medium text-muted-foreground">
+                    <h2 className={detailWorkspaceStyles.sectionTitle}>
                         供应商
-                    </h3>
+                    </h2>
                     <p className="text-body-compact font-semibold wrap-anywhere">
                         {displayName(
                             display.source.extra_sections.find(
@@ -104,9 +96,9 @@ export function WorkspacePurchaseApproval({
                 </div>
                 <div className="min-w-0 space-y-3 border-t border-grid pt-4 @min-[720px]/document:border-t-0 @min-[720px]/document:border-l @min-[720px]/document:pt-0 @min-[720px]/document:pl-6">
                     <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                        <h3 className="font-medium text-muted-foreground">
+                        <h2 className={detailWorkspaceStyles.sectionTitle}>
                             客户与销售单
-                        </h3>
+                        </h2>
                         <p className="text-xs text-muted-foreground">
                             对照提交时的销售单内容
                         </p>
@@ -168,20 +160,13 @@ export function WorkspacePurchaseApproval({
                         </p>
                     )}
                 </div>
-            </section>
+            </DetailWorkspaceSection>
 
-            <section
-                className={cn(sectionClass, "space-y-4")}
-                aria-label="采购与销售对照"
+            <DetailWorkspaceSection
+                title="采购与销售对照"
+                subtitle={lines ? `共 ${lines.length} 项` : undefined}
+                ariaLabel="采购与销售对照"
             >
-                <header className="flex items-baseline gap-2">
-                    <h3 className="font-semibold">采购与销售对照</h3>
-                    {lines && (
-                        <span className="text-xs text-muted-foreground">
-                            共 {lines.length} 项
-                        </span>
-                    )}
-                </header>
                 {extraCost ? (
                     <p className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
                         来源销售单已有附加费用（不含本次提交）：已发生{" "}
@@ -242,7 +227,7 @@ export function WorkspacePurchaseApproval({
                         </Button>
                     </>
                 )}
-            </section>
+            </DetailWorkspaceSection>
         </>
     )
 }

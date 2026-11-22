@@ -154,6 +154,47 @@ export function buildDefaults(
     }
 }
 
+function changedRowFields<
+    Row extends { existingId?: string; draftId?: string },
+>(before: readonly Row[], after: readonly Row[]): number {
+    const rowId = (row: Row) => row.existingId ?? row.draftId
+    const previous = new Map(before.map((row) => [rowId(row), row]))
+    let count = 0
+    for (const row of after) {
+        const key = rowId(row)
+        const original = previous.get(key)
+        if (!original) {
+            count += 1
+            continue
+        }
+        previous.delete(key)
+        count += (Object.keys(row) as (keyof Row)[]).filter(
+            (field) => row[field] !== original[field],
+        ).length
+    }
+    return count + previous.size
+}
+
+export function countCustomerFormChanges(
+    before: FormValues,
+    after: FormValues,
+): number {
+    const fields = [
+        "legalName",
+        "shortName",
+        "unifiedCreditCode",
+        "defaultPaymentTerm",
+        "status",
+        "changeReason",
+    ] as const
+    return (
+        fields.filter((field) => before[field] !== after[field]).length +
+        changedRowFields(before.contacts, after.contacts) +
+        changedRowFields(before.addresses, after.addresses) +
+        changedRowFields(before.bankAccounts, after.bankAccounts)
+    )
+}
+
 /**
  * 表单值 → 根命令输入：行级 trim、可选字段收口，已存在行保留掩码值时不回写。
  */

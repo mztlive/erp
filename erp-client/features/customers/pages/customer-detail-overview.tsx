@@ -4,7 +4,8 @@ import { PencilIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
-    DocumentSection,
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
     DocumentSummary,
     MetricItem,
     MetricStrip,
@@ -19,10 +20,7 @@ import {
     ownerLabel,
 } from "@/features/customers/pages/customer-detail-helpers"
 import { CustomerDetailContactSections } from "@/features/customers/pages/customer-detail-contact-sections"
-import {
-    detailSectionClassName,
-    embeddedSummaryClassName,
-} from "@/features/customers/pages/customer-detail-records"
+import { embeddedSummaryClassName } from "@/features/customers/pages/customer-detail-records"
 
 export function CustomerDetailMetrics({
     customer,
@@ -33,6 +31,8 @@ export function CustomerDetailMetrics({
         <MetricStrip
             columns={4}
             density="compact"
+            variant="plain"
+            className="grid-cols-2 py-3.5 lg:[&>*+*]:border-l lg:[&>*+*]:border-border/60 lg:[&>*+*]:pl-6"
             aria-label="关系指标"
             aria-live="polite"
         >
@@ -96,6 +96,7 @@ export function CustomerDetailOverviewTab({
     editing,
     onEditClick,
     onFormDirtyChange,
+    shortcutBlocked,
     onFormCancel,
     onFormSucceeded,
 }: {
@@ -104,6 +105,7 @@ export function CustomerDetailOverviewTab({
     editing: boolean
     onEditClick: () => void
     onFormDirtyChange: (isDirty: boolean) => void
+    shortcutBlocked: boolean
     onFormCancel: () => void
     onFormSucceeded: (customerId: string, revisionNo?: number) => void
 }) {
@@ -111,32 +113,32 @@ export function CustomerDetailOverviewTab({
 
     if (editing) {
         return (
-            <div className="px-4 pt-4 pb-4">
-                <CustomerForm
-                    key={customer.customerId}
-                    mode="edit"
-                    grouped
-                    customer={customer}
-                    onDirtyChange={onFormDirtyChange}
-                    onCancel={onFormCancel}
-                    onSucceeded={onFormSucceeded}
-                />
-            </div>
+            <CustomerForm
+                key={customer.customerId}
+                mode="edit"
+                grouped
+                shortcutBlocked={shortcutBlocked}
+                customer={customer}
+                onDirtyChange={onFormDirtyChange}
+                onCancel={onFormCancel}
+                onSucceeded={onFormSucceeded}
+            />
         )
     }
 
     return (
         <>
-            <DocumentSection
-                className={detailSectionClassName}
+            <DetailWorkspaceSection
                 title="客户基本资料"
-                action={
+                width="form"
+                actions={
                     !editBlocked ? (
                         <Button
                             id="customers-detail-overview-edit"
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant="ghost"
+                            className={detailWorkspaceStyles.subtleButton}
                             onClick={onEditClick}
                         >
                             <PencilIcon
@@ -200,7 +202,7 @@ export function CustomerDetailOverviewTab({
                         ]}
                     />
                 )}
-            </DocumentSection>
+            </DetailWorkspaceSection>
 
             <CustomerDetailContactSections
                 customer={customer}

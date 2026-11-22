@@ -3,7 +3,10 @@
 import * as React from "react"
 import { SearchIcon } from "lucide-react"
 
-import { BusinessFailureState } from "@/components/business"
+import {
+    BusinessFailureState,
+    DetailWorkspaceSection,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import {
     InputGroup,
@@ -42,10 +45,10 @@ function permissionActionLabel(item: AccountPermissionItem, groupName: string) {
     return item.label
 }
 
-function PermissionGroupCard({ group }: { group: PermissionGroupView }) {
+function PermissionGroup({ group }: { group: PermissionGroupView }) {
     return (
-        <section className="min-w-0 rounded-xl border border-border/70 bg-card p-4">
-            <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-2.5">
+        <section className="min-w-0 border-t border-border/60 py-3">
+            <div className="flex items-center justify-between gap-2">
                 <h3 className="min-w-0 truncate font-medium">{group.name}</h3>
                 <span className="num shrink-0 text-xs text-muted-foreground">
                     {group.items.length} 项
@@ -107,32 +110,22 @@ export function AccountOperationPermissions({
               : "grid items-start gap-4 md:grid-cols-2 2xl:grid-cols-3"
 
     return (
-        <section
-            aria-labelledby="account-operation-permissions-title"
-            className="space-y-4 text-body-compact"
-        >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <h2
-                            id="account-operation-permissions-title"
-                            className="text-section-title font-semibold tracking-tight"
-                        >
-                            已有操作权限
-                        </h2>
-                        {canRead && preview.permissionCount > 0 ? (
-                            <Badge variant="secondary">
-                                {preview.allPermissions
-                                    ? "全部"
-                                    : `${preview.permissionCount} 项`}
-                            </Badge>
-                        ) : null}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                        按已保存角色合并，权限按业务模块分组展示。
-                    </p>
-                </div>
-                {canRead && roles.isSuccess && preview.permissionCount > 0 ? (
+        <DetailWorkspaceSection
+            title="已有操作权限"
+            headingId="account-operation-permissions-title"
+            contentClassName="text-body-compact"
+            badge={
+                canRead && preview.permissionCount > 0 ? (
+                    <Badge variant="secondary">
+                        {preview.allPermissions
+                            ? "全部"
+                            : `${preview.permissionCount} 项`}
+                    </Badge>
+                ) : null
+            }
+            subtitle="按已保存角色合并，权限按业务模块分组展示。"
+            actions={
+                canRead && roles.isSuccess && preview.permissionCount > 0 ? (
                     <InputGroup className="w-full sm:w-72">
                         <InputGroupAddon>
                             <SearchIcon aria-hidden="true" />
@@ -146,9 +139,9 @@ export function AccountOperationPermissions({
                             onChange={(event) => setSearch(event.target.value)}
                         />
                     </InputGroup>
-                ) : null}
-            </div>
-
+                ) : null
+            }
+        >
             {canRead && preview.assigned.length > 0 ? (
                 <div className="flex flex-wrap items-center gap-1.5 text-xs">
                     <span className="mr-1 text-muted-foreground">来源角色</span>
@@ -186,7 +179,7 @@ export function AccountOperationPermissions({
                             {groups.length ? (
                                 <div className={groupGridClassName}>
                                     {groups.map((group) => (
-                                        <PermissionGroupCard
+                                        <PermissionGroup
                                             key={group.name}
                                             group={group}
                                         />
@@ -195,7 +188,7 @@ export function AccountOperationPermissions({
                             ) : (
                                 <p
                                     role="status"
-                                    className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-xs text-muted-foreground"
+                                    className="py-6 text-xs text-muted-foreground"
                                 >
                                     {keyword
                                         ? "没有匹配的权限，请修改搜索内容。"
@@ -217,6 +210,6 @@ export function AccountOperationPermissions({
                     )}
                 </>
             )}
-        </section>
+        </DetailWorkspaceSection>
     )
 }

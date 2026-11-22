@@ -1,6 +1,6 @@
 "use client"
 
-import { DocumentSection, RevisionTimeline } from "@/components/business"
+import { DetailWorkspaceSection, RevisionTimeline } from "@/components/business"
 import { MasterDataAuditList } from "@/features/master-data/components/shared/audit-event-list"
 import { masterDataRevisionEntry } from "@/features/master-data/components/shared/revision-timeline-item"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
@@ -12,10 +12,11 @@ export function SupplierEditorHistorySection({
     data: MasterDataCenterView
 }) {
     return (
-        <div className="-mt-5">
-            <DocumentSection
+        <>
+            <DetailWorkspaceSection
                 title={masterDataCopy.centerVersions}
-                description={masterDataCopy.centerVersionsDesc}
+                width="form"
+                subtitle={masterDataCopy.centerVersionsDesc}
             >
                 <RevisionTimeline
                     revisions={data.revisionTimeline.map((rev) =>
@@ -24,14 +25,15 @@ export function SupplierEditorHistorySection({
                         }),
                     )}
                 />
-            </DocumentSection>
+            </DetailWorkspaceSection>
 
-            <DocumentSection
+            <DetailWorkspaceSection
                 title={masterDataCopy.centerAudit}
-                description={masterDataCopy.centerAuditDesc}
+                width="form"
+                subtitle={masterDataCopy.centerAuditDesc}
             >
                 <MasterDataAuditList events={data.auditEvents} />
-            </DocumentSection>
-        </div>
+            </DetailWorkspaceSection>
+        </>
     )
 }
