@@ -18,6 +18,7 @@ type EvidenceUploadFieldProps = {
     label: string
     description?: string
     uploadLabel?: string
+    density?: "default" | "compact"
     disabled?: boolean
     required?: boolean
     id?: string
@@ -28,6 +29,7 @@ export function EvidenceUploadField({
     label,
     description = "支持 PDF、JPG、PNG 或 WebP，单个文件不超过 5 MB。",
     uploadLabel = "上传凭证",
+    density = "default",
     disabled,
     required,
     id,
@@ -36,6 +38,7 @@ export function EvidenceUploadField({
         <SingleFileField
             label={label}
             description={description}
+            density={density}
             disabled={disabled}
             required={required}
             id={id}

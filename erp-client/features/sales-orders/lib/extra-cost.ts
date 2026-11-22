@@ -17,6 +17,8 @@ import {
     compactFixed,
     compareDecimal,
     multiplyFixed,
+    normalizeFixed,
+    subtractFixed,
 } from "@/lib/fixed-decimal"
 
 export const EXTRA_COST_CATEGORY_LABEL: Record<ExtraCostCategory, string> = {
@@ -174,6 +176,73 @@ export function formatOccurredDate(secs: number | null): string {
     const date = new Date(secs * 1000)
     const pad = (value: number) => String(value).padStart(2, "0")
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+/** 财务登记常用进项税率（百分数）。 */
+export const COMMON_TAX_RATE_PERCENTS = ["0", "1", "3", "6", "9", "13"] as const
+
+export type ExtraCostAmountBreakdown = Readonly<{
+    gross: string
+    tax: string
+    net: string
+}>
+
+/**
+ * 按服务端 `fee_amounts` 口径试算附加费用拆解：
+ * 税额 = 含税金额 × 进项税率（银行家舍入到分），不含税成本 = 含税金额 − 税额。
+ */
+export function calculateExtraCostAmounts(
+    grossAmount: string,
+    taxRatePercent: string,
+): ExtraCostAmountBreakdown | null {
+    const trimmedGross = grossAmount.trim()
+    const trimmedPercent = taxRatePercent.trim()
+    if (
+        !amountPattern.test(trimmedGross) ||
+        !percentPattern.test(trimmedPercent)
+    ) {
+        return null
+    }
+    try {
+        if (compareDecimal(trimmedGross, "0", 2) <= 0) return null
+        const gross = normalizeFixed(trimmedGross, {
+            maxScale: 2,
+            outputScale: 2,
+        })
+        const rate = taxRateFromPercent(trimmedPercent)
+        const tax = multiplyFixed(gross, rate, {
+            leftMaxScale: 2,
+            rightMaxScale: 6,
+            outputScale: 2,
+        })
+        const net = subtractFixed(gross, tax, { maxScale: 2, outputScale: 2 })
+        return { gross, tax, net }
+    } catch {
+        return null
+    }
+}
+
+/** 比较两个百分数文本是否数值相等（如 "6" 与 "6.00"）。 */
+export function samePercentValue(left: string, right: string): boolean {
+    const a = left.trim()
+    const b = right.trim()
+    if (!a || !b) return false
+    try {
+        return compareDecimal(a, b, 2) === 0
+    } catch {
+        return false
+    }
+}
+
+/** 百分数输入格式化为紧凑显示文案（如 "6.00" -> "6%"）。 */
+export function formatPercentValue(percent: string): string {
+    const trimmed = percent.trim()
+    if (!percentPattern.test(trimmed)) return "—"
+    try {
+        return `${compactFixed(normalizeFixed(trimmed, { maxScale: 2, outputScale: 2 }))}%`
+    } catch {
+        return "—"
+    }
 }
 
 /** 每次打开表单生成一次请求标识，同一表单重试复用。 */

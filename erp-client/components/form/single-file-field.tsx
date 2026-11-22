@@ -9,6 +9,7 @@ export function SingleFileField({
     label,
     hideLabel = false,
     description,
+    density = "default",
     disabled,
     required,
     id,
@@ -21,6 +22,7 @@ export function SingleFileField({
     label: string
     hideLabel?: boolean
     description?: string
+    density?: "default" | "compact"
     disabled?: boolean
     required?: boolean
     id?: string
@@ -55,6 +57,7 @@ export function SingleFileField({
         >
             <FileUpload
                 selectedDescription={selectedDescription}
+                density={density}
                 idPrefix={resolvedId}
                 accept={accept}
                 multiple={false}

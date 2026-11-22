@@ -18,6 +18,7 @@ import { fetchHasEligibleAcceptance } from "@/features/sales-orders/api/acceptan
 import { fetchSalesOrderDeliveryProgress } from "../api/sales-order-delivery-progress"
 import {
     fetchSalesExtraCosts,
+    fetchSalesInquiryFeeCandidates,
     reduceSalesExtraCost,
     registerSalesExtraCost,
     type ReduceSalesExtraCostInput,
@@ -58,6 +59,8 @@ export const salesOrderKeys = {
         [...salesOrderKeys.acceptanceRoot(id), "eligibility"] as const,
     extraCosts: (id: string) =>
         [...salesOrderKeys.all, "extra-costs", id] as const,
+    inquiryFees: (id: string) =>
+        [...salesOrderKeys.all, "inquiry-fees", id] as const,
 }
 
 export function useSalesOrdersQuery(
@@ -350,15 +353,34 @@ export function useSalesExtraCostsQuery(
     })
 }
 
+/** 销售单可登记的询价费用候选；仅在具备成本登记权限且弹窗打开时读取。 */
+export function useSalesInquiryFeeCandidatesQuery(
+    salesOrderId: string,
+    enabled: boolean,
+) {
+    return useQuery({
+        queryKey: salesOrderKeys.inquiryFees(salesOrderId),
+        queryFn: () => fetchSalesInquiryFeeCandidates(salesOrderId),
+        enabled: enabled && Boolean(salesOrderId),
+        staleTime: 0,
+    })
+}
+
 export function useRegisterSalesExtraCostMutation(salesOrderId: string) {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: (input: RegisterSalesExtraCostInput) =>
             registerSalesExtraCost(salesOrderId, input),
-        onSuccess: () =>
-            queryClient.invalidateQueries({
-                queryKey: salesOrderKeys.extraCosts(salesOrderId),
-            }),
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: salesOrderKeys.extraCosts(salesOrderId),
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: salesOrderKeys.inquiryFees(salesOrderId),
+                }),
+            ])
+        },
     })
 }
 
