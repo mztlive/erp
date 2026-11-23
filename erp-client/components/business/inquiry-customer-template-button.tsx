@@ -11,11 +11,9 @@ import {
 } from "@/lib/inquiry-workbook"
 
 type InquiryCustomerTemplateButtonProps = {
-    /** 下载前重新获取当前授权的商品资料。 */
     productCount: number
+    /** 下载前重新获取当前授权的商品资料和允许对客展示的价格。 */
     onLoadProducts: () => Promise<readonly InquiryCustomerWorkbookProduct[]>
-    /** 仅销售本次明确确认的参考价可以进入客户文件。 */
-    confirmedReferencePrices?: Readonly<Record<string, string>>
     inquiry_no?: string
     id?: string
     disabled?: boolean
@@ -27,7 +25,6 @@ type InquiryCustomerTemplateButtonProps = {
 export function InquiryCustomerTemplateButton({
     productCount,
     onLoadProducts,
-    confirmedReferencePrices,
     inquiry_no,
     id = "sales-inquiry-download-customer-template",
     disabled = false,
@@ -38,14 +35,7 @@ export function InquiryCustomerTemplateButton({
     const download = useMutation({
         mutationFn: async () => {
             const currentProducts = await onLoadProducts()
-            await downloadInquiryCustomerWorkbook(
-                currentProducts.map((product) => ({
-                    ...product,
-                    sales_reference_price:
-                        confirmedReferencePrices?.[product.sku_code] ?? null,
-                })),
-                inquiry_no,
-            )
+            await downloadInquiryCustomerWorkbook(currentProducts, inquiry_no)
         },
     })
     return (

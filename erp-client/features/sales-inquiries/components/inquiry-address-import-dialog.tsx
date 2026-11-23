@@ -20,7 +20,7 @@ import {
 } from "@/components/business/table-toolbar"
 import { useRegionIndex } from "@/features/regions"
 import { getErrorMessage } from "@/lib/api/errors"
-import { compareDecimal, sumFixed } from "@/lib/fixed-decimal"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import {
     addressImportDefaults,
     parseAddressText,
@@ -30,7 +30,10 @@ import {
     type AddressImportChanges,
     type AddressImportChoice,
 } from "../lib/address-import-plan"
-import { deliveryProgress } from "../lib/delivery-progress"
+import {
+    deliveryProgress,
+    sumDeliveryQuantities,
+} from "../lib/delivery-progress"
 import type { InquiryLine, SalesInquiry } from "../types"
 import { InquiryAddressImportGroups } from "./inquiry-address-import-groups"
 
@@ -99,18 +102,16 @@ export function InquiryAddressImportDialog({
         : null
     const ready = Boolean(plan && !plan.hasErrors && !plan.conflicts)
     const allSkipped = rows.length > 0 && ready && plan?.changed === 0
+    const syncDemand =
+        line.fulfillment_kind === "physical" &&
+        (plan?.changes.updates.length ?? 0) > 0
     let total: string | null = null
     let exceedsDemand = false
     if (ready && plan) {
         try {
-            total = sumFixed(
-                plan.allocations.map((row) => row.quantity),
-                {
-                    maxScale: line.quantity_scale,
-                    outputScale: line.quantity_scale,
-                },
-            )
+            total = sumDeliveryQuantities(plan.allocations, line.quantity_scale)
             exceedsDemand =
+                !syncDemand &&
                 compareDecimal(total, line.quantity, line.quantity_scale) > 0
         } catch {
             /* 既有草稿数量未完善时，沿用配送进度提示。 */
@@ -120,6 +121,7 @@ export function InquiryAddressImportDialog({
         ready && plan
             ? deliveryProgress({
                   ...line,
+                  quantity: syncDemand && total != null ? total : line.quantity,
                   unit_code: unit ?? "",
                   allocations: plan.allocations,
               })
@@ -261,7 +263,10 @@ export function InquiryAddressImportDialog({
                                                 {total != null && (
                                                     <>
                                                         {" "}
-                                                        · 处理后总数量{" "}
+                                                        ·{" "}
+                                                        {syncDemand
+                                                            ? "确认后需求数量"
+                                                            : "处理后配送总量"}{" "}
                                                         <QuantityValue
                                                             value={total}
                                                             unit={unit}

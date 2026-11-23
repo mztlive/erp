@@ -13,6 +13,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { DataTransferContext } from "@/lib/data-transfer"
@@ -171,12 +172,36 @@ export function TransferPreviewResumeDialog({
             <DialogContent
                 closeButtonId={`${idPrefix}-close`}
                 showCloseButton={!pending}
-                className="flex max-h-[85svh] flex-col overflow-hidden sm:max-w-4xl"
+                className={
+                    inquiryPreview
+                        ? "flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-5xl"
+                        : "flex max-h-[85svh] flex-col overflow-hidden sm:max-w-4xl"
+                }
             >
                 <DialogHeader className="shrink-0">
-                    <DialogTitle>
-                        {quote ? "核对供应商报价" : "核对客户选品导入"}
-                    </DialogTitle>
+                    <div className="flex flex-wrap items-center gap-2.5">
+                        <DialogTitle>
+                            {quote ? "核对供应商报价" : "核对客户选品导入"}
+                        </DialogTitle>
+                        {inquiryPreview ? (
+                            <StatusBadge
+                                tone={
+                                    inquiryPreview.errors.length > 0
+                                        ? "destructive"
+                                        : inquiryPreview.merges.length > 0
+                                          ? "warning"
+                                          : "success"
+                                }
+                                label={
+                                    inquiryPreview.errors.length > 0
+                                        ? "校验未通过"
+                                        : inquiryPreview.merges.length > 0
+                                          ? "待确认合并"
+                                          : "校验通过"
+                                }
+                            />
+                        ) : null}
+                    </div>
                     <DialogDescription>
                         {quote
                             ? "核对原任务生成的报价预览，确认后登记内部报价。"

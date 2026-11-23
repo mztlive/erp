@@ -3,17 +3,18 @@
 import * as React from "react"
 import { useStore } from "@tanstack/react-form"
 import { useMutation } from "@tanstack/react-query"
-import { DownloadIcon } from "lucide-react"
+import {
+    DownloadIcon,
+    FileSpreadsheetIcon,
+    RotateCwIcon,
+    Trash2Icon,
+    UploadIcon,
+} from "lucide-react"
 import type { ReactNode } from "react"
 import { CustomerSearchCombobox } from "@/features/entity-selectors/components/customer-search-combobox"
 
-import {
-    ImportIssueTable,
-    MoneyValue,
-    QuantityValue,
-} from "@/components/business"
 import { useAppForm, toFieldErrors } from "@/components/form"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -26,50 +27,24 @@ import {
 } from "@/components/ui/dialog"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { FileUpload } from "@/components/ui/file-upload"
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { getErrorMessage } from "@/lib/api/errors"
-import { toAutomationIdSegment } from "@/lib/automation-id"
-import type { InquiryRequirement } from "../types"
+import { fileSelectionError, formatFileSize } from "@/lib/file-selection"
+import { cn } from "@/lib/utils"
 import {
     INQUIRY_IMPORT_MAX_BYTES,
     INQUIRY_WORKBOOK_MIME,
 } from "../lib/customer-workbook"
-import { inquiryDateInput } from "../lib/format"
+import {
+    InquiryImportPreviewPanel,
+    type InquiryImportConfirmResult,
+    type InquiryImportPreview,
+} from "./inquiry-import-preview-panel"
 
-export type InquiryImportPreview = {
-    preview_id: string
-    template_version: string
-    expected_version: number
-    input_fingerprint: string
-    errors: {
-        sheet: string
-        row_number: number
-        column: string
-        message: string
-    }[]
-    merges: {
-        sheet: string
-        row_numbers: number[]
-        sku_code: string
-        merged_quantity: string
-    }[]
-    data: InquiryRequirement
-    expires_at: number
-}
-
-export type InquiryImportConfirmResult = {
-    inquiry_id: string
-    preview_id: string
-    version: number
-    line_count: number
-    allocation_count: number
+export {
+    InquiryImportPreviewPanel,
+    type InquiryImportConfirmResult,
+    type InquiryImportPreview,
 }
 
 type InquiryImportDialogProps = {
@@ -107,6 +82,8 @@ export function InquiryImportDialog({
     finalFocusId = "sales-inquiries-import-create",
     recovery,
 }: InquiryImportDialogProps) {
+    const replaceInputRef = React.useRef<HTMLInputElement>(null)
+    const [replaceError, setReplaceError] = React.useState<string | null>(null)
     const downloadTemplate = useMutation({
         mutationFn: async () => onDownloadTemplate?.(),
     })
@@ -151,6 +128,7 @@ export function InquiryImportDialog({
                 const preview = await onPreview(value.file, value.customer_id)
                 form.setFieldValue("preview", preview)
                 form.setFieldValue("confirm_merge_duplicates", false)
+                setReplaceError(null)
                 if (
                     creation &&
                     !preview.errors.length &&
@@ -168,6 +146,7 @@ export function InquiryImportDialog({
                 value.customer_id,
             )
             form.reset()
+            setReplaceError(null)
             onOpenChange(false)
         },
     })
@@ -176,6 +155,7 @@ export function InquiryImportDialog({
     const locked = busy || submitting || disabled
     const preview = values.preview
     const hasErrors = Boolean(preview?.errors.length)
+    const hasMerges = Boolean(preview?.merges.length)
 
     React.useEffect(() => {
         if (!open || !creation || !initialCustomerId) return
@@ -183,6 +163,31 @@ export function InquiryImportDialog({
             form.setFieldValue("customer_id", initialCustomerId)
         }
     }, [creation, form, initialCustomerId, open])
+
+    const handleReplaceFile = (files: FileList | null) => {
+        if (!files?.length || locked) return
+        const selected = Array.from(files)
+        const validation = fileSelectionError(selected, {
+            accept: `${INQUIRY_WORKBOOK_MIME},.xlsx`,
+            multiple: false,
+            maxFileSize: INQUIRY_IMPORT_MAX_BYTES,
+        })
+        if (validation) {
+            setReplaceError(validation)
+            return
+        }
+        setReplaceError(null)
+        form.setFieldValue("file", selected[0] ?? null)
+        form.setFieldValue("preview", null)
+        form.setFieldValue("confirm_merge_duplicates", false)
+    }
+
+    const handleRemoveFile = () => {
+        setReplaceError(null)
+        form.setFieldValue("file", null)
+        form.setFieldValue("preview", null)
+        form.setFieldValue("confirm_merge_duplicates", false)
+    }
 
     return (
         <Dialog
@@ -195,123 +200,329 @@ export function InquiryImportDialog({
                 id="sales-inquiry-import-dialog"
                 closeButtonId="sales-inquiry-import-dismiss"
                 showCloseButton={!busy && !submitting}
-                className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-4xl"
+                className={cn(
+                    "flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0",
+                    preview ? "sm:max-w-5xl" : "sm:max-w-2xl",
+                )}
                 finalFocus={
                     creation
                         ? () => document.getElementById(finalFocusId)
                         : undefined
                 }
             >
-                <DialogHeader className="shrink-0">
-                    <DialogTitle>导入客户选品</DialogTitle>
+                <DialogHeader className="shrink-0 border-b border-border/60 px-5 pt-4.5 pb-3.5 pr-12">
+                    <div className="flex flex-wrap items-center gap-2.5">
+                        <DialogTitle>导入客户选品</DialogTitle>
+                        {preview ? (
+                            <StatusBadge
+                                tone={
+                                    hasErrors
+                                        ? "destructive"
+                                        : hasMerges
+                                          ? "warning"
+                                          : "success"
+                                }
+                                label={
+                                    hasErrors
+                                        ? "校验未通过"
+                                        : hasMerges
+                                          ? "待确认合并"
+                                          : "校验通过"
+                                }
+                            />
+                        ) : null}
+                    </div>
                     <DialogDescription>
-                        {creation
-                            ? "选择客户并上传填写好的选品 Excel，校验通过后自动创建询价草稿。存在重复配送行时需先核对合并结果。"
-                            : "上传公司商品池导出的选品 Excel，或询价详情下载的客户模板。先核对商品、地址和合并结果，再写入询价草稿。"}
+                        {preview
+                            ? hasErrors
+                                ? "工作簿存在校验问题，请修改原文件后更换上传重新校验。"
+                                : hasMerges
+                                  ? "请核对重复配送行的合并结果及明细，确认时会再次核对商品资格与当前需求版本。"
+                                  : "请核对商品、价格、交期及配送地址。确认写入时会再次核对商品资格与当前需求版本。"
+                            : creation
+                              ? "选择客户并上传填写好的选品 Excel，校验通过后自动创建询价草稿。存在重复配送行时需先核对合并结果。"
+                              : "上传公司商品池导出的选品 Excel，或询价详情下载的客户模板。先核对商品、地址和合并结果，再写入询价草稿。"}
                     </DialogDescription>
                 </DialogHeader>
                 <form
                     id="sales-inquiry-import-form"
-                    className="flex min-h-0 flex-1 flex-col gap-5"
+                    className="flex min-h-0 flex-1 flex-col overflow-hidden"
                     onSubmit={(event) => {
                         event.preventDefault()
                         void form.handleSubmit()
                     }}
                 >
-                    <div className="min-h-0 flex-1 space-y-5 overflow-y-auto pr-1">
-                        {creation && (
-                            <form.AppField name="customer_id">
-                                {(field) => (
-                                    <Field>
-                                        <FieldLabel htmlFor="sales-inquiry-import-customer">
-                                            客户
-                                        </FieldLabel>
-                                        <CustomerSearchCombobox
-                                            id="sales-inquiry-import-customer"
-                                            value={
-                                                field.state.value || undefined
-                                            }
-                                            disabled={locked}
-                                            onValueChange={(id) => {
-                                                field.handleChange(id ?? "")
-                                                form.setFieldValue(
-                                                    "preview",
-                                                    null,
-                                                )
-                                                form.setFieldValue(
-                                                    "confirm_merge_duplicates",
-                                                    false,
-                                                )
-                                            }}
+                    {preview && values.file ? (
+                        <div className="shrink-0 space-y-2.5 border-b border-border/60 bg-surface-sunken/45 px-5 py-2.5">
+                            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                                <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                                    <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border/70 bg-card text-primary">
+                                        <FileSpreadsheetIcon
+                                            aria-hidden="true"
+                                            className="size-4"
                                         />
-                                        <FieldError
-                                            errors={toFieldErrors(
-                                                field.state.meta.errors,
-                                            )}
-                                        />
-                                    </Field>
-                                )}
-                            </form.AppField>
-                        )}
-                        <form.AppField name="file">
-                            {(field) => (
-                                <Field>
-                                    <FieldLabel htmlFor="sales-inquiry-import-file-input">
-                                        客户选品工作簿
-                                    </FieldLabel>
-                                    <FileUpload
-                                        idPrefix="sales-inquiry-import-file"
+                                    </span>
+                                    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                        <span
+                                            title={values.file.name}
+                                            className="max-w-64 truncate font-medium text-foreground sm:max-w-md"
+                                        >
+                                            {values.file.name}
+                                        </span>
+                                        <span className="num shrink-0 text-xs text-muted-foreground">
+                                            {formatFileSize(values.file.size)}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-1">
+                                    <input
+                                        ref={replaceInputRef}
+                                        id="sales-inquiry-import-file-input"
+                                        type="file"
                                         accept={`${INQUIRY_WORKBOOK_MIME},.xlsx`}
-                                        multiple={false}
                                         disabled={locked}
-                                        maxFileSize={INQUIRY_IMPORT_MAX_BYTES}
-                                        label="上传客户填写的工作簿"
-                                        description="仅支持 XLSX，最大 5 MiB、2,000 条配送行，分组后最多 200 条需求。系统自动公式可直接导入，自行添加的公式须先粘贴为值。"
-                                        selectedFiles={
-                                            field.state.value
-                                                ? [field.state.value]
-                                                : []
+                                        className="sr-only"
+                                        onChange={(event) => {
+                                            handleReplaceFile(
+                                                event.target.files,
+                                            )
+                                            event.target.value = ""
+                                        }}
+                                    />
+                                    <Button
+                                        id="sales-inquiry-import-file-select"
+                                        type="button"
+                                        variant={
+                                            hasErrors ? "outline" : "ghost"
                                         }
-                                        onFilesSelected={(files) => {
-                                            field.handleChange(files[0] ?? null)
-                                            field.handleBlur()
+                                        size="xs"
+                                        disabled={locked}
+                                        onClick={() =>
+                                            replaceInputRef.current?.click()
+                                        }
+                                    >
+                                        <UploadIcon
+                                            aria-hidden="true"
+                                            data-icon="inline-start"
+                                        />
+                                        更换文件
+                                    </Button>
+                                    <Button
+                                        id="sales-inquiry-import-preview-again"
+                                        type="button"
+                                        variant="ghost"
+                                        size="xs"
+                                        disabled={locked}
+                                        onClick={() => {
+                                            setReplaceError(null)
                                             form.setFieldValue("preview", null)
                                             form.setFieldValue(
                                                 "confirm_merge_duplicates",
                                                 false,
                                             )
+                                            void form.handleSubmit()
                                         }}
-                                        onFileRemove={() => {
-                                            field.handleChange(null)
-                                            form.setFieldValue("preview", null)
-                                            form.setFieldValue(
-                                                "confirm_merge_duplicates",
-                                                false,
-                                            )
-                                        }}
-                                    />
-                                    <FieldError
-                                        errors={toFieldErrors(
-                                            field.state.meta.errors,
+                                    >
+                                        <RotateCwIcon
+                                            aria-hidden="true"
+                                            data-icon="inline-start"
+                                        />
+                                        {creation
+                                            ? "重新校验并创建"
+                                            : "重新预览"}
+                                    </Button>
+                                    <Button
+                                        id="sales-inquiry-import-file-remove"
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon-xs"
+                                        disabled={locked}
+                                        aria-label="移除已选文件"
+                                        title="移除文件"
+                                        className="text-muted-foreground hover:bg-destructive-soft/75 hover:text-destructive-soft-foreground"
+                                        onClick={handleRemoveFile}
+                                    >
+                                        <Trash2Icon aria-hidden="true" />
+                                    </Button>
+                                </div>
+                            </div>
+                            {creation ? (
+                                <form.AppField name="customer_id">
+                                    {(field) => (
+                                        <Field className="flex flex-row items-center gap-3">
+                                            <FieldLabel
+                                                htmlFor="sales-inquiry-import-customer"
+                                                className="shrink-0"
+                                            >
+                                                客户
+                                            </FieldLabel>
+                                            <div className="min-w-0 max-w-sm flex-1">
+                                                <CustomerSearchCombobox
+                                                    id="sales-inquiry-import-customer"
+                                                    value={
+                                                        field.state.value ||
+                                                        undefined
+                                                    }
+                                                    disabled={locked}
+                                                    onValueChange={(id) => {
+                                                        field.handleChange(
+                                                            id ?? "",
+                                                        )
+                                                        form.setFieldValue(
+                                                            "preview",
+                                                            null,
+                                                        )
+                                                        form.setFieldValue(
+                                                            "confirm_merge_duplicates",
+                                                            false,
+                                                        )
+                                                    }}
+                                                />
+                                            </div>
+                                            <FieldError
+                                                errors={toFieldErrors(
+                                                    field.state.meta.errors,
+                                                )}
+                                            />
+                                        </Field>
+                                    )}
+                                </form.AppField>
+                            ) : null}
+                            {replaceError ? (
+                                <p
+                                    role="alert"
+                                    className="text-xs text-destructive"
+                                >
+                                    {replaceError}
+                                </p>
+                            ) : null}
+                        </div>
+                    ) : null}
+
+                    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
+                        {!preview ? (
+                            <>
+                                {creation ? (
+                                    <form.AppField name="customer_id">
+                                        {(field) => (
+                                            <Field>
+                                                <FieldLabel htmlFor="sales-inquiry-import-customer">
+                                                    客户
+                                                </FieldLabel>
+                                                <CustomerSearchCombobox
+                                                    id="sales-inquiry-import-customer"
+                                                    value={
+                                                        field.state.value ||
+                                                        undefined
+                                                    }
+                                                    disabled={locked}
+                                                    onValueChange={(id) => {
+                                                        field.handleChange(
+                                                            id ?? "",
+                                                        )
+                                                        form.setFieldValue(
+                                                            "preview",
+                                                            null,
+                                                        )
+                                                        form.setFieldValue(
+                                                            "confirm_merge_duplicates",
+                                                            false,
+                                                        )
+                                                    }}
+                                                />
+                                                <FieldError
+                                                    errors={toFieldErrors(
+                                                        field.state.meta.errors,
+                                                    )}
+                                                />
+                                            </Field>
                                         )}
-                                    />
-                                </Field>
-                            )}
-                        </form.AppField>
-
-                        {preview ? (
+                                    </form.AppField>
+                                ) : null}
+                                <form.AppField name="file">
+                                    {(field) => (
+                                        <Field>
+                                            <FieldLabel htmlFor="sales-inquiry-import-file-input">
+                                                客户选品工作簿
+                                            </FieldLabel>
+                                            <FileUpload
+                                                idPrefix="sales-inquiry-import-file"
+                                                accept={`${INQUIRY_WORKBOOK_MIME},.xlsx`}
+                                                multiple={false}
+                                                disabled={locked}
+                                                maxFileSize={
+                                                    INQUIRY_IMPORT_MAX_BYTES
+                                                }
+                                                label="上传客户填写的工作簿"
+                                                description="仅支持 XLSX，最大 5 MiB、2,000 条配送行，分组后最多 200 条需求。系统自动公式可直接导入，自行添加的公式须先粘贴为值。"
+                                                selectedFiles={
+                                                    field.state.value
+                                                        ? [field.state.value]
+                                                        : []
+                                                }
+                                                onFilesSelected={(files) => {
+                                                    setReplaceError(null)
+                                                    field.handleChange(
+                                                        files[0] ?? null,
+                                                    )
+                                                    field.handleBlur()
+                                                    form.setFieldValue(
+                                                        "preview",
+                                                        null,
+                                                    )
+                                                    form.setFieldValue(
+                                                        "confirm_merge_duplicates",
+                                                        false,
+                                                    )
+                                                }}
+                                                onFileRemove={handleRemoveFile}
+                                            />
+                                            <FieldError
+                                                errors={toFieldErrors(
+                                                    field.state.meta.errors,
+                                                )}
+                                            />
+                                        </Field>
+                                    )}
+                                </form.AppField>
+                            </>
+                        ) : (
                             <InquiryImportPreviewPanel preview={preview} />
-                        ) : null}
+                        )}
 
-                        {preview?.merges.length ? (
+                        {error || downloadTemplate.isError ? (
+                            <Alert variant="destructive" className="shrink-0">
+                                <AlertDescription>
+                                    {getErrorMessage(
+                                        error ?? downloadTemplate.error,
+                                        "处理失败，请保留文件后重试",
+                                    )}
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
+                        {recovery}
+                    </div>
+
+                    {preview?.merges.length ? (
+                        <div
+                            className={cn(
+                                "shrink-0 border-t border-border/60 px-5 py-2.5 transition-colors",
+                                hasErrors
+                                    ? "bg-muted/35"
+                                    : values.confirm_merge_duplicates
+                                      ? "bg-success-soft/35"
+                                      : "bg-warning-soft/50",
+                            )}
+                        >
                             <form.AppField name="confirm_merge_duplicates">
                                 {(field) => (
                                     <Field>
-                                        <div className="flex items-start gap-2 rounded-lg border p-3">
+                                        <div className="flex items-start gap-2.5">
                                             <Checkbox
                                                 id="sales-inquiry-import-confirm-merges"
                                                 checked={field.state.value}
                                                 disabled={locked || hasErrors}
+                                                className="mt-0.5"
                                                 onCheckedChange={(checked) => {
                                                     field.handleChange(
                                                         checked === true,
@@ -321,7 +532,7 @@ export function InquiryImportDialog({
                                             />
                                             <FieldLabel
                                                 htmlFor="sales-inquiry-import-confirm-merges"
-                                                className="leading-5"
+                                                className="text-body-compact font-medium text-foreground"
                                             >
                                                 已核对重复配送行，同意按上方结果合并数量
                                             </FieldLabel>
@@ -334,245 +545,72 @@ export function InquiryImportDialog({
                                     </Field>
                                 )}
                             </form.AppField>
-                        ) : null}
-                        {error || downloadTemplate.isError ? (
-                            <Alert variant="destructive">
-                                <AlertDescription>
-                                    {getErrorMessage(
-                                        error ?? downloadTemplate.error,
-                                        "处理失败，请保留文件后重试",
-                                    )}
-                                </AlertDescription>
-                            </Alert>
-                        ) : null}
-                        {recovery}
-                    </div>
-                    <DialogFooter className="shrink-0">
-                        {onDownloadTemplate ? (
+                        </div>
+                    ) : null}
+
+                    <DialogFooter className="shrink-0 border-t border-border/60 bg-surface-sunken/30 px-5 py-3 sm:items-center sm:justify-between">
+                        <div className="flex items-center gap-2">
+                            {onDownloadTemplate ? (
+                                <Button
+                                    id="sales-inquiry-import-download-template"
+                                    type="button"
+                                    variant="ghost"
+                                    disabled={
+                                        locked ||
+                                        templateBusy ||
+                                        downloadTemplate.isPending
+                                    }
+                                    className="text-muted-foreground hover:text-foreground"
+                                    onClick={() => downloadTemplate.mutate()}
+                                >
+                                    <DownloadIcon data-icon="inline-start" />
+                                    {templateBusy || downloadTemplate.isPending
+                                        ? "正在生成…"
+                                        : "下载客户模板"}
+                                </Button>
+                            ) : preview && !hasErrors ? (
+                                <span className="num text-xs text-muted-foreground">
+                                    共 {preview.data.lines.length}{" "}
+                                    条需求待写入草稿
+                                </span>
+                            ) : null}
+                        </div>
+                        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
                             <Button
-                                id="sales-inquiry-import-download-template"
+                                id="sales-inquiry-import-cancel"
                                 type="button"
                                 variant="outline"
-                                disabled={
-                                    locked ||
-                                    templateBusy ||
-                                    downloadTemplate.isPending
-                                }
-                                onClick={() => downloadTemplate.mutate()}
+                                disabled={busy || submitting}
+                                onClick={() => onOpenChange(false)}
                             >
-                                <DownloadIcon data-icon="inline-start" />
-                                {templateBusy || downloadTemplate.isPending
-                                    ? "正在生成…"
-                                    : "下载客户模板"}
+                                关闭
                             </Button>
-                        ) : null}
-                        <Button
-                            id="sales-inquiry-import-cancel"
-                            type="button"
-                            variant="outline"
-                            disabled={busy || submitting}
-                            onClick={() => onOpenChange(false)}
-                        >
-                            关闭
-                        </Button>
-                        {preview ? (
-                            <Button
-                                id="sales-inquiry-import-preview-again"
-                                type="button"
-                                variant="outline"
-                                disabled={locked}
-                                onClick={() => {
-                                    form.setFieldValue("preview", null)
-                                    form.setFieldValue(
-                                        "confirm_merge_duplicates",
-                                        false,
-                                    )
-                                    void form.handleSubmit()
-                                }}
-                            >
-                                {creation ? "重新校验并创建" : "重新预览"}
-                            </Button>
-                        ) : null}
-                        <form.AppForm>
-                            <form.SubmitButton
-                                id="sales-inquiry-import-submit"
-                                label={
-                                    creation
-                                        ? "创建询价草稿"
-                                        : preview
-                                          ? "确认写入草稿"
-                                          : "校验并预览"
-                                }
-                                pendingLabel={
-                                    preview
-                                        ? creation
-                                            ? "正在创建…"
-                                            : "正在写入…"
-                                        : "正在校验…"
-                                }
-                                loading={busy}
-                                disabled={disabled || hasErrors}
-                            />
-                        </form.AppForm>
+                            <form.AppForm>
+                                <form.SubmitButton
+                                    id="sales-inquiry-import-submit"
+                                    label={
+                                        creation
+                                            ? "创建询价草稿"
+                                            : preview
+                                              ? "确认写入草稿"
+                                              : "校验并预览"
+                                    }
+                                    pendingLabel={
+                                        preview
+                                            ? creation
+                                                ? "正在创建…"
+                                                : "正在写入…"
+                                            : "正在校验…"
+                                    }
+                                    loading={busy}
+                                    disabled={disabled || hasErrors}
+                                />
+                            </form.AppForm>
+                        </div>
                     </DialogFooter>
                 </form>
             </DialogContent>
         </Dialog>
-    )
-}
-
-export function InquiryImportPreviewPanel({
-    preview,
-}: {
-    preview: InquiryImportPreview
-}) {
-    return (
-        <section aria-label="导入预览" className="space-y-4">
-            <Alert variant={preview.errors.length ? "warning" : "success"}>
-                <AlertTitle>
-                    {preview.errors.length
-                        ? "请修正后重新预览"
-                        : "校验通过，请核对后确认"}
-                </AlertTitle>
-                <AlertDescription>
-                    {preview.data.lines.length} 条商品需求、
-                    {preview.data.lines.reduce(
-                        (sum, line) => sum + line.allocations.length,
-                        0,
-                    )}{" "}
-                    个配送地址。
-                    {preview.errors.length
-                        ? `发现 ${preview.errors.length} 项问题，当前文件不会写入草稿。`
-                        : "确认时会再次核对商品资格与当前需求版本。"}
-                </AlertDescription>
-            </Alert>
-            {preview.errors.length ? (
-                <ImportIssueTable
-                    issues={preview.errors.map((issue) => ({
-                        id: `${issue.sheet}-${issue.row_number}-${issue.column}-${issue.message}`,
-                        rowNumber: `${issue.sheet} · ${issue.row_number}`,
-                        field: issue.column,
-                        errorCode: "INQUIRY_IMPORT_INVALID",
-                        message: issue.message,
-                        repairable: true,
-                    }))}
-                    errorCodeLabel={() => "校验未通过"}
-                    repairableLabel="修改文件后重新预览"
-                />
-            ) : null}
-            {preview.merges.length ? (
-                <div className="overflow-hidden rounded-lg border">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>重复配送行</TableHead>
-                                <TableHead>SKU 编码</TableHead>
-                                <TableHead>合并后数量</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {preview.merges.map((merge) => (
-                                <TableRow
-                                    key={`${merge.sheet}-${merge.row_numbers.join("-")}`}
-                                >
-                                    <TableCell>
-                                        {merge.sheet} · 第{" "}
-                                        {merge.row_numbers.join("、")} 行
-                                    </TableCell>
-                                    <TableCell className="num">
-                                        {merge.sku_code}
-                                    </TableCell>
-                                    <TableCell>
-                                        <QuantityValue
-                                            value={merge.merged_quantity}
-                                            unit=""
-                                        />
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
-            ) : null}
-            {preview.data.lines.map((line) => {
-                const id = `sales-inquiry-import-line-${toAutomationIdSegment(line.line_id)}`
-                return (
-                    <details key={line.line_id} className="rounded-lg border">
-                        <summary
-                            id={`${id}-toggle`}
-                            className="cursor-pointer space-y-1 px-4 py-3"
-                        >
-                            <span className="font-medium">
-                                {line.product_name}
-                            </span>
-                            <span className="ml-3">
-                                <QuantityValue
-                                    value={line.quantity}
-                                    unit={line.unit_code}
-                                />
-                            </span>
-                            <span className="ml-3 text-xs text-muted-foreground">
-                                {line.sku_code} · {line.allocations.length}{" "}
-                                个地址
-                            </span>
-                        </summary>
-                        <div className="space-y-3 border-t px-4 py-3">
-                            <p className="text-xs text-muted-foreground">
-                                {line.specification || "未标注规格"}
-                                ；要求交付日期：
-                                {inquiryDateInput(line.delivery_due_at) ||
-                                    "未标注"}
-                                ；交付条件：
-                                {line.delivery_terms || "未标注"}
-                            </p>
-                            {line.sales_reference_price_gross ? (
-                                <p className="text-body-compact">
-                                    销售价：
-                                    <MoneyValue
-                                        value={line.sales_reference_price_gross}
-                                        display="exact"
-                                    />
-                                </p>
-                            ) : null}
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>收件人及电话</TableHead>
-                                        <TableHead>收货地址</TableHead>
-                                        <TableHead>数量</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {line.allocations.map((allocation) => (
-                                        <TableRow
-                                            key={allocation.allocation_id}
-                                        >
-                                            <TableCell>
-                                                {allocation.recipient}
-                                                <br />
-                                                <span className="num text-muted-foreground">
-                                                    {allocation.phone}
-                                                </span>
-                                            </TableCell>
-                                            <TableCell className="whitespace-normal">
-                                                {allocation.region_name}
-                                                {allocation.address}
-                                            </TableCell>
-                                            <TableCell>
-                                                <QuantityValue
-                                                    value={allocation.quantity}
-                                                    unit={line.unit_code}
-                                                />
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    </details>
-                )
-            })}
-        </section>
     )
 }
 

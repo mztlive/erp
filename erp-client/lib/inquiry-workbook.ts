@@ -38,6 +38,7 @@ export const INQUIRY_DELIVERY_HEADERS = [
 
 /** 只接收客户模板接口返回的商品快照，不接收商品池内部导出行。 */
 export type InquiryCustomerWorkbookProduct = Readonly<{
+    sku_id: string
     sku_code: string
     product_name: string
     specification: string | null

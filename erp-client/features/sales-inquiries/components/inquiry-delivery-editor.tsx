@@ -18,13 +18,14 @@ import {
 import { StatusBadge } from "@/components/ui/status-badge"
 import { toast } from "@/components/ui/toast"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { compareDecimal, sumFixed } from "@/lib/fixed-decimal"
+import { compactFixed, compareDecimal, sumFixed } from "@/lib/fixed-decimal"
 import type { AddressImportChanges } from "../lib/address-import-plan"
 import { demandFormDefaults } from "../lib/demand-form"
 import {
     allocationRestrictions,
     deliveryProgress,
     newAllocation,
+    sumDeliveryQuantities,
 } from "../lib/delivery-progress"
 import type { InquiryAllocation, InquiryLine, SalesInquiry } from "../types"
 import { InquiryDeliveryAddressDialog } from "./inquiry-delivery-address-form"
@@ -84,7 +85,38 @@ export const InquiryDeliveryEditor = withForm({
                   )
                 : []
         const progress = deliveryProgress({ ...line, unit_code: unit ?? "" })
-        const allocationsPath = `draft.lines[${index}].allocations` as const
+        const linePath = `draft.lines[${index}]` as const
+        const allocationsPath = `${linePath}.allocations` as const
+
+        const updateAllocations = (
+            currentLine: InquiryLine,
+            allocations: InquiryAllocation[],
+            syncDemand: boolean,
+        ) => {
+            if (!syncDemand || currentLine.fulfillment_kind !== "physical") {
+                form.setFieldValue(allocationsPath, allocations)
+                return
+            }
+
+            let quantity: string
+            try {
+                quantity = compactFixed(
+                    sumDeliveryQuantities(
+                        allocations,
+                        currentLine.quantity_scale,
+                    ),
+                )
+            } catch {
+                throw new Error("请核对各地址的配送数量。")
+            }
+            form.setFieldValue("draft.lines", (lines) =>
+                lines.map((item) =>
+                    item.line_id === currentLine.line_id
+                        ? { ...item, allocations, quantity }
+                        : item,
+                ),
+            )
+        }
 
         const reuseAddressesFrom = (source: InquiryLine) => {
             if (disabled) return
@@ -168,7 +200,8 @@ export const InquiryDeliveryEditor = withForm({
                 appendAddresses([value])
                 return
             }
-            const current = form.getFieldValue(allocationsPath)
+            const currentLine = form.getFieldValue(linePath)
+            const current = currentLine.allocations
             const source = current.find(
                 (item) => item.allocation_id === editing.sourceId,
             )
@@ -181,18 +214,19 @@ export const InquiryDeliveryEditor = withForm({
                 : access.frozen
                   ? { ...source, quantity: value.quantity }
                   : { ...value, allocation_id: source.allocation_id }
-            form.setFieldValue(
-                allocationsPath,
+            updateAllocations(
+                currentLine,
                 current.map((item) =>
                     item.allocation_id === source.allocation_id ? next : item,
                 ),
+                compactFixed(next.quantity) !== compactFixed(source.quantity),
             )
             setSelectedIds(new Set())
         }
 
         const applyImportedAddresses = (changes: AddressImportChanges) => {
             if (disabled) throw new Error("当前需求不可编辑，请稍后重试。")
-            const currentLine = form.getFieldValue(`draft.lines[${index}]`)
+            const currentLine = form.getFieldValue(linePath)
             const current = currentLine.allocations
             if (JSON.stringify(current) !== changes.base)
                 throw new Error("地址已发生变化，请重新核对预览后确认。")
@@ -240,17 +274,21 @@ export const InquiryDeliveryEditor = withForm({
                     item.quantity,
                 ]),
             )
-            form.setFieldValue(allocationsPath, [
-                ...current.map((item) =>
-                    quantities.has(item.allocation_id)
-                        ? {
-                              ...item,
-                              quantity: quantities.get(item.allocation_id)!,
-                          }
-                        : item,
-                ),
-                ...changes.additions,
-            ])
+            updateAllocations(
+                currentLine,
+                [
+                    ...current.map((item) =>
+                        quantities.has(item.allocation_id)
+                            ? {
+                                  ...item,
+                                  quantity: quantities.get(item.allocation_id)!,
+                              }
+                            : item,
+                    ),
+                    ...changes.additions,
+                ],
+                changes.updates.length > 0,
+            )
         }
 
         const removeAddresses = (ids: ReadonlySet<string>) => {

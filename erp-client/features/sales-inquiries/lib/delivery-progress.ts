@@ -6,6 +6,16 @@ import {
 } from "@/lib/fixed-decimal"
 import type { InquiryAllocation, InquiryLine, SalesInquiry } from "../types"
 
+export function sumDeliveryQuantities(
+    allocations: readonly InquiryAllocation[],
+    scale: number,
+): string {
+    return sumFixed(
+        allocations.map((address) => address.quantity),
+        { maxScale: scale, outputScale: scale },
+    )
+}
+
 /** 已提交的收件资料不可原地改写，销售占用中的地址不可移除或替换。 */
 export function allocationRestrictions(
     inquiry: SalesInquiry | undefined,
@@ -62,10 +72,7 @@ export function deliveryProgress(line: InquiryLine): {
                 invalidQuantity: true,
             }
         }
-        const assigned = sumFixed(
-            line.allocations.map((address) => address.quantity),
-            options,
-        )
+        const assigned = sumDeliveryQuantities(line.allocations, scale)
         const remaining = subtractFixed(line.quantity, assigned, options)
         const comparison = compareDecimal(remaining, "0", scale)
         const quantity = formatFixedDisplay(remaining, {
@@ -115,9 +122,9 @@ export function deliveryAttention(line: InquiryLine): string | null {
             maxScale: line.quantity_scale,
             outputScale: line.quantity_scale,
         }
-        const allocated = sumFixed(
-            line.allocations.map((address) => address.quantity),
-            options,
+        const allocated = sumDeliveryQuantities(
+            line.allocations,
+            line.quantity_scale,
         )
         const quantity = (value: string) =>
             `${formatFixedDisplay(value, { maxScale: line.quantity_scale })} ${line.unit_code}`.trim()

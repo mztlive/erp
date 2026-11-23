@@ -31,6 +31,7 @@ import {
 import {
     downloadInquiryCustomerWorkbook,
     type InquiryCustomerWorkbookProduct,
+    withSavedDemand,
 } from "../lib/customer-workbook"
 import { summarizeDemand } from "../lib/demand-summary"
 import { salesInquiryFeedback } from "../lib/feedback-view"
@@ -191,17 +192,16 @@ export function InquirySalesView({
     )
 
     const safeTemplate = useMutation({
-        mutationFn: () =>
-            apiPost<InquiryCustomerWorkbookProduct[]>(
+        mutationFn: async () => {
+            const lines = inquiry.draft.lines
+            const products = await apiPost<InquiryCustomerWorkbookProduct[]>(
                 `${inquiryPath()}/template-products`,
                 {
-                    sku_ids: [
-                        ...new Set(
-                            inquiry.draft.lines.map((line) => line.sku_id),
-                        ),
-                    ],
+                    sku_ids: [...new Set(lines.map((line) => line.sku_id))],
                 },
-            ),
+            )
+            return withSavedDemand(products, lines)
+        },
     })
     const preview = useMutation({
         mutationFn: async (file: File) =>
