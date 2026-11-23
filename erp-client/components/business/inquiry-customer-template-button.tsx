@@ -11,8 +11,8 @@ import {
 } from "@/lib/inquiry-workbook"
 
 type InquiryCustomerTemplateButtonProps = {
-    /** 已选商品仅用于显示和禁用判断，下载始终重新取得授权后的数据。 */
-    products: readonly InquiryCustomerWorkbookProduct[]
+    /** 下载前重新获取当前授权的商品资料。 */
+    productCount: number
     onLoadProducts: () => Promise<readonly InquiryCustomerWorkbookProduct[]>
     /** 仅销售本次明确确认的参考价可以进入客户文件。 */
     confirmedReferencePrices?: Readonly<Record<string, string>>
@@ -25,7 +25,7 @@ type InquiryCustomerTemplateButtonProps = {
 }
 
 export function InquiryCustomerTemplateButton({
-    products,
+    productCount,
     onLoadProducts,
     confirmedReferencePrices,
     inquiry_no,
@@ -56,7 +56,7 @@ export function InquiryCustomerTemplateButton({
                 variant={variant}
                 size={size}
                 className={buttonClassName}
-                disabled={disabled || !products.length || download.isPending}
+                disabled={disabled || productCount === 0 || download.isPending}
                 onClick={() => download.mutate()}
             >
                 <DownloadIcon data-icon="inline-start" />

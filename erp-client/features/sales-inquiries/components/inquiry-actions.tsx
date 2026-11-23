@@ -20,6 +20,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { toast } from "@/components/ui/toast"
 import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
@@ -101,17 +102,17 @@ export function InquiryActions({
     const [action, setAction] = React.useState<InquiryAction | null>(null)
     const [error, setError] = React.useState<string | null>(null)
     const submitting = React.useRef(false)
-    const requiresReason =
-        action === "submit"
-            ? inquiry.requirement_version > 0
-            : action != null &&
-              [
+    const submitRequiresReason = inquiry.requirement_version > 0
+    const requiresReason = (item: InquiryAction) =>
+        item === "submit"
+            ? submitRequiresReason
+            : [
                   "reinquire",
                   "close",
                   "supplement",
                   "reassign",
                   "renew",
-              ].includes(action)
+              ].includes(item)
     const command = useInquiryCommand(userId, inquiry.id)
     const storageKey = `erp.sales-inquiry-action:${encodeURIComponent(userId)}:${encodeURIComponent(inquiry.id)}`
     const form = useAppForm({
@@ -122,6 +123,7 @@ export function InquiryActions({
             fee_ids: [] as string[],
             buyer_user_id: "",
         },
+        onSubmitMeta: null as InquiryAction | null,
         listeners: {
             onChange: ({ formApi }) => {
                 try {
@@ -134,7 +136,7 @@ export function InquiryActions({
                 }
             },
         },
-        onSubmit: async ({ value }) => {
+        onSubmit: async ({ value, meta: action }) => {
             if (
                 !action ||
                 disabled ||
@@ -158,10 +160,12 @@ export function InquiryActions({
                 const data: Record<string, unknown> = {
                     expected_version: inquiry.version,
                 }
-                if (requiresReason && !value.reason.trim())
+                if (requiresReason(action) && !value.reason.trim())
                     throw new Error("请填写本次操作原因。")
                 if (action === "submit")
-                    data.reason = requiresReason ? value.reason.trim() : ""
+                    data.reason = submitRequiresReason
+                        ? value.reason.trim()
+                        : ""
                 if (action === "accept")
                     data.feedback_round = inquiry.feedback_round
                 if (action === "reinquire")
@@ -294,6 +298,7 @@ export function InquiryActions({
 
     const renderButton = (item: InquiryAction) => {
         const isPrimary = isPrimaryWorkflowAction(item)
+        const submitDirectly = item === "submit" && !submitRequiresReason
         const quiet =
             workspace &&
             ["close", "reassign", "supplement", "reinquire"].includes(item)
@@ -321,7 +326,7 @@ export function InquiryActions({
 
         return (
             <PermissionGuard key={item} permission={permissionForAction(item)}>
-                <Button
+                <LoadingButton
                     key={item}
                     id={`sales-inquiry-action-${item}`}
                     type="button"
@@ -336,6 +341,7 @@ export function InquiryActions({
                               : undefined
                     }
                     disabled={actionDisabled}
+                    loading={submitDirectly && action === null && isSubmitting}
                     title={
                         disabled || (feedbackDirty && item !== "publish")
                             ? (disabledReason ?? "请先保存当前修改后再操作")
@@ -346,8 +352,12 @@ export function InquiryActions({
                               : undefined
                     }
                     onClick={() => {
-                        setAction(item)
                         setError(null)
+                        if (submitDirectly) {
+                            void form.handleSubmit(item)
+                            return
+                        }
+                        setAction(item)
                     }}
                 >
                     {item === "supplement" && (
@@ -363,7 +373,7 @@ export function InquiryActions({
                         />
                     )}
                     {ACTION_LABEL[item]}
-                </Button>
+                </LoadingButton>
             </PermissionGuard>
         )
     }
@@ -477,7 +487,7 @@ export function InquiryActions({
                     command.unresolved ||
                     !command.ready
                 }
-                onConfirm={() => form.handleSubmit()}
+                onConfirm={() => form.handleSubmit("close")}
                 formContent={
                     <div className="space-y-3">
                         {error && (
@@ -534,7 +544,7 @@ export function InquiryActions({
                         className="space-y-4"
                         onSubmit={(event) => {
                             event.preventDefault()
-                            void form.handleSubmit()
+                            if (action) void form.handleSubmit(action)
                         }}
                     >
                         {error && (
@@ -542,7 +552,7 @@ export function InquiryActions({
                                 <AlertDescription>{error}</AlertDescription>
                             </Alert>
                         )}
-                        {requiresReason && (
+                        {action && requiresReason(action) && (
                             <form.AppField
                                 name="reason"
                                 children={(field) => (

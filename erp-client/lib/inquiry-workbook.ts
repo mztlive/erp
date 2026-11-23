@@ -3,7 +3,7 @@ import { appendPoolDeliverySheet } from "@/lib/inquiry-pool-delivery"
 import { downloadBlob } from "@/lib/download-blob"
 import { workbookBlob } from "@/lib/xlsx"
 
-export const INQUIRY_TEMPLATE_VERSION = "sales-inquiry-v1"
+export const INQUIRY_TEMPLATE_VERSION = "sales-inquiry-v2"
 export const INQUIRY_POOL_TEMPLATE_VERSION = "sales-inquiry-pool-v4"
 export const INQUIRY_IMPORT_MAX_BYTES = 5 * 1024 * 1024
 export const INQUIRY_IMPORT_MAX_DELIVERY_ROWS = 2000
@@ -20,6 +20,7 @@ export const INQUIRY_PRODUCT_HEADERS = [
     "需求数量",
     "销售价",
     "需求备注",
+    "单位编码",
 ] as const
 
 export const INQUIRY_DELIVERY_HEADERS = [
@@ -39,8 +40,9 @@ export const INQUIRY_DELIVERY_HEADERS = [
 export type InquiryCustomerWorkbookProduct = Readonly<{
     sku_code: string
     product_name: string
-    specification: string
+    specification: string | null
     unit: string
+    unit_name: string | null
     delivery_key?: string
     inquiry_supported?: boolean
     quantity?: string | null
@@ -52,6 +54,7 @@ function configureSheet(
     sheet: Worksheet,
     headers: readonly string[],
     widths: readonly number[],
+    lastRow = 1,
 ) {
     sheet.addRow([...headers])
     headers.forEach((_, index) => {
@@ -63,7 +66,7 @@ function configureSheet(
     sheet.getRow(1).height = 24
     sheet.autoFilter = {
         from: { row: 1, column: 1 },
-        to: { row: 1, column: headers.length },
+        to: { row: lastRow, column: headers.length },
     }
 }
 
@@ -71,13 +74,13 @@ function configureSheet(
  * ExcelJS 的字符串单元格写为 shared string，不构造公式对象；即使文本以
  * =、+、-、@ 开头，Excel 也按文本保存，并完整保留 SKU 与电话前导零。
  */
-function addTextRow(sheet: Worksheet, values: readonly string[]) {
+function addTextRow(sheet: Worksheet, values: readonly (string | null)[]) {
     const row = sheet.addRow([...values])
     row.alignment = { vertical: "top", wrapText: true }
     values.forEach((value, index) => {
         const cell = row.getCell(index + 1)
         cell.numFmt = "@"
-        cell.value = String(value)
+        cell.value = value
     })
 }
 
@@ -103,17 +106,20 @@ export async function buildInquiryCustomerWorkbook(
     configureSheet(
         productSheet,
         INQUIRY_PRODUCT_HEADERS,
-        [24, 32, 30, 12, 16, 16, 38],
+        [24, 32, 30, 12, 16, 16, 38, 12],
+        products.length + 1,
     )
+    productSheet.getColumn(INQUIRY_PRODUCT_HEADERS.length).hidden = true
     for (const product of products)
         addTextRow(productSheet, [
             product.sku_code,
             product.product_name,
-            product.specification,
-            product.unit,
+            product.specification ?? null,
+            product.unit_name ?? null,
             product.quantity ?? "",
             product.sales_reference_price ?? "",
             product.remark ?? "",
+            product.unit,
         ])
 
     appendInquiryDeliverySheets(workbook, products)
@@ -165,7 +171,7 @@ export function appendInquiryDeliverySheets(
             pool ? "选品" : "商品清单",
             pool
                 ? "在选品页填写需求数量即表示选中；未填数量的商品不导入询价。需求数量、销售价和需求备注由客户或销售填写，原有三种展示价格不会自动作为询价销售价。"
-                : "每个 SKU 仅填写一行。保留 SKU 编码、商品名称、规格和单位；不得新增列或填写供应商、内部报价、采购责任等资料。",
+                : "每个 SKU 仅填写一行。请保留商品资料和隐藏的单位编码列。只填写需求数量、销售价和需求备注。",
         ],
         [
             "配送需求",

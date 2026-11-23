@@ -17,7 +17,9 @@ use super::sales_inquiry::{
 use crate::{Error, Result};
 
 /// 首版客户工作簿版本。
-pub const INQUIRY_TEMPLATE_VERSION: &str = "sales-inquiry-v1";
+pub const INQUIRY_LEGACY_TEMPLATE_VERSION: &str = "sales-inquiry-v1";
+/// 当前客户工作簿版本，分别存放单位名称和单位编码。
+pub const INQUIRY_TEMPLATE_VERSION: &str = "sales-inquiry-v2";
 /// 压缩后的工作簿上限。
 pub const INQUIRY_IMPORT_MAX_BYTES: usize = 5 * 1024 * 1024;
 /// 配送工作表的数据行上限。

@@ -3,7 +3,8 @@
 use std::collections::HashMap;
 
 use erp_sales::entity::sales_inquiry_import::{
-    INQUIRY_IMPORT_MAX_BYTES, INQUIRY_IMPORT_MAX_ROWS, INQUIRY_TEMPLATE_VERSION, InquiryImportIssue,
+    INQUIRY_IMPORT_MAX_BYTES, INQUIRY_IMPORT_MAX_ROWS, INQUIRY_LEGACY_TEMPLATE_VERSION,
+    INQUIRY_TEMPLATE_VERSION, InquiryImportIssue,
 };
 use erp_sales::entity::sales_inquiry_pool::{INSTRUCTIONS_SHEET, POOL_SHEET, PoolTemplateVersion};
 
@@ -18,8 +19,17 @@ pub(super) const PRODUCT_SHEET: &str = "商品清单";
 pub(super) use erp_sales::entity::sales_inquiry_pool::DELIVERY_SHEET;
 pub(super) const PRODUCT_HEADERS: [&str; 7] =
     ["SKU编码", "商品名称", "规格", "单位", "需求数量", "销售价", "需求备注"];
+const PRODUCT_HEADERS_WITH_UNIT_CODE: [&str; 8] =
+    ["SKU编码", "商品名称", "规格", "单位", "需求数量", "销售价", "需求备注", "单位编码"];
 pub(super) const DELIVERY_HEADERS: [&str; 10] =
     ["SKU编码", "收件人", "联系电话", "省", "市", "区县", "详细地址", "配送数量", "要求交付日期", "交付条件"];
+
+#[derive(Clone, Copy)]
+enum TemplateVersion {
+    CustomerV1,
+    CustomerV2,
+    Pool(PoolTemplateVersion),
+}
 
 pub(crate) struct Workbook {
     pub product_sheet: &'static str,
@@ -85,18 +95,37 @@ pub(crate) fn quote_sheets(bytes: &[u8]) -> Result<HashMap<String, Vec<Row>>> {
 
 fn parse_sheets(mut sheets: HashMap<String, Vec<Row>>) -> Result<Workbook> {
     let version = check_version(&sheets)?;
-    let automatic = version.is_some_and(PoolTemplateVersion::automatic_delivery);
+    let pool_version = match version {
+        TemplateVersion::Pool(version) => Some(version),
+        TemplateVersion::CustomerV1 | TemplateVersion::CustomerV2 => None,
+    };
+    let automatic = pool_version.is_some_and(PoolTemplateVersion::automatic_delivery);
     let mut errors = Vec::new();
-    let product_sheet = if sheets.contains_key(POOL_SHEET) { POOL_SHEET } else { PRODUCT_SHEET };
-    let product_rows = sheets.remove(product_sheet).unwrap_or_default();
-    let products = if product_sheet == POOL_SHEET {
-        pool_rows(&product_rows, &mut errors)?
-    } else {
-        data_rows(product_rows.clone(), PRODUCT_SHEET, &PRODUCT_HEADERS, &mut errors)
+    let product_sheet = if pool_version.is_some() { POOL_SHEET } else { PRODUCT_SHEET };
+    let mut product_rows = sheets.remove(product_sheet).unwrap_or_default();
+    let products = match version {
+        TemplateVersion::Pool(_) => pool_rows(&product_rows, &mut errors)?,
+        TemplateVersion::CustomerV1 => {
+            data_rows(std::mem::take(&mut product_rows), PRODUCT_SHEET, &PRODUCT_HEADERS, &mut errors)
+        },
+        TemplateVersion::CustomerV2 => {
+            let mut rows = data_rows(
+                std::mem::take(&mut product_rows),
+                PRODUCT_SHEET,
+                &PRODUCT_HEADERS_WITH_UNIT_CODE,
+                &mut errors,
+            );
+            for row in &mut rows {
+                // 统一为需求行布局，单位校验使用编码列。
+                row.cells.swap(3, PRODUCT_HEADERS_WITH_UNIT_CODE.len() - 1);
+                row.cells.truncate(PRODUCT_HEADERS.len());
+            }
+            rows
+        },
     };
 
     let mut delivery_rows = sheets.remove(DELIVERY_SHEET).unwrap_or_default();
-    if let Some(version) = version {
+    if let Some(version) = pool_version {
         strip_checks(&mut delivery_rows, version, &mut errors);
     }
     let mut deliveries = if automatic {
@@ -134,24 +163,26 @@ fn sheet_paths(archive: &mut Archive<'_>, quote: bool) -> Result<Vec<(String, St
     Ok(result)
 }
 
-fn check_version(sheets: &HashMap<String, Vec<Row>>) -> Result<Option<PoolTemplateVersion>> {
-    let row = sheets.get(INSTRUCTIONS_SHEET).and_then(|rows| rows.iter().find(|row| row.number == 1));
-    let marker = row.and_then(|row| row.cells.get(1)).map(|cell| cell.value.as_str());
-    let pool_version = marker.and_then(PoolTemplateVersion::from_marker);
-    let matches_template = if sheets.contains_key(POOL_SHEET) {
-        pool_version.is_some()
+fn check_version(sheets: &HashMap<String, Vec<Row>>) -> Result<TemplateVersion> {
+    let marker = sheets
+        .get(INSTRUCTIONS_SHEET)
+        .and_then(|rows| rows.iter().find(|row| row.number == 1))
+        .filter(|row| {
+            row.cells.first().is_some_and(|cell| cell.value == "模板版本")
+                && !row.cells.iter().any(|cell| cell.formula)
+        })
+        .and_then(|row| row.cells.get(1))
+        .map(|cell| cell.value.as_str());
+    let version = if sheets.contains_key(POOL_SHEET) {
+        marker.and_then(PoolTemplateVersion::from_marker).map(TemplateVersion::Pool)
     } else {
-        marker == Some(INQUIRY_TEMPLATE_VERSION)
-    };
-    let valid = row.is_some_and(|row| {
-        row.cells.len() >= 2
-            && row.cells[0].value == "模板版本"
-            && matches_template
-            && !row.cells.iter().any(|cell| cell.formula)
-    });
-    if !valid {
-        return Err(invalid("填写说明第 1 行模板版本与工作表不匹配，请使用当前导出文件"));
+        match marker {
+            Some(INQUIRY_LEGACY_TEMPLATE_VERSION) => Some(TemplateVersion::CustomerV1),
+            Some(INQUIRY_TEMPLATE_VERSION) => Some(TemplateVersion::CustomerV2),
+            _ => None,
+        }
     }
+    .ok_or_else(|| invalid("填写说明第 1 行模板版本与工作表不匹配，请使用当前导出文件"))?;
     // 说明页公式不参与业务，但仍须先转值；明细公式由各模板解析器定位。
     if sheets
         .get(INSTRUCTIONS_SHEET)
@@ -159,7 +190,7 @@ fn check_version(sheets: &HashMap<String, Vec<Row>>) -> Result<Option<PoolTempla
     {
         return Err(invalid("填写说明含公式，请先转换为值"));
     }
-    Ok(pool_version)
+    Ok(version)
 }
 
 pub(super) fn data_rows(
@@ -281,14 +312,51 @@ mod tests {
     }
 
     #[test]
+    fn customer_template_reads_unit_code_from_its_versioned_column() {
+        let legacy_row = r#"<c r="A2" t="inlineStr"><is><t>001</t></is></c><c r="D2" t="inlineStr"><is><t>BOX</t></is></c><c r="E2"><v>1</v></c>"#;
+        let legacy = parse(&package(INQUIRY_LEGACY_TEMPLATE_VERSION, legacy_row, "")).unwrap();
+        assert!(legacy.errors.is_empty(), "{:?}", legacy.errors);
+
+        let display_row = legacy_row.replace("BOX", "箱");
+        let code_cell = r#"<c r="H2" t="inlineStr"><is><t>BOX</t></is></c>"#;
+        let new_row = format!("{display_row}{code_cell}");
+        let new = parse(&package_sheet(
+            INQUIRY_TEMPLATE_VERSION,
+            PRODUCT_SHEET,
+            sheet(&PRODUCT_HEADERS_WITH_UNIT_CODE, &new_row),
+            "",
+        ))
+        .unwrap();
+        assert!(new.errors.is_empty(), "{:?}", new.errors);
+        let new_products = product_rows(&new);
+        let legacy_products = product_rows(&legacy);
+        assert_eq!(new_products[0].unit, "BOX");
+        assert_eq!(new_products[0].unit, legacy_products[0].unit);
+        assert_eq!(new_products[0].sku_code, legacy_products[0].sku_code);
+        assert_eq!(new_products[0].quantity, legacy_products[0].quantity);
+
+        let missing_code = parse(&package_sheet(
+            INQUIRY_TEMPLATE_VERSION,
+            PRODUCT_SHEET,
+            sheet(&PRODUCT_HEADERS_WITH_UNIT_CODE, &display_row),
+            "",
+        ))
+        .unwrap();
+        assert!(product_rows(&missing_code)[0].unit.is_empty());
+
+        let missing_column = parse(&package(INQUIRY_TEMPLATE_VERSION, &display_row, "")).unwrap();
+        assert!(missing_column.errors.iter().any(|error| error.column == "表头"));
+    }
+
+    #[test]
     fn numeric_phone_and_excel_date_produce_a_valid_requirement() {
         let products = r#"<c r="A2" t="inlineStr"><is><t>001</t></is></c><c r="D2" t="inlineStr"><is><t>BOX</t></is></c><c r="E2"><v>1</v></c>"#;
         let delivery = r#"<c r="A2" t="inlineStr"><is><t>001</t></is></c><c r="B2" t="inlineStr"><is><t>收件人</t></is></c><c r="C2"><v>1.3800000000E+10</v></c><c r="D2" t="inlineStr"><is><t>广东省</t></is></c><c r="E2" t="inlineStr"><is><t>广州市</t></is></c><c r="F2" t="inlineStr"><is><t>天河区</t></is></c><c r="G2" t="inlineStr"><is><t>测试地址</t></is></c><c r="H2"><v>1</v></c><c r="I2" s="1"><v>46296</v></c>"#;
-        let parsed = parse(&package(INQUIRY_TEMPLATE_VERSION, products, delivery)).unwrap();
+        let parsed = parse(&package(INQUIRY_LEGACY_TEMPLATE_VERSION, products, delivery)).unwrap();
         assert_valid_delivery(&parsed);
 
         // 两种日期系统必须得到同一天，不受 XML 属性引号形式影响。
-        let bytes = package(INQUIRY_TEMPLATE_VERSION, products, &delivery.replace("46296", "44834"));
+        let bytes = package(INQUIRY_LEGACY_TEMPLATE_VERSION, products, &delivery.replace("46296", "44834"));
         let mut archive = ZipArchive::new(Cursor::new(bytes)).unwrap();
         let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
         for index in 0..archive.len() {
@@ -389,7 +457,7 @@ mod tests {
     #[test]
     fn parses_versioned_three_sheet_package_and_locates_formula_rows() {
         let bytes = package(
-            INQUIRY_TEMPLATE_VERSION,
+            INQUIRY_LEGACY_TEMPLATE_VERSION,
             r#"<c r="A2" t="inlineStr"><is><t>001</t></is></c>"#,
             r#"<c r="A9" t="inlineStr"><is><t>001</t></is></c><c r="H9"><f>1+1</f><v>2</v></c>"#,
         );

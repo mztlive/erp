@@ -43,6 +43,7 @@ impl InquiryTemplateProduct {
                 product_name: row.name,
                 specification: row.specification,
                 unit,
+                unit_name: row.base_unit_name,
             });
         }
 
@@ -67,7 +68,7 @@ mod tests {
             "sku_id": id, "sku_version": 1, "sku_revision_id": "revision", "sku_revision_no": 1,
             "sku_no": format!("SKU-{id}"), "product_id": "product", "product_no": "P-1",
             "product_kind": kind, "name": format!("商品{id}"), "specification_signature": "",
-            "base_unit_id": "unit", "base_unit_code": unit, "sales_visible_price_gross": "10.00",
+            "base_unit_id": "unit", "base_unit_code": unit, "base_unit_name": "件", "sales_visible_price_gross": "10.00",
             "effective_from": "2026-10-01", "supplier_count": 1
         }))
         .unwrap()
@@ -93,6 +94,9 @@ mod tests {
             ["service", "physical", "virtual"]
         );
         assert_eq!(result[0].unit, "TIME");
+        assert_eq!(result[1].unit, "PCS");
+        assert_eq!(result[1].unit_name.as_deref(), Some("件"));
+        assert!(result[1].specification.is_none());
     }
 
     #[test]

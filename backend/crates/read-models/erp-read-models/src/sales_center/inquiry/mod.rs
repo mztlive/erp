@@ -180,6 +180,7 @@ pub struct InquiryTemplateProduct {
     pub product_name: String,
     pub specification: Option<String>,
     pub unit: String,
+    pub unit_name: Option<String>,
 }
 
 /// 不缓存对象资格的询价读取用例。

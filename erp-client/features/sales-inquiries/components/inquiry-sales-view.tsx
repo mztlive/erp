@@ -239,12 +239,7 @@ export function InquirySalesView({
                         size="sm"
                         variant="ghost"
                         buttonClassName={detailWorkspaceStyles.subtleButton}
-                        products={inquiry.draft.lines.map((line) => ({
-                            sku_code: line.sku_code,
-                            product_name: line.product_name,
-                            specification: line.specification,
-                            unit: line.unit_code,
-                        }))}
+                        productCount={inquiry.draft.lines.length}
                         onLoadProducts={() => safeTemplate.mutateAsync()}
                         inquiry_no={inquiry.inquiry_no}
                         disabled={inquiry.status === "closed"}
