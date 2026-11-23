@@ -268,31 +268,26 @@ export function AccountDetailSidebar({
                     账号安全
                 </h2>
 
-                <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                        <span className="font-medium text-foreground">
-                            登录密码
-                        </span>
-                        {canChangePassword ? (
-                            <Button
-                                id="account-detail-password"
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className={detailWorkspaceStyles.subtleButton}
-                                onClick={onPasswordChange}
-                            >
-                                <KeyRoundIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                />
-                                修改密码
-                            </Button>
-                        ) : null}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                        修改密码单独保存，不影响姓名、部门与角色配置。
-                    </p>
+                <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-foreground">
+                        登录密码
+                    </span>
+                    {canChangePassword ? (
+                        <Button
+                            id="account-detail-password"
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className={detailWorkspaceStyles.subtleButton}
+                            onClick={onPasswordChange}
+                        >
+                            <KeyRoundIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            修改密码
+                        </Button>
+                    ) : null}
                 </div>
 
                 {protectionNote ? (

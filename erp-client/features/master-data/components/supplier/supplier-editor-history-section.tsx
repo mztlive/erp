@@ -16,7 +16,6 @@ export function SupplierEditorHistorySection({
             <DetailWorkspaceSection
                 title={masterDataCopy.centerVersions}
                 width="form"
-                subtitle={masterDataCopy.centerVersionsDesc}
             >
                 <RevisionTimeline
                     revisions={data.revisionTimeline.map((rev) =>
@@ -30,7 +29,6 @@ export function SupplierEditorHistorySection({
             <DetailWorkspaceSection
                 title={masterDataCopy.centerAudit}
                 width="form"
-                subtitle={masterDataCopy.centerAuditDesc}
             >
                 <MasterDataAuditList events={data.auditEvents} />
             </DetailWorkspaceSection>

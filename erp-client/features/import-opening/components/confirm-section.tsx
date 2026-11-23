@@ -161,10 +161,7 @@ export function ConfirmSection({
     } = useConfirmationActions(batch, onTaskCompleted)
 
     return (
-        <DetailWorkspaceSection
-            title="部门责任确认"
-            subtitle="各业务部门按职责范围核对最新预检结果并登记确认结论。"
-        >
+        <DetailWorkspaceSection title="部门责任确认">
             {workItemTypeMissing ? (
                 <FormalActionResult
                     status="blocked"

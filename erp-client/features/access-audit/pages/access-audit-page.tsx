@@ -56,11 +56,7 @@ export function AccessAuditPage() {
 
     if (page.rejectedWorkItemId) {
         return (
-            <ListWorkspacePage
-                title={TITLE}
-                eyebrow="系统"
-                description="管理角色的操作权限，查看关联人员。"
-            >
+            <ListWorkspacePage title={TITLE}>
                 <FormalActionResult
                     status="blocked"
                     title="权限复核入口未开放"

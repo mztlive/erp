@@ -5,7 +5,6 @@ import {
     DetailWorkspaceFacts,
     DetailWorkspaceSection,
 } from "@/components/business"
-import { Separator } from "@/components/ui/separator"
 import type { ImportBatchView } from "@/features/import-opening/types"
 import { RETENTION_LABEL } from "@/features/import-opening/types"
 import { formatDateTime } from "@/lib/datetime"
@@ -20,10 +19,7 @@ function formatBytes(n: number) {
 export function FilesSection({ batch }: { batch: ImportBatchView }) {
     return (
         <>
-            <DetailWorkspaceSection
-                title="导入源文件"
-                subtitle="展示本次上传的期初数据文件基本信息与检查状态。"
-            >
+            <DetailWorkspaceSection title="导入源文件">
                 <div className="space-y-4">
                     {batch.inputAsset ? (
                         <DetailWorkspaceFacts columns={3}>
@@ -74,10 +70,6 @@ export function FilesSection({ batch }: { batch: ImportBatchView }) {
                             暂未上传导入文件。
                         </p>
                     )}
-                    <Separator />
-                    <p className="text-xs text-muted-foreground">
-                        请按标准模板整理数据，避免包含系统无关字段。
-                    </p>
                 </div>
             </DetailWorkspaceSection>
 

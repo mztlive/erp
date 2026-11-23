@@ -120,9 +120,6 @@ export function AuditLogDetails({ row }: { row: AuditLogItem }) {
                         {auditChangesLabel(row)}
                     </p>
                 )}
-                <p className="text-xs text-muted-foreground">
-                    仅展示允许记录的业务字段。敏感内容仅标记已变更。
-                </p>
             </section>
 
             <details className="rounded-lg border border-border">
@@ -145,9 +142,6 @@ export function AuditLogDetails({ row }: { row: AuditLogItem }) {
                     </DescriptionList>
                 </div>
             </details>
-            <p className="text-xs text-muted-foreground">
-                操作人与单据编号均为操作发生时的历史记录，不会随当前资料修改而变动。
-            </p>
         </div>
     )
 }

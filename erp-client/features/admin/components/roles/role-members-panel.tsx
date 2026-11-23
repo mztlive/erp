@@ -84,7 +84,6 @@ export function RoleMembersPanel({
                     </Badge>
                 ) : null
             }
-            subtitle="角色操作权限保存后，将对所有启用中的关联人员即时生效；人员角色分配请在人员账号中调整。"
             actions={
                 <>
                     {adminsQuery.isSuccess && summary.members.length > 0 ? (
@@ -141,12 +140,9 @@ export function RoleMembersPanel({
                             className="mt-0.5 size-4 shrink-0 text-muted-foreground"
                             aria-hidden="true"
                         />
-                        <div className="min-w-0 space-y-1">
+                        <div className="min-w-0">
                             <p className="font-medium text-foreground">
                                 尚未绑定任何人员账号
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                                可在人员账号管理中将此角色分配给对应岗位人员。
                             </p>
                         </div>
                     </div>

@@ -52,9 +52,6 @@ export function OfferingAvailability({
                     </span>
                 </OfferingField>
             </dl>
-            <p className="text-xs text-muted-foreground">
-                关系状态、条款有效期与当前可供分别核对；采购时以最新校验结果为准。
-            </p>
         </section>
     )
 }

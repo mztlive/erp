@@ -505,7 +505,7 @@ interface AllocationWorkspaceProps<TAllocation> extends Omit<
 /** 分配数量摘要与分配行字段的受控工作区，不在组件内计算任何业务数值。 */
 function AllocationWorkspace<TAllocation>({
     title = "分配明细",
-    description = "请逐行填写分配明细与数量，并核对未分配差额。",
+    description,
     summary,
     allocations,
     columns,
@@ -535,7 +535,9 @@ function AllocationWorkspace<TAllocation>({
             <Card>
                 <CardHeader className="border-b border-border">
                     <CardTitle>{title}</CardTitle>
-                    <CardDescription>{description}</CardDescription>
+                    {description ? (
+                        <CardDescription>{description}</CardDescription>
+                    ) : null}
                 </CardHeader>
 
                 <CardContent className="space-y-5">

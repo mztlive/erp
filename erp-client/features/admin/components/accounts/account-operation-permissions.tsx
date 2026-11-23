@@ -176,7 +176,6 @@ export function AccountOperationPermissions({
                     </Badge>
                 ) : null
             }
-            subtitle="按已保存角色合并去重，悬停具体权限可查看授予来源角色。"
             actions={
                 canRead && roles.isSuccess && preview.permissionCount > 0 ? (
                     <InputGroup className="w-full sm:w-72">
@@ -413,9 +412,6 @@ export function AccountOperationPermissions({
                                     ) : null}
                                 </div>
                             )}
-                            <p className="text-xs text-muted-foreground">
-                                可访问的数据见「数据范围」；具体操作仍需满足业务及审批条件。
-                            </p>
                         </>
                     ) : (
                         <p className="border-y border-border/60 py-8 text-muted-foreground">

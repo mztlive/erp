@@ -37,10 +37,7 @@ export function TrialSection({
     const totalPages = Math.max(1, Math.ceil(totalCount / 20))
 
     return (
-        <DetailWorkspaceSection
-            title="预检问题明细"
-            subtitle="仅列出校验失败、冲突、跳过及待匹配的数据行，正常通过的数据不在此处展示。"
-        >
+        <DetailWorkspaceSection title="预检问题明细">
             <div className="flex flex-wrap items-end gap-2">
                 <div className="space-y-1">
                     <Label

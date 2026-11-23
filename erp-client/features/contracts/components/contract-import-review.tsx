@@ -409,14 +409,7 @@ function ContractImportReviewForm({
                 className="space-y-4"
                 aria-label="签约双方"
             >
-                <div className="space-y-1">
-                    <h3 className="text-body-compact font-semibold">
-                        签约双方
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                        核对客户与我方签约主体。
-                    </p>
-                </div>
+                <h3 className="text-body-compact font-semibold">签约双方</h3>
                 <ContractImportCustomerChoice
                     mode={values.customerMode}
                     recognizedName={task.draft?.fields.customer_name}
@@ -675,14 +668,9 @@ function ContractImportReviewForm({
                 className="space-y-5"
                 aria-label="合同与结算条款"
             >
-                <div className="space-y-1">
-                    <h3 className="text-body-compact font-semibold">
-                        合同与结算条款
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                        核对合同编号、付款与开票约定
-                    </p>
-                </div>
+                <h3 className="text-body-compact font-semibold">
+                    合同与结算条款
+                </h3>
                 <form.AppField name="contract_no">
                     {(field) => (
                         <field.TextField
@@ -740,14 +728,9 @@ function ContractImportReviewForm({
                 className="space-y-5"
                 aria-label="日期与业务范围"
             >
-                <div className="space-y-1">
-                    <h3 className="text-body-compact font-semibold">
-                        日期与业务范围
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                        核对有效期与业务内容，确认后归档
-                    </p>
-                </div>
+                <h3 className="text-body-compact font-semibold">
+                    日期与业务范围
+                </h3>
                 <div className="grid gap-3 sm:grid-cols-3">
                     <form.AppField name="signed_at">
                         {(field) => (

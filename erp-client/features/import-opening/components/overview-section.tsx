@@ -24,10 +24,7 @@ export function OverviewSection({
 }) {
     return (
         <>
-            <DetailWorkspaceSection
-                title="预检摘要"
-                subtitle="此处展示本次数据预检的整体统计结果，具体异常可在明细中筛选查看。"
-            >
+            <DetailWorkspaceSection title="预检摘要">
                 <DetailWorkspaceMetrics
                     variant="inline"
                     columns={4}
@@ -73,10 +70,7 @@ export function OverviewSection({
                 </div>
             </DetailWorkspaceSection>
 
-            <DetailWorkspaceSection
-                title="期初口径"
-                subtitle="以下为本批次导入数据的口径说明，仅供核对参考。"
-            >
+            <DetailWorkspaceSection title="期初口径">
                 <div className="space-y-3">
                     {batch.openingPolicyHints.length > 0 ? (
                         batch.openingPolicyHints.map((hint) => (

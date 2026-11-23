@@ -22,7 +22,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { RequiredMark } from "@/components/ui/required-mark"
 import {
@@ -290,7 +290,7 @@ export function AccountProfileEditor({
     )
 
     const footerHint = !changed
-        ? "修改任意内容后可保存"
+        ? undefined
         : confirmed
           ? "请核对上方修改内容，确认后生效"
           : canOrganization
@@ -317,12 +317,8 @@ export function AccountProfileEditor({
                                 <DetailWorkspaceDirtyBadge label="有未保存的修改" />
                             ) : null}
                         </div>
-                        <DialogDescription className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                            <span className="num font-medium text-foreground/80">
-                                {account.account}
-                            </span>
-                            <span aria-hidden="true">·</span>
-                            <span>姓名、所属部门与角色统一保存后生效</span>
+                        <DialogDescription className="num font-medium text-foreground/80">
+                            {account.account}
                         </DialogDescription>
                     </DialogHeader>
 
@@ -490,9 +486,6 @@ export function AccountProfileEditor({
                                                         )}
                                                     </div>
                                                 ) : null}
-                                                <FieldDescription>
-                                                    角色决定可执行的功能操作；数据范围在「数据范围」页签中设置。
-                                                </FieldDescription>
                                                 {roleOptionsError !==
                                                 undefined ? (
                                                     <BusinessFailureState
@@ -531,7 +524,6 @@ export function AccountProfileEditor({
                                             id="account-profile-reason"
                                             label="变更原因"
                                             placeholder="如：岗位调整、职责变更"
-                                            description="组织类变更需记录原因，保存前会先展示影响预览。"
                                             required
                                             rows={2}
                                         />

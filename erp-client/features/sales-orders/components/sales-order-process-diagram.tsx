@@ -401,14 +401,9 @@ export function SalesOrderProcessDiagram({
                 triggerId={`${prefix}-sales-open`}
             />
             <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-baseline gap-4">
-                    <h2 className="text-section-title font-semibold tracking-tight">
-                        全流程进度
-                    </h2>
-                    <p className="text-xs text-muted-foreground">
-                        交付、回款与开票分别推进
-                    </p>
-                </div>
+                <h2 className="text-section-title font-semibold tracking-tight">
+                    全流程进度
+                </h2>
                 <div className="flex gap-4 text-xs text-muted-foreground">
                     {(["done", "active", "waiting"] as const).map((state) => (
                         <span key={state} className="flex items-center gap-1.5">

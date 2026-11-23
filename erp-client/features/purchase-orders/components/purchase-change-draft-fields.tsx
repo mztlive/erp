@@ -68,11 +68,7 @@ export function PurchaseChangeDraftFields({
                 options={options}
                 disabled={disabled}
             />
-            <ChangeOrderSection
-                id={`${id}-terms`}
-                title="商业条款"
-                description="随本次改单一并审批；不需要调整时保持原值。"
-            >
+            <ChangeOrderSection id={`${id}-terms`} title="商业条款">
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <form.AppField name="paymentTermCode">
                         {(field) => (
@@ -88,11 +84,7 @@ export function PurchaseChangeDraftFields({
                     </form.AppField>
                 </div>
             </ChangeOrderSection>
-            <ChangeOrderSection
-                id={`${id}-explain`}
-                title="变更说明"
-                description="变更原因会随审批流转，审批人据此判断。"
-            >
+            <ChangeOrderSection id={`${id}-explain`} title="变更说明">
                 <div className="grid gap-4 sm:grid-cols-2">
                     <form.AppField name="reason">
                         {(field) => (

@@ -76,9 +76,6 @@ function MobileDetailPreview({
                                 <p className="truncate text-xs font-medium text-foreground">
                                     {productName || "未命名商品"}
                                 </p>
-                                <p className="text-xs text-muted-foreground">
-                                    以下为详情长图连续展示效果
-                                </p>
                             </div>
                         </div>
                     ) : null}
@@ -127,9 +124,6 @@ function MobileDetailPreview({
                             />
                             <p className="text-xs font-medium text-muted-foreground">
                                 暂无详情图
-                            </p>
-                            <p className="text-xs text-muted-foreground/80">
-                                在左侧上传并拖拽排序后，此处将实时呈现客户看到的无缝长图效果。
                             </p>
                         </div>
                     )}

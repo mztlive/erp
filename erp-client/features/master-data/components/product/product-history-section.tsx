@@ -18,7 +18,6 @@ function ProductHistorySection({ data }: ProductHistorySectionProps) {
                 id="product-section-history"
                 title={masterDataCopy.centerVersions}
                 width="form"
-                subtitle={masterDataCopy.centerVersionsDesc}
             >
                 <RevisionTimeline
                     revisions={data.revisionTimeline.map((rev) =>
@@ -92,7 +91,6 @@ function ProductHistorySection({ data }: ProductHistorySectionProps) {
             <DetailWorkspaceSection
                 title={masterDataCopy.centerAudit}
                 width="form"
-                subtitle={masterDataCopy.centerAuditDesc}
             >
                 <MasterDataAuditList events={data.auditEvents} />
             </DetailWorkspaceSection>

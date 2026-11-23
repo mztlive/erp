@@ -3,7 +3,6 @@
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -35,9 +34,6 @@ export function SalesOrderApprovalDialog({
             >
                 <DialogHeader className="shrink-0 pr-8">
                     <DialogTitle>销售单审批链及进度</DialogTitle>
-                    <DialogDescription>
-                        查看各节点审批人、当前进度与处理意见。
-                    </DialogDescription>
                 </DialogHeader>
                 <div className="min-h-0 flex-1 overflow-y-auto pr-1">
                     {open ? (

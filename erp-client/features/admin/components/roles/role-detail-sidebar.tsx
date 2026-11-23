@@ -1,6 +1,6 @@
 "use client"
 
-import { ChevronRightIcon, ShieldAlertIcon, ShieldIcon } from "lucide-react"
+import { ChevronRightIcon, ShieldAlertIcon } from "lucide-react"
 
 import { detailWorkspaceStyles } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
@@ -232,23 +232,6 @@ export function RoleDetailSidebar({
                         </div>
                     ) : null}
                 </dl>
-
-                <div className="space-y-2 border-t border-border/60 pt-3 text-xs text-muted-foreground">
-                    {role.system ? (
-                        <p className="flex items-start gap-1.5">
-                            <ShieldIcon
-                                className="mt-0.5 size-3.5 shrink-0 text-indigo-soft-foreground"
-                                aria-hidden="true"
-                            />
-                            <span>
-                                系统内置角色受系统保护，不可修改或删除。
-                            </span>
-                        </p>
-                    ) : null}
-                    <p>
-                        角色仅决定可执行的功能操作；每个人能查看和处理哪些数据，请在人员资料的「数据范围」中配置。
-                    </p>
-                </div>
             </section>
         </div>
     )

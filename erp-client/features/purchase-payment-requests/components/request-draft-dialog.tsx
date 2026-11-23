@@ -68,11 +68,6 @@ export function RequestDraftDialog({
                     <div className="space-y-4 p-6">
                         <DialogHeader>
                             <DialogTitle>申请采购付款</DialogTitle>
-                            <DialogDescription>
-                                {fixedPurchaseOrderId
-                                    ? "为当前采购单填写付款金额、收款账户和付款日期。"
-                                    : "从已生效采购单中选择本次付款来源。"}
-                            </DialogDescription>
                         </DialogHeader>
                         {query.isPending ? (
                             <p className="py-8 text-muted-foreground">

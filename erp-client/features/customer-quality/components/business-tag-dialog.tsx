@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
@@ -28,9 +27,6 @@ export function BusinessTagDialog({
                         <InfoIcon className="size-4" aria-hidden="true" />
                         经营标签说明
                     </DialogTitle>
-                    <DialogDescription>
-                        标签由系统规则自动生成，仅供查看。
-                    </DialogDescription>
                 </DialogHeader>
                 {tag ? (
                     <div className="space-y-3 text-body-compact">

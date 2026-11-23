@@ -18,11 +18,7 @@ export function SalesOrderEvidenceAttachments({
 }) {
     const download = useSalesOrderEvidenceDownload(salesOrderId)
     return (
-        <DetailWorkspaceSection
-            width="form"
-            title="开单凭证"
-            subtitle="随本单归档的开单依据，供履约与审批核对。"
-        >
+        <DetailWorkspaceSection width="form" title="开单凭证">
             {files.length ? (
                 <ul className="divide-y divide-border/60 border-y border-border/60">
                     {files.map((file) => (

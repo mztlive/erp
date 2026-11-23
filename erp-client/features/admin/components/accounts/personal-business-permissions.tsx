@@ -109,7 +109,6 @@ export function PersonalBusinessPermissions({
                     </div>
                 ) : null
             }
-            subtitle="决定此人在各业务中可以查看或处理的单据范围；按业务独立配置并保存生效。"
         >
             {unavailableDraft ? (
                 <Alert variant="warning">

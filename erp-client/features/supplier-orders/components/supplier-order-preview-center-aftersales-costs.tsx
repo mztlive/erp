@@ -30,11 +30,7 @@ export function AftersalesSection({
     onRequest: (request: AfterSalesConfirmRequest) => void
 }) {
     return (
-        <DetailWorkspaceSection
-            title="售后"
-            width="form"
-            subtitle="售后请求 + 余额恢复 / 供应商退款两类记录分别展示"
-        >
+        <DetailWorkspaceSection title="售后" width="form">
             {afterSales.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                     暂无售后申请记录。如需取消订单或申请退款，请先由关联销售单或采购单发起售后。
@@ -154,11 +150,7 @@ export function CostsSection({
           : "/supplier-api/settlements"
 
     return (
-        <DetailWorkspaceSection
-            title="成本与结算"
-            width="form"
-            subtitle="金额按含税与不含税分别标注"
-        >
+        <DetailWorkspaceSection title="成本与结算" width="form">
             <DescriptionList className="gap-y-3">
                 <Item
                     label="累计成本（含税）"

@@ -313,10 +313,6 @@ export function AccessCheckResult({
                     </ol>
                 </CollapsibleContent>
             </Collapsible>
-
-            <p className="text-xs text-muted-foreground">
-                结果以本次检查为准；权限、责任人或单据状态变化后，请重新检查。
-            </p>
         </section>
     )
 }

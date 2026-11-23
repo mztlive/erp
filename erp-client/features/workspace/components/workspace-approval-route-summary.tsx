@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogHeader,
     DialogTitle,
     DialogTrigger,
@@ -82,9 +81,6 @@ export function WorkspaceApprovalRouteSummary({
                     >
                         <DialogHeader className="shrink-0 pr-8">
                             <DialogTitle>审批记录</DialogTitle>
-                            <DialogDescription>
-                                查看各轮审批的处理人、时间和审批意见。
-                            </DialogDescription>
                         </DialogHeader>
                         <div className="min-h-0 flex-1 space-y-4 overflow-auto">
                             {historyQuery.isPending ? (

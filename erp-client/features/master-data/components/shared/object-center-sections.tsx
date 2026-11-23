@@ -64,7 +64,6 @@ export function ObjectCenterOverviewSection({
             id="md-section-overview"
             title={masterDataCopy.centerOverview}
             width="form"
-            subtitle={masterDataCopy.centerOverviewDescFor(data.resource)}
         >
             <DetailWorkspaceFacts columns={2}>
                 <DetailWorkspaceFact
@@ -176,7 +175,6 @@ export function ObjectCenterVersionsSection({
             id="md-section-versions"
             title={masterDataCopy.centerVersions}
             width="form"
-            subtitle={masterDataCopy.centerVersionsDesc}
         >
             <RevisionTimeline
                 revisions={data.revisionTimeline.map((rev) =>
@@ -204,7 +202,6 @@ export function ObjectCenterAuditSection({
             id="md-section-audit"
             title={masterDataCopy.centerAudit}
             width="form"
-            subtitle={masterDataCopy.centerAuditDesc}
         >
             <MasterDataAuditList events={data.auditEvents} />
         </DetailWorkspaceSection>

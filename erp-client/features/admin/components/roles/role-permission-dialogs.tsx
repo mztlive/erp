@@ -234,9 +234,6 @@ export function RolePermissionReview({
                     <DialogTitle>
                         {mode ? titles[mode] : "权限明细"}
                     </DialogTitle>
-                    <DialogDescription>
-                        此处仅供核对。编辑结果在保存角色后生效；数据可见范围仍由人员资料的数据范围配置决定。
-                    </DialogDescription>
                 </DialogHeader>
                 <div className="max-h-[56dvh] space-y-5 overflow-y-auto pr-1">
                     {mode === "changes" ? (

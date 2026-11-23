@@ -37,11 +37,7 @@ export function SupplierEditorInvoiceSection({
     markSensitiveEdited: (field: SupplierSensitiveFieldKey) => void
 }) {
     return (
-        <SectionPanel
-            id="supplier-section-invoice"
-            title="开票信息"
-            description="税号与银行信息用于采购开票与付款。"
-        >
+        <SectionPanel id="supplier-section-invoice" title="开票信息">
             <div className="grid gap-4 sm:grid-cols-2">
                 <FieldShell>
                     <Label htmlFor="master-data-supplier-invoice-tax-no">

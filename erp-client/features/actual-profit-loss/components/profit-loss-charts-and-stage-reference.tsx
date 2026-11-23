@@ -107,9 +107,6 @@ export function ProfitLossChartsAndStageReference({
                             <CardTitle>
                                 经营趋势（{PROFIT_LOSS_SCOPE_LABEL} · 万元）
                             </CardTitle>
-                            <CardDescription>
-                                按销售单生效月份展示当前筛选下的累计结果。
-                            </CardDescription>
                         </CardHeader>
                         <CardContent className="pt-4">
                             <ChartContainer

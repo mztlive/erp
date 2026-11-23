@@ -5,13 +5,7 @@ import { CalendarRangeIcon } from "lucide-react"
 import { surfacePanelClassName } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { DatePicker } from "@/components/ui/date-picker"
 import { Label } from "@/components/ui/label"
 import type { CustomerQualityPeriodPolicy } from "../types"
@@ -45,9 +39,6 @@ export function PeriodBlockerCard({
             <Card size="sm" className={surfacePanelClassName}>
                 <CardHeader className="border-b border-grid">
                     <CardTitle>选择统计期间</CardTitle>
-                    <CardDescription>
-                        选定后作为本页所有统计的唯一期间。
-                    </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4 pt-4 sm:flex-row sm:items-end">
                     <div className="grid flex-1 gap-2 sm:grid-cols-2">

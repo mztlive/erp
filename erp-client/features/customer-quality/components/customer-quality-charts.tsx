@@ -39,11 +39,6 @@ export function CustomerQualityCharts({
                     dimensionKey="scale"
                     tagKey="scaleTag"
                     titleFallback="客户规模分层"
-                    description={() => (
-                        <>
-                            点击柱形筛选明细。柱形颜色仅作区分，具体数值见下方表格。
-                        </>
-                    )}
                     tableCaption="客户规模分层等价数据表"
                     labelColumnHeader="分层"
                     valueColumnHeader="成交规模"

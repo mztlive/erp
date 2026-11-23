@@ -93,7 +93,6 @@ function SettlementCenterItems({
         <DetailWorkspaceSection
             title="结算明细"
             width="full"
-            subtitle="按结算单锁定的业务明细汇总（均含税），金额仅供核对，不可直接修改"
             actions={
                 items.length > 0 ? (
                     <div className="flex flex-wrap items-center gap-2">
@@ -330,9 +329,6 @@ function SettlementCenterItems({
                     ) : null}
                 </Table>
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-                为保障账实一致，明细金额来自采购单与供应商账单原值，不支持在此处手动修改。
-            </p>
         </DetailWorkspaceSection>
     )
 }

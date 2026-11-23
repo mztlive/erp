@@ -315,7 +315,7 @@ const costCoverageStatus = {
 
 function CostCoverageNotice({
     title = "成本归集完整度",
-    description = "展示当前统计范围内已获取准确采购成本的订单比例。",
+    description,
     basis,
     coveragePercent,
     coverageLabel,
@@ -338,7 +338,9 @@ function CostCoverageNotice({
         >
             <CardHeader className="border-b border-border">
                 <CardTitle>{title}</CardTitle>
-                <CardDescription>{description}</CardDescription>
+                {description ? (
+                    <CardDescription>{description}</CardDescription>
+                ) : null}
                 <CardAction className="flex flex-wrap items-center justify-end gap-2">
                     <StatusBadge
                         tone={coverageStatus.tone}

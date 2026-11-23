@@ -86,9 +86,6 @@ function AuditEventBody({ query }: AuditEventBodyProps) {
                             ? query.data.changedFieldDisplay
                             : "无字段变更记录"}
                     </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        涉及敏感信息的字段仅提示已变更，不展示明文。
-                    </p>
                 </div>
             </section>
             <details className="group rounded-lg border border-border">
@@ -123,9 +120,6 @@ function AuditEventBody({ query }: AuditEventBodyProps) {
                     </DescriptionList>
                 </div>
             </details>
-            <p className="text-xs text-muted-foreground">
-                操作记录不可修改或删除；查看关联单据需具备相应权限。
-            </p>
         </div>
     )
 }

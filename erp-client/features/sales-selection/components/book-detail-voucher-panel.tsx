@@ -118,7 +118,6 @@ export function BookDetailVoucherPanel({
             <DetailWorkspaceSection
                 title="提货券选品"
                 ariaLabel="提货券选品"
-                subtitle="每人使用一个独立提货码，共用选品册访问密码。提交后自动生成个人销售方案。"
                 actions={
                     <>
                         <LoadingButton
@@ -265,10 +264,7 @@ export function BookDetailVoucherPanel({
                     </div>
                 )}
             </DetailWorkspaceSection>
-            <DetailWorkspaceSection
-                title="个人选品结果"
-                subtitle="查看每个人选了哪些商品、收件信息和对应销售方案。"
-            >
+            <DetailWorkspaceSection title="个人选品结果">
                 {!canReadSelections ? (
                     <p className="text-xs text-muted-foreground">
                         当前账号无权查看个人选品结果。

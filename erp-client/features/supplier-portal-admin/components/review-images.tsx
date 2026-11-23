@@ -14,7 +14,6 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -163,9 +162,6 @@ export function PortalReviewImages({
                         <DialogTitle>
                             {preview?.label ?? "图片预览"}
                         </DialogTitle>
-                        <DialogDescription>
-                            查看供应商提交的原图，可点击下方按钮下载留存。
-                        </DialogDescription>
                     </DialogHeader>
                     {preview ? (
                         <div className="flex max-h-[70vh] items-center justify-center overflow-auto bg-muted/20 p-4">

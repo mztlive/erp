@@ -8,11 +8,7 @@ import { formatDateTime } from "@/lib/datetime"
 
 function SettlementCenterReview({ detail }: { detail: SettlementDetailView }) {
     return (
-        <DetailWorkspaceSection
-            title="复核记录"
-            subtitle="支持提交复核、退回修改与复核确认；提交与复核需由不同人员操作"
-            width="form"
-        >
+        <DetailWorkspaceSection title="复核记录" width="form">
             {detail.workItem ? (
                 <Alert variant="info">
                     <AlertTitle>复核任务</AlertTitle>

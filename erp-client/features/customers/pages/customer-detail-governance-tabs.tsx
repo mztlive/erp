@@ -100,7 +100,6 @@ export function CustomerDetailAuditTab({
                     ) : undefined
                 }
                 width="full"
-                subtitle="多名销售可共同服务同一客户，各自负责的业务单据独立管理"
                 actions={
                     can(customer, "MANAGE_ASSIGNMENTS") ? (
                         <Button
@@ -225,7 +224,6 @@ export function CustomerDetailAuditTab({
                     ) : undefined
                 }
                 width="full"
-                subtitle="每次保存资料将生成新版本，历史单据沿用当时版本快照"
             >
                 {customer.revisionTimeline.length === 0 ? (
                     <p className="py-1 text-xs text-muted-foreground">

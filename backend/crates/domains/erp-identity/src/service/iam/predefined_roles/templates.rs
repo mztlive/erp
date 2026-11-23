@@ -6,11 +6,11 @@ use crate::entity::role_template::{BuiltinRoleTemplate, FinancePosition};
 
 /// 在管理端预览或显式生成岗位前，构建含权限及上岗条件的服务端目录。
 /// 从综合财务派生财务总监、出纳和开票岗，保留综合财务供按需选择。
-/// 构建仅使用静态定义，无需数据库或演示账号；权限解析失败时返回错误。
+/// 目录使用静态岗位定义。派生财务岗位失败时返回错误。
 pub fn builtin_role_templates() -> Result<Vec<BuiltinRoleTemplate>> {
     let mut templates = Vec::new();
     for role in PREDEFINED_ROLES {
-        let template = BuiltinRoleTemplate::new(role.id, role.name, role.description, role.permissions)?;
+        let template = BuiltinRoleTemplate::new(role.id, role.name, role.description, role.permissions);
         if role.id == "role-finance" {
             for kind in [FinancePosition::Director, FinancePosition::Cashier, FinancePosition::Invoice] {
                 templates.push(template.finance(kind)?);

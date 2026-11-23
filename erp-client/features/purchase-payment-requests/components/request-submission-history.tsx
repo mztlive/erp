@@ -34,12 +34,7 @@ export function RequestSubmissionHistory({
             className="space-y-3 border-t border-border/60 pt-5"
             aria-label="历次提交材料"
         >
-            <div>
-                <h3 className="font-medium">历次提交材料</h3>
-                <p className="mt-1 text-xs text-muted-foreground">
-                    按提交轮次查看当次申请金额、收款账户与完整审核依据。
-                </p>
-            </div>
+            <h3 className="font-medium">历次提交材料</h3>
             <div className="flex flex-wrap gap-2">
                 {versions.map((version) => (
                     <Button

@@ -62,7 +62,7 @@ export type BatchImpactPreviewProps = Omit<
 /** 批量动作执行前的范围、数量、后台任务和敏感字段预览。 */
 function BatchImpactPreview({
     title = "批量操作影响预览",
-    description = "执行前请再次核对当前筛选、选择范围和预计处理结果。",
+    description,
     filterSummary,
     selectionScope,
     estimated,
@@ -89,9 +89,11 @@ function BatchImpactPreview({
                             />
                             {title}
                         </CardTitle>
-                        <CardDescription className="mt-1">
-                            {description}
-                        </CardDescription>
+                        {description ? (
+                            <CardDescription className="mt-1">
+                                {description}
+                            </CardDescription>
+                        ) : null}
                     </div>
                     <StatusBadge
                         tone={background ? "info" : "neutral"}

@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
@@ -181,9 +180,6 @@ export function InvoiceRequestDetail({
             >
                 <DialogHeader className="shrink-0">
                     <DialogTitle>开票申请详情</DialogTitle>
-                    <DialogDescription>
-                        查看申请金额、开票资料与审批进度。
-                    </DialogDescription>
                 </DialogHeader>
                 <div className="min-h-0 flex-1 overflow-y-auto">{content}</div>
             </DialogContent>

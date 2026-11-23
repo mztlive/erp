@@ -103,8 +103,9 @@ HTTP 应用启动时在 `ensure_root_role` 之后执行 `ensure_identity_foundat
 - 演示基础初始化通过 `ensure_seeded_role` 显式维护 `role-demo-*` 角色，沿用操作人授权、策略版本和审计约束。
   该入口不接入应用启动。
 
-共享权限定义位于 `crates/domains/erp-identity/src/service/iam/predefined_roles/permission_tables/`；
-最终模板构造位于同目录的 `templates.rs`，岗位权限边界由 `entity/role_template.rs` 约束。
+在 `permission_tables.rs` 配置岗位推荐权限。共享权限引用 `erp-permissions` 的常量。
+资源内动作通配使用 `Permission::new(resource, "*")`，岗位专用权限在表文件内定义为私有 `Permission` 常量。
+最终模板构造位于同目录的 `templates.rs`，岗位权限边界由 `entity/role_template.rs` 约束。 [岗位权限表](../crates/domains/erp-identity/src/service/iam/predefined_roles/permission_tables.rs) · [共享权限库](../crates/foundation/erp-permissions/README.md)
 
 系统超级管理员只能通过 `AdminService::initialize_super_admin` 创建或修复。该方法按包含软删除记录的全局
 账号查找已有身份，并在同一事务中写入传入的名称和新 Argon2 密码、恢复账号、设置启用状态

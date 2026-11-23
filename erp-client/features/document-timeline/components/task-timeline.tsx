@@ -75,10 +75,7 @@ export function TaskTimeline({
             }
         >
             <div className="min-w-0 space-y-5 break-words">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs text-muted-foreground">
-                        按时间倒序展示
-                    </p>
+                <div className="flex justify-end">
                     <Button
                         id={`${idPrefix}-refresh`}
                         variant="ghost"

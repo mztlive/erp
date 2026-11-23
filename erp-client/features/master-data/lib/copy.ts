@@ -316,19 +316,6 @@ export const masterDataCopy = {
     centerOverview: "概览",
     centerVersions: "变更历史",
     centerAudit: "操作记录",
-    centerOverviewDesc: "编号、启用状态、生效期间与基本资料",
-    centerOverviewDescFor: (resource: MasterDataResource) => {
-        switch (resource) {
-            case "warehouses":
-                return "仓库编号、生效期间与收发责任配置"
-            case "categories":
-                return "分类编号、层级归属与适用商品类型"
-            default:
-                return "编号、启用状态、生效期间与基本资料"
-        }
-    },
-    centerVersionsDesc: "每一版的名称、原因与生效期间；改名称不会改掉历史记录",
-    centerAuditDesc: "新建、更新、停用等操作记录（敏感内容不显示原文）",
     centerNoAudit: "暂无操作记录",
     centerCurrentVersion: "当前版本",
     centerChangeReason: "变更原因",

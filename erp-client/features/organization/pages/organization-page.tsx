@@ -26,10 +26,7 @@ import {
     type OrganizationChangeDraft,
 } from "@/features/organization/lib/change-payload"
 import { organizationEmptyReason } from "@/features/organization/lib/empty-reason"
-import {
-    ORGANIZATION_BOUNDARY_NOTICE,
-    PAGE_NARROW_CLASS,
-} from "@/features/organization/lib/labels"
+import { PAGE_NARROW_CLASS } from "@/features/organization/lib/labels"
 import {
     buildOrganizationForest,
     flattenTree,
@@ -134,12 +131,7 @@ export function OrganizationPage() {
             density="compact"
             className={`${styles.page} ${PAGE_NARROW_CLASS} min-h-0 overflow-hidden`}
         >
-            <ListWorkspaceHeader
-                className="shrink-0"
-                eyebrow="系统"
-                title="组织与人员"
-                description="先选择部门添加成员；人员账号中可创建账号、调整部门和分配角色。"
-            >
+            <ListWorkspaceHeader className="shrink-0" title="组织与人员">
                 {canManage ? (
                     <Button
                         id="organization-create-root"
@@ -232,10 +224,11 @@ export function OrganizationPage() {
                 }
             />
 
-            <div className="shrink-0 space-y-1 text-xs text-muted-foreground">
-                <p>{ORGANIZATION_BOUNDARY_NOTICE}</p>
-                {view ? <p>当前范围：{view.scopeSummary}</p> : null}
-            </div>
+            {view ? (
+                <div className="shrink-0 text-xs text-muted-foreground">
+                    <p>当前范围：{view.scopeSummary}</p>
+                </div>
+            ) : null}
 
             {changeOpen ? (
                 <OrganizationChangeDialog

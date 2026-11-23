@@ -120,7 +120,6 @@ export function SupplierAccountsSection({
                     共 {query.data?.total ?? 0} 个账号
                 </span>
             }
-            subtitle="为供应商人员开通登录账号，按岗位分配维护或查看权限。"
             actions={
                 canCreate ? (
                     <Button

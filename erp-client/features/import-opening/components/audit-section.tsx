@@ -14,10 +14,7 @@ import { versionText } from "@/lib/ui-text"
 
 export function AuditSection({ batch }: { batch: ImportBatchView }) {
     return (
-        <DetailWorkspaceSection
-            title="导入溯源信息"
-            subtitle="记录本批次的数据来源、导入规则版本与核对信息；详细操作日志可在「审计查询」中查看。"
-        >
+        <DetailWorkspaceSection title="导入溯源信息">
             <DetailWorkspaceFacts columns={3}>
                 <DetailWorkspaceFact
                     label="批次号"

@@ -178,11 +178,6 @@ export function ProfitLossRowsPanel({
             views={
                 <ListWorkspaceViews
                     ariaLabel="盈亏明细维度"
-                    hint={
-                        data
-                            ? "明细与指标使用同一范围 · 点击签单归属查看该组订单 · 点击成本金额可查看明细"
-                            : undefined
-                    }
                     items={(
                         Object.keys(DIMENSION_LABEL) as ProfitLossDimension[]
                     ).map((key) => ({

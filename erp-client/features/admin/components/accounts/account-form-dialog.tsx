@@ -207,17 +207,11 @@ export function AccountFormDialog({
                 >
                     <DialogHeader className="shrink-0 pr-8">
                         <DialogTitle>{title}</DialogTitle>
-                        <DialogDescription>
-                            {section === "roles"
-                                ? `为${account?.name}分配角色；每个业务的数据范围在人员页单独设置。`
-                                : section
-                                  ? `正在${title}：${account?.name}（${account?.account}）`
-                                  : isEdit
-                                    ? "修改账号资料与角色权限。"
-                                    : onCreated
-                                      ? "创建后继续完善人员资料。"
-                                      : "填写账号信息并分配角色。"}
-                        </DialogDescription>
+                        {section && account ? (
+                            <DialogDescription>
+                                {account.name}（{account.account}）
+                            </DialogDescription>
+                        ) : null}
                     </DialogHeader>
                     <form
                         className="flex min-h-0 flex-col gap-4"
@@ -395,9 +389,6 @@ export function AccountFormDialog({
                                                             )
                                                         }}
                                                     />
-                                                    <p className="text-xs text-muted-foreground">
-                                                        部门与业务数据范围在人员资料中设置。
-                                                    </p>
                                                     {isInvalid ? (
                                                         <FieldError
                                                             id={`${id}-roles-error`}

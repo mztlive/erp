@@ -140,7 +140,6 @@ function AccessPreviewSheets({
                     </Button>
                 }
                 title="审计事件详情"
-                description="操作记录仅供查阅，不可修改；密码、密钥等敏感信息已隐藏。"
             >
                 <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6">
                     <AuditEventBody query={eventQuery} />

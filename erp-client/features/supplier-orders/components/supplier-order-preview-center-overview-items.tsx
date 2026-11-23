@@ -40,11 +40,7 @@ export function OverviewSection({
     )
 
     return (
-        <DetailWorkspaceSection
-            title="概览"
-            width="form"
-            subtitle="来源采购、供应商与下单记录版本"
-        >
+        <DetailWorkspaceSection title="概览" width="form">
             <DescriptionList className="gap-y-3">
                 <Item label="履约链" value="ERP 自动供应商履约" />
                 <Item label="供应商" value={order.supplierName} />
@@ -87,9 +83,6 @@ export function OverviewSection({
                     }
                 />
             </DescriptionList>
-            <p className="mt-3 text-xs text-muted-foreground">
-                供给、商品与成本在下单时固定，不受后续基础资料变化影响。
-            </p>
         </DetailWorkspaceSection>
     )
 }
@@ -109,11 +102,7 @@ export function ItemsSection({
     const singleUnit = distinctUnits.length === 1 ? distinctUnits[0] : null
 
     return (
-        <DetailWorkspaceSection
-            title="商品明细"
-            width="full"
-            subtitle="一条商品明细只属于一个供应商子订单；下单记录不可改供应商"
-        >
+        <DetailWorkspaceSection title="商品明细" width="full">
             <div
                 data-slot="detail-inline-table"
                 className={detailWorkspaceStyles.dataTableWrapper}

@@ -50,11 +50,11 @@ function RolePermissionOverview({
                     </dl>
                 )}
             </section>
-            <p className="border-t border-border pt-4 text-xs text-muted-foreground">
-                {disabled
-                    ? "此角色已停用，当前不会向关联人员授予操作权限。"
-                    : "角色操作权限由所有关联人员共用，修改后会对这些人员生效。"}
-            </p>
+            {disabled ? (
+                <p className="border-t border-border pt-4 text-xs text-muted-foreground">
+                    此角色已停用，当前不会向关联人员授予操作权限。
+                </p>
+            ) : null}
         </div>
     )
 }
@@ -141,9 +141,6 @@ function DataScopeSection({
     return (
         <section className="space-y-3">
             <h3 className="font-medium">数据访问依据</h3>
-            <p className="text-xs text-muted-foreground">
-                在具备功能权限的前提下，实际可查看或处理的单据还需满足以下数据范围规则。
-            </p>
             {groups.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                     暂无可展示的访问依据，具体业务须在访问时校验。
@@ -246,17 +243,6 @@ function EffectiveAccessBody({ query, previewRole }: EffectiveAccessBodyProps) {
                             <AlertDescription>当前不可操作</AlertDescription>
                         </Alert>
                     ))}
-                </section>
-            ) : null}
-
-            {query.data ? (
-                <section className="border-t border-border pt-6">
-                    <h3 className="text-xs font-medium text-muted-foreground">
-                        查询范围
-                    </h3>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                        以上为当前人员的操作权限与数据访问政策。具体业务操作是否允许，以执行时的权限校验为准。
-                    </p>
                 </section>
             ) : null}
         </div>

@@ -59,11 +59,7 @@ export function AuditSection({
 
     return (
         <>
-            <DetailWorkspaceSection
-                title="动作与审计"
-                width="full"
-                subtitle="不展示密钥、完整消息内容或敏感地址"
-            >
+            <DetailWorkspaceSection title="动作与审计" width="full">
                 <div
                     data-slot="detail-inline-table"
                     className={detailWorkspaceStyles.dataTableWrapper}
@@ -122,11 +118,7 @@ export function AuditSection({
             </DetailWorkspaceSection>
 
             {canAddNote ? (
-                <DetailWorkspaceSection
-                    title="记录协同说明"
-                    width="form"
-                    subtitle="不改变订单状态，仅追加审计说明"
-                >
+                <DetailWorkspaceSection title="记录协同说明" width="form">
                     <form
                         className="space-y-3"
                         onSubmit={(e) => {

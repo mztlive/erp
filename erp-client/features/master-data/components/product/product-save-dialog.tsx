@@ -6,7 +6,6 @@ import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -54,9 +53,6 @@ export function ProductSaveDialog({
                     <DialogTitle>
                         {effective.isCreate ? "创建商品" : "保存更新"}
                     </DialogTitle>
-                    <DialogDescription>
-                        核对修改内容和生效时间。
-                    </DialogDescription>
                 </DialogHeader>
                 <form
                     id="master-data-product-save-form"

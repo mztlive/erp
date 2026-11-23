@@ -307,15 +307,12 @@ export function CustomerDetailSettlementTab({
                 subtitle={
                     summary?.projectedAt ? (
                         <>
-                            仅展示回款与开票汇总，办理核销或开票请前往「客户往来」
-                            {" · "}更新于{" "}
+                            更新于{" "}
                             <span className="num">
                                 {formatDateTime(summary.projectedAt)}
                             </span>
                         </>
-                    ) : (
-                        "仅展示回款与开票汇总，办理核销或开票请前往「客户往来」。"
-                    )
+                    ) : undefined
                 }
                 actions={
                     <Button
@@ -423,7 +420,6 @@ export function CustomerDetailSettlementTab({
             <DetailWorkspaceSection
                 title="经营摘要"
                 width="full"
-                subtitle="基于近期业务成交、利润与回款表现生成的客户分层标签。"
                 actions={
                     <Button
                         id="customers-detail-quality-open"

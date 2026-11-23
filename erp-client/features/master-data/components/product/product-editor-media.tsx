@@ -20,7 +20,6 @@ import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
@@ -537,9 +536,6 @@ function MediaListEditor({
                         <DialogTitle>
                             {expandedPreview?.name ?? "图片预览"}
                         </DialogTitle>
-                        <DialogDescription>
-                            查看商品原图细节。
-                        </DialogDescription>
                     </DialogHeader>
                     <div className="flex min-h-0 items-center justify-center overflow-hidden rounded-lg bg-surface-sunken">
                         {expandedPreview ? (
@@ -978,7 +974,6 @@ function ProductBasicMediaRail({
                         <DialogTitle>
                             {expandedPreview?.name ?? "图片预览"}
                         </DialogTitle>
-                        <DialogDescription>商品轮播图预览</DialogDescription>
                     </DialogHeader>
                     <div className="flex min-h-0 items-center justify-center overflow-hidden rounded-lg bg-surface-sunken">
                         {expandedPreview ? (

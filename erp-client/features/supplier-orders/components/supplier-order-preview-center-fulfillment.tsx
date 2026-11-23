@@ -41,11 +41,7 @@ export function FulfillmentSection({
 }) {
     return (
         <>
-            <DetailWorkspaceSection
-                title="履约与物流"
-                width="form"
-                subtitle="接单、发货与地址"
-            >
+            <DetailWorkspaceSection title="履约与物流" width="form">
                 <DescriptionList className="mb-4 gap-y-3">
                     <Item
                         label="接单时间"
@@ -113,7 +109,6 @@ export function FulfillmentSection({
             <DetailWorkspaceSection
                 title="收货信息"
                 width="form"
-                subtitle="默认打码；仅履约所需角色可短时揭示，揭示写入审计。"
                 contentClassName="space-y-2 text-body-compact"
             >
                 <div>

@@ -15,7 +15,6 @@ import {
     Dialog,
     DialogClose,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -206,9 +205,6 @@ export function RegisterSupplyForSkuDialog({
                         <DialogTitle className="text-section-title font-semibold tracking-tight">
                             添加供给
                         </DialogTitle>
-                        <DialogDescription>
-                            为这个商品规格登记一家供应商：报价、配送范围和当前可供情况。
-                        </DialogDescription>
                     </DialogHeader>
                     {skuName && (
                         <div className="mx-5 mb-2 flex shrink-0 items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2.5 sm:mx-6">
@@ -277,11 +273,7 @@ export function RegisterSupplyForSkuDialog({
                                         </form.AppField>
                                     </FormSection>
                                 )}
-                                <FormSection
-                                    id="supplier"
-                                    title="供应商"
-                                    description="下单时按订货编码向供应商订货。"
-                                >
+                                <FormSection id="supplier" title="供应商">
                                     <div className="grid items-start gap-4 sm:grid-cols-2">
                                         <form.AppField
                                             name="supplierId"
@@ -526,11 +518,7 @@ export function RegisterSupplyForSkuDialog({
                                         </form.AppField>
                                     </div>
                                 </FormSection>
-                                <FormSection
-                                    id="delivery"
-                                    title="配送"
-                                    description="按收货地区判定能否配送、集采是否另付运费。"
-                                >
+                                <FormSection id="delivery" title="配送">
                                     <form.Subscribe
                                         selector={(state) =>
                                             state.values.supplierId
@@ -560,7 +548,6 @@ export function RegisterSupplyForSkuDialog({
                                 <FormSection
                                     id="availability"
                                     title="有效期与可供"
-                                    description="可供状态和数量决定这条供给现在能否用于销售。"
                                 >
                                     <div className="grid items-start gap-4 sm:grid-cols-2">
                                         <form.AppField name="validFrom">

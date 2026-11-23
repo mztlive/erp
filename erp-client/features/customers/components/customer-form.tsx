@@ -560,11 +560,7 @@ export function CustomerForm({
             )}
 
             {grouped && mode === "edit" ? (
-                <FormSection
-                    grouped={grouped}
-                    title="变更说明"
-                    description="记录本次资料修订原因，将计入版本修改记录（也可在保存时补充）"
-                >
+                <FormSection grouped={grouped} title="变更说明">
                     <FieldGroup
                         data-slot="detail-form-grid"
                         className="space-y-2.5"

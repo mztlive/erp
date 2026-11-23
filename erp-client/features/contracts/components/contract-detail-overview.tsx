@@ -33,11 +33,7 @@ export function ContractDetailOverview({
     const customerHref = `/sales/customers/${encodeURIComponent(contract.customer.id)}`
 
     return (
-        <DetailWorkspaceSection
-            width="form"
-            title="合同要点"
-            subtitle="合同基本签约信息与有效期限（实际交易金额以具体销售单为准）。"
-        >
+        <DetailWorkspaceSection width="form" title="合同要点">
             <DocumentSummary
                 columns="two"
                 className="border-0 py-0"
@@ -321,7 +317,7 @@ export function ContractDetailRelatedSalesSummary({
                     </ul>
                 ) : (
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                        暂无关联销售单。基于本合同新建销售单后，单据履约与金额摘要将自动汇总于此。
+                        暂无关联销售单
                     </p>
                 )}
             </section>

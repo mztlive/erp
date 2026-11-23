@@ -23,16 +23,9 @@ function SettlementCenterOverview({
         : ""
 
     return (
-        <DetailWorkspaceSection
-            title="概览"
-            width="form"
-            subtitle="账单、订单与成本原值只读，不可在本页改写以消差；快捷键 d 可直达差异处理"
-        >
+        <DetailWorkspaceSection title="概览" width="form">
             <DetailWorkspaceFacts columns={2} ariaLabel="结算单基础信息">
-                <DetailWorkspaceFact
-                    label="供应商"
-                    value={`${st.supplierName}（记录时，不受后续更名影响）`}
-                />
+                <DetailWorkspaceFact label="供应商" value={st.supplierName} />
                 <DetailWorkspaceFact
                     label="结算期间"
                     value={`${st.periodStart} ~ ${st.periodEnd}`}

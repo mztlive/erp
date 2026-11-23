@@ -27,7 +27,6 @@ import { Button } from "@/components/ui/button"
 import {
     Sheet,
     SheetContent,
-    SheetDescription,
     SheetHeader,
     SheetTitle,
 } from "@/components/ui/sheet"
@@ -453,9 +452,6 @@ export function CategoryTreePage() {
                 >
                     <SheetHeader>
                         <SheetTitle>分类目录</SheetTitle>
-                        <SheetDescription>
-                            查找分类并查看资料或下级分类。
-                        </SheetDescription>
                     </SheetHeader>
                     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                         {navigation(true)}

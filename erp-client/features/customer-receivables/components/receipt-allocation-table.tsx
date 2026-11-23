@@ -67,22 +67,17 @@ export function ReceiptAllocationTable({
             className="min-w-0 space-y-4"
         >
             <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                        <h2
-                            id="customer-receivables-session-allocations-title"
-                            tabIndex={-1}
-                            className="text-section-title font-semibold text-foreground tracking-tight"
-                        >
-                            核销应收
-                        </h2>
-                        <span className="num rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                            {allocations.length} 笔应收
-                        </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                        指定本次回款冲抵的销售单应收项目；可核销余额已扣除待审批占用
-                    </p>
+                <div className="flex items-center gap-2">
+                    <h2
+                        id="customer-receivables-session-allocations-title"
+                        tabIndex={-1}
+                        className="text-section-title font-semibold text-foreground tracking-tight"
+                    >
+                        核销应收
+                    </h2>
+                    <span className="num rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                        {allocations.length} 笔应收
+                    </span>
                 </div>
                 <Button
                     id="customer-receivables-session-add-receivable"

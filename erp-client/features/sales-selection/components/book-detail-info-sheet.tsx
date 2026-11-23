@@ -148,9 +148,6 @@ export function BookDetailInfoSheet({
                                     }
                                 />
                             </div>
-                            <p className="text-xs text-muted-foreground">
-                                客户在手机端选品，提交后生成销售方案。
-                            </p>
                             <InputGroup>
                                 <InputGroupInput
                                     id="selection-copy-link-value"

@@ -13,11 +13,7 @@ export function ContractDetailVersions({
 }) {
     return (
         <>
-            <DetailWorkspaceSection
-                width="form"
-                title="版本时间线"
-                subtitle="每个版本对应已上传的签署 PDF。"
-            >
+            <DetailWorkspaceSection width="form" title="版本时间线">
                 {contract.revisionTimeline.length === 0 ? (
                     <p className="text-body-compact leading-relaxed text-muted-foreground">
                         尚无已确认修订。
@@ -74,11 +70,7 @@ export function ContractDetailVersions({
                 )}
             </DetailWorkspaceSection>
 
-            <DetailWorkspaceSection
-                width="form"
-                title="审计时间线"
-                subtitle="PDF 上传、版本归档、终止与下载等处理动作。"
-            >
+            <DetailWorkspaceSection width="form" title="审计时间线">
                 {contract.auditTimeline.length === 0 ? (
                     <p className="text-body-compact leading-relaxed text-muted-foreground">
                         暂无审计记录。

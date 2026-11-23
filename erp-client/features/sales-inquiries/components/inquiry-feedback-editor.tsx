@@ -28,7 +28,6 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
-    DialogDescription,
     DialogFooter,
 } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -857,9 +856,6 @@ function FeedbackEditorContent({
                     >
                         <DialogHeader className="shrink-0 border-b px-6 py-5 pr-14">
                             <DialogTitle>登记额外成本</DialogTitle>
-                            <DialogDescription>
-                                填写商品价格之外的费用，备注可选。
-                            </DialogDescription>
                         </DialogHeader>
                         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-muted/20 px-6 py-5">
                             {error && (

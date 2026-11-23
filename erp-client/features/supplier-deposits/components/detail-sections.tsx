@@ -484,7 +484,7 @@ export function DepositRechargesSection({
     return (
         <DetailWorkspaceSection
             title="充值办理"
-            subtitle={`共 ${requests.length} 条 · 按申请、审批、银行付款与到账核对分步推进`}
+            subtitle={`共 ${requests.length} 条`}
             width="full"
             actions={actions}
         >
@@ -1381,8 +1381,8 @@ export function DepositLedgerAndBatchesSection({
             title="资金流水与批次"
             subtitle={
                 subTab === "ledger"
-                    ? `最近 ${data.ledger.length} 条 · 不可变资金明细（最多显示 100 条）`
-                    : `最近 ${data.batches.length} 条 · 按到账顺序追踪每批资金的占用与消耗`
+                    ? `最近 ${data.ledger.length} 条（最多显示 100 条）`
+                    : `最近 ${data.batches.length} 条`
             }
             width="full"
             actions={

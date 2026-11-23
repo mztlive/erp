@@ -23,17 +23,16 @@ pub struct BuiltinRoleTemplate {
 }
 
 impl BuiltinRoleTemplate {
-    /// 构造部署岗位模板，解析并去重静态权限；非法权限标识返回错误。
-    pub fn new(id: &str, name: &str, description: &str, raw: &[&str]) -> Result<Self> {
-        let permissions = raw.iter().map(Permission::parse).collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok(Self {
+    /// 使用已规范化的权限构造部署岗位模板，按权限值去重并排序。
+    pub fn new(id: &str, name: &str, description: &str, permissions: &[&Permission]) -> Self {
+        Self {
             id: id.into(),
             name: name.into(),
             description: description.into(),
-            permissions: PermissionSet::new(permissions).into_vec(),
+            permissions: PermissionSet::new(permissions.iter().copied().cloned()).into_vec(),
             setup_requirements: Self::setup_requirements(id).iter().map(|value| (*value).into()).collect(),
             recommended: id != "role-finance",
-        })
+        }
     }
 
     // 给出生成岗位后仍需管理员配置的范围、流程或责任；生成本身不写入这些配置。
@@ -256,7 +255,7 @@ mod tests {
     // 验证模板选择拒绝空集，并在选择过多时仍报告具体的重复或未知 ID。
     #[test]
     fn oversized_selection_reports_duplicate_or_unknown_template() {
-        let catalog = [BuiltinRoleTemplate::new("role-sales", "销售", "销售岗位", &[]).unwrap()];
+        let catalog = [BuiltinRoleTemplate::new("role-sales", "销售", "销售岗位", &[])];
         for (ids, expected) in [
             (vec!["role-sales".into(), "role-sales".into()], "内建岗位不能重复选择"),
             (vec!["role-sales".into(), "unknown".into()], "未登记的内建岗位：unknown"),

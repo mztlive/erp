@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -71,9 +70,6 @@ export function PurchaseOrderCreateSourcePickerDialog({
             >
                 <DialogHeader className="shrink-0 border-b border-border px-6 py-4 pr-14 text-left">
                     <DialogTitle>选择来源销售单</DialogTitle>
-                    <DialogDescription>
-                        预览待分配供给的销售单，选定后作为本次供给分配来源。
-                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">

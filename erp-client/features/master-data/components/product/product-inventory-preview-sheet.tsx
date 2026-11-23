@@ -301,7 +301,6 @@ export function ProductInventoryPreviewSheet({
             onOpenChange={onOpenChange}
             size="detail"
             title="商品库存"
-            description="按仓库查看当前 SKU 的正式库存余额，不离开商品编辑页。"
             identity={
                 selectedSku ? (
                     <span className="num">
@@ -336,9 +335,6 @@ export function ProductInventoryPreviewSheet({
                             aria-label="选择要查看库存的 SKU"
                         />
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                        此处展示已保存规格的实时库存。
-                    </p>
                 </div>
             }
             footer={

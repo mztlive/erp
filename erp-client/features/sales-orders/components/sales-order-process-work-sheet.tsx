@@ -27,7 +27,6 @@ export function SalesOrderProcessWorkSheet({
             }}
             finalFocus={finalFocus}
             title={`${step?.title ?? "当前事项"} · 待办进度`}
-            description="查看还需完成的事项及当前责任人"
             footer={
                 <Button
                     id={`${prefix}-work-close`}

@@ -84,14 +84,7 @@ function DataTableViewOptions<TData>({
                 className="w-auto min-w-72 max-w-[calc(100vw-2rem)] max-h-[min(36rem,80vh,var(--available-height))] overflow-y-auto"
             >
                 <div className="space-y-3">
-                    <div>
-                        <div className="text-body-compact font-medium">
-                            列设置
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                            调整顺序、显隐和固定位置
-                        </p>
-                    </div>
+                    <div className="text-body-compact font-medium">列设置</div>
                     <div className="flex gap-2">
                         <Button
                             id={`${idPrefix ?? "data-table"}-columns-show-all`}

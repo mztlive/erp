@@ -88,7 +88,6 @@ export function AccountProfileOverview({
             <DetailWorkspaceSection
                 title="账号资料"
                 headingId="account-profile-title"
-                subtitle="人员姓名、所属部门与角色统一保存后生效。"
                 width="full"
             >
                 <DetailWorkspaceFacts columns={3} ariaLabel="账号基本信息">
@@ -137,7 +136,6 @@ export function AccountProfileOverview({
                             </Badge>
                         ) : null
                     }
-                    subtitle="角色决定可执行的功能操作；可访问的数据在「数据范围」中设置。"
                     actions={
                         roleCount > 0 ? (
                             <Button
@@ -292,7 +290,6 @@ export function AccountProfileOverview({
                             </div>
                         ) : null
                     }
-                    subtitle="优先展示待配置与已扩展的业务范围，点击单条业务可直接前往配置。"
                     actions={
                         <Button
                             id="account-profile-open-scopes"
@@ -387,31 +384,37 @@ export function AccountProfileOverview({
                                     )
                                 })}
                             </ul>
-                            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                                <span>
-                                    {scopeSummary.automatic.length > 0
-                                        ? `另有 ${scopeSummary.automatic.length} 项业务按岗位共享与业务规则自动校验。`
-                                        : "所有可配置业务均已展示。"}
-                                </span>
-                                {prioritizedScopes.length >
-                                OVERVIEW_SCOPE_LIMIT ? (
-                                    <Button
-                                        id="account-overview-scopes-more"
-                                        type="button"
-                                        variant="ghost"
-                                        size="xs"
-                                        className="text-primary hover:bg-sidebar-accent/70 hover:text-primary"
-                                        onClick={() => onOpenScopes()}
-                                    >
-                                        查看全部 {prioritizedScopes.length}{" "}
-                                        项可配置业务
-                                        <ChevronRightIcon
-                                            data-icon="inline-end"
-                                            aria-hidden="true"
-                                        />
-                                    </Button>
-                                ) : null}
-                            </div>
+                            {scopeSummary.automatic.length > 0 ||
+                            prioritizedScopes.length > OVERVIEW_SCOPE_LIMIT ? (
+                                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                                    {scopeSummary.automatic.length > 0 ? (
+                                        <span>
+                                            另有 {scopeSummary.automatic.length}{" "}
+                                            项业务按岗位共享与业务规则自动校验。
+                                        </span>
+                                    ) : (
+                                        <span />
+                                    )}
+                                    {prioritizedScopes.length >
+                                    OVERVIEW_SCOPE_LIMIT ? (
+                                        <Button
+                                            id="account-overview-scopes-more"
+                                            type="button"
+                                            variant="ghost"
+                                            size="xs"
+                                            className="text-primary hover:bg-sidebar-accent/70 hover:text-primary"
+                                            onClick={() => onOpenScopes()}
+                                        >
+                                            查看全部 {prioritizedScopes.length}{" "}
+                                            项可配置业务
+                                            <ChevronRightIcon
+                                                data-icon="inline-end"
+                                                aria-hidden="true"
+                                            />
+                                        </Button>
+                                    ) : null}
+                                </div>
+                            ) : null}
                         </div>
                     )}
                 </DetailWorkspaceSection>

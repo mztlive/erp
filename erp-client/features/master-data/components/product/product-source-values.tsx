@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
@@ -175,9 +174,6 @@ function SourceImage({
                 >
                     <DialogHeader>
                         <DialogTitle>第 {position} 张商品图片</DialogTitle>
-                        <DialogDescription>
-                            按原图内容核对，长图可向下滚动查看。
-                        </DialogDescription>
                     </DialogHeader>
                     <div className="min-h-0 overflow-y-auto">
                         <SourceImagePreview

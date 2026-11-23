@@ -3,7 +3,6 @@
 import * as React from "react"
 import Link from "next/link"
 import {
-    CircleHelpIcon,
     ExternalLinkIcon,
     GitCompareArrowsIcon,
     ImageIcon,
@@ -106,14 +105,12 @@ export function SupplierPaymentDetailBody({
                         id="supplier-payables-payment-detail-field-payment-no-input"
                         label="付款单号"
                         value={row.paymentNo}
-                        description="过账后不可改号"
                         mono
                     />
                     <ReadOnlyField
                         id="supplier-payables-payment-detail-field-supplier-name-input"
                         label="供应商"
                         value={row.supplierName}
-                        description="本付款对应的往来供应商"
                     />
                     <ReadOnlyField
                         id="supplier-payables-payment-detail-field-paid-at-input"
@@ -123,7 +120,6 @@ export function SupplierPaymentDetailBody({
                             "full",
                             "passthrough",
                         )}
-                        description="银行实际付款时间"
                         mono
                     />
                     <ReadOnlyField
@@ -132,7 +128,6 @@ export function SupplierPaymentDetailBody({
                         value={
                             <MoneyValue value={row.amount} taxBasis="gross" />
                         }
-                        description="本单含税付款总额"
                     />
                     <ReadOnlyField
                         id="supplier-payables-payment-detail-field-effective-amount-input"
@@ -154,13 +149,11 @@ export function SupplierPaymentDetailBody({
                                 taxBasis="gross"
                             />
                         }
-                        description="原付款事实与冲正记录分别保留"
                     />
                     <ReadOnlyField
                         id="supplier-payables-payment-detail-field-bank-reference-input"
                         label="银行流水号"
                         value={row.bankReferenceMasked}
-                        description="用于对账的银行引用"
                         mono
                         className="sm:col-span-2"
                     />
@@ -173,7 +166,6 @@ export function SupplierPaymentDetailBody({
                                 taxBasis="gross"
                             />
                         }
-                        description="已经付给具体应付的金额"
                     />
                     <ReadOnlyField
                         id="supplier-payables-payment-detail-field-unallocated-amount-input"
@@ -184,7 +176,6 @@ export function SupplierPaymentDetailBody({
                                 taxBasis="gross"
                             />
                         }
-                        description="还没指定付给哪一笔应付的余额"
                     />
                 </div>
             </SectionPanel>
@@ -198,7 +189,6 @@ export function SupplierPaymentDetailBody({
                         <ReadOnlyField
                             label="收款户名"
                             value={row.paymentRecipient.accountName}
-                            description="供应商收款账户户名"
                         />
                         <ReadOnlyField
                             label="收款银行"
@@ -208,12 +198,10 @@ export function SupplierPaymentDetailBody({
                             ]
                                 .filter(Boolean)
                                 .join(" · ")}
-                            description="开户银行与网点"
                         />
                         <ReadOnlyField
                             label="收款账号"
                             value={row.paymentRecipient.accountNumberMasked}
-                            description="脱敏账号，完整号码需受控揭示"
                             mono
                             className="sm:col-span-2"
                         />
@@ -231,9 +219,6 @@ export function SupplierPaymentDetailBody({
                 <PaymentReversalHistory row={row} />
             </SectionPanel>
             <SectionPanel value="related" icon={Link2Icon} title="关联单据">
-                <p className="text-xs text-muted-foreground">
-                    应付按来源采购单或结算单记账。查看应付在本页打开，打开采购单会进入该单据。
-                </p>
                 <RelatedDocumentList
                     documents={relatedDocumentsFromPayment(row, onOpenPayable)}
                     emptyContent="此付款尚未付到任何应付。"
@@ -244,9 +229,6 @@ export function SupplierPaymentDetailBody({
                 icon={GitCompareArrowsIcon}
                 title="付款去向"
             >
-                <p className="text-xs text-muted-foreground">
-                    这笔付款分别付给了哪些应付、各付了多少。点来源单进入采购单或结算单。冲正不会改已经记下的行，只会再记一笔冲减。
-                </p>
                 {row.allocations.length === 0 ? (
                     <p className="text-xs text-muted-foreground">
                         尚未付到任何应付
@@ -363,13 +345,7 @@ function ReadOnlyField({
                 </div>
             )}
             {description ? (
-                <FieldDescription className="flex items-start justify-between gap-2">
-                    <span>{description}</span>
-                    <CircleHelpIcon
-                        className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/70"
-                        aria-hidden
-                    />
-                </FieldDescription>
+                <FieldDescription>{description}</FieldDescription>
             ) : null}
         </Field>
     )

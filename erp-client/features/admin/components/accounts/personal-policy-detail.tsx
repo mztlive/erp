@@ -210,9 +210,6 @@ export function PersonalPolicyDetail({
                                     )
                                 })}
                             </ul>
-                            <p className="text-xs text-muted-foreground">
-                                操作权限由角色授予，执行时仍须符合本业务的访问方式和处理规则。
-                            </p>
                         </div>
                     </CollapsibleContent>
                 </Collapsible>

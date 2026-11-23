@@ -157,7 +157,6 @@ export function SupplierApplicationsSection({
                     共 {query.data?.total ?? 0} 条申请
                 </span>
             }
-            subtitle="查看当前供应商的报价、商品及合作资料申请；待处理事项也可从工作台进入。"
             actions={
                 <OptionCombobox
                     filterLabel="申请状态"

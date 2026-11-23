@@ -1,12 +1,6 @@
 import { surfacePanelClassName } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { DatePicker } from "@/components/ui/date-picker"
 import { Label } from "@/components/ui/label"
 import { OptionCombobox } from "@/components/business"
@@ -43,9 +37,6 @@ export function PeriodBasisPanel({
         <Card size="sm" className={surfacePanelClassName}>
             <CardHeader className="border-b border-grid">
                 <CardTitle>统计期间与归属口径</CardTitle>
-                <CardDescription>
-                    查询与导出仅按此处明确的期间与归属口径执行。
-                </CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-3 pt-4 sm:flex sm:flex-wrap sm:items-end">
                 <div className="col-span-2 space-y-1.5">

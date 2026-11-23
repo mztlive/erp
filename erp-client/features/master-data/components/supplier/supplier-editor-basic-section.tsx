@@ -37,11 +37,7 @@ export function SupplierEditorBasicSection({
     markSensitiveEdited: (field: SupplierSensitiveFieldKey) => void
 }) {
     return (
-        <SectionPanel
-            id="supplier-section-basic"
-            title="基本信息"
-            description="名称与企业主体为必填项；联系方式便于采购对接，保存前请一并完善下方商务合作必填项。"
-        >
+        <SectionPanel id="supplier-section-basic" title="基本信息">
             <div className="grid gap-4 sm:grid-cols-2">
                 <FieldShell>
                     <Label htmlFor="master-data-supplier-basic-name">

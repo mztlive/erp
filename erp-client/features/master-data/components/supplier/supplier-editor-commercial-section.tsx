@@ -34,11 +34,7 @@ export function SupplierEditorCommercialSection({
     const cycle = periodicSettlement(values.settlement)
     const term = parsePeriodicTerm(values.paymentTerm)
     return (
-        <SectionPanel
-            id="supplier-section-commercial"
-            title="商务合作"
-            description="能力、结算与主体用于采购选用；评估分便于后续优选。"
-        >
+        <SectionPanel id="supplier-section-commercial" title="商务合作">
             <div className="space-y-4">
                 <FieldShell>
                     <Label>{masterDataCopy.fCapability}</Label>

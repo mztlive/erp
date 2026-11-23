@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -57,7 +56,6 @@ export function SupplierPaymentDetailDialog({
                             />
                         ) : null}
                     </div>
-                    <DialogDescription>付款记录与核销明细。</DialogDescription>
                 </DialogHeader>
                 <div className="flex min-h-0 flex-1 flex-col border-t">
                     {isPending ? (

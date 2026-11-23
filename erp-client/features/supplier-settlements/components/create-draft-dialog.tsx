@@ -8,7 +8,6 @@ import { DatePicker } from "@/components/ui/date-picker"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -73,9 +72,6 @@ export function CreateDraftDialog({
             >
                 <DialogHeader>
                     <DialogTitle>新建结算草稿</DialogTitle>
-                    <DialogDescription>
-                        选择供应商与结算期间，创建后进入待对账。
-                    </DialogDescription>
                 </DialogHeader>
                 <form
                     className="space-y-3"

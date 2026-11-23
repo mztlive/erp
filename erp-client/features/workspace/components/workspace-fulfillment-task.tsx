@@ -439,7 +439,6 @@ function WorkspaceFulfillmentReassignDialog({
                                     }
                                     placeholder="选择接收人"
                                     emptyLabel="暂无符合处理权限的员工"
-                                    description="选择能够接手当前任务的人员。"
                                     loading={candidatesQuery.isFetching}
                                     disabled={candidatesQuery.isPending}
                                     allowClear={false}
@@ -560,9 +559,6 @@ export function WorkspaceFulfillmentProcessAction(
                     {!deliveryDialog ? (
                         <DialogHeader>
                             <DialogTitle>处理履约</DialogTitle>
-                            <DialogDescription>
-                                填写本次履约信息并确认提交。
-                            </DialogDescription>
                         </DialogHeader>
                     ) : null}
                     {open ? (

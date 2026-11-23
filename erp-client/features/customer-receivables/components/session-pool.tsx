@@ -31,9 +31,6 @@ export function SessionPool({
                     仅 {session.counterpartyPartyName}
                 </span>
             </h3>
-            <p className="text-xs text-muted-foreground">
-                仅展示当前结算公司下尚未结清的应收账款。
-            </p>
             <ul className="max-h-72 space-y-2 overflow-auto">
                 {session.pool.length === 0 ? (
                     <li className="text-body-compact text-muted-foreground">

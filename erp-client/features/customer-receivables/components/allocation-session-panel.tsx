@@ -297,14 +297,9 @@ export function AllocationSessionPanel({
                             {/* 左侧：回款事实与凭证（扁平无卡片，右分割线，宽屏吸顶） */}
                             <div className="border-b border-border/60 pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-8">
                                 <div className="space-y-5 lg:sticky lg:top-20">
-                                    <div className="space-y-1">
-                                        <h2 className="text-section-title font-semibold text-foreground tracking-tight">
-                                            到账信息
-                                        </h2>
-                                        <p className="text-xs text-muted-foreground">
-                                            录入实际到账金额、时间与银行流水
-                                        </p>
-                                    </div>
+                                    <h2 className="text-section-title font-semibold text-foreground tracking-tight">
+                                        到账信息
+                                    </h2>
 
                                     <ReceiptSessionFields
                                         form={form}
@@ -441,7 +436,6 @@ export function AllocationSessionPanel({
                                 <AllocationWorkspace
                                     id="customer-receivables-session-allocations"
                                     title="本次分配"
-                                    description="拟分配金额仅供参考，以提交后结果为准。"
                                     summary={{
                                         totalToAllocate: (
                                             <MoneyValue

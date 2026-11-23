@@ -282,7 +282,6 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                     共 {query.data?.total ?? 0} 项配置
                 </span>
             }
-            subtitle="选择允许当前供应商报价的公司规格，开放报价不改变商品上架状态。"
             actions={
                 canAdd ? (
                     <Button

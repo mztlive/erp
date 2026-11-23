@@ -13,10 +13,7 @@ export function ProductionGateCard({ batch }: { batch: ImportBatchView }) {
         (b) => b.action === "START_APPLY",
     )
     return (
-        <DetailWorkspaceSection
-            title="提交前检查"
-            subtitle="需先完成数据预检与各部门业务核对，才能正式导入系统。"
-        >
+        <DetailWorkspaceSection title="提交前检查">
             <div className="space-y-3">
                 <GateRow
                     ok={batch.productionGates.validationEnvPassed}

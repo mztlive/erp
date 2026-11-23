@@ -191,14 +191,9 @@ export function InvoiceRegistrationEditor({
                 {/* 左侧：发票信息（扁平无卡片，右分割线，宽屏吸顶） */}
                 <div className="border-b border-border/60 pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-8">
                     <div className="space-y-5 lg:sticky lg:top-20">
-                        <div className="space-y-1">
-                            <h2 className="text-section-title font-semibold text-foreground tracking-tight">
-                                发票信息
-                            </h2>
-                            <p className="text-xs text-muted-foreground">
-                                录入发票号码、开票日期、金额与发票文件
-                            </p>
-                        </div>
+                        <h2 className="text-section-title font-semibold text-foreground tracking-tight">
+                            发票信息
+                        </h2>
 
                         <InvoiceRegistrationFields state={state} />
 

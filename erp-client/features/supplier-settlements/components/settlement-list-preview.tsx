@@ -162,9 +162,6 @@ export function SettlementListPreviewSheet({
                                 </div>
                             </dl>
                         </section>
-                        <p className="border-t border-border pt-6 text-xs text-muted-foreground">
-                            详情页可继续提交复核并查询处理结果。
-                        </p>
                     </>
                 ) : (
                     <p className="text-xs text-muted-foreground">

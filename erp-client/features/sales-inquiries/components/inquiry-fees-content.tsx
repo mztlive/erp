@@ -17,7 +17,6 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
-    DialogDescription,
 } from "@/components/ui/dialog"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
@@ -682,9 +681,6 @@ export function InquiryFeesContent({
                         >
                             <DialogHeader>
                                 <DialogTitle>分摊费用归属</DialogTitle>
-                                <DialogDescription>
-                                    选择归属销售单并填写本次分摊金额，预览核对后保存。
-                                </DialogDescription>
                             </DialogHeader>
                             <form
                                 className="space-y-4"
@@ -937,9 +933,6 @@ export function InquiryFeesContent({
                             >
                                 <DialogHeader>
                                     <DialogTitle>办理费用采购</DialogTitle>
-                                    <DialogDescription>
-                                        核对销售归属、收款供应商和付款条件，预览后提交审批。
-                                    </DialogDescription>
                                 </DialogHeader>
                                 <form
                                     className="space-y-4"

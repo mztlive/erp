@@ -95,14 +95,9 @@ export function WorkspacePurchaseApproval({
                     />
                 </div>
                 <div className="min-w-0 space-y-3 border-t border-grid pt-4 @min-[720px]/document:border-t-0 @min-[720px]/document:border-l @min-[720px]/document:pt-0 @min-[720px]/document:pl-6">
-                    <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                        <h2 className={detailWorkspaceStyles.sectionTitle}>
-                            客户与销售单
-                        </h2>
-                        <p className="text-xs text-muted-foreground">
-                            对照提交时的销售单内容
-                        </p>
-                    </header>
+                    <h2 className={detailWorkspaceStyles.sectionTitle}>
+                        客户与销售单
+                    </h2>
                     {sources.length ? (
                         sources.map((sales) => (
                             <div

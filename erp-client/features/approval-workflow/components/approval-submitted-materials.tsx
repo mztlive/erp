@@ -122,9 +122,6 @@ export function ApprovalSubmittedMaterialsContent({
                                     {source.list_summary}
                                 </p>
                             )}
-                        <p className="text-xs text-muted-foreground">
-                            以下为本次提交审批时的单据内容与附件。
-                        </p>
                     </>
                 ) : (
                     <>
@@ -138,8 +135,7 @@ export function ApprovalSubmittedMaterialsContent({
                         <p className="text-xs text-muted-foreground">
                             {view === "source-sales"
                                 ? `销售版本 V${sourceSnapshot?.revision_no ?? "—"}`
-                                : `提交版本 ${version}`}{" "}
-                            · 以下为本次提交审批时的单据内容与附件。
+                                : `提交版本 ${version}`}
                         </p>
                     </>
                 )}
@@ -256,9 +252,6 @@ export function ApprovalSubmittedMaterialsContent({
                         <MaterialSectionHeading
                             title={`当前销售依据 · V${currentBasis.source.revision_no}`}
                         />
-                        <p className="text-xs text-muted-foreground">
-                            以下为当前生效销售版本及该版本关联的合同与凭证。
-                        </p>
                         <ApprovalSalesOrderPaper
                             submission={currentBasis.sales_order.revision}
                             documentNo={currentBasis.sales_order.document_no}

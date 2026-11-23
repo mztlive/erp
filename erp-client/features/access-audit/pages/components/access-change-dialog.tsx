@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -61,9 +60,6 @@ function AccessChangeDialog({
             >
                 <DialogHeader>
                     <DialogTitle>授权变更影响预览</DialogTitle>
-                    <DialogDescription>
-                        请核对权限变化与受影响人员。
-                    </DialogDescription>
                 </DialogHeader>
 
                 {impact ? (

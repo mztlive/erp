@@ -1006,7 +1006,6 @@ function PurchaseOrderCreateSurface({
                 {embedded ? null : (
                     <PageHeader
                         title="货源分配与采购建单"
-                        description="优先使用现有库存，不足部分生成采购单并提交审批。"
                         actions={
                             <PageActions
                                 actions={[
@@ -1174,11 +1173,6 @@ function PurchaseOrderCreateSurface({
                                         ) : (
                                             <Skeleton className="h-40" />
                                         )}
-                                        {!embedded ? (
-                                            <p className="text-xs text-muted-foreground">
-                                                页面已自动优先分配现有库存；库存不足时优先推荐供应商直发，同类方案再按可覆盖数量、成本和交期排序。可调整或拆分，同一采购维度会合并为一张采购单。
-                                            </p>
-                                        ) : null}
                                     </div>
                                 </section>
                             ) : null}

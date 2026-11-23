@@ -15,11 +15,7 @@ function SettlementCenterPayable({
     payable?: SettlementDetailView["payable"]
 }) {
     return (
-        <DetailWorkspaceSection
-            title="应付与票款"
-            subtitle="确认后形成唯一应付；付款/进项发票/核销进入供应商往来，不在本页复制"
-            width="form"
-        >
+        <DetailWorkspaceSection title="应付与票款" width="form">
             {payable ? (
                 <>
                     <p className="text-body-compact">

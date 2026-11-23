@@ -184,10 +184,9 @@ function PersonPickerSession(props: PersonPickerDialogProps) {
         >
             <DialogHeader className="px-6 pt-6 pr-14">
                 <DialogTitle>{props.title || "选择人员"}</DialogTitle>
-                <DialogDescription>
-                    {props.description ||
-                        (multiple ? "可跨部门选择多位人员" : "请选择一位人员")}
-                </DialogDescription>
+                {props.description ? (
+                    <DialogDescription>{props.description}</DialogDescription>
+                ) : null}
             </DialogHeader>
             <div className="relative mx-6 my-5">
                 <SearchIcon

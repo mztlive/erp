@@ -155,14 +155,9 @@ export function CategoryObjectPage({
 
             <PermissionGuard permission="product:list">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
-                    <div className="space-y-0.5">
-                        <p className="text-body-compact font-medium text-foreground">
-                            关联商品
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                            前往商品列表查看归属该分类下的全部商品资料。
-                        </p>
-                    </div>
+                    <p className="text-body-compact font-medium text-foreground">
+                        关联商品
+                    </p>
                     <Button
                         id="master-data-category-object-view-products"
                         size="sm"

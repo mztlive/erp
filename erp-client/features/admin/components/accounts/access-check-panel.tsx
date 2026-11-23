@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { SearchCheckIcon, XIcon } from "lucide-react"
+import { XIcon } from "lucide-react"
 import { z } from "zod"
 
 import {
@@ -21,24 +21,6 @@ import { hasPermission } from "@/lib/permissions"
 import type { AccessCheckInput } from "../../api/access-check"
 import { useAccessCheck } from "../../hooks/use-access-check"
 import { AccessCheckResult } from "./access-check-result"
-
-const CHECK_LAYERS = [
-    {
-        step: "01",
-        title: "功能操作权限",
-        description: "核对已分配角色是否包含对应业务操作权限。",
-    },
-    {
-        step: "02",
-        title: "数据范围规则",
-        description: "结合所属部门与个人追加范围，确认可访问边界。",
-    },
-    {
-        step: "03",
-        title: "单据归属与状态",
-        description: "指定具体销售单时，进一步核对单据归属与当前状态。",
-    },
-] as const
 
 export function AccessCheckPanel({ accountId }: { accountId: string }) {
     const [input, setInput] = React.useState<AccessCheckInput | null>(null)
@@ -87,11 +69,6 @@ export function AccessCheckPanel({ accountId }: { accountId: string }) {
         <DetailWorkspaceSection
             title="访问检查"
             headingId="account-access-check-title"
-            subtitle={
-                canListOrders
-                    ? "模拟核对此人能否执行所选操作；未选单据时检查权限配置，选择销售单后可核对具体单据权限。"
-                    : "模拟核对此人能否执行所选业务操作，快速定位权限或数据范围阻断原因。"
-            }
             width="form"
         >
             <form
@@ -248,9 +225,6 @@ export function AccessCheckPanel({ accountId }: { accountId: string }) {
                                                     setInput(null)
                                                 }}
                                             />
-                                            <p className="text-xs text-muted-foreground">
-                                                此处列出的是你有权查看的销售单；选中后将核对此人对该单据的实际访问权限。
-                                            </p>
                                         </Field>
                                     )}
                                 </form.AppField>
@@ -282,35 +256,7 @@ export function AccessCheckPanel({ accountId }: { accountId: string }) {
                 </div>
             ) : input && query.data ? (
                 <AccessCheckResult input={input} result={query.data} />
-            ) : (
-                <div className="space-y-3 border-t border-border/60 pt-5">
-                    <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                        <SearchCheckIcon
-                            className="size-3.5"
-                            aria-hidden="true"
-                        />
-                        <span>检查链路说明</span>
-                    </div>
-                    <ol className="grid gap-4 sm:grid-cols-3">
-                        {CHECK_LAYERS.map((layer) => (
-                            <li
-                                key={layer.step}
-                                className="space-y-1 border-l border-border/80 pl-3"
-                            >
-                                <p className="flex items-center gap-1.5 font-medium text-foreground">
-                                    <span className="num text-xs text-primary">
-                                        {layer.step}
-                                    </span>
-                                    <span>{layer.title}</span>
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                    {layer.description}
-                                </p>
-                            </li>
-                        ))}
-                    </ol>
-                </div>
-            )}
+            ) : null}
         </DetailWorkspaceSection>
     )
 }

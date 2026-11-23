@@ -12,11 +12,7 @@ export function ContractDetailSettlement({
     const rev = contract.currentRevision
 
     return (
-        <DetailWorkspaceSection
-            title="结算与开票"
-            width="form"
-            subtitle="当前合同约定的结算与开票条款，新建销售单时将默认带入。"
-        >
+        <DetailWorkspaceSection title="结算与开票" width="form">
             <DocumentSummary
                 columns="two"
                 className="border-0 py-0"

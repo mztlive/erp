@@ -93,7 +93,7 @@ export function ListFilterTray({
     onReset,
     resetId,
     hasPendingChanges = false,
-    hint = "可组合多个条件，点击「查询」后统一生效",
+    hint,
     inPortal = true,
     children,
 }: {
@@ -125,9 +125,11 @@ export function ListFilterTray({
                 data-slot="list-filter-tray-footer"
                 className="flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-3 pb-3.5"
             >
-                <span className="min-w-0 truncate text-xs text-muted-foreground/75">
-                    {hint}
-                </span>
+                {hint ? (
+                    <span className="min-w-0 truncate text-xs text-muted-foreground/75">
+                        {hint}
+                    </span>
+                ) : null}
                 <div className="ml-auto flex shrink-0 items-center gap-1.5">
                     {onReset ? (
                         <Button

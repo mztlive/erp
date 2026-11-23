@@ -58,7 +58,7 @@ export function DimensionBarChartCard({
     dimensionKey: "scale" | "profit"
     tagKey: "scaleTag" | "profitTag"
     titleFallback: string
-    description: (ruleVersion?: string) => React.ReactNode
+    description?: (ruleVersion?: string) => React.ReactNode
     tableCaption: string
     labelColumnHeader: string
     valueColumnHeader: string
@@ -70,6 +70,7 @@ export function DimensionBarChartCard({
     setPagination: React.Dispatch<React.SetStateAction<PaginationState>>
 }) {
     const items = dimension?.items ?? []
+    const descriptionContent = description?.(dimension?.ruleVersion)
 
     function selectItem(code: string) {
         const nextActive = chartDimension === dimensionKey && chartCode === code
@@ -85,9 +86,9 @@ export function DimensionBarChartCard({
         <Card size="sm" className={surfacePanelClassName}>
             <CardHeader className="border-b border-grid">
                 <CardTitle>{dimension?.title ?? titleFallback}</CardTitle>
-                <CardDescription>
-                    {description(dimension?.ruleVersion)}
-                </CardDescription>
+                {descriptionContent ? (
+                    <CardDescription>{descriptionContent}</CardDescription>
+                ) : null}
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
                 {hiddenNotice ? (

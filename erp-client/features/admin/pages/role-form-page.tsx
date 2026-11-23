@@ -583,7 +583,6 @@ function RoleForm({
                         : `${overview.effectiveCount} / ${overview.totalCatalogCount} 项`}
                 </Badge>
             }
-            subtitle="设置此角色可执行的功能操作；每个人能查看哪些数据请在人员资料的「数据范围」中配置。"
             actions={permissionReviewActions}
         >
             <form.AppField name="permissions">
@@ -749,7 +748,6 @@ function RoleForm({
     ) : (
         <DetailWorkspaceMeta
             items={[
-                "设置角色名称、岗位工作台与操作权限",
                 overview.effectiveCount > 0 ? (
                     <span key="perms" className="num">
                         已选 {overview.effectiveCount} 项权限（覆盖{" "}
@@ -964,7 +962,6 @@ function RoleForm({
                                                     id="governance-admin-role-form-name"
                                                     label="角色名称"
                                                     required
-                                                    description="用于岗位识别与人员角色分配，2 至 32 个字符。"
                                                     placeholder="请输入角色名称"
                                                     className="max-w-md"
                                                     inputClassName="scroll-mt-32"
@@ -990,7 +987,6 @@ function RoleForm({
                                         </Badge>
                                     ) : null
                                 }
-                                subtitle="设置该角色登录后默认使用的岗位工作台；需同时具备对应入口权限才可进入。"
                             >
                                 <fieldset
                                     aria-labelledby="governance-admin-role-form-workbenches-heading"
@@ -1084,7 +1080,6 @@ function RoleForm({
                                     id="governance-admin-role-form-name"
                                     label="角色名称"
                                     required
-                                    description="用于岗位识别与人员角色分配，2 至 32 个字符。"
                                     placeholder="请输入角色名称"
                                     className="max-w-md"
                                     inputClassName="scroll-mt-32"
@@ -1098,17 +1093,12 @@ function RoleForm({
                         aria-labelledby="governance-admin-role-form-workbenches-heading"
                         className="space-y-2.5 pt-2"
                     >
-                        <div className="space-y-0.5">
-                            <h3
-                                id="governance-admin-role-form-workbenches-heading"
-                                className="font-semibold text-foreground"
-                            >
-                                岗位工作台
-                            </h3>
-                            <p className="text-xs text-muted-foreground">
-                                可选。设置该角色登录后默认使用的岗位工作台（仍需勾选对应入口权限后才可进入）。
-                            </p>
-                        </div>
+                        <h3
+                            id="governance-admin-role-form-workbenches-heading"
+                            className="font-semibold text-foreground"
+                        >
+                            岗位工作台
+                        </h3>
                         <form.Field name="workbenches">
                             {(field) => (
                                 <RoleWorkbenchPicker

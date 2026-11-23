@@ -67,9 +67,7 @@ export function WorkspaceSalesApproval({
         <DetailWorkspaceSection
             title="销售明细"
             subtitle={
-                submission
-                    ? `共 ${submission.lines.length} 行 · 本次提交的全部明细`
-                    : undefined
+                submission ? `共 ${submission.lines.length} 行` : undefined
             }
             ariaLabel="销售明细"
             className="@container/sales-lines"
