@@ -3,7 +3,7 @@ import type { Metadata } from "next"
 import { RoleFormPage } from "@/features/admin/pages/role-form-page"
 
 export const metadata: Metadata = {
-    title: "编辑角色",
+    title: "角色详情",
 }
 
 /**

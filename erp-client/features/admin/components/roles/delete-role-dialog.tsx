@@ -8,10 +8,12 @@ import { DeleteConfirmationDialog } from "../delete-confirmation-dialog"
 export function DeleteRoleDialog({
     role,
     onOpenChange,
+    onDeleted,
     id = "governance-admin-delete-role-dialog",
 }: {
     role: { id: string; name: string }
     onOpenChange: (open: boolean) => void
+    onDeleted?: () => void
     id?: string
 }) {
     const { deleteRole, isDeleting } = useRoleMutations()
@@ -24,6 +26,7 @@ export function DeleteRoleDialog({
             pending={isDeleting}
             onConfirm={() => deleteRole(role.id)}
             onClose={() => onOpenChange(false)}
+            onDeleted={onDeleted}
         />
     )
 }
