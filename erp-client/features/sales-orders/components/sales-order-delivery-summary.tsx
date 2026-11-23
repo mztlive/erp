@@ -6,22 +6,54 @@ import { ChevronRightIcon, MapPinIcon } from "lucide-react"
 import { QuickPreviewSheet } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { SheetClose, SheetTrigger } from "@/components/ui/sheet"
-import type { SalesOrderLineItem } from "@/features/sales-orders/types"
+import { RegionName } from "@/features/regions"
+import type { SalesDeliveryAllocation, SalesOrderLineItem } from "../types"
+import { addressKey } from "../lib/sales-delivery-import"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { fullDeliveryAddress } from "@/lib/delivery-address"
 import { compactFixed, sumFixed } from "@/lib/fixed-decimal"
 
+function groupAllocationsByAddress(rows: readonly SalesDeliveryAllocation[]) {
+    const addresses = new Map<string, SalesDeliveryAllocation>()
+    for (const row of rows) {
+        const key = addressKey(row)
+        const existing = addresses.get(key)
+        addresses.set(
+            key,
+            existing
+                ? {
+                      ...existing,
+                      region_name: existing.region_name || row.region_name,
+                      quantity: sumFixed([existing.quantity, row.quantity], {
+                          maxScale: 6,
+                          outputScale: 6,
+                      }),
+                  }
+                : row,
+        )
+    }
+    return [...addresses.values()]
+}
+
 /** 销售行只展示地址摘要，完整交付安排在详情抽屉中读取。 */
 export function SalesOrderDeliverySummary({
     line,
+    variant = "detail",
 }: {
-    line: SalesOrderLineItem
+    line: Pick<
+        SalesOrderLineItem,
+        "id" | "name" | "sku" | "unit" | "deliveryAllocations"
+    >
+    variant?: "detail" | "submit"
 }) {
     const [open, setOpen] = useState(false)
-    const allocations = line.deliveryAllocations ?? []
+    const isSubmit = variant === "submit"
+    const rows = line.deliveryAllocations ?? []
+    const allocations = isSubmit ? groupAllocationsByAddress(rows) : rows
     const first = allocations[0]
 
     if (!first) {
+        if (isSubmit) return null
         return (
             <span className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
                 <MapPinIcon aria-hidden="true" className="size-3 shrink-0" />
@@ -30,7 +62,8 @@ export function SalesOrderDeliverySummary({
         )
     }
 
-    const prefix = `sales-order-line-${toAutomationIdSegment(line.id)}-delivery`
+    const surface = isSubmit ? "sales-order-submit" : "sales-order"
+    const prefix = `${surface}-line-${toAutomationIdSegment(line.id)}-delivery`
     const total = compactFixed(
         sumFixed(
             allocations.map((allocation) => allocation.quantity),
@@ -41,10 +74,45 @@ export function SalesOrderDeliverySummary({
         ),
     )
     const summary = `分送 ${allocations.length} 个地址 · 共 ${total} ${line.unit}`
-    const triggerText =
-        allocations.length === 1
-            ? [first.recipient, first.region_name].filter(Boolean).join(" · ")
-            : summary
+    const singleAddress = allocations.length === 1
+    const triggerText = isSubmit
+        ? singleAddress
+            ? "查看配送"
+            : `查看 ${allocations.length} 个收货地址`
+        : singleAddress
+          ? [first.recipient, first.region_name].filter(Boolean).join(" · ")
+          : summary
+    const trigger = (
+        <SheetTrigger
+            id={`${prefix}-trigger`}
+            aria-label={
+                isSubmit
+                    ? `${triggerText}（${line.name}）`
+                    : `查看${line.name}的交付地址，共${allocations.length}个地址`
+            }
+            render={
+                <Button
+                    type="button"
+                    variant={isSubmit ? "outline" : "link"}
+                    size={isSubmit ? "xs" : "sm"}
+                    className={
+                        isSubmit
+                            ? "max-w-full cursor-pointer"
+                            : "mt-1 h-auto max-w-64 justify-start gap-1 px-0 py-0 text-left text-xs font-normal text-primary/90 hover:text-primary"
+                    }
+                />
+            }
+        >
+            {!isSubmit && (
+                <MapPinIcon aria-hidden="true" className="size-3 shrink-0" />
+            )}
+            <span className="min-w-0 truncate">{triggerText}</span>
+            <ChevronRightIcon
+                aria-hidden="true"
+                className="size-3 shrink-0 opacity-75"
+            />
+        </SheetTrigger>
+    )
 
     return (
         <QuickPreviewSheet
@@ -59,28 +127,28 @@ export function SalesOrderDeliverySummary({
             identity="交付地址"
             summary={<p className="text-xs text-muted-foreground">{summary}</p>}
             trigger={
-                <SheetTrigger
-                    id={`${prefix}-trigger`}
-                    aria-label={`查看${line.name}的交付地址，共${allocations.length}个地址`}
-                    render={
-                        <Button
-                            type="button"
-                            variant="link"
-                            size="sm"
-                            className="mt-1 h-auto max-w-64 justify-start gap-1 px-0 py-0 text-left text-xs font-normal text-primary/90 hover:text-primary"
-                        />
-                    }
-                >
-                    <MapPinIcon
-                        aria-hidden="true"
-                        className="size-3 shrink-0"
-                    />
-                    <span className="min-w-0 truncate">{triggerText}</span>
-                    <ChevronRightIcon
-                        aria-hidden="true"
-                        className="size-3 shrink-0 opacity-75"
-                    />
-                </SheetTrigger>
+                isSubmit ? (
+                    <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                        {singleAddress && (
+                            <span className="min-w-0 truncate">
+                                {first.recipient}
+                                {(first.region_name || first.region_code) && (
+                                    <>
+                                        {" · "}
+                                        {first.region_name || (
+                                            <RegionName
+                                                code={first.region_code}
+                                            />
+                                        )}
+                                    </>
+                                )}
+                            </span>
+                        )}
+                        {trigger}
+                    </div>
+                ) : (
+                    trigger
+                )
             }
             footer={
                 <SheetClose
@@ -117,6 +185,13 @@ export function SalesOrderDeliverySummary({
                             </dd>
                             <dt className="text-muted-foreground">完整地址</dt>
                             <dd className="leading-6 break-words">
+                                {isSubmit &&
+                                    !allocation.region_name &&
+                                    allocation.region_code && (
+                                        <RegionName
+                                            code={allocation.region_code}
+                                        />
+                                    )}
                                 {fullDeliveryAddress(allocation)}
                             </dd>
                         </dl>

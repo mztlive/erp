@@ -4,7 +4,10 @@ import * as React from "react"
 import { useInquirySalesDraftPersistence } from "../hooks/use-inquiry-sales-draft-persistence"
 import { inquirySaleScope } from "../lib/inquiry-sales-storage"
 import type { CreateSalesOrderFormValues } from "../lib/sales-order-create-model"
-import type { InquirySalesBasis } from "../api/inquiry-basis"
+import {
+    inquirySourceForLines,
+    type InquirySalesBasis,
+} from "../api/inquiry-basis"
 import { SalesOrderInquirySource } from "./sales-order-inquiry-source"
 import { SalesOrderInquiryPickerDialog } from "./sales-order-inquiry-picker-dialog"
 import { hasPermission } from "@/lib/permissions"
@@ -31,7 +34,7 @@ import {
     DiscardConfirmDialog,
     detailWorkspaceStyles,
 } from "@/components/business"
-import { useAppForm } from "@/components/form"
+import { applyApiFormError, useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -44,7 +47,10 @@ import {
 } from "@/lib/business-options"
 import { getErrorMessage } from "@/lib/api/errors"
 import { compareDecimal } from "@/lib/fixed-decimal"
-import type { FormalCommandKeyLedger } from "@/lib/formal-command"
+import {
+    isCommandOutcomeUnknown,
+    type FormalCommandKeyLedger,
+} from "@/lib/formal-command"
 import { ContractImportWorkspace } from "@/features/contracts/components/contract-import-workspace"
 import { useContractFilePicker } from "@/features/contracts/hooks/use-contract-file-picker"
 import { useContractCenterQuery } from "@/features/contracts/queries"
@@ -285,6 +291,13 @@ export function SalesOrderCreateForm({
         onSubmit: async ({ value }) => {
             if (submission.submitIntentRef.current === "SUBMIT") {
                 if (blocksSalesOrderSubmit(value)) return
+                if (
+                    initialInquiryBasis &&
+                    !submission.draftIdentity &&
+                    !commandLedger.peek("create")
+                ) {
+                    inquirySourceForLines(initialInquiryBasis, value.lineItems)
+                }
                 submission.setSubmitConfirmOpen(true)
                 return
             }
@@ -303,8 +316,20 @@ export function SalesOrderCreateForm({
             : "",
     )
 
-    /** 负毛利在提交预览后再确认一次；待完善或非负毛利直接提交。 */
     const resubmissionReasonRef = React.useRef<string | undefined>(undefined)
+    const submitConfirmed = async (values: CreateSalesOrderFormValues) => {
+        try {
+            await submission.handleSubmit(
+                values,
+                form,
+                resubmissionReasonRef.current,
+            )
+        } catch (error) {
+            if (!isCommandOutcomeUnknown(error)) applyApiFormError(form, error)
+        }
+    }
+
+    /** 负毛利在提交预览后再确认一次；待完善或非负毛利直接提交。 */
     const handleSubmitConfirm = (resubmissionReason?: string) => {
         resubmissionReasonRef.current = resubmissionReason
         const values = form.state.values
@@ -318,21 +343,13 @@ export function SalesOrderCreateForm({
             setNegativeProfit(grossProfit)
             return
         }
-        void submission.handleSubmit(
-            values,
-            form,
-            resubmissionReasonRef.current,
-        )
+        void submitConfirmed(values)
     }
 
     const handleNegativeProfitConfirm = () => {
         if (blocksSalesOrderSubmit(form.state.values)) return
         setNegativeProfit(null)
-        void submission.handleSubmit(
-            form.state.values,
-            form,
-            resubmissionReasonRef.current,
-        )
+        void submitConfirmed(form.state.values)
     }
 
     const dirty = useSelector(
@@ -844,7 +861,8 @@ export function SalesOrderCreateForm({
                         onSubmit={(event) => {
                             event.preventDefault()
                             event.stopPropagation()
-                            void form.handleSubmit()
+                            // useAppForm 已将提交错误绑定到表单。
+                            void form.handleSubmit().catch(() => undefined)
                         }}
                     >
                         <div

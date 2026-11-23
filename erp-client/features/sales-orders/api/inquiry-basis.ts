@@ -1,5 +1,6 @@
 import { apiGet } from "@/lib/api"
-import { compareDecimal } from "@/lib/fixed-decimal"
+import { createApiError } from "@/lib/api/errors"
+import { compactFixed, compareDecimal } from "@/lib/fixed-decimal"
 import { formatEpochDate, throwValidation } from "./mappers"
 import type {
     SalesDeliveryAllocation,
@@ -145,13 +146,17 @@ export function inquirySourceForLines(
                     "询价来源商品或交期已变化，请返回询价重新确认。",
                 )
             }
-            if (
-                compareDecimal(line.quantity, original!.selection.quantity, 6) >
-                0
-            )
-                throwValidation(
-                    "开单数量超过本次可转数量，请返回询价重新核对。",
-                )
+            const maxQuantity = original!.selection.quantity
+            if (compareDecimal(line.quantity, maxQuantity, 6) > 0) {
+                const limit = `${compactFixed(maxQuantity)} ${line.unit}`.trim()
+                throw createApiError({
+                    kind: "Validation",
+                    message: `「${line.name}」开单数量超过本次可转数量，请调整数量。`,
+                    fieldErrors: {
+                        [`lineItems[${index}].quantity`]: `本次最多可开 ${limit}。`,
+                    },
+                })
+            }
             const allocations = (line.deliveryAllocations ?? []).map(
                 (delivery) => {
                     const candidates = original!.selection.allocations.filter(

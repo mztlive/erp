@@ -2,7 +2,7 @@
 
 import type { Ref } from "react"
 
-import { SalesDeliveryPlan } from "./sales-delivery-plan"
+import { SalesOrderDeliverySummary } from "./sales-order-delivery-summary"
 
 import { MoneyValue, PaperDocument, QuantityValue } from "@/components/business"
 import { paymentTermLabel, welfareScenarioLabel } from "@/lib/business-options"
@@ -21,6 +21,24 @@ function giftRateLabel(line: SalesOrderSubmitLineSnapshot): string {
         line.quantity,
     )
     return preview ? `${preview.giftRatePercent}%` : "—"
+}
+
+function submitLineName(row: SalesOrderSubmitLineSnapshot) {
+    const name = row.name || "—"
+    return (
+        <div>
+            <div>{name}</div>
+            <SalesOrderDeliverySummary
+                variant="submit"
+                line={{
+                    id: row.rowKey,
+                    name,
+                    unit: row.unit,
+                    deliveryAllocations: row.deliveryAllocations,
+                }}
+            />
+        </div>
+    )
 }
 
 /**
@@ -116,15 +134,7 @@ export function SalesOrderSubmitPaper({
                           {
                               id: "name",
                               header: "卡券类目",
-                              cell: (row) => (
-                                  <div>
-                                      <div>{row.name || "—"}</div>
-                                      <SalesDeliveryPlan
-                                          rows={row.deliveryAllocations}
-                                          unit={row.unit}
-                                      />
-                                  </div>
-                              ),
+                              cell: submitLineName,
                           },
                           {
                               id: "face",
@@ -182,15 +192,7 @@ export function SalesOrderSubmitPaper({
                           {
                               id: "name",
                               header: "项目",
-                              cell: (row) => (
-                                  <div>
-                                      <div>{row.name || "—"}</div>
-                                      <SalesDeliveryPlan
-                                          rows={row.deliveryAllocations}
-                                          unit={row.unit}
-                                      />
-                                  </div>
-                              ),
+                              cell: submitLineName,
                           },
                           {
                               id: "due",
