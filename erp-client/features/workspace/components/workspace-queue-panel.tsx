@@ -25,6 +25,7 @@ import { hasPermission } from "@/lib/permissions"
 import { workspaceHost } from "@/lib/workspace-tabs"
 import { workspaceQueueSubjects } from "../hooks/queries"
 import type { useWorkspaceHome } from "../hooks/use-workspace-home"
+import { useWorkspaceListMaterials } from "../hooks/use-workspace-list-materials"
 import { queueTypeLabel } from "../lib/queue-presentation"
 import { workspaceTaskPresentation } from "../lib/task-presentation"
 import { buildWorkspaceSearchParams } from "../lib/url-state"
@@ -33,6 +34,7 @@ import { WorkspaceDocumentBadge } from "./workspace-document-badge"
 import { WorkspaceSearchPanel } from "./workspace-search-panel"
 import { WorkspaceSortMenu } from "./workspace-sort-menu"
 import { WorkspaceTaskInspector } from "./workspace-task-inspector"
+import { queueTaskRow } from "./workspace-task-columns"
 import {
     canBatchOperateTask,
     WorkspaceTaskList,
@@ -172,6 +174,14 @@ function WorkspaceQueueContent({
     const selectedTypes = filters.item_types ?? []
     const started = urlState.view === "started"
     const history = urlState.view === "history"
+    const materials = useWorkspaceListMaterials(view.items)
+    const rows = useMemo(
+        () =>
+            materials.map(({ item, materialNotice, retryMaterials }) =>
+                queueTaskRow(item, materialNotice, retryMaterials),
+            ),
+        [materials],
+    )
     const selectedLabel =
         selectedTypes.length === 1
             ? options.item_types?.find(
@@ -448,26 +458,35 @@ function WorkspaceQueueContent({
         </div>
     ) : null
 
-    const getInspectorHeader = useCallback((item: WorkspaceWorkItem) => {
-        const meta = workspaceTaskPresentation(item)
-        return {
-            title: meta.title,
-            subtitle:
-                meta.number !== "—" ? (
-                    <span className="num select-all">{meta.number}</span>
-                ) : undefined,
-            badges: (
-                <>
-                    <WorkspaceDocumentBadge item={item} />
-                    <StatusBadge
-                        label={item.statusLabel}
-                        tone={item.statusTone}
-                    />
-                </>
-            ),
-            openFullPageLabel: "全屏打开",
-        }
-    }, [])
+    const getInspectorHeader = useCallback(
+        (item: WorkspaceWorkItem) => {
+            const row = rows.find(
+                (entry) => entry.item.workItemId === item.workItemId,
+            )
+            const meta =
+                row && !row.materialNotice
+                    ? row.presentation
+                    : workspaceTaskPresentation(item)
+            return {
+                title: meta.title,
+                subtitle:
+                    meta.number !== "—" && meta.number !== meta.title ? (
+                        <span className="num select-all">{meta.number}</span>
+                    ) : undefined,
+                badges: (
+                    <>
+                        <WorkspaceDocumentBadge item={item} />
+                        <StatusBadge
+                            label={item.statusLabel}
+                            tone={item.statusTone}
+                        />
+                    </>
+                ),
+                openFullPageLabel: "全屏打开",
+            }
+        },
+        [rows],
+    )
 
     return (
         <>
@@ -540,7 +559,7 @@ function WorkspaceQueueContent({
                                 {title}
                             </h2>
                             <WorkspaceTaskList
-                                items={view.items}
+                                rows={rows}
                                 onSelect={onSelectTask}
                                 onInspect={handleInspectItem}
                                 activeId={activeInspectorId}
@@ -581,7 +600,7 @@ function WorkspaceQueueContent({
                                 {title}
                             </h2>
                             <WorkspaceTaskSplitList
-                                items={view.items}
+                                rows={rows}
                                 onSelect={onSelectTask}
                                 onInspect={handleInspectItem}
                                 activeId={activeInspectorId}

@@ -1,9 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { PlusIcon } from "lucide-react"
+import { InfoIcon, PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { cn } from "@/lib/utils"
 import { findSourcingOption } from "../lib/purchase-order-create-model"
 import { canSplitSourcingProduct } from "../lib/sourcing-quantity"
 import { supplierDeliveryRequired } from "../lib/sourcing/delivery"
@@ -79,8 +80,10 @@ export function SourcingProductEditor({
             ({ line }) => line.targetWarehouseId === source.targetWarehouseId,
         )
     const [notice, setNotice] = useState("")
+    const insetClass = activeRowKey ? "px-4 @min-[560px]/sourcing:px-6" : "px-4"
+
     return (
-        <div className="@container/sourcing">
+        <div>
             {showParticipation ? (
                 <div className="px-4 pt-4">
                     <SourcingParticipationControl
@@ -96,13 +99,25 @@ export function SourcingProductEditor({
                     />
                 </div>
             ) : !included ? (
-                <p className="px-4 pt-4 text-xs text-muted-foreground">
-                    暂不分配：本次不提交，方案已保留。
-                </p>
+                <div className={cn("pt-3.5", insetClass)}>
+                    <p className="flex items-center gap-2 rounded-md border border-border/60 bg-surface-sunken px-3 py-2 text-xs text-muted-foreground">
+                        <InfoIcon
+                            aria-hidden="true"
+                            className="size-3.5 shrink-0"
+                        />
+                        <span>暂不分配：本次不提交，当前方案草稿已保留。</span>
+                    </p>
+                </div>
             ) : activeRowKey && !visibleAllocations[0]?.line.selected ? (
-                <p className="px-4 pt-4 text-xs text-muted-foreground">
-                    此来源暂不参与分配，修改仅保留在草稿中。
-                </p>
+                <div className={cn("pt-3.5", insetClass)}>
+                    <p className="flex items-center gap-2 rounded-md border border-border/60 bg-surface-sunken px-3 py-2 text-xs text-muted-foreground">
+                        <InfoIcon
+                            aria-hidden="true"
+                            className="size-3.5 shrink-0"
+                        />
+                        <span>此来源暂不参与分配，修改仅保留在草稿中。</span>
+                    </p>
+                </div>
             ) : null}
             <fieldset
                 disabled={!included}
@@ -129,7 +144,7 @@ export function SourcingProductEditor({
                         />
                     ))}
                 </div>
-                <div className="space-y-3 px-4 pb-4 empty:hidden">
+                <div className={cn("space-y-3 pb-4 empty:hidden", insetClass)}>
                     {!condensed &&
                     canSplitSourcingProduct(
                         row.product,
@@ -149,15 +164,18 @@ export function SourcingProductEditor({
                         </Button>
                     ) : null}
                     {commonWarehouse && targets.length > 0 ? (
-                        <div className="space-y-2 border-t border-border pt-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-surface-sunken px-3.5 py-2.5">
                             <p className="text-xs text-muted-foreground">
-                                将 {source.targetWarehouseName || "当前目标仓"}{" "}
+                                将{" "}
+                                <span className="font-medium text-foreground">
+                                    {source.targetWarehouseName || "当前目标仓"}
+                                </span>{" "}
                                 应用到其余 {targets.length} 条已勾选入仓明细。
                             </p>
                             <Button
                                 id={`sourcing-product-${toAutomationIdSegment(row.product.salesOrderLineId)}-apply-warehouse`}
                                 type="button"
-                                size="sm"
+                                size="xs"
                                 variant="outline"
                                 onClick={() => {
                                     for (const index of targets) {
@@ -182,14 +200,20 @@ export function SourcingProductEditor({
                     {notice ? (
                         <p
                             role="status"
-                            className="text-xs text-muted-foreground"
+                            className="text-xs text-success-soft-foreground"
                         >
                             {notice}
                         </p>
                     ) : null}
                     {row.status === "部分分配" ? (
-                        <p className="text-xs text-muted-foreground">
-                            本次尚未覆盖全部需求，可拆分其他来源；确认后剩余缺口继续保留。
+                        <p className="flex items-center gap-2 rounded-md border border-warning-border bg-warning-soft/60 px-3 py-2 text-xs text-warning-soft-foreground">
+                            <InfoIcon
+                                aria-hidden="true"
+                                className="size-3.5 shrink-0"
+                            />
+                            <span>
+                                本次尚未覆盖全部需求，可在左侧添加其他来源拆分；确认后剩余缺口继续保留。
+                            </span>
                         </p>
                     ) : null}
                 </div>

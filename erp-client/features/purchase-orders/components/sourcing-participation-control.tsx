@@ -10,12 +10,14 @@ export function SourcingParticipationControl({
     included,
     onChange,
     showHint = true,
+    variant = "inline",
 }: {
     idPrefix: string
     itemName: string
     included: boolean
     onChange: (included: boolean) => void
     showHint?: boolean
+    variant?: "inline" | "pill"
 }) {
     const id = `${idPrefix}-participation`
     const hint = showHint && !included
@@ -23,7 +25,16 @@ export function SourcingParticipationControl({
         <div className="space-y-1">
             <label
                 htmlFor={id}
-                className="inline-flex cursor-pointer items-center gap-2"
+                className={cn(
+                    "inline-flex cursor-pointer items-center gap-2 select-none transition-colors",
+                    variant === "pill" &&
+                        cn(
+                            "h-control-sm rounded-md border px-2.5",
+                            included
+                                ? "border-border/80 bg-surface-sunken hover:bg-muted/70"
+                                : "border-dashed border-border bg-muted/40 hover:bg-muted/70",
+                        ),
+                )}
             >
                 <Checkbox
                     id={id}

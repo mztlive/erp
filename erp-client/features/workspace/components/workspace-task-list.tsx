@@ -20,14 +20,12 @@ import {
     getWorkItemStatusMeta,
 } from "@/lib/task-status-dictionary"
 import { cn } from "@/lib/utils"
-import { useWorkspaceListMaterials } from "../hooks/use-workspace-list-materials"
 import { useWorkspaceScroll } from "../hooks/use-workspace-scroll"
 import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceDocumentBadge } from "./workspace-document-badge"
 import { WorkspaceMoney } from "./workspace-money"
 import {
-    queueTaskRow,
     workspaceTaskColumns,
     type QueueTaskRow,
 } from "./workspace-task-columns"
@@ -121,7 +119,7 @@ function resolveQueueCopy({
 }
 
 export type WorkspaceTaskListProps = Readonly<{
-    items: readonly WorkspaceWorkItem[]
+    rows: QueueTaskRow[]
     onSelect: (item: WorkspaceWorkItem) => void
     /** 原位快览回调：在通栏表格模式下点击行或「快览」按钮唤起检查器。 */
     onInspect?: (item: WorkspaceWorkItem) => void
@@ -153,7 +151,7 @@ export type WorkspaceTaskListProps = Readonly<{
  * - 支持多选复选框（配合底部悬浮 `ListSelectionBar` 执行批量转交/关闭）。
  */
 export function WorkspaceTaskList({
-    items,
+    rows,
     onSelect,
     onInspect,
     activeId,
@@ -177,15 +175,6 @@ export function WorkspaceTaskList({
         `queue:${scrollKey}`,
         "[data-slot=table-container]",
     )
-    const materials = useWorkspaceListMaterials(items)
-    const rows = useMemo(
-        () =>
-            materials.map(({ item, materialNotice, retryMaterials }) =>
-                queueTaskRow(item, materialNotice, retryMaterials),
-            ),
-        [materials],
-    )
-
     const columns = useMemo<ColumnDef<QueueTaskRow, unknown>[]>(() => {
         const base = workspaceTaskColumns({
             selectedTypes,
@@ -381,7 +370,7 @@ function SplitCardStatus({
  * 分栏左栏 2 行紧凑摘要卡列表（每条 ~54px 高，符合 `AGENTS.md §8` 不显示列设置）。
  */
 export function WorkspaceTaskSplitList({
-    items,
+    rows,
     onSelect,
     onInspect,
     activeId,
@@ -403,14 +392,6 @@ export function WorkspaceTaskSplitList({
     const scrollRef = useWorkspaceScroll<HTMLDivElement>(
         `split-queue:${scrollKey}`,
         "[data-slot=table-container]",
-    )
-    const materials = useWorkspaceListMaterials(items)
-    const rows = useMemo(
-        () =>
-            materials.map(({ item, materialNotice, retryMaterials }) =>
-                queueTaskRow(item, materialNotice, retryMaterials),
-            ),
-        [materials],
     )
     const { caption, emptyCopy } = resolveQueueCopy({
         tracking,
@@ -467,7 +448,10 @@ export function WorkspaceTaskSplitList({
                                 </div>
                                 <div className="flex shrink-0 items-center gap-2">
                                     {hasAmount ? (
-                                        <span className="num text-xs font-medium text-foreground">
+                                        <span
+                                            className="num text-xs font-medium text-foreground"
+                                            title={metric.label}
+                                        >
                                             <WorkspaceMoney
                                                 value={metric.value}
                                                 display="exact"

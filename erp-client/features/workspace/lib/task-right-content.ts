@@ -62,7 +62,7 @@ const POLICIES: Record<string, Policy> = {
     },
     SUPPLIER_PAYMENT_EXECUTION: {
         metric: "本次待付金额",
-        fields: ["待付金额", "未付金额"],
+        fields: ["待付金额", "未付金额", "已付金额"],
         status: "待付款",
         dates: ["计划付款日", "希望付款日"],
     },

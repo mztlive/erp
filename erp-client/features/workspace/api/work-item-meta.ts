@@ -300,17 +300,19 @@ function documentMetaOf(businessObjectType: string): DocumentMeta | undefined {
  *
  * @param workItemType 任务类型码。
  * @param businessObjectType 业务对象种类。
+ * @param status 当前任务状态。
  * @returns 类型标签，例如「销售单审批」。
  */
 export function workspaceTypeLabel(
     workItemType: string,
     businessObjectType: string,
+    status: WorkspaceWorkItem["status"] = "OPEN",
 ): string {
     if (
         workItemType === "SUPPLIER_PAYMENT_EXECUTION" &&
         normalizeObjectType(businessObjectType) === "purchase_payment_request"
     ) {
-        return "待执行采购付款"
+        return status === "OPEN" ? "待执行采购付款" : "采购付款"
     }
     if (DOCUMENT_TYPED_WORK_ITEMS.has(workItemType)) {
         return (
@@ -327,12 +329,14 @@ export function workspaceTypeLabel(
  * @param workItemType 任务类型码。
  * @param businessObjectType 业务对象种类。
  * @param fallbackLabel 未知类型时的兜底文案，通常是已算好的 `workItemTypeLabel`。
+ * @param status 当前任务状态。
  * @returns 短标签与徽章色，供队列和详情扫读。
  */
 export function workspaceDocumentBadge(
     workItemType: string,
     businessObjectType: string,
     fallbackLabel?: string,
+    status: WorkspaceWorkItem["status"] = "OPEN",
 ): WorkspaceDocumentBadgeMeta {
     if (
         DOCUMENT_TYPED_WORK_ITEMS.has(workItemType) ||
@@ -349,7 +353,17 @@ export function workspaceDocumentBadge(
     const typeMeta = TYPE_META[workItemType]
     if (typeMeta) {
         return {
-            label: typeMeta.badgeLabel,
+            label:
+                workItemType === "SUPPLIER_PAYMENT_EXECUTION" &&
+                normalizeObjectType(businessObjectType) ===
+                    "purchase_payment_request" &&
+                status !== "OPEN"
+                    ? workspaceTypeLabel(
+                          workItemType,
+                          businessObjectType,
+                          status,
+                      )
+                    : typeMeta.badgeLabel,
             variant: typeMeta.badgeVariant,
         }
     }

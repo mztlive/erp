@@ -338,6 +338,8 @@ export function WorkspaceTaskInspector({
             workspaceHost()?.changed(window)
             void queryClient.invalidateQueries({
                 queryKey: workspaceHomeKeys.all,
+                predicate: (query) =>
+                    query.meta?.taskMaterialWorkItemId !== completedId,
             })
             onCompleted?.(completedId, preferredId, autoNext)
         },

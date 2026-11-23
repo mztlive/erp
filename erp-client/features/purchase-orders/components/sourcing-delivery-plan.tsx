@@ -128,10 +128,16 @@ export function SourcingDeliveryRequirementSection({
     const rows = deliveryRequirementRows(product)
     return (
         <section
-            className="space-y-2 border-t border-border px-4 py-4"
+            className={
+                condensed
+                    ? "space-y-2 border-t border-border/60 px-4 py-4 @min-[560px]/sourcing:px-6"
+                    : "space-y-2 border-t border-border px-4 py-4"
+            }
             aria-label="交付地址"
         >
-            <h4 className="text-body-compact font-medium">交付地址</h4>
+            <h4 className="text-body-compact font-semibold text-foreground">
+                交付地址
+            </h4>
             {rows.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                     {NO_ADDRESS_NOTE}

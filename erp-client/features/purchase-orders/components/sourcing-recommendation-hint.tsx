@@ -44,13 +44,13 @@ export function SourcingRecommendationHint({
                                     id={id}
                                     type="button"
                                     aria-label={`系统推荐：${text}`}
-                                    className="inline-flex items-center gap-1 rounded-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                                    className="inline-flex h-5 cursor-pointer items-center gap-1 rounded-sm bg-info-soft px-1.5 text-xs font-medium text-info-soft-foreground transition-colors outline-none hover:bg-info-soft/80 focus-visible:ring-2 focus-visible:ring-ring"
                                 />
                             }
                         >
                             <SparklesIcon
                                 aria-hidden="true"
-                                className="size-3.5 text-muted-foreground"
+                                className="size-3 shrink-0"
                             />
                             系统推荐
                         </TooltipTrigger>

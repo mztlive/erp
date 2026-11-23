@@ -1,7 +1,14 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { ArrowLeftIcon, ArrowRightIcon, PlusIcon } from "lucide-react"
+import {
+    ArrowLeftIcon,
+    ArrowRightIcon,
+    PlusIcon,
+    TriangleAlertIcon,
+} from "lucide-react"
+import { DetailWorkspaceMeta, MoneyValue } from "@/components/business"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -13,8 +20,11 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { findSourcingOption } from "../lib/purchase-order-create-model"
 import { sourcingFormValidationError } from "../lib/purchase-order-create-validation"
+import { sourcingRouteLabel } from "../lib/sourcing/delivery-terms"
 import { buildSourcingEditorRows } from "../lib/sourcing/editor-rows"
 import { canSplitSourcingProduct } from "../lib/sourcing-quantity"
 import type {
@@ -25,6 +35,13 @@ import { SourcingParticipationControl } from "./sourcing-participation-control"
 import { SourcingProductEditor } from "./sourcing-product-editor"
 import { SourcingSourceList } from "./sourcing-source-list"
 import { SourcingAllocationSummary } from "./sourcing-allocation-summary"
+
+function statusTone(status: string): StatusTone {
+    if (status === "已就绪") return "success"
+    if (status === "部分分配" || status === "缺目标仓") return "warning"
+    if (status === "待调整") return "destructive"
+    return "neutral"
+}
 
 /** 左侧比较全部来源，右侧编辑一个来源；全部字段继续使用整单共享草稿。 */
 export function SourcingProductAdjustDialog({
@@ -61,14 +78,23 @@ export function SourcingProductAdjustDialog({
     const position = navigation.findIndex((item) => item === row)
     const previous = navigation[position - 1]
     const next = navigation[position + 1]
-    const nextPending = [
+    const pendingItems = [
         ...navigation.slice(position + 1),
         ...navigation.slice(0, Math.max(0, position)),
-    ].find((item) => item.needsAttention)
+    ].filter((item) => item.needsAttention)
+    const nextPending = pendingItems[0]
     const active =
         row?.allocations.find(({ line }) => line.rowKey === selectedRowKey) ??
         row?.allocations[0]
     const activeRowKey = active?.line.rowKey
+    const activeIndex =
+        row?.allocations.findIndex(
+            ({ line }) => line.rowKey === activeRowKey,
+        ) ?? -1
+    const activeOption =
+        row && active
+            ? findSourcingOption(row.product, active.line.basisId)
+            : undefined
     const addDisabledReason =
         !row || (!row.selected && !row.partiallySelected)
             ? "恢复本次分配后可添加来源"
@@ -147,14 +173,14 @@ export function SourcingProductAdjustDialog({
     }
     const removeSource = (rowKey: string) => {
         if (!row || row.allocations.length <= 1) return
-        const position = row.allocations.findIndex(
+        const index = row.allocations.findIndex(
             ({ line }) => line.rowKey === rowKey,
         )
-        if (position < 0) return
-        const next =
-            row.allocations[position + 1] ?? row.allocations[position - 1]
+        if (index < 0) return
+        const fallback =
+            row.allocations[index + 1] ?? row.allocations[index - 1]
         const nextRowKey =
-            rowKey === activeRowKey ? next?.line.rowKey : activeRowKey
+            rowKey === activeRowKey ? fallback?.line.rowKey : activeRowKey
         if (rowKey === activeRowKey) setSelectedRowKey(nextRowKey ?? null)
         props.onRemoveSplit(rowKey)
         requestAnimationFrame(() => {
@@ -201,6 +227,10 @@ export function SourcingProductAdjustDialog({
             onNavigate(nextId)
         } else close()
     }
+
+    const supplyRefPrice =
+        row?.product.salesPrices?.procurement_supply_price_gross
+
     return (
         <Dialog
             open={Boolean(row)}
@@ -209,7 +239,7 @@ export function SourcingProductAdjustDialog({
             }}
         >
             <DialogContent
-                size="full"
+                size="2xl"
                 scroll="body"
                 closeButtonId="sourcing-product-adjust-close"
                 finalFocus={() =>
@@ -226,45 +256,87 @@ export function SourcingProductAdjustDialog({
             >
                 {row ? (
                     <>
-                        <DialogHeader>
+                        <DialogHeader className="border-border/60 bg-card py-3">
                             <div className="flex flex-wrap items-center justify-between gap-3">
-                                <DialogTitle>
-                                    供给分配 · {row.product.itemName}
-                                </DialogTitle>
-                                <SourcingParticipationControl
-                                    idPrefix={`sourcing-product-adjust-${toAutomationIdSegment(row.product.salesOrderLineId)}`}
-                                    itemName={row.product.itemName}
-                                    included={
-                                        row.selected || row.partiallySelected
-                                    }
-                                    onChange={(included) =>
-                                        onSetParticipation(
-                                            [row.product.salesOrderLineId],
-                                            included,
-                                        )
-                                    }
-                                    showHint={false}
-                                />
+                                <div className="min-w-0 flex-1 space-y-0.5">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <DialogTitle className="truncate">
+                                            供给分配 · {row.product.itemName}
+                                        </DialogTitle>
+                                        <StatusBadge
+                                            label={row.status}
+                                            tone={statusTone(row.status)}
+                                        />
+                                    </div>
+                                    <DetailWorkspaceMeta
+                                        items={[
+                                            row.product.itemSku ? (
+                                                <span key="sku" className="num">
+                                                    {row.product.itemSku}
+                                                </span>
+                                            ) : null,
+                                            supplyRefPrice ? (
+                                                <span key="ref-price">
+                                                    参考供货价{" "}
+                                                    <MoneyValue
+                                                        display="exact"
+                                                        value={supplyRefPrice}
+                                                        className="font-medium [&_[data-slot=money-value-number]]:text-foreground/85"
+                                                    />
+                                                </span>
+                                            ) : null,
+                                            row.product.deliveryAllocations
+                                                .length > 0
+                                                ? `共 ${row.product.deliveryAllocations.length} 个收货地址`
+                                                : null,
+                                        ]}
+                                    />
+                                </div>
+                                <div className="shrink-0">
+                                    <SourcingParticipationControl
+                                        idPrefix={`sourcing-product-adjust-${toAutomationIdSegment(row.product.salesOrderLineId)}`}
+                                        itemName={row.product.itemName}
+                                        included={
+                                            row.selected ||
+                                            row.partiallySelected
+                                        }
+                                        onChange={(included) =>
+                                            onSetParticipation(
+                                                [row.product.salesOrderLineId],
+                                                included,
+                                            )
+                                        }
+                                        showHint={false}
+                                        variant="pill"
+                                    />
+                                </div>
                             </div>
                             <DialogDescription className="sr-only">
                                 左侧比较并选择来源，右侧调整当前来源。修改保留在草稿中，整单预览后统一提交。
                             </DialogDescription>
                         </DialogHeader>
+
                         <SourcingAllocationSummary row={row} />
-                        <DialogBody className="grid grid-rows-[minmax(7rem,0.35fr)_minmax(0,1fr)] overflow-hidden p-0 lg:grid-cols-[minmax(18rem,0.3fr)_minmax(0,0.7fr)] lg:grid-rows-1">
+
+                        <DialogBody className="grid h-[min(74dvh,46rem)] min-h-0 flex-auto grid-rows-[minmax(6rem,auto)_minmax(0,1fr)] overflow-hidden p-0 lg:grid-cols-[18rem_minmax(0,1fr)] lg:grid-rows-1">
                             <section
-                                className="flex min-h-0 min-w-0 flex-col border-b border-border lg:border-r lg:border-b-0"
+                                className="flex max-h-44 min-h-0 min-w-0 flex-col border-b border-border/60 bg-sidebar lg:max-h-none lg:border-r lg:border-b-0"
                                 aria-label="供给来源列表"
                             >
-                                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-5 py-4">
-                                    <h3 className="font-medium">
-                                        供给来源 · {row.allocations.length}
-                                    </h3>
+                                <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-4 py-2.5">
+                                    <div className="flex items-center gap-1.5">
+                                        <h3 className="text-body-compact font-semibold text-foreground">
+                                            供给来源
+                                        </h3>
+                                        <span className="num rounded-sm bg-muted px-1.5 py-0.5 text-tiny font-medium text-muted-foreground">
+                                            {row.allocations.length}
+                                        </span>
+                                    </div>
                                     <Button
                                         id={`sourcing-product-${toAutomationIdSegment(row.product.salesOrderLineId)}-split`}
                                         type="button"
                                         variant="outline"
-                                        size="sm"
+                                        size="xs"
                                         disabled={Boolean(addDisabledReason)}
                                         onClick={addSplit}
                                         title={addDisabledReason}
@@ -272,12 +344,8 @@ export function SourcingProductAdjustDialog({
                                         <PlusIcon />
                                         添加来源
                                     </Button>
-                                    {addDisabledReason ? (
-                                        <p className="w-full text-xs text-muted-foreground">
-                                            {addDisabledReason}
-                                        </p>
-                                    ) : null}
                                 </div>
+
                                 <div
                                     ref={listRef}
                                     className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
@@ -290,23 +358,46 @@ export function SourcingProductAdjustDialog({
                                         errors={errors}
                                     />
                                 </div>
+
+                                <div className="shrink-0 border-t border-border/60 px-4 py-2 text-xs text-muted-foreground">
+                                    {addDisabledReason
+                                        ? addDisabledReason
+                                        : `共 ${row.product.options.length} 个可用供给方案，支持多源拆分`}
+                                </div>
                             </section>
+
                             <section
                                 id="sourcing-product-adjust-detail"
-                                className="flex min-h-0 min-w-0 flex-col"
+                                className="flex min-h-0 min-w-0 flex-col bg-card"
                                 aria-label="当前来源编辑"
                             >
-                                <div className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-3 px-4 pt-2 lg:px-6">
-                                    <h3 className="font-medium">
-                                        编辑当前来源
-                                    </h3>
-                                    {active && row.allocations.length > 1 ? (
+                                {active && row.allocations.length > 1 ? (
+                                    <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-2.5 lg:px-6">
+                                        <div className="flex items-center gap-2">
+                                            <h3 className="text-body-compact font-semibold text-foreground">
+                                                来源 {activeIndex + 1}
+                                            </h3>
+                                            {activeOption ? (
+                                                <Badge
+                                                    variant={
+                                                        activeOption.sourceType ===
+                                                        "EXISTING_STOCK"
+                                                            ? "info"
+                                                            : "neutral"
+                                                    }
+                                                >
+                                                    {sourcingRouteLabel(
+                                                        activeOption,
+                                                    )}
+                                                </Badge>
+                                            ) : null}
+                                        </div>
                                         <props.form.AppField
                                             name={`lines[${active.index}].selected`}
                                         >
                                             {(field) => (
                                                 <label
-                                                    className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"
+                                                    className="flex cursor-pointer items-center gap-2 text-xs font-medium text-muted-foreground select-none hover:text-foreground"
                                                     htmlFor={`procurement-orders-create-row-${toAutomationIdSegment(active.line.rowKey)}-select`}
                                                 >
                                                     <Checkbox
@@ -328,23 +419,32 @@ export function SourcingProductAdjustDialog({
                                                 </label>
                                             )}
                                         </props.form.AppField>
-                                    ) : null}
-                                </div>
+                                    </div>
+                                ) : null}
+
                                 <div
                                     id="sourcing-product-adjust-body"
                                     ref={bodyRef}
-                                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+                                    className="@container/sourcing min-h-0 flex-1 overflow-y-auto overscroll-contain"
                                 >
                                     {activeErrors.length ? (
                                         <div
                                             id="sourcing-product-adjust-source-errors"
                                             role="alert"
                                             tabIndex={-1}
-                                            className="mx-4 mt-2 rounded-md bg-destructive/5 p-3 text-xs text-destructive"
+                                            className="mx-4 mt-3.5 flex items-start gap-2 rounded-lg border border-destructive-border bg-destructive-soft px-3.5 py-2.5 text-xs text-destructive-soft-foreground outline-none @min-[560px]/sourcing:mx-6"
                                         >
-                                            {activeErrors.map((message) => (
-                                                <p key={message}>{message}</p>
-                                            ))}
+                                            <TriangleAlertIcon
+                                                aria-hidden="true"
+                                                className="mt-0.5 size-3.5 shrink-0"
+                                            />
+                                            <div className="space-y-0.5">
+                                                {activeErrors.map((message) => (
+                                                    <p key={message}>
+                                                        {message}
+                                                    </p>
+                                                ))}
+                                            </div>
                                         </div>
                                     ) : null}
                                     {active ? (
@@ -360,67 +460,75 @@ export function SourcingProductAdjustDialog({
                                             row={row}
                                         />
                                     ) : (
-                                        <p className="p-4 text-xs text-muted-foreground">
+                                        <p className="p-6 text-xs text-muted-foreground">
                                             尚未添加供给来源
                                         </p>
                                     )}
                                 </div>
                             </section>
                         </DialogBody>
-                        <DialogFooter className="items-center sm:justify-between">
-                            <p className="text-xs text-muted-foreground">
+
+                        <DialogFooter className="items-center border-border/60 bg-card sm:justify-between">
+                            <div className="flex flex-wrap items-center gap-2.5">
                                 {showErrors && row.issues.length ? (
-                                    <span className="mr-3 text-destructive">
-                                        还有 {row.issues.length} 项需调整
-                                    </span>
+                                    <StatusBadge
+                                        tone="destructive"
+                                        label={`还有 ${row.issues.length} 项需调整`}
+                                    />
                                 ) : null}
-                                仅更新草稿，整单预览后统一提交
-                            </p>
+                                <p className="text-xs text-muted-foreground">
+                                    仅更新草稿，整单预览后统一提交
+                                </p>
+                            </div>
                             <div className="flex flex-wrap items-center gap-2">
                                 {onNavigate ? (
                                     <>
-                                        <Button
-                                            id="sourcing-product-adjust-previous"
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={!previous}
-                                            onClick={() =>
-                                                previous &&
-                                                void finish(
-                                                    previous.product
-                                                        .salesOrderLineId,
-                                                )
-                                            }
-                                        >
-                                            <ArrowLeftIcon />
-                                            上一商品
-                                        </Button>
-                                        <span className="num text-xs text-muted-foreground">
-                                            {position + 1} / {navigation.length}
-                                        </span>
-                                        <Button
-                                            id="sourcing-product-adjust-next"
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={!next}
-                                            onClick={() =>
-                                                next &&
-                                                void finish(
-                                                    next.product
-                                                        .salesOrderLineId,
-                                                )
-                                            }
-                                        >
-                                            下一商品
-                                            <ArrowRightIcon />
-                                        </Button>
+                                        <div className="inline-flex h-control items-center overflow-hidden rounded-md border border-border bg-card">
+                                            <Button
+                                                id="sourcing-product-adjust-previous"
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-full rounded-none px-2.5 text-xs"
+                                                disabled={!previous}
+                                                onClick={() =>
+                                                    previous &&
+                                                    void finish(
+                                                        previous.product
+                                                            .salesOrderLineId,
+                                                    )
+                                                }
+                                            >
+                                                <ArrowLeftIcon />
+                                                上一商品
+                                            </Button>
+                                            <span className="num inline-flex h-full items-center border-x border-border/60 bg-surface-sunken px-2.5 text-xs font-medium text-muted-foreground">
+                                                {position + 1} /{" "}
+                                                {navigation.length}
+                                            </span>
+                                            <Button
+                                                id="sourcing-product-adjust-next"
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-full rounded-none px-2.5 text-xs"
+                                                disabled={!next}
+                                                onClick={() =>
+                                                    next &&
+                                                    void finish(
+                                                        next.product
+                                                            .salesOrderLineId,
+                                                    )
+                                                }
+                                            >
+                                                下一商品
+                                                <ArrowRightIcon />
+                                            </Button>
+                                        </div>
                                         <Button
                                             id="sourcing-product-adjust-next-pending"
                                             type="button"
                                             variant="outline"
-                                            size="sm"
                                             disabled={!nextPending}
                                             onClick={() =>
                                                 nextPending &&
@@ -431,12 +539,22 @@ export function SourcingProductAdjustDialog({
                                             }
                                         >
                                             下一待调整
+                                            {pendingItems.length > 0 ? (
+                                                <span className="num rounded-sm bg-warning-soft px-1.5 py-0 text-tiny font-medium text-warning-soft-foreground">
+                                                    {pendingItems.length}
+                                                </span>
+                                            ) : null}
                                         </Button>
+                                        <span
+                                            aria-hidden="true"
+                                            className="mx-0.5 hidden h-4 w-px bg-border sm:block"
+                                        />
                                     </>
                                 ) : null}
                                 <Button
                                     id="sourcing-product-adjust-done"
                                     type="button"
+                                    className="px-4"
                                     onClick={() => void finish()}
                                 >
                                     完成调整

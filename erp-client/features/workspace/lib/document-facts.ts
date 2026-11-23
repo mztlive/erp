@@ -1,7 +1,10 @@
 import { apiGet } from "@/lib/api"
+import { isApiError } from "@/lib/api/errors"
 import { displayBusinessText, displayName } from "@/lib/display-name"
+import { hasPermission } from "@/lib/permissions"
 import { fetchPaymentArrangement } from "@/features/purchase-orders/api/payment-arrangement"
 import { fetchPurchaseOrderDetail } from "@/features/purchase-orders/api/purchase-order-queries-api"
+import { fetchRequest } from "@/features/purchase-payment-requests/api"
 import { fetchInquiry } from "@/features/sales-inquiries/api"
 import { salesLineSpecification } from "@/features/sales-orders/lib/sales-line-specification"
 import { compareDecimal, formatCurrencyFixed } from "@/lib/fixed-decimal"
@@ -96,15 +99,28 @@ export async function fetchWorkspaceDocumentFacts(input: {
 
 export class WorkspaceMaterialReferenceMismatch extends Error {}
 
-/** 采购列表资料按业务对象和任务类型选用原业务读取权限。 */
-export function workspaceProcurementListSource(item: WorkspaceWorkItem) {
+export type WorkspaceTaskListMaterials =
+    | WorkspaceDocumentFacts
+    | "unavailable"
+    | "reference_mismatch"
+
+type WorkspaceTaskListSource = {
+    canRead: (permissions: readonly string[]) => boolean
+    load: (item: WorkspaceWorkItem) => Promise<WorkspaceTaskListMaterials>
+}
+
+/** 按任务类型选择资料接口及其读取资格。 */
+export function workspaceTaskListSource(
+    item: WorkspaceWorkItem,
+): WorkspaceTaskListSource | undefined {
     const kind = normalizeObjectType(item.businessObjectType)
     if (
         item.workItemType === "SALES_INQUIRY_PROCESSING" &&
         kind === "sales_inquiry"
     ) {
         return {
-            permission: "procurement_inquiry:detail",
+            canRead: (permissions) =>
+                hasPermission(permissions, "procurement_inquiry:detail"),
             load: loadInquiryFacts,
         }
     }
@@ -113,11 +129,82 @@ export function workspaceProcurementListSource(item: WorkspaceWorkItem) {
         kind === "purchase_order"
     ) {
         return {
-            permission: "purchase_order:detail",
+            canRead: (permissions) =>
+                hasPermission(permissions, "purchase_order:detail"),
             load: loadPaymentArrangementFacts,
         }
     }
+    if (
+        item.workItemType === "SUPPLIER_PAYMENT_EXECUTION" &&
+        kind === "purchase_payment_request"
+    ) {
+        return {
+            canRead: (permissions) =>
+                item.status === "OPEN"
+                    ? item.allowedActions.includes("PROCESS")
+                    : hasPermission(
+                          permissions,
+                          "purchase_payment_request:detail",
+                      ),
+            load: loadPaymentExecutionFacts,
+        }
+    }
     return undefined
+}
+
+async function loadPaymentExecutionFacts(
+    item: WorkspaceWorkItem,
+): Promise<WorkspaceTaskListMaterials> {
+    if (!item.subjectVersion) return "reference_mismatch"
+
+    const open = item.status === "OPEN"
+    let request
+    try {
+        request = await fetchRequest(
+            item.businessObjectId,
+            open ? item.workItemId : undefined,
+        )
+    } catch (error) {
+        // 队列刷新前，刚完成或转交的任务可能仍在当前页。
+        if (isApiError(error)) {
+            if (error.status === 403 || error.status === 404)
+                return "unavailable"
+            if (error.status === 409) return "reference_mismatch"
+        }
+        throw error
+    }
+    if (
+        request.id !== item.businessObjectId ||
+        String(request.submission_version) !== item.subjectVersion
+    ) {
+        return "reference_mismatch"
+    }
+
+    const sections: WorkspaceFactSection[] = [
+        {
+            label: open ? "待付金额" : "已付金额",
+            value: formatYuan(
+                open ? request.unpaid_amount : request.paid_amount,
+            ),
+            numeric: true,
+        },
+    ]
+    pushSection(sections, "申请说明", request.description)
+    pushSection(
+        sections,
+        "我方付款主体",
+        displayName(request.our_company_name, request.our_company_id),
+    )
+    pushSection(sections, "希望付款日", request.desired_payment_date)
+
+    return {
+        documentNumber: displayBusinessText(request.request_no, request.id),
+        counterparty: displayName(request.supplier_name, request.supplier_id),
+        impact: item.impactSummary,
+        sections,
+        lines: [],
+        moreCount: 0,
+    }
 }
 
 async function loadInquiryFacts(

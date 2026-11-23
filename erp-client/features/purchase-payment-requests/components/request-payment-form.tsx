@@ -45,7 +45,7 @@ function BankRequestPaymentForm({
     task: PaymentTaskContext
     onTaskCompleted?: () => void
 }) {
-    const payment = useRequestPaymentMutation()
+    const payment = useRequestPaymentMutation(onTaskCompleted)
     const reveal = useAccountRevealMutation()
     const profile = useAccountProfileQuery()
     const [confirmOpen, setConfirmOpen] = useState(false)
@@ -116,10 +116,10 @@ function BankRequestPaymentForm({
     async function confirmPayment() {
         if (!pending.current || !pendingRecipient.current) return
         try {
-            const completesRequest = pendingCompletesRequest.current
             const applied = await payment.mutateAsync({
                 payment: pending.current,
                 recipient: pendingRecipient.current,
+                completesRequest: pendingCompletesRequest.current,
             })
             pending.current = null
             pendingRecipient.current = null
@@ -127,7 +127,6 @@ function BankRequestPaymentForm({
             setResult(`付款 ${applied.payment_no} 已登记并核销。`)
             form.reset()
             setConfirmOpen(false)
-            if (completesRequest) onTaskCompleted?.()
         } catch (error) {
             const outcomeUnknown =
                 classifyFormalCommandError(error) === "unknown"

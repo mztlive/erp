@@ -70,159 +70,93 @@ export function SourcingAllocationEditor({
     return (
         <div
             key={line.rowKey}
-            className={cn(
-                "space-y-4 px-4 py-4",
-                expandDeliverySummary && "@min-[560px]/sourcing:px-6",
-                !line.selected && "bg-muted/20",
-            )}
+            className={cn(!line.selected && "bg-surface-sunken/50")}
         >
-            {showParticipation || canRemove ? (
-                <div className="flex items-center justify-between gap-2">
-                    {showParticipation ? (
-                        <form.AppField name={`lines[${index}].selected`}>
-                            {(field) => (
-                                <label
-                                    htmlFor={`${id}-select`}
-                                    className="flex min-h-8 cursor-pointer items-center gap-2 text-xs font-medium"
-                                >
-                                    <Checkbox
-                                        id={`${id}-select`}
-                                        checked={field.state.value === true}
-                                        onCheckedChange={(checked) =>
-                                            field.handleChange(checked === true)
-                                        }
-                                        aria-label={`本次供给分配 ${product.itemName}`}
-                                        data-testid={`purchase-sourcing-selected-${line.rowKey}`}
-                                    />
-                                    {participationLabel}
-                                </label>
-                            )}
-                        </form.AppField>
-                    ) : null}
-                    {canRemove ? (
-                        <Button
-                            id={`${id}-split-remove`}
-                            type="button"
-                            size="icon-sm"
-                            variant="ghost"
-                            className="ml-auto"
-                            aria-label={`删除 ${product.itemName} 的拆分行`}
-                            onClick={() => onRemoveSplit(line.rowKey)}
-                        >
-                            <Trash2Icon aria-hidden="true" />
-                        </Button>
-                    ) : null}
-                </div>
-            ) : null}
             <div
                 className={cn(
-                    addressDriven &&
-                        "grid min-w-0 grid-cols-1 items-start gap-4 @min-[640px]/sourcing:grid-cols-[minmax(0,1fr)_15rem]",
+                    "space-y-3.5 px-4 py-4",
+                    expandDeliverySummary && "@min-[560px]/sourcing:px-6",
                 )}
             >
-                <div className="min-w-0 space-y-1.5">
-                    <div className="flex min-h-6 flex-wrap items-center justify-between gap-2">
-                        <p className="text-xs text-muted-foreground">
-                            供给来源
-                            <RequiredMark />
-                        </p>
-                        <SourcingRecommendationHint
-                            id={`${id}-recommendation`}
-                            form={form}
-                            order={order}
-                            product={product}
-                            index={index}
-                        />
-                    </div>
-                    <SourcingOptionField
-                        form={form}
-                        order={order}
-                        index={index}
-                        rowKey={line.rowKey}
-                        product={product}
-                        showDeliverySummary={false}
-                    />
-                    {!condensed ? (
-                        <SourcingOptionFacts
-                            option={option}
-                            product={product}
-                        />
-                    ) : null}
-                </div>
-                {addressDriven ? (
-                    <div className="min-w-0 space-y-1.5">
-                        <p className="flex min-h-6 items-center text-xs text-muted-foreground">
-                            预计交付日
-                            <RequiredMark />
-                        </p>
-                        <SourcingExpectedDeliveryField
-                            form={form}
-                            index={index}
-                            rowKey={line.rowKey}
-                            order={order}
-                            salesOrderLineId={line.salesOrderLineId}
-                            showDeadlineHint={false}
-                        />
+                {showParticipation || canRemove ? (
+                    <div className="flex items-center justify-between gap-2">
+                        {showParticipation ? (
+                            <form.AppField name={`lines[${index}].selected`}>
+                                {(field) => (
+                                    <label
+                                        htmlFor={`${id}-select`}
+                                        className="flex min-h-8 cursor-pointer items-center gap-2 text-xs font-medium"
+                                    >
+                                        <Checkbox
+                                            id={`${id}-select`}
+                                            checked={field.state.value === true}
+                                            onCheckedChange={(checked) =>
+                                                field.handleChange(
+                                                    checked === true,
+                                                )
+                                            }
+                                            aria-label={`本次供给分配 ${product.itemName}`}
+                                            data-testid={`purchase-sourcing-selected-${line.rowKey}`}
+                                        />
+                                        {participationLabel}
+                                    </label>
+                                )}
+                            </form.AppField>
+                        ) : null}
+                        {canRemove ? (
+                            <Button
+                                id={`${id}-split-remove`}
+                                type="button"
+                                size="icon-sm"
+                                variant="ghost"
+                                className="ml-auto"
+                                aria-label={`删除 ${product.itemName} 的拆分行`}
+                                onClick={() => onRemoveSplit(line.rowKey)}
+                            >
+                                <Trash2Icon aria-hidden="true" />
+                            </Button>
+                        ) : null}
                     </div>
                 ) : null}
-            </div>
-            {!addressDriven ? (
+
                 <div
                     className={cn(
-                        "grid min-w-0 grid-cols-1 gap-3 @min-[420px]/sourcing:grid-cols-2",
-                        needsWarehouse &&
-                            (compact
-                                ? "@min-[560px]/sourcing:grid-cols-[minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1.1fr)]"
-                                : "@min-[680px]/sourcing:grid-cols-3"),
+                        addressDriven &&
+                            "grid min-w-0 grid-cols-1 items-start gap-4 @min-[580px]/sourcing:grid-cols-[minmax(0,1fr)_13.5rem]",
                     )}
                 >
                     <div className="min-w-0 space-y-1.5">
-                        <p className="text-xs text-muted-foreground">
-                            本次分配数量（{product.unit}）<RequiredMark />
-                        </p>
-                        <form.AppField name={`lines[${index}].quantity`}>
-                            {(field) => (
-                                <field.TextField
-                                    id={`${id}-quantity`}
-                                    label={`本次分配数量，${product.itemName}`}
-                                    required
-                                    hideLabel
-                                    type="number"
-                                    inputMode="decimal"
-                                    min="0"
-                                    step={
-                                        sourcingQuantityStep(
-                                            product.quantityScale,
-                                        ) ?? "1"
-                                    }
-                                    inputClassName="num"
-                                    testId={`purchase-sourcing-quantity-${line.rowKey}`}
-                                />
-                            )}
-                        </form.AppField>
-                    </div>
-                    {needsWarehouse ? (
-                        <div className="min-w-0 space-y-1.5">
-                            <p className="text-xs text-muted-foreground">
-                                采购入库目标仓
+                        <div className="flex min-h-5 flex-wrap items-center justify-between gap-2">
+                            <p className="text-xs font-medium text-foreground/75">
+                                供给来源
                                 <RequiredMark />
                             </p>
-                            <SourcingTargetWarehouseField
+                            <SourcingRecommendationHint
+                                id={`${id}-recommendation`}
                                 form={form}
-                                index={index}
-                                rowKey={line.rowKey}
                                 order={order}
-                                salesOrderLineId={line.salesOrderLineId}
-                            />
-                            <WarehouseDeliveryNote
-                                option={option}
-                                warehouseId={line.targetWarehouseId ?? ""}
+                                product={product}
+                                index={index}
                             />
                         </div>
-                    ) : null}
-                    {!isStock ? (
+                        <SourcingOptionField
+                            form={form}
+                            order={order}
+                            index={index}
+                            rowKey={line.rowKey}
+                            product={product}
+                            showDeliverySummary={false}
+                        />
+                        {!condensed ? (
+                            <SourcingOptionFacts
+                                option={option}
+                                product={product}
+                            />
+                        ) : null}
+                    </div>
+                    {addressDriven ? (
                         <div className="min-w-0 space-y-1.5">
-                            <p className="text-xs text-muted-foreground">
+                            <p className="flex min-h-5 items-center text-xs font-medium text-foreground/75">
                                 预计交付日
                                 <RequiredMark />
                             </p>
@@ -232,20 +166,95 @@ export function SourcingAllocationEditor({
                                 rowKey={line.rowKey}
                                 order={order}
                                 salesOrderLineId={line.salesOrderLineId}
-                                showDeadlineHint={!condensed}
+                                showDeadlineHint={false}
                             />
                         </div>
                     ) : null}
                 </div>
-            ) : null}
-            {condensed ? (
-                <SourcingCompactFacts
-                    key={line.basisId}
-                    idPrefix={id}
-                    option={option}
-                    product={product}
-                />
-            ) : null}
+
+                {!addressDriven ? (
+                    <div
+                        className={cn(
+                            "grid min-w-0 grid-cols-1 gap-3.5 @min-[420px]/sourcing:grid-cols-2",
+                            needsWarehouse &&
+                                (compact
+                                    ? "@min-[560px]/sourcing:grid-cols-[minmax(0,0.75fr)_minmax(0,1.15fr)_minmax(0,1fr)]"
+                                    : "@min-[680px]/sourcing:grid-cols-3"),
+                        )}
+                    >
+                        <div className="min-w-0 space-y-1.5">
+                            <p className="text-xs font-medium text-foreground/75">
+                                本次分配数量（{product.unit}）<RequiredMark />
+                            </p>
+                            <form.AppField name={`lines[${index}].quantity`}>
+                                {(field) => (
+                                    <field.TextField
+                                        id={`${id}-quantity`}
+                                        label={`本次分配数量，${product.itemName}`}
+                                        required
+                                        hideLabel
+                                        type="number"
+                                        inputMode="decimal"
+                                        min="0"
+                                        step={
+                                            sourcingQuantityStep(
+                                                product.quantityScale,
+                                            ) ?? "1"
+                                        }
+                                        inputClassName="num"
+                                        testId={`purchase-sourcing-quantity-${line.rowKey}`}
+                                    />
+                                )}
+                            </form.AppField>
+                        </div>
+                        {needsWarehouse ? (
+                            <div className="min-w-0 space-y-1.5">
+                                <p className="text-xs font-medium text-foreground/75">
+                                    采购入库目标仓
+                                    <RequiredMark />
+                                </p>
+                                <SourcingTargetWarehouseField
+                                    form={form}
+                                    index={index}
+                                    rowKey={line.rowKey}
+                                    order={order}
+                                    salesOrderLineId={line.salesOrderLineId}
+                                />
+                                <WarehouseDeliveryNote
+                                    option={option}
+                                    warehouseId={line.targetWarehouseId ?? ""}
+                                />
+                            </div>
+                        ) : null}
+                        {!isStock ? (
+                            <div className="min-w-0 space-y-1.5">
+                                <p className="text-xs font-medium text-foreground/75">
+                                    预计交付日
+                                    <RequiredMark />
+                                </p>
+                                <SourcingExpectedDeliveryField
+                                    form={form}
+                                    index={index}
+                                    rowKey={line.rowKey}
+                                    order={order}
+                                    salesOrderLineId={line.salesOrderLineId}
+                                    showDeadlineHint={!condensed}
+                                />
+                            </div>
+                        ) : null}
+                    </div>
+                ) : null}
+
+                {condensed ? (
+                    <SourcingCompactFacts
+                        key={line.basisId}
+                        idPrefix={id}
+                        option={option}
+                        product={product}
+                    />
+                ) : null}
+            </div>
+
             {addressDriven ? (
                 <SourcingAddressEditor
                     form={form}
@@ -254,15 +263,22 @@ export function SourcingAllocationEditor({
                     index={index}
                 />
             ) : (
-                <SourcingDeliveryEditor
-                    form={form}
-                    product={product}
-                    line={line}
-                    index={index}
-                    showNotApplicable={false}
-                    condensed={condensed}
-                    expandSummary={expandDeliverySummary}
-                />
+                <div
+                    className={cn(
+                        "px-4 pb-4 empty:hidden",
+                        expandDeliverySummary && "@min-[560px]/sourcing:px-6",
+                    )}
+                >
+                    <SourcingDeliveryEditor
+                        form={form}
+                        product={product}
+                        line={line}
+                        index={index}
+                        showNotApplicable={false}
+                        condensed={condensed}
+                        expandSummary={expandDeliverySummary}
+                    />
+                </div>
             )}
         </div>
     )

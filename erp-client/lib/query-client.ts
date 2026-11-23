@@ -3,7 +3,10 @@ import type { ReadProblemContext } from "@/lib/system-feedback"
 
 declare module "@tanstack/react-query" {
     interface Register {
-        queryMeta: Record<string, unknown> & { feedback?: ReadProblemContext }
+        queryMeta: Record<string, unknown> & {
+            feedback?: ReadProblemContext
+            taskMaterialWorkItemId?: string
+        }
     }
 }
 

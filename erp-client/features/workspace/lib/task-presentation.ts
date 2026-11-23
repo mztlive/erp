@@ -203,7 +203,9 @@ function taskAmount(item: WorkspaceWorkItem, kind: string) {
     const labels =
         item.workItemType === "SUPPLIER_PAYMENT_EXECUTION"
             ? kind === "purchase_payment_request"
-                ? ["待付金额", "申请金额"]
+                ? item.status === "OPEN"
+                    ? ["待付金额", "申请金额"]
+                    : ["已付金额"]
                 : ["未付金额"]
             : (TASK_AMOUNTS[item.workItemType] ??
               DOCUMENT_AMOUNTS[kind] ?? [

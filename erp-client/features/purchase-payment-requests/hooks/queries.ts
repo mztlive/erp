@@ -3,7 +3,12 @@ import type {
     CandidateListQuery,
 } from "../lib/candidate-list-query"
 import type { RequestListQuery } from "../lib/list-query"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+    useMutation,
+    useQuery,
+    useQueryClient,
+    type Query,
+} from "@tanstack/react-query"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 import {
     commandRequest,
@@ -76,6 +81,7 @@ export function usePaymentRequestQuery(
         queryKey: paymentRequestKeys.detail(id, workItemId),
         queryFn: () => fetchRequest(id, workItemId),
         enabled: enabled && Boolean(id),
+        meta: { taskMaterialWorkItemId: workItemId },
     })
 }
 export function usePaymentSubmissionQuery(
@@ -106,16 +112,26 @@ export function usePaymentMaterialsQuery(
         ],
         queryFn: () => fetchMaterials(id, workItemId, submissionVersion),
         enabled: Boolean(id),
+        meta: { taskMaterialWorkItemId: workItemId },
     })
 }
 
 function useInvalidate() {
     const client = useQueryClient()
-    return async () => {
+    return async (completedWorkItemId?: string) => {
+        const predicate = (query: Query) =>
+            !completedWorkItemId ||
+            query.meta?.taskMaterialWorkItemId !== completedWorkItemId
         await Promise.all([
-            client.invalidateQueries({ queryKey: paymentRequestKeys.all }),
+            client.invalidateQueries({
+                queryKey: paymentRequestKeys.all,
+                predicate,
+            }),
             client.invalidateQueries({ queryKey: queryKeyRoots.workItems }),
-            client.invalidateQueries({ queryKey: ["workspace-home"] }),
+            client.invalidateQueries({
+                queryKey: queryKeyRoots.workspaceHome,
+                predicate,
+            }),
             client.invalidateQueries({ queryKey: ["supplier-payables"] }),
             client.invalidateQueries({ queryKey: ["purchase-orders"] }),
         ])
@@ -153,20 +169,38 @@ export function useRequestCommandMutation() {
             action: Parameters<typeof commandRequest>[1]
             command: Parameters<typeof commandRequest>[2]
         }) => commandRequest(input.id, input.action, input.command),
-        onSuccess: invalidate,
+        onSuccess: () => invalidate(),
     })
 }
-export function useRequestPaymentMutation() {
+export function useRequestPaymentMutation(onTaskCompleted?: () => void) {
     const invalidate = useInvalidate()
     const client = useQueryClient()
     return useMutation({
         mutationFn: (input: {
             payment: Parameters<typeof commitPayment>[0]
             recipient: Parameters<typeof commitPayment>[1]
+            completesRequest: boolean
         }) => commitPayment(input.payment, input.recipient),
-        onSuccess: async () => {
+        onSuccess: async (_, { payment, completesRequest }) => {
+            const completedWorkItemId = completesRequest
+                ? payment.workItemId
+                : undefined
+            if (completedWorkItemId) {
+                const completedMaterials = {
+                    predicate: (query: Query) =>
+                        query.meta?.taskMaterialWorkItemId ===
+                        completedWorkItemId,
+                }
+                await client.cancelQueries(completedMaterials)
+                await client.invalidateQueries({
+                    ...completedMaterials,
+                    refetchType: "none",
+                })
+                // 队列刷新可能卸载表单，先通知作业面完成。
+                onTaskCompleted?.()
+            }
             await Promise.all([
-                invalidate(),
+                invalidate(completedWorkItemId),
                 client.invalidateQueries({
                     queryKey: ["fulfillment-operations"],
                 }),

@@ -14,7 +14,7 @@ export function WorkspaceDocumentBadge({
 }: {
     item: Pick<
         WorkspaceWorkItem,
-        "workItemType" | "businessObjectType" | "workItemTypeLabel"
+        "workItemType" | "businessObjectType" | "workItemTypeLabel" | "status"
     >
     /** 列表行已有 aria-label 时隐藏给读屏，避免重复朗读类型。 */
     decorative?: boolean
@@ -25,6 +25,7 @@ export function WorkspaceDocumentBadge({
         item.workItemType,
         item.businessObjectType,
         item.workItemTypeLabel,
+        item.status,
     )
 
     return (

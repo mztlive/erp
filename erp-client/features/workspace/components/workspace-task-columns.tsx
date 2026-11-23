@@ -247,6 +247,11 @@ export function workspaceTaskColumns({
         selectedTypes[0] === "task:SUPPLIER_PAYMENT_EXECUTION"
     const compact = !tracking && !history
     const numberLabel = purchase ? "采购单号" : "单号"
+    const metricLabel = purchase
+        ? "含税金额"
+        : tracking || history
+          ? "金额"
+          : "本次金额"
     const partyLabel = compact
         ? purchase
             ? "供应商与摘要"
@@ -303,6 +308,7 @@ export function workspaceTaskColumns({
                     row.item.workItemType,
                     row.item.businessObjectType,
                     row.presentation.typeLabel,
+                    row.item.status,
                 )
                 const shortLabel = rework ? "退回重办" : badge.label
                 return (
@@ -371,13 +377,13 @@ export function workspaceTaskColumns({
         },
         {
             id: "metric",
-            header: purchase ? "含税金额" : tracking ? "金额" : "本次金额",
+            header: metricLabel,
             enableSorting: false,
             meta: {
                 width: "amount",
                 align: "end",
                 numeric: true,
-                label: purchase ? "含税金额" : tracking ? "金额" : "本次金额",
+                label: metricLabel,
             },
             cell: ({ row: { original: row } }) => {
                 const metric = row.content.metric
@@ -528,10 +534,17 @@ export function workspaceTaskColumns({
                 cell: ({ row }) => {
                     const value = workspaceTaskSection(
                         row.original.item,
-                        "待付金额",
+                        history ? "已付金额" : "待付金额",
                     )?.value
-                    return value && value !== "—" ? (
-                        <span title="当前剩余待付金额" className="num">
+                    return !row.original.materialNotice &&
+                        value &&
+                        value !== "—" ? (
+                        <span
+                            title={
+                                history ? "申请已付金额" : "当前剩余待付金额"
+                            }
+                            className="num"
+                        >
                             <WorkspaceMoney value={value} display="exact" />
                         </span>
                     ) : (

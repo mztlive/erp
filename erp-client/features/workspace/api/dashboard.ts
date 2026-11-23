@@ -160,8 +160,13 @@ export function mapWorkspaceWorkItem(
     timezone: string,
 ): WorkspaceWorkItem {
     const task = mapWorkItemDto(dto)
+    const typeLabel = workspaceTypeLabel(
+        task.workItemType,
+        task.businessObjectType,
+        task.status,
+    )
     const meta = TYPE_META[dto.work_item_type] ?? {
-        label: workspaceTypeLabel(dto.work_item_type, dto.business_object_type),
+        label: typeLabel,
         family: "exception" as WorkspaceFamilyFilter,
     }
     const statusMeta = getWorkItemStatusMeta(task.status)
@@ -183,22 +188,19 @@ export function mapWorkspaceWorkItem(
         workItemId: task.workItemId,
         taskVersion: task.taskVersion,
         workItemType: task.workItemType,
-        workItemTypeLabel: workspaceTypeLabel(
-            dto.work_item_type,
-            dto.business_object_type,
-        ),
+        workItemTypeLabel: typeLabel,
         businessObjectType: task.businessObjectType,
         businessObjectId: task.businessObjectId,
         subjectVersion: task.subjectVersion,
         stableNumber: fulfillmentStableNumber(
             dto.work_item_type,
             businessObjectLabel,
-            workspaceTypeLabel(dto.work_item_type, dto.business_object_type),
+            typeLabel,
         ),
         objectTitle: fulfillmentTitle(
             dto.work_item_type,
             businessObjectLabel,
-            workspaceTypeLabel(dto.work_item_type, dto.business_object_type),
+            typeLabel,
         ),
         counterpartyName: task.counterpartyLabel,
         listSummary: task.listSummary,
