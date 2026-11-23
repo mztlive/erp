@@ -27,8 +27,8 @@ use crate::{Error, Result};
 
 const POOL_WIDTHS: [u16; 20] =
     [18, 32, 24, 24, 24, 20, 18, 18, 16, 26, 16, 14, 12, 24, 16, 18, 36, 32, 16, 16];
-const IMAGE_CELL_WIDTH: u32 = 128;
-const PRODUCT_ROW_HEIGHT: u32 = 112;
+pub(super) const IMAGE_CELL_WIDTH: u32 = 128;
+pub(super) const PRODUCT_ROW_HEIGHT: u32 = 112;
 const IMAGE_SIZE: u32 = 88;
 pub(super) const XLSX_MIME: &str = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 impl BusinessTransfers {
@@ -205,7 +205,7 @@ fn pool_book(rows: &[Value], images: &HashMap<String, Vec<u8>>) -> Result<Workbo
     Ok(book)
 }
 
-fn catalog_format() -> Format {
+pub(super) fn catalog_format() -> Format {
     Format::new()
         .set_font_name("微软雅黑")
         .set_font_size(11)
@@ -354,13 +354,13 @@ fn pool_rows(sheet: &mut Worksheet, rows: &[Value], images: &HashMap<String, Vec
         }
         sheet.set_row_height_pixels(n, PRODUCT_ROW_HEIGHT).map_err(xlsx)?;
         if let Some(bytes) = image {
-            insert_pool_image(sheet, n, bytes)?;
+            insert_product_image(sheet, n, bytes)?;
         }
     }
     Ok(())
 }
 
-fn insert_pool_image(sheet: &mut Worksheet, row: u32, bytes: &[u8]) -> Result<()> {
+pub(super) fn insert_product_image(sheet: &mut Worksheet, row: u32, bytes: &[u8]) -> Result<()> {
     let (width, height) = image::ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
         .map_err(|_| image_error())?

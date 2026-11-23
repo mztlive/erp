@@ -1,9 +1,10 @@
 "use client"
 
 import * as React from "react"
+import { SlidersHorizontalIcon } from "lucide-react"
 import { useStore } from "@tanstack/react-form"
 import { useAppForm } from "@/components/form"
-import { MoneyValue } from "@/components/business"
+import { MoneyValue, detailWorkspaceStyles } from "@/components/business"
 import {
     Table,
     TableHeader,
@@ -127,10 +128,16 @@ export function InquiryRatioPricing({
             <Button
                 id="procurement-inquiry-ratio-open"
                 type="button"
-                variant="outline"
+                variant="ghost"
+                size="sm"
+                className={detailWorkspaceStyles.subtleButton}
                 disabled={disabled}
                 onClick={() => setOpen(true)}
             >
+                <SlidersHorizontalIcon
+                    aria-hidden="true"
+                    data-icon="inline-start"
+                />
                 按供应商比例定价
             </Button>
             <Dialog open={open} onOpenChange={setOpen}>

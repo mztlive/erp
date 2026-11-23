@@ -2,7 +2,10 @@
 
 import * as React from "react"
 import { DownloadIcon } from "lucide-react"
-import { BusinessFailureState } from "@/components/business"
+import {
+    BusinessFailureState,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
@@ -36,8 +39,9 @@ export function SupplierQuoteExportButton({
         <>
             <Button
                 id="procurement-inquiry-export-supplier-quotes"
-                variant="outline"
+                variant="ghost"
                 size="sm"
+                className={detailWorkspaceStyles.subtleButton}
                 type="button"
                 onClick={() => setOpen(true)}
             >

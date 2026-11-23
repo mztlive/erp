@@ -25,6 +25,11 @@ type Policy = Readonly<{
 }>
 
 const POLICIES: Record<string, Policy> = {
+    SALES_INQUIRY_PROCESSING: {
+        metric: "询价明细",
+        fields: ["询价明细"],
+        status: "待处理",
+    },
     PROCUREMENT_ORDER_CREATION: {
         metric: "待分配范围",
         fields: ["待分配行数", "未覆盖数量"],
@@ -36,6 +41,7 @@ const POLICIES: Record<string, Policy> = {
         fields: ["可申请余额"],
         status: "待安排",
         dates: ["下次跟进"],
+        states: ["付款状态"],
     },
     PURCHASE_SOURCE_UPDATE: {
         metric: "变更影响",

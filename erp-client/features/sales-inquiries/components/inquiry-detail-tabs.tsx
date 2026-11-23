@@ -16,13 +16,12 @@ import { InquiryHistory } from "./inquiry-history"
 
 type InquiryTab = "demand" | "feedback" | "published" | "fees"
 
-/** 操作记录入口与抽屉：直接渲染于页头次要操作区，不再使用 DOM Portal。 */
+/** 操作记录入口与抽屉：直接渲染于页头次要操作区，采用无框轻按钮语言。 */
 export function InquiryHistoryButton({
     inquiry,
-    workspace,
 }: {
     inquiry: SalesInquiry | ProcurementInquiry
-    workspace: boolean
+    workspace?: boolean
 }) {
     const [historyOpen, setHistoryOpen] = React.useState(false)
     const historyTrigger = React.useRef<HTMLButtonElement>(null)
@@ -32,10 +31,8 @@ export function InquiryHistoryButton({
                 id="sales-inquiry-history-open"
                 ref={historyTrigger}
                 type="button"
-                variant={workspace ? "ghost" : "outline"}
-                className={
-                    workspace ? detailWorkspaceStyles.quietButton : undefined
-                }
+                variant="ghost"
+                className={detailWorkspaceStyles.quietButton}
                 size="sm"
                 onClick={() => setHistoryOpen(true)}
             >
@@ -178,27 +175,13 @@ export function InquiryDetailTabs({
         }
     }
 
-    const navigation = workspace ? (
+    const navigation = (
         <DetailWorkspaceTabs
             value={activeTab}
             onValueChange={handleTabChange}
             items={tabItems}
             ariaLabel="询价内容分区"
         />
-    ) : (
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-border/60">
-            <DetailWorkspaceTabs
-                value={activeTab}
-                onValueChange={handleTabChange}
-                items={tabItems}
-                ariaLabel="询价内容分区"
-            />
-            {procurement && feedbackActions && activeTab === "feedback" ? (
-                <div className="ml-auto flex flex-wrap items-center justify-end gap-2 pb-2">
-                    {feedbackActions}
-                </div>
-            ) : null}
-        </div>
     )
 
     const panels = tabs.map((tab) => {
@@ -218,15 +201,12 @@ export function InquiryDetailTabs({
                 role="tabpanel"
                 aria-labelledby={`sales-inquiry-tab-${tab}`}
                 hidden={!isActive}
-                className={
-                    workspace
-                        ? "min-w-0"
-                        : "min-h-0 flex-1 overflow-auto overscroll-contain pt-4"
-                }
+                className={workspace ? "min-w-0" : "min-w-0 py-4"}
             >
                 {workspace ? (
                     <DetailWorkspaceSection
                         divider={false}
+                        className="py-5 first:pt-4 last:pb-10"
                         actions={
                             tab === "feedback" ? feedbackActions : undefined
                         }

@@ -79,6 +79,7 @@ export function InquiryActions({
     disabledReason,
     renderActions,
     workspace = false,
+    fillHeight = false,
     feedbackRound,
     feedbackDirty = false,
     beforePublish,
@@ -97,6 +98,7 @@ export function InquiryActions({
     beforePublish?: () => Promise<InquiryPublishContext | null>
     onPublishingChange?: (publishing: boolean) => void
     workspace?: boolean
+    fillHeight?: boolean
     renderActions?: (slots: InquiryActionsRenderSlots) => React.ReactNode
 }) {
     const [action, setAction] = React.useState<InquiryAction | null>(null)
@@ -299,9 +301,9 @@ export function InquiryActions({
     const renderButton = (item: InquiryAction) => {
         const isPrimary = isPrimaryWorkflowAction(item)
         const submitDirectly = item === "submit" && !submitRequiresReason
-        const quiet =
-            workspace &&
-            ["close", "reassign", "supplement", "reinquire"].includes(item)
+        const quiet = ["close", "reassign", "supplement", "reinquire"].includes(
+            item,
+        )
         const actionDisabled =
             disabled ||
             (feedbackDirty && item !== "publish") ||
@@ -330,13 +332,14 @@ export function InquiryActions({
                     key={item}
                     id={`sales-inquiry-action-${item}`}
                     type="button"
+                    size="sm"
                     variant={variant}
                     className={
                         quiet
                             ? item === "close"
                                 ? detailWorkspaceStyles.quietDangerButton
                                 : detailWorkspaceStyles.quietButton
-                            : isPrimary && !demoteSubmitWhileDirty && workspace
+                            : isPrimary && !demoteSubmitWhileDirty
                               ? "px-3.5"
                               : undefined
                     }
@@ -427,14 +430,16 @@ export function InquiryActions({
     return (
         <div
             className={
-                workspace
-                    ? "min-w-0"
-                    : renderActions
-                      ? "flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden"
-                      : "space-y-3"
+                fillHeight
+                    ? "flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+                    : workspace
+                      ? "min-w-0"
+                      : renderActions
+                        ? "flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden"
+                        : "space-y-3"
             }
         >
-            {!workspace && alerts}
+            {!renderActions && alerts}
             {renderActions ? (
                 renderActions({
                     primaryAction:
@@ -449,7 +454,7 @@ export function InquiryActions({
                         assignmentItems.length > 0 ? (
                             <>{assignmentItems.map(renderButton)}</>
                         ) : undefined,
-                    alerts: workspace ? alerts : null,
+                    alerts,
                 })
             ) : (
                 <div className="flex flex-wrap gap-2">

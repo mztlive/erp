@@ -27,22 +27,14 @@ export function InquiryQuoteHint({
 }) {
     if (failed)
         return (
-            <p className="mt-1 whitespace-normal text-xs text-destructive">
-                报价参考读取失败，请重试
+            <p className="whitespace-normal text-xs text-destructive">
+                报价参考读取失败
             </p>
         )
     if (pending)
-        return (
-            <p className="mt-1 text-xs text-muted-foreground">
-                正在读取报价参考…
-            </p>
-        )
+        return <p className="text-xs text-muted-foreground">读取报价参考…</p>
     if (!tax)
-        return (
-            <p className="mt-1 text-xs text-muted-foreground">
-                填写税率后比较报价
-            </p>
-        )
+        return <p className="text-xs text-muted-foreground">填写税率后比价</p>
     let comparable: InternalQuote[]
     const exclusions = new Set<string>()
     const current = latestSupplierQuotes(quotes).filter(
@@ -55,9 +47,7 @@ export function InquiryQuoteHint({
             return !reason
         })
     } catch {
-        return (
-            <p className="mt-1 text-xs text-muted-foreground">请核对税率格式</p>
-        )
+        return <p className="text-xs text-muted-foreground">请核对税率格式</p>
     }
     const hint = quotePriceHint(comparable, price, line.quantity)
     const priceRange = hint
@@ -67,7 +57,7 @@ export function InquiryQuoteHint({
         : ""
     return (
         <div
-            className="mt-1.5 min-w-0 space-y-1 text-xs leading-4 text-muted-foreground"
+            className="min-w-0 space-y-0.5 text-xs leading-4 text-muted-foreground"
             aria-live="polite"
         >
             {hint ? (

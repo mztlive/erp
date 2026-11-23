@@ -71,6 +71,13 @@ export function WorkspaceTaskSurface({
                 procurement
                 workItemId={item.workItemId}
                 embedded
+                TaskPane={WorkspaceProcessingPane}
+                taskHeaderActions={
+                    <WorkspaceTaskHeaderActions
+                        item={item}
+                        contextLabel="任务说明"
+                    />
+                }
                 onTaskCompleted={() => onTaskCompleted?.(item.workItemId)}
             />
         )

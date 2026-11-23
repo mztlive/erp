@@ -1,4 +1,8 @@
 import { apiGet } from "@/lib/api"
+import { displayBusinessText, displayName } from "@/lib/display-name"
+import { fetchPaymentArrangement } from "@/features/purchase-orders/api/payment-arrangement"
+import { fetchPurchaseOrderDetail } from "@/features/purchase-orders/api/purchase-order-queries-api"
+import { fetchInquiry } from "@/features/sales-inquiries/api"
 import { salesLineSpecification } from "@/features/sales-orders/lib/sales-line-specification"
 import { compareDecimal, formatCurrencyFixed } from "@/lib/fixed-decimal"
 import type {
@@ -12,6 +16,7 @@ import type {
     BackendPaymentReversal,
     BackendSupplierPayment,
 } from "@/features/supplier-payables/api/mappers"
+import type { WorkspaceWorkItem } from "../types"
 import { normalizeObjectType } from "./object-type"
 
 export type WorkspaceFactSection = Readonly<{
@@ -87,6 +92,132 @@ export async function fetchWorkspaceDocumentFacts(input: {
         return loadPaymentReversalFacts(id, input.subjectVersion)
     }
     return null
+}
+
+export class WorkspaceMaterialReferenceMismatch extends Error {}
+
+/** 采购列表资料按业务对象和任务类型选用原业务读取权限。 */
+export function workspaceProcurementListSource(item: WorkspaceWorkItem) {
+    const kind = normalizeObjectType(item.businessObjectType)
+    if (
+        item.workItemType === "SALES_INQUIRY_PROCESSING" &&
+        kind === "sales_inquiry"
+    ) {
+        return {
+            permission: "procurement_inquiry:detail",
+            load: loadInquiryFacts,
+        }
+    }
+    if (
+        item.workItemType === "PURCHASE_PAYMENT_ARRANGEMENT" &&
+        kind === "purchase_order"
+    ) {
+        return {
+            permission: "purchase_order:detail",
+            load: loadPaymentArrangementFacts,
+        }
+    }
+    return undefined
+}
+
+async function loadInquiryFacts(
+    item: WorkspaceWorkItem,
+): Promise<WorkspaceDocumentFacts> {
+    const inquiry = await fetchInquiry(
+        item.businessObjectId,
+        true,
+        item.workItemId,
+    )
+    const task =
+        "work_items" in inquiry
+            ? inquiry.work_items.find((work) => work.id === item.workItemId)
+            : undefined
+    const requirement = inquiry.requirements.find(
+        (entry) => entry.version === inquiry.requirement_version,
+    )
+    if (
+        inquiry.id !== item.businessObjectId ||
+        !task ||
+        task.status !== item.status ||
+        String(task.version) !== item.taskVersion ||
+        task.subject_version !== item.subjectVersion ||
+        !requirement ||
+        `requirement-${requirement.version}` !== item.subjectVersion
+    ) {
+        throw new WorkspaceMaterialReferenceMismatch(
+            "询价资料与任务不一致，请刷新任务",
+        )
+    }
+
+    const assignedIds = new Set(task.line_ids)
+    const assignedLines = requirement.data.lines.filter((line) =>
+        assignedIds.has(line.line_id),
+    )
+    if (
+        assignedLines.length !== assignedIds.size ||
+        assignedLines.length === 0
+    ) {
+        throw new WorkspaceMaterialReferenceMismatch(
+            "询价责任行已变化，请刷新任务",
+        )
+    }
+    const lines = assignedLines.slice(0, LINE_LIMIT).map((line) => ({
+        title: [line.product_name, line.specification]
+            .filter(Boolean)
+            .join(" · "),
+        quantity: [line.quantity, line.unit_code].filter(Boolean).join(" "),
+    }))
+    return {
+        documentNumber: displayBusinessText(inquiry.inquiry_no, inquiry.id),
+        counterparty: displayName(inquiry.customer_name, inquiry.customer_id),
+        impact: item.impactSummary,
+        sections: [{ label: "询价明细", value: `${assignedLines.length} 项` }],
+        lines,
+        moreCount: assignedLines.length - lines.length,
+    }
+}
+
+async function loadPaymentArrangementFacts(
+    item: WorkspaceWorkItem,
+): Promise<WorkspaceDocumentFacts> {
+    const id = item.businessObjectId
+    const [order, arrangement] = await Promise.all([
+        fetchPurchaseOrderDetail(id),
+        item.status === "OPEN" ? fetchPaymentArrangement(id) : undefined,
+    ])
+    if (
+        order.id !== id ||
+        !order.current_revision_id ||
+        order.current_revision_id !== item.subjectVersion ||
+        (arrangement &&
+            (arrangement.task_id !== item.workItemId ||
+                String(arrangement.task_version) !== item.taskVersion))
+    ) {
+        throw new WorkspaceMaterialReferenceMismatch(
+            "采购付款资料与任务不一致，请刷新任务",
+        )
+    }
+
+    const sections: WorkspaceFactSection[] = []
+    if (arrangement) {
+        pushSection(sections, "付款条件", arrangement.payment_term_label)
+        sections.push({
+            label: "可申请余额",
+            value: formatYuan(arrangement.available_amount),
+            numeric: true,
+        })
+        if (arrangement.payment_blocked) {
+            sections.push({ label: "付款状态", value: "付款受阻" })
+        }
+    }
+    return {
+        documentNumber: displayBusinessText(order.purchase_no, order.id),
+        counterparty: displayName(order.supplier_name, order.supplier_id),
+        impact: item.impactSummary,
+        sections,
+        lines: [],
+        moreCount: 0,
+    }
 }
 
 type CustomerReceiptDto = Readonly<{

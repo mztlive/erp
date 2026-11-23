@@ -43,7 +43,7 @@ export function InquiryDeliveryBadge({
             type="button"
             variant="ghost"
             size="xs"
-            className="h-auto min-h-6 max-w-full gap-1 px-1 py-0.5 text-right font-normal whitespace-normal text-muted-foreground hover:text-primary"
+            className="h-5 max-w-full gap-1 rounded-md bg-muted/55 px-1.5 py-0 font-normal text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground"
             aria-label={`${line.product_name}配送地址：${label}`}
             aria-haspopup="dialog"
             title={

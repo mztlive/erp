@@ -16,6 +16,7 @@ import {
     Table,
     TableBody,
     TableCell,
+    TableFooter,
     TableHead,
     TableHeader,
     TableRow,
@@ -28,6 +29,10 @@ import {
 } from "@/lib/fixed-decimal"
 import { useInquirySkuDetailsQuery } from "../hooks/queries"
 import { deliveryAttention } from "../lib/delivery-progress"
+import {
+    feedbackLineSubtotal,
+    summarizeFeedback,
+} from "../lib/feedback-summary"
 import { inquiryDateInput } from "../lib/format"
 import {
     INQUIRY_CONCLUSION_LABEL,
@@ -59,6 +64,17 @@ export function InquiryProductsTable({
     const results = new Map(
         feedback?.data.lines.map((line) => [line.line_id, line]),
     )
+    const feedbackSummary = React.useMemo(
+        () =>
+            feedback
+                ? summarizeFeedback(
+                      feedback.data.lines,
+                      requirement.lines,
+                      feedback.data.fees,
+                  )
+                : null,
+        [feedback, requirement.lines],
+    )
     const unitLabel = (code: string) =>
         details.units.get(code) ?? (details.isPending ? "加载中" : "")
 
@@ -76,13 +92,13 @@ export function InquiryProductsTable({
                 data-slot="detail-inline-table"
                 className="min-w-0 border-y border-border/70"
             >
-                <Table className="min-w-[880px] table-fixed">
+                <Table className="min-w-[960px] table-fixed">
                     <TableHeader>
                         <TableRow>
                             <TableHead>商品 / 规格</TableHead>
                             <TableHead
                                 data-align="end"
-                                className="w-40 text-right"
+                                className="w-36 text-right"
                             >
                                 需求 / 可供
                             </TableHead>
@@ -97,6 +113,12 @@ export function InquiryProductsTable({
                                 className="w-20 text-right"
                             >
                                 税率
+                            </TableHead>
+                            <TableHead
+                                data-align="end"
+                                className="w-32 text-right"
+                            >
+                                含税小计
                             </TableHead>
                             <TableHead className="w-28">要求交付日</TableHead>
                             <TableHead className="w-28 text-right">
@@ -141,7 +163,7 @@ export function InquiryProductsTable({
                         {requirement.lines.length === 0 && (
                             <TableRow>
                                 <TableCell
-                                    colSpan={6}
+                                    colSpan={7}
                                     className="h-24 text-center text-muted-foreground"
                                 >
                                     暂无商品需求
@@ -149,6 +171,69 @@ export function InquiryProductsTable({
                             </TableRow>
                         )}
                     </TableBody>
+                    {requirement.lines.length > 0 && feedbackSummary && (
+                        <TableFooter className="border-t border-border/75 bg-surface-sunken/60 font-normal">
+                            <TableRow className="hover:bg-transparent">
+                                <TableCell
+                                    colSpan={4}
+                                    className="py-2.5 text-xs text-muted-foreground"
+                                >
+                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                        <span className="font-medium text-foreground">
+                                            共{" "}
+                                            <span className="num">
+                                                {requirement.lines.length}
+                                            </span>{" "}
+                                            项商品
+                                        </span>
+                                        {feedbackSummary.feeCount > 0 &&
+                                            feedbackSummary.feesTotal !=
+                                                null && (
+                                                <span>
+                                                    额外费用{" "}
+                                                    <span className="num">
+                                                        {
+                                                            feedbackSummary.feeCount
+                                                        }
+                                                    </span>{" "}
+                                                    项 ·{" "}
+                                                    <MoneyValue
+                                                        value={
+                                                            feedbackSummary.feesTotal
+                                                        }
+                                                        display="exact"
+                                                        showHint={false}
+                                                        className="font-medium text-foreground"
+                                                    />
+                                                </span>
+                                            )}
+                                    </div>
+                                </TableCell>
+                                <TableCell
+                                    data-align="end"
+                                    className="num py-2.5 text-right font-semibold text-foreground"
+                                >
+                                    {feedbackSummary.goodsTotal != null ? (
+                                        <MoneyValue
+                                            value={feedbackSummary.goodsTotal}
+                                            display="exact"
+                                            showHint={false}
+                                        />
+                                    ) : (
+                                        <span className="font-normal text-muted-foreground/60">
+                                            —
+                                        </span>
+                                    )}
+                                </TableCell>
+                                <TableCell
+                                    colSpan={2}
+                                    className="py-2.5 text-xs text-muted-foreground"
+                                >
+                                    商品供给合计
+                                </TableCell>
+                            </TableRow>
+                        </TableFooter>
+                    )}
                 </Table>
             </div>
             <QuickPreviewSheet
@@ -429,6 +514,27 @@ function ProductRow({
                             <span className="text-muted-foreground">—</span>
                         )}
                     </TableCell>
+                    {price === prices[0] && (
+                        <TableCell
+                            rowSpan={prices.length}
+                            data-align="end"
+                            className="num py-3 text-right align-top"
+                        >
+                            {result &&
+                            feedbackLineSubtotal(result, line) != null ? (
+                                <MoneyValue
+                                    value={feedbackLineSubtotal(result, line)!}
+                                    display="exact"
+                                    showHint={false}
+                                    className="font-medium text-foreground"
+                                />
+                            ) : (
+                                <span className="text-muted-foreground/60">
+                                    —
+                                </span>
+                            )}
+                        </TableCell>
+                    )}
                     <TableCell className="num py-3 align-top">
                         {dueDate ? (
                             <span>{dueDate}</span>

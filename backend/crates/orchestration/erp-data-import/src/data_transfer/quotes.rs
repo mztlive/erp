@@ -6,14 +6,16 @@ use chrono::{DateTime, FixedOffset};
 use erp_core::common::time::BUSINESS_TZ_OFFSET_SECS;
 use erp_read_models::sales_center::inquiry::InquiryReadService;
 use rust_decimal::Decimal;
-use rust_xlsxwriter::{Format, Image, Workbook, Worksheet};
+use rust_xlsxwriter::{FormatAlign, FormatBorder, Workbook, Worksheet, XlsxError};
 use serde_json::{Value, json};
 use tokio::task::spawn_blocking;
 use zip::ZipWriter;
 use zip::write::SimpleFileOptions;
 
 use super::imports::{required, version};
-use super::workbook::{text, write_row, xlsx};
+use super::workbook::{
+    IMAGE_CELL_WIDTH, PRODUCT_ROW_HEIGHT, catalog_format, insert_product_image, text, write_row, xlsx,
+};
 use super::{BusinessTransfers, TransferKind, TransferResult};
 use crate::{Error, Result};
 
@@ -34,6 +36,9 @@ pub(super) const HEADERS: [&str; 15] = [
     "运费（元）",
     "报价备注",
 ];
+const QUOTE_WIDTHS: [u32; HEADERS.len()] =
+    [IMAGE_CELL_WIDTH, 230, 175, 140, 160, 75, 110, 120, 215, 180, 130, 100, 110, 120, 215];
+
 impl BusinessTransfers {
     pub(super) async fn quote_context(&self, input: &Value, actor: &AuditActor) -> Result<Value> {
         let detail = InquiryReadService::new(self.db.clone(), self.authorization.clone())
@@ -154,25 +159,7 @@ fn quote_book(
 ) -> Result<Vec<u8>> {
     let mut book = Workbook::new();
     let sheet = book.add_worksheet();
-    sheet.set_name("报价表").map_err(xlsx)?;
-    sheet
-        .set_freeze_panes(4, 2)
-        .map_err(xlsx)?
-        .set_column_range_width(0, 15, 22)
-        .map_err(xlsx)?
-        .set_column_hidden(15)
-        .map_err(xlsx)?;
-    for (i, notice) in [
-        format!("{name}报价表"),
-        format!("询价：{}；请按原需求填写", text(inquiry, "inquiry_no")),
-        "填写含税单价、税率、可供数量、运费（已含填 0）及备注；不能供货填数量 0 并说明原因。".into(),
-    ]
-    .iter()
-    .enumerate()
-    {
-        sheet.merge_range(i as u32, 0, i as u32, 14, notice, &Format::new().set_text_wrap()).map_err(xlsx)?;
-    }
-    write_row(sheet, 3, &HEADERS.map(str::to_owned)).map_err(xlsx)?;
+    configure_quote_sheet(sheet, name, &text(inquiry, "inquiry_no")).map_err(xlsx)?;
     quote_rows(sheet, rows, images)?;
 
     let meta = book.add_worksheet();
@@ -194,6 +181,40 @@ fn quote_book(
     delivery(&mut book, rows)?;
     book.save_to_buffer().map_err(xlsx)
 }
+
+fn configure_quote_sheet(
+    sheet: &mut Worksheet,
+    supplier: &str,
+    inquiry_no: &str,
+) -> std::result::Result<(), XlsxError> {
+    sheet.set_name("报价表")?.set_screen_gridlines(false);
+    sheet.set_freeze_panes(4, 2)?.set_column_hidden(15)?;
+
+    let title = catalog_format().set_font_size(18).set_bold();
+    let note = catalog_format().set_font_color("475569");
+    let header = catalog_format().set_bold().set_font_color("FFFFFF").set_background_color("334E68");
+    sheet
+        .set_row_height(0, 34)?
+        .set_row_height(1, 24)?
+        .set_row_height(2, 27)?
+        .set_row_height(3, 30)?
+        .merge_range(0, 0, 0, 14, &format!("{supplier}报价表"), &title)?
+        .merge_range(1, 0, 1, 14, &format!("询价：{inquiry_no}，请按原需求填写"), &note)?
+        .merge_range(
+            2,
+            0,
+            2,
+            14,
+            "请填写黄色区域。已含运费填 0。不能供货时，可供数量填 0，并在报价备注中说明原因。",
+            &note,
+        )?;
+
+    for (col, (label, width)) in (0u16..).zip(HEADERS.into_iter().zip(QUOTE_WIDTHS)) {
+        sheet.set_column_width_pixels(col, width)?.write_string_with_format(3, col, label, &header)?;
+    }
+    Ok(())
+}
+
 fn delivery(book: &mut Workbook, rows: &[Value]) -> Result<()> {
     let sheet = book.add_worksheet();
     sheet.set_name("配送需求").map_err(xlsx)?;
@@ -248,11 +269,21 @@ fn json_error(_: serde_json::Error) -> Error {
 }
 
 fn quote_rows(sheet: &mut Worksheet, rows: &[Value], images: &HashMap<String, Vec<u8>>) -> Result<()> {
+    let product_format =
+        catalog_format().set_border_bottom(FormatBorder::Hair).set_border_bottom_color("E2E8F0");
+    let picture_format = product_format.clone().set_align(FormatAlign::Center).set_font_color("64748B");
+    let input_format = product_format
+        .clone()
+        .set_background_color("FFF2CC")
+        .set_border(FormatBorder::Thin)
+        .set_border_color("E4D7AB");
+
     for (i, row) in rows.iter().enumerate() {
         let l = &row["line"];
         let p = &row["product"];
+        let image = p["main_image_asset_id"].as_str().and_then(|id| images.get(id));
         let mut values = vec![
-            "暂无图片".into(),
+            if image.is_some() { "" } else { "暂无图片" }.into(),
             text(l, "product_name"),
             text(l, "specification"),
             text(l, "sku_code"),
@@ -267,18 +298,17 @@ fn quote_rows(sheet: &mut Worksheet, rows: &[Value], images: &HashMap<String, Ve
         values.push(json!({"lineId":l["line_id"],"skuId":l["sku_id"]}).to_string());
 
         let n = u32::try_from(i + 4).map_err(|_| Error::ValidationError("商品数量超限".into()))?;
-        write_row(sheet, n, &values).map_err(xlsx)?;
-        sheet.set_row_height(n, 66).map_err(xlsx)?;
-        if let Some(bytes) = p["main_image_asset_id"].as_str().and_then(|id| images.get(id)) {
-            sheet
-                .write_string(n, 0, "")
-                .map_err(xlsx)?
-                .insert_image(
-                    n,
-                    0,
-                    &Image::new_from_buffer(bytes).map_err(xlsx)?.set_scale_to_size(76, 76, false),
-                )
-                .map_err(xlsx)?;
+        sheet.set_row_height_pixels(n, PRODUCT_ROW_HEIGHT).map_err(xlsx)?;
+        for (col, value) in (0u16..).zip(values) {
+            let format = match col {
+                0 => &picture_format,
+                10..=14 => &input_format,
+                _ => &product_format,
+            };
+            sheet.write_string_with_format(n, col, value, format).map_err(xlsx)?;
+        }
+        if let Some(bytes) = image {
+            insert_product_image(sheet, n, bytes)?;
         }
     }
     Ok(())
@@ -375,10 +405,42 @@ mod tests {
 
     use base64::Engine;
     use base64::engine::general_purpose::STANDARD;
+    use image::{DynamicImage, ImageFormat};
     use zip::ZipArchive;
 
     use super::super::quote_import::parse_files;
     use super::*;
+    use crate::sales_inquiry_import::parse::quote_sheets;
+
+    #[test]
+    fn quote_images_show_placeholders_only_on_rows_without_images() {
+        let mut png = Cursor::new(Vec::new());
+        DynamicImage::new_rgb8(152, 76).write_to(&mut png, ImageFormat::Png).unwrap();
+        let rows = [
+            json!({"line":{"product_name":"有图商品"},"product":{"main_image_asset_id":"image"}}),
+            json!({"line":{"product_name":"无图商品"},"product":{}}),
+        ];
+        let bytes = quote_book(
+            &json!({}),
+            "S1",
+            "供货商",
+            &rows,
+            &HashMap::from([("image".into(), png.into_inner())]),
+        )
+        .unwrap();
+
+        let sheets = quote_sheets(&bytes).unwrap();
+        let products = &sheets["报价表"][4..];
+        assert_eq!(products[0].cells[0].value, "");
+        assert_eq!(products[1].cells[0].value, "暂无图片");
+
+        let mut workbook = ZipArchive::new(Cursor::new(bytes)).unwrap();
+        let mut drawing = String::new();
+        workbook.by_name("xl/drawings/drawing1.xml").unwrap().read_to_string(&mut drawing).unwrap();
+        assert_eq!(drawing.matches("<xdr:pic>").count(), 1);
+        assert!(drawing.contains("<xdr:row>4</xdr:row>"));
+    }
+
     #[test]
     fn export_dates_use_business_timezone() {
         assert_eq!(date(&json!(1792598400)), "2026-10-22");

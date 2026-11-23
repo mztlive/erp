@@ -52,15 +52,17 @@ export function InquiryFeedbackLineIssues({
             {issues.length > 0 && (
                 <div
                     id={`${prefix}-issues`}
-                    className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
+                    className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs"
                 >
-                    <span className="text-muted-foreground">待完善：</span>
+                    <span className="font-medium text-warning-soft-foreground">
+                        待完善：
+                    </span>
                     {fields.map((field) => (
                         <button
                             key={field}
                             id={`${prefix}-issue-${toAutomationIdSegment(field)}`}
                             type="button"
-                            className="text-left text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-foreground"
+                            className="rounded-sm bg-warning-soft px-1.5 py-0.5 text-left text-warning-soft-foreground transition-colors hover:bg-warning-border/40"
                             onClick={() => onFocusIssue(field)}
                         >
                             {issues

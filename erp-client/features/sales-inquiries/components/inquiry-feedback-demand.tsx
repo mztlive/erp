@@ -40,7 +40,7 @@ export function InquiryFeedbackDemand({
                         type="button"
                         variant="ghost"
                         size="xs"
-                        className="h-auto min-h-6 gap-1 px-1 py-0.5 font-normal text-muted-foreground hover:text-primary"
+                        className="h-5 gap-1 rounded-md bg-muted/55 px-1.5 py-0 font-normal text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground"
                         aria-label={`${line.product_name}交付要求`}
                         aria-haspopup="dialog"
                         onClick={() => setOpen(true)}

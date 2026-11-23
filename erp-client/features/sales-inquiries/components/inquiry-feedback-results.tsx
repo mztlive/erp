@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { InquiryFeedbackTable } from "./inquiry-feedback-table"
+import { sumInquiryFeesGross } from "../lib/feedback-summary"
 import { inquiryDate } from "../lib/format"
 import {
     type InquiryFeedback,
@@ -119,6 +120,8 @@ export function InquiryFeedbackResults({
                     idPrefix={`${idPrefix}-feedback-${feedback.round}`}
                     lines={feedback.data.lines}
                     demand={requirement.lines}
+                    feeCount={feedback.data.fees.length}
+                    feesTotal={sumInquiryFeesGross(feedback.data.fees)}
                 />
             )}
             {content === "all" && <FeedbackFees feedback={feedback} />}

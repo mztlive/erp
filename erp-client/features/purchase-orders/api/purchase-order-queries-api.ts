@@ -191,6 +191,13 @@ const loadCenterFromChangeOrder = (
         }
     })
 
+/** 读取指定采购单，不解析变更单入口或追加变更列表查询。 */
+export function fetchPurchaseOrderDetail(purchaseOrderId: string) {
+    return apiGet<BackendCenter>(
+        `/admin/purchase-orders/${encodeURIComponent(purchaseOrderId)}`,
+    )
+}
+
 /**
  * 读取采购单对象中心，并挂上在途采购变更单的只读审批投影。
  *
@@ -205,9 +212,7 @@ export async function fetchPurchaseOrderCenter(
     options?: { changeOrderId?: string; scopeVersion?: string },
 ): Promise<PurchaseOrderCenterView | null> {
     try {
-        const center = await apiGet<BackendCenter>(
-            `/admin/purchase-orders/${encodeURIComponent(purchaseOrderId)}`,
-        )
+        const center = await fetchPurchaseOrderDetail(purchaseOrderId)
         const view = mapCenter(center)
         const activeChange = await fetchActivePurchaseChangeOrder(
             center.id,

@@ -18,6 +18,7 @@ import {
     feedbackFeeIssues,
     validateFeedbackFees,
 } from "../lib/feedback-fee-validation"
+import { summarizeFeedback } from "../lib/feedback-summary"
 import { InquiryFeedbackResults } from "./inquiry-feedback-results"
 import { MoneyValue, detailWorkspaceStyles } from "@/components/business"
 import { useAppForm } from "@/components/form"
@@ -33,6 +34,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { cn } from "@/lib/utils"
 import { fetchInquiry, inquiryPath } from "../api"
 import { inquiryKeys } from "../hooks/queries"
 import { useInquiryCommand } from "../hooks/use-inquiry-command"
@@ -62,6 +64,7 @@ export type InquiryPublishContext = {
 }
 export type InquiryFeedbackEditorHandle = {
     save: () => void
+    openFees: () => void
     saveForPublish: () => Promise<InquiryPublishContext | null>
     adoptQuote: (quote: InternalQuote) => boolean
 }
@@ -71,6 +74,15 @@ export type InquiryFeedbackEditorStatus = {
     disabled: boolean
     completeCount: number
     totalCount: number
+    availableCount: number
+    partialCount: number
+    unavailableCount: number
+    pendingCount: number
+    pricedCount: number
+    goodsTotal: string | null
+    feeCount: number
+    feesTotal: string | null
+    grandTotal: string | null
     saved: boolean
 }
 function newFee(): InquiryFee {
@@ -115,9 +127,8 @@ export function InquiryFeedbackEditor({
     onSaved,
     onDirtyChange,
     onStatusChange,
-    footerActions,
+    quoteWorkbookActions,
     onInternalQuote,
-    embedded = false,
 }: {
     ref?: React.Ref<InquiryFeedbackEditorHandle>
     publishing?: boolean
@@ -127,9 +138,8 @@ export function InquiryFeedbackEditor({
     onSaved: () => void
     onDirtyChange: (dirty: boolean) => void
     onStatusChange?: (status: InquiryFeedbackEditorStatus) => void
-    footerActions?: React.ReactNode
+    quoteWorkbookActions?: React.ReactNode
     onInternalQuote?: (lineId: string) => void
-    embedded?: boolean
 }) {
     const key = inquiryStorageKey(userId, `${inquiry.id}:${task.id}:feedback`)
     const [initial, setInitial] = React.useState<{
@@ -181,12 +191,13 @@ export function InquiryFeedbackEditor({
             onSaved={onSaved}
             onDirtyChange={onDirtyChange}
             onStatusChange={onStatusChange}
-            footerActions={footerActions}
+            quoteWorkbookActions={quoteWorkbookActions}
             onInternalQuote={onInternalQuote}
-            embedded={embedded}
         />
     ) : (
-        <p role="status">正在恢复采购输入…</p>
+        <p role="status" className="text-xs text-muted-foreground">
+            正在恢复采购输入…
+        </p>
     )
 }
 
@@ -201,9 +212,8 @@ function FeedbackEditorContent({
     onSaved,
     onDirtyChange,
     onStatusChange,
-    footerActions,
+    quoteWorkbookActions,
     onInternalQuote,
-    embedded,
 }: {
     ref?: React.Ref<InquiryFeedbackEditorHandle>
     publishing: boolean
@@ -220,9 +230,8 @@ function FeedbackEditorContent({
     onSaved: () => void
     onDirtyChange: (dirty: boolean) => void
     onStatusChange?: (status: InquiryFeedbackEditorStatus) => void
-    footerActions?: React.ReactNode
+    quoteWorkbookActions?: React.ReactNode
     onInternalQuote?: (lineId: string) => void
-    embedded: boolean
 }) {
     const client = useQueryClient()
     const command = useInquiryCommand(userId, inquiry.id)
@@ -471,12 +480,10 @@ function FeedbackEditorContent({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [command.resolution])
     const values = useStore(form.store, (state) => state.values)
-    const completeCount = values.lines.filter((line) => {
-        const demand = inquiry.draft.lines.find(
-            (item) => item.line_id === line.line_id,
-        )
-        return demand && feedbackIssues(line, demand).length === 0
-    }).length
+    const summary = React.useMemo(
+        () => summarizeFeedback(values.lines, inquiry.draft.lines, values.fees),
+        [values.lines, inquiry.draft.lines, values.fees],
+    )
     const disabled =
         publishing ||
         conflict ||
@@ -488,22 +495,29 @@ function FeedbackEditorContent({
             dirty,
             saving: command.isPending,
             disabled,
-            completeCount,
-            totalCount: values.lines.length,
+            completeCount: summary.completeCount,
+            totalCount: summary.totalCount,
+            availableCount: summary.availableCount,
+            partialCount: summary.partialCount,
+            unavailableCount: summary.unavailableCount,
+            pendingCount: summary.pendingCount,
+            pricedCount: summary.pricedCount,
+            goodsTotal: summary.goodsTotal,
+            feeCount: summary.feeCount,
+            feesTotal: summary.feesTotal,
+            grandTotal: summary.grandTotal,
             saved,
         })
-    }, [
-        command.isPending,
-        completeCount,
-        dirty,
-        disabled,
-        onStatusChange,
-        saved,
-        values.lines.length,
-    ])
+    }, [command.isPending, dirty, disabled, onStatusChange, saved, summary])
     React.useImperativeHandle(ref, () => ({
         save() {
             if (!disabled) void form.handleSubmit()
+        },
+        openFees() {
+            if (command.isPending || !command.ready) return
+            setEditingFeeId(null)
+            feeFocus.current = null
+            setFeesOpen(true)
         },
         adoptQuote(quote) {
             if (disabled || publishSave.current) return false
@@ -595,30 +609,10 @@ function FeedbackEditorContent({
     const currentWork = inquiry.feedback_work.find(
         (work) => !work.frozen && work.actor_id === userId,
     )?.data
-    const embeddedFooter = embedded ? (
-        <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border/60 bg-card py-3">
-            <p className="num mr-auto text-xs text-muted-foreground">
-                已填写完整 {completeCount} / {values.lines.length} 项 ·{" "}
-                {saved
-                    ? "处理进度已保存，发布后销售可见"
-                    : "尚未保存，发布时自动保存"}
-            </p>
-            <Button
-                id="procurement-inquiry-save-feedback"
-                type="submit"
-                form="procurement-inquiry-feedback-form"
-                variant={dirty ? "default" : "outline"}
-                disabled={disabled}
-            >
-                {command.isPending ? "正在保存…" : "保存处理进度"}
-            </Button>
-            {footerActions}
-        </div>
-    ) : null
     return (
         <form
             id="procurement-inquiry-feedback-form"
-            className="space-y-4"
+            className="space-y-3"
             onSubmit={(event) => {
                 event.preventDefault()
                 void form.handleSubmit()
@@ -774,17 +768,6 @@ function FeedbackEditorContent({
                         </AlertDescription>
                     </Alert>
                 )}
-                {onInternalQuote && (
-                    <InquiryRatioPricing
-                        inquiryId={inquiry.id}
-                        taskId={task.id}
-                        round={inquiry.feedback_round + 1}
-                        demand={inquiry.draft.lines}
-                        lines={values.lines}
-                        disabled={disabled}
-                        onChange={(lines) => form.setFieldValue("lines", lines)}
-                    />
-                )}
                 <form.Field
                     name="lines"
                     mode="array"
@@ -799,45 +782,79 @@ function FeedbackEditorContent({
                             validationRequest={validationRequest}
                             onInternalQuote={onInternalQuote}
                             disabled={disabled}
+                            feesTotal={summary.feesTotal}
+                            feeCount={summary.feeCount}
                             toolbarSummary={
-                                <span className="num text-xs text-muted-foreground">
-                                    已填写完整 {completeCount} /{" "}
-                                    {values.lines.length} 项 ·{" "}
+                                <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    <span
+                                        aria-hidden="true"
+                                        className={cn(
+                                            "size-1.5 shrink-0 rounded-full",
+                                            saved
+                                                ? "bg-success"
+                                                : dirty
+                                                  ? "bg-warning"
+                                                  : "bg-muted-foreground/40",
+                                        )}
+                                    />
                                     {saved
-                                        ? "处理进度已保存，发布后销售可见"
-                                        : "尚未保存，发布时自动保存"}
+                                        ? "已保存"
+                                        : dirty
+                                          ? "尚未保存"
+                                          : "发布时自动保存"}
                                 </span>
                             }
                             toolbarActions={
-                                <Button
-                                    id="procurement-feedback-fees-open"
-                                    ref={feesTrigger}
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className={
-                                        detailWorkspaceStyles.subtleButton
-                                    }
-                                    disabled={
-                                        command.isPending || !command.ready
-                                    }
-                                    onClick={() => {
-                                        setEditingFeeId(null)
-                                        feeFocus.current = null
-                                        setFeesOpen(true)
-                                    }}
-                                >
-                                    <ReceiptTextIcon
-                                        aria-hidden="true"
-                                        data-icon="inline-start"
-                                    />
-                                    额外成本（
-                                    <span className="num">
-                                        {values.fees.length}
-                                    </span>
-                                    ）
-                                </Button>
+                                <>
+                                    <Button
+                                        id="procurement-feedback-fees-open"
+                                        ref={feesTrigger}
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className={cn(
+                                            detailWorkspaceStyles.subtleButton,
+                                            values.fees.length > 0 &&
+                                                "border-primary/25 bg-sidebar-accent/70 text-sidebar-accent-foreground hover:bg-sidebar-accent",
+                                        )}
+                                        disabled={
+                                            command.isPending || !command.ready
+                                        }
+                                        onClick={() => {
+                                            setEditingFeeId(null)
+                                            feeFocus.current = null
+                                            setFeesOpen(true)
+                                        }}
+                                    >
+                                        <ReceiptTextIcon
+                                            aria-hidden="true"
+                                            data-icon="inline-start"
+                                        />
+                                        额外成本（
+                                        <span className="num">
+                                            {values.fees.length}
+                                        </span>
+                                        ）
+                                    </Button>
+                                    {onInternalQuote && (
+                                        <InquiryRatioPricing
+                                            inquiryId={inquiry.id}
+                                            taskId={task.id}
+                                            round={inquiry.feedback_round + 1}
+                                            demand={inquiry.draft.lines}
+                                            lines={values.lines}
+                                            disabled={disabled}
+                                            onChange={(lines) =>
+                                                form.setFieldValue(
+                                                    "lines",
+                                                    lines,
+                                                )
+                                            }
+                                        />
+                                    )}
+                                </>
                             }
+                            quoteWorkbookActions={quoteWorkbookActions}
                         />
                     )}
                 />
@@ -854,10 +871,10 @@ function FeedbackEditorContent({
                         }
                         className="flex max-h-[85svh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
                     >
-                        <DialogHeader className="shrink-0 border-b px-6 py-5 pr-14">
+                        <DialogHeader className="shrink-0 border-b px-6 py-4 pr-14">
                             <DialogTitle>登记额外成本</DialogTitle>
                         </DialogHeader>
-                        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-muted/20 px-6 py-5">
+                        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-surface-sunken/50 px-6 py-5">
                             {error && (
                                 <Alert variant="destructive">
                                     <AlertDescription>{error}</AlertDescription>
@@ -1070,7 +1087,6 @@ function FeedbackEditorContent({
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
-                {embeddedFooter}
             </fieldset>
         </form>
     )

@@ -3,6 +3,7 @@ import { transferJson, transferFileInput } from "@/lib/data-transfer"
 import * as React from "react"
 import { useMutation } from "@tanstack/react-query"
 import { UploadIcon } from "lucide-react"
+import { detailWorkspaceStyles } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { selectedFileKey } from "@/lib/file-selection"
 import { FileUpload } from "@/components/ui/file-upload"
@@ -117,8 +118,9 @@ export function SupplierQuoteImportButton({
         <>
             <Button
                 id="procurement-inquiry-import-quotes"
-                variant="outline"
+                variant="ghost"
                 size="sm"
+                className={detailWorkspaceStyles.subtleButton}
                 type="button"
                 onClick={() => setOpen(true)}
             >

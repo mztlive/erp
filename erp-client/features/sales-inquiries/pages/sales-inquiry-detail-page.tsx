@@ -13,6 +13,10 @@ import {
     DetailWorkspaceSection,
     DetailWorkspaceSkeleton,
 } from "@/components/business"
+import {
+    WorkspaceTaskPane,
+    type WorkspaceTaskPaneProps,
+} from "@/components/business/workspace-task-pane"
 import { buttonVariants } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { isWorkspaceFrame, workspaceHost } from "@/lib/workspace-tabs"
@@ -33,12 +37,16 @@ export function SalesInquiryDetailPage({
     workItemId,
     embedded = false,
     onTaskCompleted,
+    taskHeaderActions,
+    TaskPane = WorkspaceTaskPane,
 }: {
     inquiryId?: string
     procurement?: boolean
     workItemId?: string
     embedded?: boolean
     onTaskCompleted?: () => void
+    taskHeaderActions?: React.ReactNode
+    TaskPane?: React.ComponentType<WorkspaceTaskPaneProps>
 }) {
     const search = useSearchParams()
     const router = useRouter()
@@ -105,6 +113,24 @@ export function SalesInquiryDetailPage({
     }, [embedded, mutating, onTaskCompleted, router, taskFinished, taskKey])
 
     const detailTitle = procurement ? "采购询价" : "销售询价"
+    const renderEmbeddedState = (
+        body: React.ReactNode,
+        description?: string,
+    ) => (
+        <TaskPane
+            aria-label={detailTitle}
+            header={
+                <DetailWorkspaceChrome
+                    className="shrink-0"
+                    title={detailTitle}
+                    meta={description ? <span>{description}</span> : undefined}
+                    secondaryActions={taskHeaderActions}
+                />
+            }
+        >
+            <div className="min-w-0 py-6">{body}</div>
+        </TaskPane>
+    )
 
     if (!profile.data) {
         return !embedded ? (
@@ -119,12 +145,15 @@ export function SalesInquiryDetailPage({
                 description="正在核对账号权限…"
             />
         ) : (
-            <p
-                className="p-6 text-body-compact text-muted-foreground"
-                role="status"
-            >
-                正在核对账号权限…
-            </p>
+            renderEmbeddedState(
+                <p
+                    className="text-body-compact text-muted-foreground"
+                    role="status"
+                >
+                    正在核对账号权限…
+                </p>,
+                "正在核对账号权限…",
+            )
         )
     }
 
@@ -148,12 +177,14 @@ export function SalesInquiryDetailPage({
         const message =
             completion?.message || "本轮询价处理已完成，正在返回列表…"
         return embedded ? (
-            <div
-                className="p-6 text-body-compact text-muted-foreground"
-                role="status"
-            >
-                {message}
-            </div>
+            renderEmbeddedState(
+                <p
+                    className="text-body-compact text-muted-foreground"
+                    role="status"
+                >
+                    {message}
+                </p>,
+            )
         ) : (
             <DetailWorkspacePage>
                 <DetailWorkspaceChrome
@@ -180,12 +211,15 @@ export function SalesInquiryDetailPage({
 
     if (query.isPending) {
         return embedded ? (
-            <p
-                className="p-6 text-body-compact text-muted-foreground"
-                role="status"
-            >
-                正在读取询价资料…
-            </p>
+            renderEmbeddedState(
+                <p
+                    className="text-body-compact text-muted-foreground"
+                    role="status"
+                >
+                    正在读取询价资料…
+                </p>,
+                "正在读取询价资料…",
+            )
         ) : (
             <DetailWorkspaceSkeleton
                 title={detailTitle}
@@ -210,18 +244,20 @@ export function SalesInquiryDetailPage({
             />
         )
         return embedded ? (
-            <div className="space-y-4 p-6">
-                {failure}
-                {errorBack.href ? (
-                    <Link
-                        id={errorBack.id}
-                        href={errorBack.href}
-                        className={buttonVariants({ variant: "outline" })}
-                    >
-                        {errorBack.label}
-                    </Link>
-                ) : null}
-            </div>
+            renderEmbeddedState(
+                <div className="space-y-4">
+                    {failure}
+                    {errorBack.href ? (
+                        <Link
+                            id={errorBack.id}
+                            href={errorBack.href}
+                            className={buttonVariants({ variant: "outline" })}
+                        >
+                            {errorBack.label}
+                        </Link>
+                    ) : null}
+                </div>,
+            )
         ) : (
             <DetailWorkspacePage>
                 <DetailWorkspaceChrome title={detailTitle} back={errorBack} />
@@ -243,7 +279,7 @@ export function SalesInquiryDetailPage({
             />
         )
         return embedded ? (
-            <div className="p-6">{empty}</div>
+            renderEmbeddedState(empty)
         ) : (
             <DetailWorkspacePage>
                 <DetailWorkspaceChrome title={detailTitle} back={errorBack} />
@@ -271,6 +307,8 @@ export function SalesInquiryDetailPage({
                 permissions={profile.data.permissions}
                 returnTo={returnTo}
                 onSaved={handleSaved}
+                taskHeaderActions={taskHeaderActions}
+                TaskPane={TaskPane}
             />
         )
     }

@@ -105,6 +105,10 @@ export function WorkspaceProcessingLayout({
         payment && item.workItemType !== "SUPPLIER_PAYMENT_EXECUTION"
     const paymentArrangement =
         item.workItemType === "PURCHASE_PAYMENT_ARRANGEMENT"
+    const inquiryProcessing =
+        item.workItemType === "SALES_INQUIRY_PROCESSING" &&
+        item.handlerKey === "sales_inquiry_processing" &&
+        item.businessObjectType === "sales_inquiry"
     const actionable = (reworkTask ?? item).allowedActions.some((action) =>
         ["PROCESS", "APPROVE", "REJECT"].includes(action),
     )
@@ -114,16 +118,18 @@ export function WorkspaceProcessingLayout({
                 fulfillment ||
                 purchaseApproval ||
                 salesApproval ||
-                paymentReview
+                paymentReview ||
+                inquiryProcessing
             }
             summaryInHeader={fulfillment}
             denseHeader={fulfillment}
             fillBody={fulfillment && item.businessObjectType === "delivery"}
             compact={paymentArrangement}
             fullWidth={
-                item.workItemType === "PROCUREMENT_ORDER_CREATION" &&
-                item.businessObjectType === "sales_order" &&
-                item.allowedActions.includes("PROCESS")
+                inquiryProcessing ||
+                (item.workItemType === "PROCUREMENT_ORDER_CREATION" &&
+                    item.businessObjectType === "sales_order" &&
+                    item.allowedActions.includes("PROCESS"))
             }
             summary={
                 <div

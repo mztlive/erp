@@ -13,6 +13,7 @@ import {
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { isApiError } from "@/lib/api/errors"
 import { displayName } from "@/lib/display-name"
+import { hasPermission } from "@/lib/permissions"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 import {
     approvalListMaterialReference,
@@ -21,6 +22,8 @@ import {
 } from "../api/task-materials"
 import {
     fetchWorkspaceDocumentFacts,
+    WorkspaceMaterialReferenceMismatch,
+    workspaceProcurementListSource,
     type WorkspaceDocumentFacts,
 } from "../lib/document-facts"
 import type { WorkspaceWorkItem } from "../types"
@@ -41,7 +44,13 @@ function combineMaterials(
 /** 同一提交引用只发送一次，列表排序变化时复用同一批资料。 */
 function collectReferences(items: readonly WorkspaceWorkItem[]) {
     const approvals = new Map<string, ApprovalListMaterialReference>()
-    const documents = new Map<string, WorkspaceWorkItem>()
+    const documents = new Map<
+        string,
+        {
+            item: WorkspaceWorkItem
+            procurementSource: ReturnType<typeof workspaceProcurementListSource>
+        }
+    >()
     const rows = items.map((item) => {
         if (usesApprovalListMaterials(item)) {
             const reference = approvalListMaterialReference(item)
@@ -51,15 +60,19 @@ function collectReferences(items: readonly WorkspaceWorkItem[]) {
             return { item, kind: "approval", key } as const
         }
 
+        const procurementSource = workspaceProcurementListSource(item)
         const key = JSON.stringify([
             item.workItemType,
             item.businessObjectType,
             item.businessObjectId,
             item.subjectVersion,
             item.approvalProcessInstanceId ?? item.approval?.instanceId,
+            ...(procurementSource
+                ? [item.workItemId, item.taskVersion, item.status]
+                : []),
         ])
-        documents.set(key, item)
-        return { item, kind: "document", key } as const
+        documents.set(key, { item, procurementSource })
+        return { item, kind: "document", key, procurementSource } as const
     })
     return {
         rows,
@@ -136,7 +149,7 @@ export function useWorkspaceListMaterials(items: readonly WorkspaceWorkItem[]) {
     })
     const documentQueries = useQueries({
         combine: combineMaterials,
-        queries: documents.map(([key, item]) => {
+        queries: documents.map(([key, { item, procurementSource }]) => {
             const number = displayName(
                 item.stableNumber,
                 item.businessObjectId,
@@ -144,7 +157,10 @@ export function useWorkspaceListMaterials(items: readonly WorkspaceWorkItem[]) {
             )
             return {
                 queryKey: [...scopeKey, key],
-                queryFn: () => fetchWorkspaceDocumentFacts(item),
+                queryFn: () =>
+                    procurementSource
+                        ? procurementSource.load(item)
+                        : fetchWorkspaceDocumentFacts(item),
                 meta: {
                     feedback: {
                         subject:
@@ -154,7 +170,13 @@ export function useWorkspaceListMaterials(items: readonly WorkspaceWorkItem[]) {
                         impact: "此事项仍会显示在列表中。",
                     },
                 },
-                enabled: Boolean(profile),
+                enabled:
+                    Boolean(profile) &&
+                    (!procurementSource ||
+                        hasPermission(
+                            profile?.permissions,
+                            procurementSource.permission,
+                        )),
                 retry: false,
                 staleTime: 0,
                 refetchInterval: 60_000,
@@ -205,9 +227,28 @@ export function useWorkspaceListMaterials(items: readonly WorkspaceWorkItem[]) {
                 }
             }
 
+            const { procurementSource } = row
+            if (
+                profile &&
+                procurementSource &&
+                !hasPermission(
+                    profile.permissions,
+                    procurementSource.permission,
+                )
+            ) {
+                return { item, materialNotice: "无权查看业务资料" }
+            }
             const query = documentResults.get(key)!
             if (profile && !query.isError && query.data)
                 return rowWithFacts(item, query.data)
+            if (
+                query.error instanceof WorkspaceMaterialReferenceMismatch ||
+                (procurementSource &&
+                    isApiError(query.error) &&
+                    query.error.status === 409)
+            ) {
+                return { item, materialNotice: "资料与任务不一致，请刷新任务" }
+            }
             const forbidden =
                 isApiError(query.error) && query.error.status === 403
             return {

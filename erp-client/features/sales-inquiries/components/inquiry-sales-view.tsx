@@ -20,8 +20,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { apiPost } from "@/lib/api"
 import { transferFileInput, transferJson } from "@/lib/data-transfer"
-import { sumFixed } from "@/lib/fixed-decimal"
 import { hasPermission } from "@/lib/permissions"
+import { cn } from "@/lib/utils"
 import { useWorkspaceDirtyState } from "@/lib/workspace-form-guard"
 import { inquiryPath } from "../api"
 import {
@@ -34,14 +34,14 @@ import {
     withSavedDemand,
 } from "../lib/customer-workbook"
 import { summarizeDemand } from "../lib/demand-summary"
+import { summarizeFeedback, sumInquiryFeesGross } from "../lib/feedback-summary"
 import { salesInquiryFeedback } from "../lib/feedback-view"
-import { inquiryDateInput } from "../lib/format"
+import { inquiryDateInput, inquiryDeadlineMeta } from "../lib/format"
 import { inquiryStorageKey } from "../lib/local-draft"
 import { resolveInquiryBackLink } from "../lib/navigation"
 import {
     INQUIRY_STATUS_LABEL,
     INQUIRY_STATUS_TONE,
-    type InquiryFee,
     type SalesInquiry,
 } from "../types"
 import { InquiryActions } from "./inquiry-actions"
@@ -61,18 +61,6 @@ import {
 import { TRANSFER_LABEL, VALIDITY_LABEL } from "./inquiry-progress"
 import { InquiryRequirementTable } from "./inquiry-requirement-table"
 import { SalesInquiryProducts } from "./sales-inquiry-products"
-
-function sumFeesGross(fees: readonly InquiryFee[]): string | null {
-    if (fees.length === 0) return null
-    try {
-        return sumFixed(
-            fees.map((fee) => fee.amount_gross),
-            { maxScale: 2, outputScale: 2 },
-        )
-    } catch {
-        return null
-    }
-}
 
 export function InquirySalesView({
     inquiry,
@@ -268,9 +256,16 @@ export function InquirySalesView({
     })
 
     const saveDockOpen = canEdit && dirty && demandStatus.canSave
-    const deadlineText = inquiryDateInput(inquiry.deadline_at) || "未设置"
+    const isActiveInquiry = !["confirmed", "closed"].includes(inquiry.status)
+    const deadline = inquiryDeadlineMeta(inquiry.deadline_at, isActiveInquiry)
     const editingDeadlineText =
         inquiryDateInput(demandStatus.deadlineAt) || "未设置"
+    const feeOwnerLabel = inquiry.shared_fee_owner_user_id
+        ? inquiry.shared_fee_owner_name ||
+          (inquiry.shared_fee_owner_user_id === userId
+              ? "由我维护"
+              : "已指定责任采购")
+        : null
     const headerMetaItems = [
         inquiry.requirement_version > 0 && (
             <span key="req" className="num">
@@ -284,25 +279,41 @@ export function InquirySalesView({
         ),
         inquiry.deadline_at > 0 && (
             <span key="deadline">
-                截止：<span className="num">{deadlineText}</span>
+                截止：<span className="num">{deadline.label}</span>
+            </span>
+        ),
+        feeOwnerLabel && (
+            <span key="fee-owner">
+                整单费用：
+                <span className="text-foreground/85">{feeOwnerLabel}</span>
             </span>
         ),
     ].filter(Boolean)
     const feeCount = selectedFeedback?.data.fees.length ?? 0
-    const feeTotal = sumFeesGross(selectedFeedback?.data.fees ?? [])
+    const feeTotal = sumInquiryFeesGross(selectedFeedback?.data.fees ?? [])
 
-    const availableCount =
-        productFeedback?.data.lines.filter(
-            (item) => item.conclusion === "available",
-        ).length ?? 0
-    const partialCount =
-        productFeedback?.data.lines.filter(
-            (item) => item.conclusion === "partially_available",
-        ).length ?? 0
-    const unavailableCount =
-        productFeedback?.data.lines.filter(
-            (item) => item.conclusion === "unavailable",
-        ).length ?? 0
+    const productRequirementLines =
+        (productFeedback
+            ? inquiry.requirements.find(
+                  (item) =>
+                      item.version === productFeedback.requirement_version,
+              )?.data.lines
+            : undefined) ?? inquiry.draft.lines
+    const feedbackSummary = React.useMemo(
+        () =>
+            productFeedback
+                ? summarizeFeedback(
+                      productFeedback.data.lines,
+                      productRequirementLines,
+                      productFeedback.data.fees,
+                  )
+                : null,
+        [productFeedback, productRequirementLines],
+    )
+
+    const availableCount = feedbackSummary?.availableCount ?? 0
+    const partialCount = feedbackSummary?.partialCount ?? 0
+    const unavailableCount = feedbackSummary?.unavailableCount ?? 0
 
     const summaryBar = revising ? undefined : canEdit ? (
         <DetailWorkspaceMetrics columns={4} variant="bar" ariaLabel="询价概览">
@@ -389,11 +400,11 @@ export function InquirySalesView({
                 }
             />
             <DetailWorkspaceMetricItem
-                label="额外费用"
+                label="含税供给合计"
                 value={
-                    feeTotal !== null ? (
+                    feedbackSummary?.goodsTotal != null ? (
                         <MoneyValue
-                            value={feeTotal}
+                            value={feedbackSummary.goodsTotal}
                             display="exact"
                             showHint={false}
                         />
@@ -401,7 +412,13 @@ export function InquirySalesView({
                         <span className="text-muted-foreground">—</span>
                     )
                 }
-                detail={feeCount > 0 ? `共 ${feeCount} 项费用` : "暂无额外费用"}
+                detail={
+                    feeTotal !== null
+                        ? `另含额外费用 ¥${feeTotal}（${feeCount} 项）`
+                        : feeCount > 0
+                          ? `共 ${feeCount} 项额外费用`
+                          : "暂无额外费用"
+                }
             />
             <DetailWorkspaceMetricItem
                 label="转单进度"
@@ -420,11 +437,35 @@ export function InquirySalesView({
             />
             <DetailWorkspaceMetricItem
                 label="询价截止"
-                value={deadlineText}
+                value={deadline.label}
                 detail={
-                    inquiry.feedback_round > 0
-                        ? `需求第 ${inquiry.requirement_version} 版 · 反馈第 ${inquiry.feedback_round} 轮`
-                        : `需求第 ${inquiry.requirement_version} 版 · 待首次反馈`
+                    <span className="flex flex-wrap items-center gap-x-1.5">
+                        {deadline.hint ? (
+                            <span
+                                className={cn(
+                                    deadline.tone === "destructive" &&
+                                        "font-medium text-destructive",
+                                    deadline.tone === "warning" &&
+                                        "font-medium text-warning-soft-foreground",
+                                )}
+                            >
+                                {deadline.hint}
+                            </span>
+                        ) : null}
+                        {deadline.hint ? (
+                            <span
+                                aria-hidden="true"
+                                className="text-muted-foreground/40"
+                            >
+                                ·
+                            </span>
+                        ) : null}
+                        <span className="num">
+                            {inquiry.feedback_round > 0
+                                ? `需求第 ${inquiry.requirement_version} 版 · 第 ${inquiry.feedback_round} 轮`
+                                : `需求第 ${inquiry.requirement_version} 版 · 待首次反馈`}
+                        </span>
+                    </span>
                 }
             />
         </DetailWorkspaceMetrics>
