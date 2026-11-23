@@ -46,6 +46,7 @@ import {
 import {
     INQUIRY_CONCLUSION_LABEL,
     type InquiryFeedbackData,
+    type InquiryFeedbackLine,
     type InquiryFee,
     type ProcurementInquiry,
 } from "../types"
@@ -127,6 +128,7 @@ export function InquiryFeedbackEditor({
     onSaved,
     onDirtyChange,
     onStatusChange,
+    onLinesChange,
     quoteWorkbookActions,
     onInternalQuote,
 }: {
@@ -138,6 +140,7 @@ export function InquiryFeedbackEditor({
     onSaved: () => void
     onDirtyChange: (dirty: boolean) => void
     onStatusChange?: (status: InquiryFeedbackEditorStatus) => void
+    onLinesChange?: (lines: readonly InquiryFeedbackLine[]) => void
     quoteWorkbookActions?: React.ReactNode
     onInternalQuote?: (lineId: string) => void
 }) {
@@ -191,6 +194,7 @@ export function InquiryFeedbackEditor({
             onSaved={onSaved}
             onDirtyChange={onDirtyChange}
             onStatusChange={onStatusChange}
+            onLinesChange={onLinesChange}
             quoteWorkbookActions={quoteWorkbookActions}
             onInternalQuote={onInternalQuote}
         />
@@ -212,6 +216,7 @@ function FeedbackEditorContent({
     onSaved,
     onDirtyChange,
     onStatusChange,
+    onLinesChange,
     quoteWorkbookActions,
     onInternalQuote,
 }: {
@@ -230,6 +235,7 @@ function FeedbackEditorContent({
     onSaved: () => void
     onDirtyChange: (dirty: boolean) => void
     onStatusChange?: (status: InquiryFeedbackEditorStatus) => void
+    onLinesChange?: (lines: readonly InquiryFeedbackLine[]) => void
     quoteWorkbookActions?: React.ReactNode
     onInternalQuote?: (lineId: string) => void
 }) {
@@ -509,6 +515,9 @@ function FeedbackEditorContent({
             saved,
         })
     }, [command.isPending, dirty, disabled, onStatusChange, saved, summary])
+    React.useEffect(() => {
+        onLinesChange?.(values.lines)
+    }, [onLinesChange, values.lines])
     React.useImperativeHandle(ref, () => ({
         save() {
             if (!disabled) void form.handleSubmit()

@@ -11,7 +11,6 @@ import {
     DetailWorkspacePage,
     DetailWorkspaceSaveDock,
     MoneyValue,
-    QuickPreviewSheet,
 } from "@/components/business"
 import {
     WorkspaceTaskFooter,
@@ -30,6 +29,7 @@ import { resolveInquiryBackLink } from "../lib/navigation"
 import {
     INQUIRY_STATUS_LABEL,
     INQUIRY_STATUS_TONE,
+    type InquiryFeedbackLine,
     type ProcurementInquiry,
 } from "../types"
 import { InquiryActions } from "./inquiry-actions"
@@ -42,7 +42,7 @@ import {
 } from "./inquiry-feedback-editor"
 import { InquiryFeedbackResults } from "./inquiry-feedback-results"
 import { InquiryFees } from "./inquiry-fees"
-import { InquiryInternalQuotes } from "./inquiry-internal-quotes"
+import { InquiryInternalQuotesDialog } from "./inquiry-internal-quotes"
 import { InquiryReinquiryNotice } from "./inquiry-reinquiry-notice"
 import { InquiryRequirementTable } from "./inquiry-requirement-table"
 import { SupplierQuoteExportButton } from "./supplier-quote-export-dialog"
@@ -103,6 +103,9 @@ export function InquiryProcurementView({
     const [publishing, setPublishing] = React.useState(false)
     const feedbackEditor = React.useRef<InquiryFeedbackEditorHandle>(null)
     const [quoteLineId, setQuoteLineId] = React.useState<string | null>(null)
+    const [feedbackLines, setFeedbackLines] = React.useState<
+        readonly InquiryFeedbackLine[]
+    >([])
     const [feedbackStatus, setFeedbackStatus] =
         React.useState<InquiryFeedbackEditorStatus>({
             dirty: false,
@@ -570,6 +573,7 @@ export function InquiryProcurementView({
                                     publishing={publishing}
                                     onDirtyChange={setFeedbackDirty}
                                     onStatusChange={setFeedbackStatus}
+                                    onLinesChange={setFeedbackLines}
                                     inquiry={inquiry}
                                     task={task}
                                     userId={userId}
@@ -584,38 +588,30 @@ export function InquiryProcurementView({
                                             : undefined
                                     }
                                 />
-                                <QuickPreviewSheet
-                                    idPrefix="procurement-feedback-internal"
-                                    size="preview"
-                                    open={quoteLineId !== null}
-                                    onOpenChange={(open) => {
-                                        if (!open) setQuoteLineId(null)
-                                    }}
-                                    title={
-                                        inquiry.draft.lines.find(
-                                            (line) =>
-                                                line.line_id === quoteLineId,
-                                        )?.product_name ?? "供应商报价"
-                                    }
-                                    description="仅采购可见。采用报价带入含运费供给单价，不代表已选定采购供应商。"
-                                >
-                                    {quoteLineId && (
-                                        <InquiryInternalQuotes
-                                            key={quoteLineId}
-                                            inquiry={inquiry}
-                                            task={task}
-                                            userId={userId}
-                                            permissions={permissions}
-                                            onSaved={onSaved}
-                                            lineId={quoteLineId}
-                                            onAdopt={(quote) =>
-                                                feedbackEditor.current?.adoptQuote(
-                                                    quote,
-                                                ) ?? false
-                                            }
-                                        />
-                                    )}
-                                </QuickPreviewSheet>
+                                {hasPermission(
+                                    permissions,
+                                    "procurement_inquiry:internal_quote",
+                                ) && (
+                                    <InquiryInternalQuotesDialog
+                                        open={quoteLineId !== null}
+                                        onOpenChange={(open) => {
+                                            if (!open) setQuoteLineId(null)
+                                        }}
+                                        lineId={quoteLineId}
+                                        onLineIdChange={setQuoteLineId}
+                                        inquiry={inquiry}
+                                        task={task}
+                                        userId={userId}
+                                        permissions={permissions}
+                                        feedbackLines={feedbackLines}
+                                        onSaved={onSaved}
+                                        onAdopt={(quote) =>
+                                            feedbackEditor.current?.adoptQuote(
+                                                quote,
+                                            ) ?? false
+                                        }
+                                    />
+                                )}
                             </>
                         )}
                         {!canProcess &&
