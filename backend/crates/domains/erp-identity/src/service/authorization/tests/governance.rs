@@ -738,6 +738,22 @@ async fn attachment_preparations_keep_fixed_function_qualification_and_reject_ob
 }
 
 #[tokio::test]
+async fn customer_import_source_requires_the_submitter_and_current_create_permission() {
+    let h = AuthHarness::with_facts("background_job", vec![object("background_job", "job", "user")]);
+    let permission = internal::CUSTOMER_IMPORT_JOB_READ;
+    let target = || AccessTarget::record("job").unwrap();
+
+    h.grants(&[("sales", &[customer::LIST])]);
+    assert!(matches!(h.require_snap(&permission, target()).await, Err(Error::Forbidden(_))));
+    h.grants(&[("sales", &[customer::CREATE])]);
+    h.require_snap(&permission, target()).await.unwrap();
+
+    h.mutate_first("background_job", |o| o.owner_id = FactValue::Known(Some("other".into())));
+    h.grants(&[("role-sysadmin", &[customer::CREATE, bulk_job::BACKGROUND_JOB_DETAIL])]);
+    assert!(matches!(h.require_snap(&permission, target()).await, Err(Error::Forbidden(_))));
+}
+
+#[tokio::test]
 async fn background_jobs_copy_detail_and_organization_scope_keep_boundaries() {
     // 后台任务管理员与导入读取、取消全部任务
     let h = AuthHarness::with_facts("background_job", vec![object("background_job", "job", "other")]);

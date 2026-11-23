@@ -1,12 +1,22 @@
 "use client"
 
 import * as React from "react"
+import { useStore } from "@tanstack/react-form"
+import { CopyIcon } from "lucide-react"
 import { withForm } from "@/components/form"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { QuantityValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
+import {
+    Popover,
+    PopoverContent,
+    PopoverDescription,
+    PopoverTitle,
+    PopoverTrigger,
+} from "@/components/ui/popover"
 import { StatusBadge } from "@/components/ui/status-badge"
+import { toast } from "@/components/ui/toast"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { compareDecimal, sumFixed } from "@/lib/fixed-decimal"
 import type { AddressImportChanges } from "../lib/address-import-plan"
@@ -51,6 +61,7 @@ export const InquiryDeliveryEditor = withForm({
             title: string
         } | null>(null)
         const [importOpen, setImportOpen] = React.useState(false)
+        const [reuseOpen, setReuseOpen] = React.useState(false)
         const [editingTerms, setEditingTerms] = React.useState(false)
         const [selectedIds, setSelectedIds] = React.useState<Set<string>>(
             new Set(),
@@ -58,10 +69,54 @@ export const InquiryDeliveryEditor = withForm({
         const [removed, setRemoved] = React.useState<
             { allocation: InquiryAllocation; index: number }[]
         >([])
+        const allLines = useStore(
+            form.store,
+            (state) => state.values.draft.lines,
+        )
         const prefix = `sales-inquiry-line-${toAutomationIdSegment(line?.line_id ?? "")}`
         if (!line) return null
+        const reusableSources =
+            line.fulfillment_kind === "physical"
+                ? allLines.filter(
+                      (candidate) =>
+                          candidate.line_id !== line.line_id &&
+                          candidate.allocations.length > 0,
+                  )
+                : []
         const progress = deliveryProgress({ ...line, unit_code: unit ?? "" })
         const allocationsPath = `draft.lines[${index}].allocations` as const
+
+        const reuseAddressesFrom = (source: InquiryLine) => {
+            if (disabled) return
+            const current = form.getFieldValue(allocationsPath)
+            const remainingSlots = 100 - current.length
+            if (remainingSlots <= 0) {
+                toast.add({
+                    title: "地址数量已达上限",
+                    description: "当前商品已有 100 个配送地址。",
+                    type: "warning",
+                })
+                return
+            }
+            const sourceList = source.allocations.slice(0, remainingSlots)
+            const singleTargetFill =
+                current.length === 0 && sourceList.length === 1
+            const copied: InquiryAllocation[] = sourceList.map((item) => ({
+                ...item,
+                allocation_id: crypto.randomUUID(),
+                quantity: singleTargetFill ? line.quantity : item.quantity,
+            }))
+            form.setFieldValue(allocationsPath, [...current, ...copied])
+            setReuseOpen(false)
+            toast.add({
+                title: "已复用配送地址",
+                description:
+                    source.allocations.length > remainingSlots
+                        ? `已从「${source.product_name}」复制前 ${copied.length} 个地址（已达 100 个上限），请核对数量。`
+                        : `已从「${source.product_name}」复制 ${copied.length} 个地址${singleTargetFill ? "" : "，请核对各地址配送数量"}。`,
+                type: "success",
+            })
+        }
 
         const editAddress = (
             allocation: InquiryAllocation,
@@ -398,6 +453,84 @@ export const InquiryDeliveryEditor = withForm({
                                     onEdit={editAddress}
                                     onRemove={removeAddresses}
                                     onImport={() => setImportOpen(true)}
+                                    extraActions={
+                                        reusableSources.length > 0 ? (
+                                            <Popover
+                                                open={reuseOpen}
+                                                onOpenChange={setReuseOpen}
+                                            >
+                                                <PopoverTrigger
+                                                    id={`${prefix}-reuse-addresses`}
+                                                    render={
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="outline"
+                                                        />
+                                                    }
+                                                    disabled={
+                                                        disabled ||
+                                                        line.allocations
+                                                            .length >= 100
+                                                    }
+                                                >
+                                                    <CopyIcon
+                                                        aria-hidden="true"
+                                                        data-icon="inline-start"
+                                                        className="size-3.5"
+                                                    />
+                                                    复用已有地址
+                                                </PopoverTrigger>
+                                                <PopoverContent
+                                                    align="end"
+                                                    className="w-80 max-w-[calc(100vw-2rem)]"
+                                                >
+                                                    <PopoverTitle>
+                                                        复用其他商品的配送地址
+                                                    </PopoverTitle>
+                                                    <PopoverDescription>
+                                                        复制收件人与地址到当前商品，复制后可按需调整数量。
+                                                    </PopoverDescription>
+                                                    <div className="max-h-56 space-y-1 overflow-y-auto pt-1">
+                                                        {reusableSources.map(
+                                                            (source) => (
+                                                                <button
+                                                                    key={
+                                                                        source.line_id
+                                                                    }
+                                                                    id={`${prefix}-reuse-from-${toAutomationIdSegment(source.line_id)}`}
+                                                                    type="button"
+                                                                    disabled={
+                                                                        disabled
+                                                                    }
+                                                                    onClick={() =>
+                                                                        reuseAddressesFrom(
+                                                                            source,
+                                                                        )
+                                                                    }
+                                                                    className="flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-2 text-left text-body-compact transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+                                                                >
+                                                                    <span className="min-w-0 truncate font-medium text-foreground">
+                                                                        {
+                                                                            source.product_name
+                                                                        }
+                                                                    </span>
+                                                                    <span className="num shrink-0 text-xs text-muted-foreground">
+                                                                        {
+                                                                            source
+                                                                                .allocations
+                                                                                .length
+                                                                        }{" "}
+                                                                        个地址
+                                                                    </span>
+                                                                </button>
+                                                            ),
+                                                        )}
+                                                    </div>
+                                                </PopoverContent>
+                                            </Popover>
+                                        ) : undefined
+                                    }
                                     onAdd={() => {
                                         const currentLine = form.getFieldValue(
                                             `draft.lines[${index}]`,

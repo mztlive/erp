@@ -134,6 +134,11 @@ export function SalesInquiryDetailPage({
                 copyFromId={copyFromId}
                 returnTo={returnTo}
                 userId={profile.data.userid}
+                ownerName={(
+                    profile.data.name ||
+                    profile.data.account ||
+                    ""
+                ).trim()}
                 permissions={profile.data.permissions}
             />
         )

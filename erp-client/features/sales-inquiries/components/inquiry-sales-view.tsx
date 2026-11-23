@@ -80,6 +80,7 @@ export function InquirySalesView({
             lineCount: inquiry.draft.lines.length,
             pendingDeliveryCount: 0,
             canSave: false,
+            customerId: inquiry.customer_id,
         })
 
     const roundContext = `${inquiry.requirement_version}:${inquiry.feedback_round}:${inquiry.status}`

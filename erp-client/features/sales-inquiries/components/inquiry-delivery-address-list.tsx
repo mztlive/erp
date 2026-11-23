@@ -1,5 +1,6 @@
 "use client"
 
+import type * as React from "react"
 import { PencilIcon, ReplaceIcon, Trash2Icon } from "lucide-react"
 import { QuantityValue } from "@/components/business"
 import { TableRowActions } from "@/components/business/table-row-actions"
@@ -35,6 +36,7 @@ export function InquiryDeliveryAddressList({
     onImport,
     onEdit,
     onRemove,
+    extraActions,
 }: {
     prefix: string
     allocations: readonly InquiryAllocation[]
@@ -47,6 +49,7 @@ export function InquiryDeliveryAddressList({
     onImport: () => void
     onEdit: (allocation: InquiryAllocation, replace?: boolean) => void
     onRemove: (ids: ReadonlySet<string>) => void
+    extraActions?: React.ReactNode
 }) {
     const selectable = allocations.filter(
         (item) => !allocationRestrictions(inquiry, item.allocation_id).occupied,
@@ -60,6 +63,7 @@ export function InquiryDeliveryAddressList({
                 <TableToolbar
                     actions={
                         <>
+                            {extraActions}
                             <Button
                                 id={`${prefix}-import-addresses`}
                                 type="button"

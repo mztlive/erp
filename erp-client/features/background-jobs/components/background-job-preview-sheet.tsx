@@ -16,6 +16,7 @@ import {
     formatJobDateTime,
     isJobActive,
     JOB_STATUS_LABELS,
+    usesFilteredImportResults,
 } from "../labels"
 import type {
     useBackgroundJobDetailQuery,
@@ -23,6 +24,7 @@ import type {
 } from "../queries"
 import { BACKGROUND_JOBS_ID_PREFIX as ID_PREFIX } from "../lib/constants"
 import { BackgroundJobItemResults } from "./background-job-item-results"
+import { CustomerImportResult } from "./customer-import-result"
 import { DataTransferTaskResult } from "./data-transfer-task-result"
 import { DirectImportResult } from "./direct-import-result"
 import { DomainJobResult } from "./domain-job-result"
@@ -95,7 +97,9 @@ export function BackgroundJobPreviewSheet({
                             }
                             label={JOB_STATUS_LABELS[previewJob.status]}
                         />
-                        {previewJob.domain_job_type !== "PRODUCT_IMPORT" && (
+                        {!usesFilteredImportResults(
+                            previewJob.domain_job_type,
+                        ) && (
                             <span className="text-xs text-muted-foreground">
                                 {backgroundJobDomainLabel(
                                     previewJob.domain_job_type,
@@ -176,6 +180,13 @@ export function BackgroundJobPreviewSheet({
                             canReadItems={canReadItems}
                             currentUserId={currentUserId}
                         />
+                    ) : previewJob.domain_job_type === "CUSTOMER_IMPORT" ? (
+                        <CustomerImportResult
+                            key={previewJob.id}
+                            job={previewJob}
+                            canReadItems={canReadItems}
+                            currentUserId={currentUserId}
+                        />
                     ) : previewJob.domain_job_type === "SUPPLIER_IMPORT" ||
                       previewJob.domain_job_type === "BRAND_IMPORT" ? (
                         <DirectImportResult
@@ -186,7 +197,9 @@ export function BackgroundJobPreviewSheet({
                         <DomainJobResult job={previewJob} />
                     )}
                     {previewJob.error_summary &&
-                        previewJob.domain_job_type !== "PRODUCT_IMPORT" && (
+                        !usesFilteredImportResults(
+                            previewJob.domain_job_type,
+                        ) && (
                             <p role="alert" className="text-destructive">
                                 {previewJob.error_summary}
                             </p>
@@ -241,7 +254,9 @@ export function BackgroundJobPreviewSheet({
                     </section>
                     {canReadItems &&
                         previewJob.domain_job_type !== "DATA_TRANSFER" &&
-                        previewJob.domain_job_type !== "PRODUCT_IMPORT" && (
+                        !usesFilteredImportResults(
+                            previewJob.domain_job_type,
+                        ) && (
                             <BackgroundJobItemResults
                                 previewJob={previewJob}
                                 itemsPage={itemsPage}

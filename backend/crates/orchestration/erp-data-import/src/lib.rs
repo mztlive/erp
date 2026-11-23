@@ -3,6 +3,7 @@ mod background;
 pub mod brand_import;
 pub use brand_import::BrandImportProcess;
 pub mod contract_import;
+pub mod customer_import;
 pub mod data_transfer;
 mod errors;
 pub mod import_apply;

@@ -2153,6 +2153,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/customers/import/jobs",
+                description: "提交客户导入任务",
+                permission: {
+                    resource: "customer",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customers/import/jobs/{id}/result-rows",
+                description: "下载客户导入结果行",
+                permission: {
+                    resource: "customer",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/customers/{id}/assignments",
                 description: "查询客户归属列表",

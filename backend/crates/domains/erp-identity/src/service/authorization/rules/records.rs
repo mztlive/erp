@@ -189,6 +189,7 @@ const SAME_ROLE: &[(Permission, &[Permission])] = &[
     (internal::SUPPLIER_IMPORT_JOB_READ, &[supplier::IMPORT_SUPPLIER_IMPORT]),
     (internal::SUPPLIER_IMPORT_SUBMIT, &[supplier::IMPORT_SUPPLIER_IMPORT]),
     (internal::BRAND_IMPORT_JOB_READ, &[catalog::PRODUCT_BRAND_CREATE]),
+    (internal::CUSTOMER_IMPORT_JOB_READ, &[customer::CREATE]),
     (internal::PURCHASE_EXPENSE_SOURCE, &[purchase_order::CREATE]),
     (internal::SALES_ORDER_HANDOVER_RECIPIENT, &[sales_order::DETAIL]),
     (internal::CUSTOMER_SELECT, &[customer::DETAIL]),

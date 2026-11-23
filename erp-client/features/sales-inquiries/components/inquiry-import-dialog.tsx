@@ -177,6 +177,13 @@ export function InquiryImportDialog({
     const preview = values.preview
     const hasErrors = Boolean(preview?.errors.length)
 
+    React.useEffect(() => {
+        if (!open || !creation || !initialCustomerId) return
+        if (!form.getFieldValue("customer_id")) {
+            form.setFieldValue("customer_id", initialCustomerId)
+        }
+    }, [creation, form, initialCustomerId, open])
+
     return (
         <Dialog
             open={open}
@@ -191,10 +198,7 @@ export function InquiryImportDialog({
                 className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-4xl"
                 finalFocus={
                     creation
-                        ? () =>
-                              document.getElementById(
-                                  "sales-inquiries-import-create",
-                              )
+                        ? () => document.getElementById(finalFocusId)
                         : undefined
                 }
             >

@@ -31,10 +31,7 @@ impl CustomerProfileProcess {
         req: SaveCustomerProfileRequest,
         actor: &AuditActor,
     ) -> Result<CustomerProfileMutationView> {
-        req.validate_protocol()?;
-        req.validate_structure(CustomerProfileOperation::Create)?;
-
-        let replay = req.replay_context(CustomerProfileOperation::Create, None, actor.id())?;
+        let replay = create_context(&req, actor)?;
         let fields = field_changes::permissions(&req, CustomerProfileOperation::Create);
         let transaction = self.commit_create(req, replay.clone(), actor).await;
         self.resolve_transaction(transaction, &replay, actor, &fields).await
@@ -48,36 +45,61 @@ impl CustomerProfileProcess {
         replay: CustomerProfileReplayContext,
         actor: &AuditActor,
     ) -> Result<CustomerProfileMutationView> {
-        let rbac = self.access.clone();
         let actor = actor.clone();
         let this = self.clone();
         self.db
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    rbac.require_create(&actor, executor).await?;
-                    this.require_fields(
-                        &actor,
-                        &field_changes::permissions(&req, CustomerProfileOperation::Create),
-                        executor,
-                    )
-                    .await?;
-
-                    if let Some(view) = this.replay_command(&replay, &actor, executor).await? {
-                        return Ok(view);
-                    }
-
-                    let identity = this.creation_identity(&req, &actor, executor).await?;
-                    let prepared = this.prepare_create(req, identity, replay, &actor)?;
-                    let result = prepared.result.clone();
-                    rbac.require_candidate(&actor, &result.customer_id, executor).await?;
-
-                    prepared.persist(&this.db, executor).await?;
-                    Ok(result)
-                })
+                Box::pin(async move { this.persist_create(req, replay, &actor, executor).await })
             })
             .await
+    }
+
+    /// 按当前账号和真实创建候选校验客户建档资格。
+    pub async fn require_create(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<()> {
+        Ok(self.access.require_create(actor, executor).await?)
+    }
+
+    /// 在调用方事务内建档，供导入流程原子保存客户与导入行结果。
+    ///
+    /// 使用与单条建档相同的校验、授权、回执和审计。任何错误均须由调用方中止本次事务。
+    pub async fn create_in_transaction(
+        &self,
+        req: SaveCustomerProfileRequest,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerProfileMutationView> {
+        let replay = create_context(&req, actor)?;
+        self.persist_create(req, replay, actor, executor).await
+    }
+
+    async fn persist_create(
+        &self,
+        req: SaveCustomerProfileRequest,
+        replay: CustomerProfileReplayContext,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerProfileMutationView> {
+        self.require_create(actor, executor).await?;
+        self.require_fields(
+            actor,
+            &field_changes::permissions(&req, CustomerProfileOperation::Create),
+            executor,
+        )
+        .await?;
+
+        if let Some(view) = self.replay_command(&replay, actor, executor).await? {
+            return Ok(view);
+        }
+
+        let identity = self.creation_identity(&req, actor, executor).await?;
+        let prepared = self.prepare_create(req, identity, replay, actor)?;
+        let result = prepared.result.clone();
+        self.access.require_candidate(actor, &result.customer_id, executor).await?;
+
+        prepared.persist(&self.db, executor).await?;
+        Ok(result)
     }
 
     // 在写事务内完成主体查重后，按已选主体、认证人及原幂等上下文组装创建载荷，不写入。
@@ -103,6 +125,15 @@ impl CustomerProfileProcess {
             actor,
         )
     }
+}
+
+fn create_context(
+    req: &SaveCustomerProfileRequest,
+    actor: &AuditActor,
+) -> Result<CustomerProfileReplayContext> {
+    req.validate_protocol()?;
+    req.validate_structure(CustomerProfileOperation::Create)?;
+    Ok(req.replay_context(CustomerProfileOperation::Create, None, actor.id())?)
 }
 
 /// 创建事务载荷。

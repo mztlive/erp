@@ -5,6 +5,7 @@
 //! JWT 认证；业务授权由用例执行，目录由 `permission_route` 提供，权限由显式目录统一定义。
 
 use axum::Router;
+use axum::extract::DefaultBodyLimit;
 use axum::routing::{delete, get, post, put};
 use erp_permissions as permissions;
 
@@ -18,6 +19,7 @@ pub fn routes() -> Router<HttpState> {
         .merge(profile_query_routes())
         .merge(profile_command_routes())
         .merge(customer_routes())
+        .merge(import_routes())
         .merge(assignment_routes())
 }
 
@@ -88,6 +90,21 @@ fn customer_routes() -> Router<HttpState> {
         .route(
             "/customers/{id}",
             permission_route(delete(customer::customer_delete), &permissions::customer::DELETE),
+        )
+}
+
+fn import_routes() -> Router<HttpState> {
+    Router::new()
+        .route(
+            "/customers/import/jobs",
+            permission_route(
+                post(customer::import::submit).layer(DefaultBodyLimit::max(5 * 1024 * 1024)),
+                &permissions::customer::CREATE,
+            ),
+        )
+        .route(
+            "/customers/import/jobs/{id}/result-rows",
+            permission_route(get(customer::import::result_rows), &permissions::customer::CREATE),
         )
 }
 

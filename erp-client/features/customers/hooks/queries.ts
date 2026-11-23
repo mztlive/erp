@@ -1,6 +1,8 @@
 "use client"
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { submitCustomerImport } from "@/features/customers/api/import"
+import { backgroundJobKeys } from "@/lib/background-jobs"
 
 import {
     applyCustomerAssignment,
@@ -21,7 +23,7 @@ import { useScopedListQuery } from "@/lib/use-scoped-list-query"
 
 export { revealCustomerSensitiveField }
 
-const customerKeys = {
+export const customerKeys = {
     all: ["customers"] as const,
     directory: (query: CustomerDirectoryQuery) =>
         [...customerKeys.all, "directory", query] as const,
@@ -111,5 +113,20 @@ export function useCustomerConflictQuery(customerId: string, enabled: boolean) {
         enabled,
         staleTime: 0,
         refetchOnWindowFocus: false,
+    })
+}
+
+/** 提交持久化后台任务并刷新任务列表。 */
+export function useCustomerImportMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: submitCustomerImport,
+        retry: false,
+        meta: { suppressErrorToast: true },
+        onSuccess: () => {
+            void queryClient.invalidateQueries({
+                queryKey: backgroundJobKeys.all,
+            })
+        },
     })
 }

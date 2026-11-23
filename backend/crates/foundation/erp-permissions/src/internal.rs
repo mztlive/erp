@@ -124,6 +124,8 @@ pub const SUPPLIER_IMPORT_JOB_READ: Permission = Permission::new("background_job
 pub const SUPPLIER_IMPORT_SUBMIT: Permission = Permission::new("supplier_import_job", "submit");
 /// 按品牌创建资格查看本人导入任务。
 pub const BRAND_IMPORT_JOB_READ: Permission = Permission::new("background_job", "brand_import_read");
+/// 按客户创建资格查看本人客户导入任务。
+pub const CUSTOMER_IMPORT_JOB_READ: Permission = Permission::new("background_job", "customer_import_read");
 /// 查看本人数据传输任务；交付结果仍核验所属业务资格。
 pub const DATA_TRANSFER_JOB_READ: Permission = Permission::new("background_job", "data_transfer_read");
 

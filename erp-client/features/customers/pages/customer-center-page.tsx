@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { DownloadIcon, PlusIcon } from "lucide-react"
+import { DownloadIcon, PlusIcon, UploadIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
@@ -9,6 +9,8 @@ import {
     listWorkspaceFilterStatusText,
     type ListWorkspacePageAction,
 } from "@/components/business"
+import { toast } from "@/components/ui/toast"
+import { CustomerImportDialog } from "@/features/customers/components/customer-import-dialog"
 import { CustomerCreateDialog } from "@/features/customers/components/customer-create-dialog"
 import { useCustomerDirectoryQuery } from "@/features/customers/hooks/queries"
 import { useCustomerCenterDirectoryState } from "@/features/customers/hooks/use-customer-center-directory-state"
@@ -25,6 +27,7 @@ import type {
 } from "@/features/customers/types"
 import { isDataScopeChanged } from "@/features/data-scope/cache"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { hasPermission } from "@/lib/permissions"
 import { useRouter } from "@/lib/navigation"
 import { useSearchHotkey } from "@/lib/use-search-hotkey"
 
@@ -47,6 +50,7 @@ export function CustomerCenterPage() {
     useSearchHotkey(directoryState.searchInputRef)
 
     const [createOpen, setCreateOpen] = React.useState(false)
+    const [importOpen, setImportOpen] = React.useState(false)
     const [lastResolvedScope, setLastResolvedScope] =
         React.useState<CustomerScope | null>(null)
 
@@ -120,8 +124,46 @@ export function CustomerCenterPage() {
         hidden: !canCreate,
         onClick: openCreate,
     }
-    const createDialog = canCreate ? (
-        <CustomerCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+    const importAction: ListWorkspacePageAction = {
+        id: "customers-directory-import",
+        actionKey: "import",
+        label: "批量导入",
+        icon: UploadIcon,
+        tier: "quiet",
+        hidden: !canCreate,
+        onClick: () => setImportOpen(true),
+    }
+    const dialogs = canCreate ? (
+        <>
+            <CustomerCreateDialog
+                open={createOpen}
+                onOpenChange={setCreateOpen}
+            />
+            {importOpen && (
+                <CustomerImportDialog
+                    onClose={() => setImportOpen(false)}
+                    onSubmitted={(job, fileName) => {
+                        toast.add({
+                            title: "客户导入任务已提交",
+                            description: `「${fileName}」共 ${job.total_count} 行`,
+                            type: "success",
+                            actionProps: hasPermission(
+                                accountProfile.data?.permissions,
+                                "background_job:list",
+                            )
+                                ? {
+                                      children: "查看任务",
+                                      onClick: () =>
+                                          router.push(
+                                              "/governance/background-jobs",
+                                          ),
+                                  }
+                                : undefined,
+                        })
+                    }}
+                />
+            )}
+        </>
     ) : null
 
     if (!accountProfile.data && accountProfile.isError) {
@@ -146,7 +188,7 @@ export function CustomerCenterPage() {
         return (
             <ListWorkspacePage
                 title="客户中心"
-                actions={canCreate ? [createAction] : undefined}
+                actions={canCreate ? [importAction, createAction] : undefined}
                 alerts={
                     <BusinessFailureState
                         kind="permission"
@@ -154,7 +196,7 @@ export function CustomerCenterPage() {
                     />
                 }
             >
-                {createDialog}
+                {dialogs}
             </ListWorkspacePage>
         )
     }
@@ -197,6 +239,7 @@ export function CustomerCenterPage() {
                     loading: exportMutation.isPending,
                     onClick: () => exportMutation.mutate(),
                 },
+                importAction,
                 createAction,
             ]}
             notices={
@@ -271,7 +314,7 @@ export function CustomerCenterPage() {
                 ),
             }}
         >
-            {createDialog}
+            {dialogs}
         </ListWorkspacePage>
     )
 }

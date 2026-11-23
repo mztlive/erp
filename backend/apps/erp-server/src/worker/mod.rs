@@ -122,6 +122,7 @@ fn build_runner(state: &Application) -> Result<BackgroundRunner> {
         .register(state.product_import_process())
         .register(state.supplier_import_process())
         .register(state.brand_import_process())
+        .register(state.customer_import_process())
         .register(SupplierCatalogAdoptionTaskAdapter::new(
             state.db(),
             state.supplier_catalog_adoption_process()?,

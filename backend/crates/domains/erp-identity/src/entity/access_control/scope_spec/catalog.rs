@@ -264,6 +264,7 @@ pub(super) const TASK_ACTIONS: &[Permission] = &[
     internal::PRODUCT_IMPORT_JOB_READ,
     internal::SUPPLIER_IMPORT_JOB_READ,
     internal::BRAND_IMPORT_JOB_READ,
+    internal::CUSTOMER_IMPORT_JOB_READ,
     internal::DATA_TRANSFER_JOB_READ,
     internal::CATALOG_PREVIEW_DETAIL,
     internal::SALES_INQUIRY_IMPORT_PREVIEW,

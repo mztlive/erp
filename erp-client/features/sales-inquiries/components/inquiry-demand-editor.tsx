@@ -1,23 +1,29 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "@/lib/navigation"
 import { PlusIcon, UploadIcon } from "lucide-react"
 import { DetailWorkspaceSection } from "@/components/business"
 import { useAppForm } from "@/components/form"
-import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
 import { SellableSkuSelectDialog } from "@/features/sales-orders/components/sellable-sku-select-dialog"
 import type { SellableSkuPick } from "@/features/sales-orders/lib/sellable-sku-pick"
-import { hasPermission } from "@/lib/permissions"
 import { getErrorMessage } from "@/lib/api/errors"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { compactFixed, sumFixed } from "@/lib/fixed-decimal"
+import { useRouter } from "@/lib/navigation"
+import { hasPermission } from "@/lib/permissions"
 import { useWorkspaceDirtyState } from "@/lib/workspace-form-guard"
 import { inquiryPath } from "../api"
 import { useInquiryCommand } from "../hooks/use-inquiry-command"
-import type { DemandFormValues } from "../lib/demand-form"
 import { deliveryProgress } from "../lib/delivery-progress"
+import type { DemandFormValues } from "../lib/demand-form"
+import {
+    isLineQuantityValid,
+    isLineReferencePriceValid,
+} from "../lib/demand-summary"
+import { inquiryDateSeconds } from "../lib/format"
 import {
     inquiryStorageKey,
     readInquiryLocalValue,
@@ -26,10 +32,12 @@ import {
 import type { InquiryLine, SalesInquiry } from "../types"
 import { InquiryDemandDetails } from "./inquiry-demand-details"
 import { InquiryDemandLines } from "./inquiry-demand-lines"
+import { InquiryDueDateBatchBar } from "./inquiry-due-date-batch-bar"
 import { InquiryProgress } from "./inquiry-progress"
 
 export type InquiryDemandEditorHandle = {
     save: () => void
+    reset: () => void
 }
 
 export type InquiryDemandEditorStatus = {
@@ -39,6 +47,7 @@ export type InquiryDemandEditorStatus = {
     lineCount: number
     pendingDeliveryCount: number
     canSave: boolean
+    customerId: string
 }
 
 type DemandRevision = {
@@ -50,6 +59,37 @@ function validateRevisionReason({ value }: { value: string | undefined }) {
     if (!value?.trim()) return "请填写修改原因"
     if (value.trim().length > 2000) return "修改原因最多 2000 字"
     return undefined
+}
+
+function buildBaseValues(
+    inquiry: SalesInquiry | undefined,
+    copyFrom: SalesInquiry | undefined,
+    userId: string,
+): DemandFormValues {
+    return {
+        customer_id: inquiry?.customer_id ?? copyFrom?.customer_id ?? "",
+        customer_name: inquiry?.customer_name ?? copyFrom?.customer_name ?? "",
+        sales_owner_user_id: inquiry?.sales_owner_user_id ?? userId,
+        business_org_unit_id: inquiry?.business_org_unit_id ?? "",
+        deadline_at: inquiry?.deadline_at ?? 0,
+        revision_reason: "",
+        copied_from_inquiry_id: copyFrom?.id ?? null,
+        draft:
+            inquiry?.draft ??
+            (copyFrom
+                ? {
+                      ...copyFrom.draft,
+                      lines: copyFrom.draft.lines.map((line) => ({
+                          ...line,
+                          line_id: crypto.randomUUID(),
+                          allocations: line.allocations.map((address) => ({
+                              ...address,
+                              allocation_id: crypto.randomUUID(),
+                          })),
+                      })),
+                  }
+                : { lines: [], note: "" }),
+    }
 }
 
 function fromPick(pick: SellableSkuPick): InquiryLine {
@@ -121,6 +161,7 @@ export function InquiryDemandEditor({
     onStatusChange,
     revision,
     storageScope,
+    externalSaveChrome = false,
 }: {
     ref?: React.Ref<InquiryDemandEditorHandle>
     inquiry?: SalesInquiry
@@ -135,6 +176,8 @@ export function InquiryDemandEditor({
     onStatusChange?: (status: InquiryDemandEditorStatus) => void
     revision?: DemandRevision
     storageScope?: string
+    /** 创建页由顶部吸顶 Chrome 承接唯一主动作，不再渲染页底重复保存条。 */
+    externalSaveChrome?: boolean
 }) {
     const storageKey = inquiryStorageKey(
         userId,
@@ -158,44 +201,7 @@ export function InquiryDemandEditor({
                 : {
                       base_version: inquiry?.version ?? 0,
                       restoredDirty: false,
-                      values: {
-                          customer_id:
-                              inquiry?.customer_id ??
-                              copyFrom?.customer_id ??
-                              "",
-                          customer_name:
-                              inquiry?.customer_name ??
-                              copyFrom?.customer_name ??
-                              "",
-                          sales_owner_user_id:
-                              inquiry?.sales_owner_user_id ?? userId,
-                          business_org_unit_id:
-                              inquiry?.business_org_unit_id ?? "",
-                          deadline_at: inquiry?.deadline_at ?? 0,
-                          revision_reason: "",
-                          copied_from_inquiry_id: copyFrom?.id ?? null,
-                          draft:
-                              inquiry?.draft ??
-                              (copyFrom
-                                  ? {
-                                        ...copyFrom.draft,
-                                        lines: copyFrom.draft.lines.map(
-                                            (line) => ({
-                                                ...line,
-                                                line_id: crypto.randomUUID(),
-                                                allocations:
-                                                    line.allocations.map(
-                                                        (address) => ({
-                                                            ...address,
-                                                            allocation_id:
-                                                                crypto.randomUUID(),
-                                                        }),
-                                                    ),
-                                            }),
-                                        ),
-                                    }
-                                  : { lines: [], note: "" }),
-                      },
+                      values: buildBaseValues(inquiry, copyFrom, userId),
                   },
         )
         // 同一编辑对象的后台刷新不重建正在输入的表单。
@@ -209,6 +215,7 @@ export function InquiryDemandEditor({
             baseVersion={initial.base_version}
             restoredDirty={initial.restoredDirty}
             inquiry={inquiry}
+            copyFrom={copyFrom}
             userId={userId}
             permissions={permissions}
             storageKey={storageKey}
@@ -219,11 +226,17 @@ export function InquiryDemandEditor({
             onDirtyChange={onDirtyChange}
             onStatusChange={onStatusChange}
             revision={revision}
+            externalSaveChrome={externalSaveChrome}
         />
     ) : (
-        <p role="status" className="text-body-compact text-muted-foreground">
-            正在恢复询价输入…
-        </p>
+        <div className="py-6">
+            <p
+                role="status"
+                className="text-body-compact text-muted-foreground"
+            >
+                正在恢复询价输入…
+            </p>
+        </div>
     )
 }
 
@@ -233,6 +246,7 @@ function DemandEditorContent({
     baseVersion,
     restoredDirty,
     inquiry,
+    copyFrom,
     userId,
     permissions,
     storageKey,
@@ -243,12 +257,14 @@ function DemandEditorContent({
     onDirtyChange,
     onStatusChange,
     revision,
+    externalSaveChrome,
 }: {
     ref?: React.Ref<InquiryDemandEditorHandle>
     initial: DemandFormValues
     baseVersion: number
     restoredDirty: boolean
     inquiry?: SalesInquiry
+    copyFrom?: SalesInquiry
     userId: string
     permissions: readonly string[]
     storageKey: string
@@ -259,6 +275,7 @@ function DemandEditorContent({
     onDirtyChange?: (dirty: boolean) => void
     onStatusChange?: (status: InquiryDemandEditorStatus) => void
     revision?: DemandRevision
+    externalSaveChrome: boolean
 }) {
     const router = useRouter()
     const command = useInquiryCommand(
@@ -273,11 +290,13 @@ function DemandEditorContent({
     const [localFailure, setLocalFailure] = React.useState(false)
     const [saved, setSaved] = React.useState(false)
     const [dirty, setDirty] = React.useState(restoredDirty)
-    const [lineStats, setLineStats] = React.useState(() => ({
+    const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
+    const [editorMeta, setEditorMeta] = React.useState(() => ({
         lineCount: initial.draft.lines.length,
         pendingDeliveryCount: initial.draft.lines.filter(
             (line) => !deliveryProgress(line).complete,
         ).length,
+        customerId: initial.customer_id,
     }))
     const canSave =
         hasPermission(permissions, "sellable_sku:list") &&
@@ -297,17 +316,19 @@ function DemandEditorContent({
                 setSaved(false)
                 setDirty(true)
                 onDirtyChange?.(true)
-                const lines = formApi.state.values.draft.lines
-                setLineStats({
+                const values = formApi.state.values
+                const lines = values.draft.lines
+                setEditorMeta({
                     lineCount: lines.length,
                     pendingDeliveryCount: lines.filter(
                         (line) => !deliveryProgress(line).complete,
                     ).length,
+                    customerId: values.customer_id,
                 })
                 try {
                     writeInquiryLocalValue(storageKey, {
                         base_version: editVersion,
-                        values: formApi.state.values,
+                        values,
                     })
                     setLocalFailure(false)
                 } catch {
@@ -315,9 +336,45 @@ function DemandEditorContent({
                 }
             },
         },
+        onSubmitInvalid: () => {
+            if (!inquiry && !form.state.values.customer_id) {
+                const target = document.getElementById("sales-inquiry-customer")
+                target?.scrollIntoView({ block: "center", behavior: "smooth" })
+                target?.focus({ preventScroll: true })
+            }
+        },
         onSubmit: async ({ value, formApi }) => {
             setFailure(null)
             try {
+                for (const line of value.draft.lines) {
+                    const segment = toAutomationIdSegment(line.line_id)
+                    if (!isLineQuantityValid(line)) {
+                        const target = document.getElementById(
+                            `sales-inquiry-line-${segment}-quantity`,
+                        )
+                        target?.scrollIntoView({
+                            block: "center",
+                            behavior: "smooth",
+                        })
+                        target?.focus({ preventScroll: true })
+                        throw new Error(
+                            `请修正「${line.product_name}」的需求数量（须大于 0）。`,
+                        )
+                    }
+                    if (!isLineReferencePriceValid(line)) {
+                        const target = document.getElementById(
+                            `sales-inquiry-line-${segment}-reference-price`,
+                        )
+                        target?.scrollIntoView({
+                            block: "center",
+                            behavior: "smooth",
+                        })
+                        target?.focus({ preventScroll: true })
+                        throw new Error(
+                            `请修正「${line.product_name}」的销售价（非负数字，最多 4 位小数）。`,
+                        )
+                    }
+                }
                 if (revision && inquiry) {
                     if (!canSave) throw new Error("当前账号没有修改需求权限。")
                     if (inquiry.version !== editVersion)
@@ -354,7 +411,17 @@ function DemandEditorContent({
                     })
                     return
                 }
-                if (!value.customer_id) throw new Error("请选择客户后保存。")
+                if (!value.customer_id) {
+                    const target = document.getElementById(
+                        "sales-inquiry-customer",
+                    )
+                    target?.scrollIntoView({
+                        block: "center",
+                        behavior: "smooth",
+                    })
+                    target?.focus({ preventScroll: true })
+                    throw new Error("请选择客户后再创建询价草稿。")
+                }
                 const result = await command.run<{
                     inquiry_id?: string
                     id?: string
@@ -417,14 +484,42 @@ function DemandEditorContent({
                 !["awaiting_sales", "confirmed"].includes(inquiry.status)),
         )
 
+    const handleReset = React.useCallback(() => {
+        try {
+            localStorage.removeItem(storageKey)
+        } catch {
+            // 忽略本地清理异常，仍重置内存态表单。
+        }
+        const fresh = buildBaseValues(inquiry, copyFrom, userId)
+        form.reset(fresh)
+        setSelectedIds(new Set())
+        setFailure(null)
+        setLocalFailure(false)
+        setSaved(false)
+        setDirty(false)
+        onDirtyChange?.(false)
+        setEditorMeta({
+            lineCount: fresh.draft.lines.length,
+            pendingDeliveryCount: fresh.draft.lines.filter(
+                (line) => !deliveryProgress(line).complete,
+            ).length,
+            customerId: fresh.customer_id,
+        })
+        toast.add({
+            title: copyFrom ? "已恢复原询价内容" : "已清空未创建内容",
+            type: "info",
+        })
+    }, [copyFrom, form, inquiry, onDirtyChange, storageKey, userId])
+
     React.useImperativeHandle(
         ref,
         () => ({
             save: () => {
                 if (!saveDisabled) void form.handleSubmit()
             },
+            reset: handleReset,
         }),
-        [form, saveDisabled],
+        [form, handleReset, saveDisabled],
     )
 
     React.useEffect(() => {
@@ -432,16 +527,18 @@ function DemandEditorContent({
             dirty,
             saving: command.isPending,
             disabled: saveDisabled,
-            lineCount: lineStats.lineCount,
-            pendingDeliveryCount: lineStats.pendingDeliveryCount,
+            lineCount: editorMeta.lineCount,
+            pendingDeliveryCount: editorMeta.pendingDeliveryCount,
             canSave,
+            customerId: editorMeta.customerId,
         })
     }, [
         canSave,
         command.isPending,
         dirty,
-        lineStats.lineCount,
-        lineStats.pendingDeliveryCount,
+        editorMeta.customerId,
+        editorMeta.lineCount,
+        editorMeta.pendingDeliveryCount,
         onStatusChange,
         saveDisabled,
     ])
@@ -497,7 +594,173 @@ function DemandEditorContent({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [command.resolution, command.isPending])
 
-    const showInlineFooter = !inquiry || Boolean(revision)
+    const applyBatchDueDate = (date: string) => {
+        if (command.isPending || Boolean(revision && busy)) return
+        const dueAt = inquiryDateSeconds(date)
+        if (!Number.isFinite(dueAt)) return
+        const current = form.getFieldValue("draft.lines")
+        const scoped = selectedIds.size > 0
+        const targetCount = scoped
+            ? current.filter((line) => selectedIds.has(line.line_id)).length
+            : current.length
+        if (!targetCount) return
+        form.setFieldValue(
+            "draft.lines",
+            current.map((line) =>
+                !scoped || selectedIds.has(line.line_id)
+                    ? { ...line, delivery_due_at: dueAt }
+                    : line,
+            ),
+        )
+        if (scoped) setSelectedIds(new Set())
+        toast.add({
+            title: scoped ? "已批量设置交付日" : "已统一设置交付日",
+            description: `已将 ${targetCount} 项商品设为 ${date}。`,
+            type: "success",
+        })
+    }
+
+    const linesDisabled = command.isPending || Boolean(revision && busy)
+    const showInlineFooter =
+        Boolean(revision) || (!inquiry && !externalSaveChrome)
+
+    const statusAlerts = (
+        <>
+            {revision && inquiry && inquiry.version !== editVersion && (
+                <Alert variant="warning">
+                    <AlertDescription>
+                        询价已更新，当前输入已保留。重新载入会清除本次商品和配送修改，请先核对并保留需要的内容。
+                        <Button
+                            id="sales-inquiry-revision-reload"
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={busy}
+                            onClick={() => {
+                                setEditVersion(inquiry.version)
+                                const values = {
+                                    ...form.state.values,
+                                    draft: inquiry.draft,
+                                }
+                                form.reset(values)
+                                try {
+                                    writeInquiryLocalValue(storageKey, {
+                                        base_version: inquiry.version,
+                                        values,
+                                    })
+                                    setLocalFailure(false)
+                                } catch {
+                                    setLocalFailure(true)
+                                }
+                                setFailure(null)
+                            }}
+                        >
+                            从最新需求重新编辑
+                        </Button>
+                    </AlertDescription>
+                </Alert>
+            )}
+            {command.unresolved && (
+                <Alert variant="warning">
+                    <AlertDescription>
+                        上次提交结果尚待核对，当前输入已保留。
+                        <Button
+                            id="sales-inquiry-demand-recover"
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                                void command
+                                    .recover()
+                                    .then(() => onSaved())
+                                    .catch((error) =>
+                                        setFailure(getErrorMessage(error)),
+                                    )
+                            }
+                        >
+                            核对上次提交结果
+                        </Button>
+                    </AlertDescription>
+                </Alert>
+            )}
+            {failure && (
+                <Alert variant="destructive">
+                    <AlertDescription>{failure}</AlertDescription>
+                </Alert>
+            )}
+            {localFailure && (
+                <Alert variant="warning">
+                    <AlertDescription>
+                        当前浏览器无法保存本地输入，请先保存询价后再离开页面。
+                    </AlertDescription>
+                </Alert>
+            )}
+        </>
+    )
+
+    const linesToolbar = (
+        <form.Subscribe selector={(state) => state.values.draft.lines}>
+            {(lines) => {
+                const selectedCount = lines.filter((line) =>
+                    selectedIds.has(line.line_id),
+                ).length
+                return (
+                    <>
+                        {productActions}
+                        {lines.length > 0 && (
+                            <InquiryDueDateBatchBar
+                                count={selectedCount}
+                                total={lines.length}
+                                disabled={linesDisabled}
+                                onApply={applyBatchDueDate}
+                            />
+                        )}
+                        {onImport && inquiry && (
+                            <Button
+                                id="sales-inquiry-import-open"
+                                variant="outline"
+                                size="sm"
+                                type="button"
+                                onClick={onImport}
+                            >
+                                <UploadIcon
+                                    aria-hidden="true"
+                                    data-icon="inline-start"
+                                />
+                                导入选品文件
+                            </Button>
+                        )}
+                        <Button
+                            id="sales-inquiry-add-products"
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            disabled={Boolean(revision && busy)}
+                            onClick={() => setPickerOpen(true)}
+                        >
+                            <PlusIcon
+                                aria-hidden="true"
+                                data-icon="inline-start"
+                            />
+                            添加商品
+                        </Button>
+                    </>
+                )
+            }}
+        </form.Subscribe>
+    )
+
+    const linesContent = (
+        <InquiryDemandLines
+            form={form}
+            inquiry={inquiry}
+            disabled={linesDisabled}
+            selectedIds={selectedIds}
+            onSelectedIdsChange={setSelectedIds}
+            onAddProducts={() => setPickerOpen(true)}
+            onImport={onImport}
+        />
+    )
 
     return (
         <form
@@ -506,22 +769,34 @@ function DemandEditorContent({
                     ? "sales-inquiry-revision-form"
                     : "sales-inquiry-demand-form"
             }
-            className="flex min-w-0 flex-col gap-6"
+            className={
+                !inquiry && !revision
+                    ? "flex min-w-0 flex-col"
+                    : "flex min-w-0 flex-col gap-6"
+            }
             onSubmit={(event) => {
                 event.preventDefault()
                 void form.handleSubmit()
             }}
         >
             <fieldset disabled={command.isPending} className="contents">
+                {!inquiry && !revision ? (
+                    <div className="space-y-2.5 pt-4 empty:hidden">
+                        {statusAlerts}
+                    </div>
+                ) : (
+                    statusAlerts
+                )}
+
                 {revision && (
                     <DetailWorkspaceSection
                         title="修改需求"
-                        subtitle="直接修改商品数量，点击“编辑配送”调整地址。提交后建立新需求版本并重新询价，历史报价及已有销售单保留原版本。"
+                        subtitle="直接修改商品数量，点击“配送”调整地址。提交后建立新需求版本并重新询价，历史报价及已有销售单保留原版本。"
                         width="form"
                         divider={false}
                         className="py-2 first:pt-0 last:pb-0"
                     >
-                        <div className="space-y-4">
+                        <div data-slot="detail-form-grid" className="space-y-4">
                             <form.AppField
                                 name="revision_reason"
                                 validators={{
@@ -550,75 +825,7 @@ function DemandEditorContent({
                         </div>
                     </DetailWorkspaceSection>
                 )}
-                {revision && inquiry && inquiry.version !== editVersion && (
-                    <Alert variant="warning">
-                        <AlertDescription>
-                            询价已更新，当前输入已保留。重新载入会清除本次商品和配送修改，请先核对并保留需要的内容。
-                            <Button
-                                id="sales-inquiry-revision-reload"
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                disabled={busy}
-                                onClick={() => {
-                                    setEditVersion(inquiry.version)
-                                    const values = {
-                                        ...form.state.values,
-                                        draft: inquiry.draft,
-                                    }
-                                    form.reset(values)
-                                    try {
-                                        writeInquiryLocalValue(storageKey, {
-                                            base_version: inquiry.version,
-                                            values,
-                                        })
-                                        setLocalFailure(false)
-                                    } catch {
-                                        setLocalFailure(true)
-                                    }
-                                    setFailure(null)
-                                }}
-                            >
-                                从最新需求重新编辑
-                            </Button>
-                        </AlertDescription>
-                    </Alert>
-                )}
-                {command.unresolved && (
-                    <Alert variant="warning">
-                        <AlertDescription>
-                            上次提交结果尚待核对，当前输入已保留。
-                            <Button
-                                id="sales-inquiry-demand-recover"
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() =>
-                                    void command
-                                        .recover()
-                                        .then(() => onSaved())
-                                        .catch((error) =>
-                                            setFailure(getErrorMessage(error)),
-                                        )
-                                }
-                            >
-                                核对上次提交结果
-                            </Button>
-                        </AlertDescription>
-                    </Alert>
-                )}
-                {failure && (
-                    <Alert variant="destructive">
-                        <AlertDescription>{failure}</AlertDescription>
-                    </Alert>
-                )}
-                {localFailure && (
-                    <Alert variant="warning">
-                        <AlertDescription>
-                            当前浏览器无法保存本地输入，请先保存询价后再离开页面。
-                        </AlertDescription>
-                    </Alert>
-                )}
+
                 {!revision && (
                     <InquiryDemandDetails
                         form={form}
@@ -626,12 +833,13 @@ function DemandEditorContent({
                         feeOwner={feeOwner}
                     />
                 )}
-                <section
-                    className="min-w-0 space-y-4 border-t border-border/60 pt-5"
-                    aria-label="商品与配送需求"
-                >
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="space-y-2">
+
+                {!inquiry && !revision ? (
+                    <DetailWorkspaceSection
+                        id="sales-inquiry-lines-section"
+                        title="商品需求"
+                        width="full"
+                        badge={
                             <form.Subscribe
                                 selector={(state) => state.values.draft.lines}
                             >
@@ -640,102 +848,104 @@ function DemandEditorContent({
                                         (line) =>
                                             !deliveryProgress(line).complete,
                                     ).length
-                                    return inquiry ? (
-                                        <p className="text-body-compact font-medium">
-                                            共{" "}
-                                            <span className="num">
-                                                {lines.length}
-                                            </span>{" "}
-                                            项商品
+                                    return (
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="num rounded-sm bg-muted/80 px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+                                                {lines.length} 项
+                                            </span>
                                             {pending > 0 ? (
-                                                <span className="ml-2 text-xs font-normal text-warning-soft-foreground">
-                                                    ·{" "}
+                                                <span className="text-xs text-warning-soft-foreground">
                                                     <span className="num">
                                                         {pending}
                                                     </span>{" "}
                                                     项待完善配送
                                                 </span>
                                             ) : null}
-                                            {saved ? (
-                                                <span
-                                                    role="status"
-                                                    className="ml-2 text-xs font-normal text-muted-foreground"
-                                                >
-                                                    · 需求已保存
-                                                </span>
-                                            ) : null}
-                                        </p>
-                                    ) : (
-                                        <h2 className="text-section-title font-semibold tracking-tight">
-                                            商品需求
-                                            <span className="num ml-2 text-body-compact font-normal text-muted-foreground">
-                                                {lines.length} 项
-                                            </span>
-                                        </h2>
+                                        </div>
                                     )
                                 }}
                             </form.Subscribe>
-                            {inquiry && (
-                                <InquiryProgress
-                                    progress={inquiry.sales_progress}
-                                    compact
-                                />
-                            )}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                            {productActions}
-                            {onImport && (
-                                <Button
-                                    id="sales-inquiry-import-open"
-                                    variant="outline"
-                                    type="button"
-                                    onClick={onImport}
-                                >
-                                    <UploadIcon
-                                        aria-hidden="true"
-                                        data-icon="inline-start"
-                                    />
-                                    导入选品文件
-                                </Button>
-                            )}
-                            <Button
-                                id="sales-inquiry-add-products"
-                                variant="outline"
-                                type="button"
-                                disabled={Boolean(revision && busy)}
-                                onClick={() => setPickerOpen(true)}
-                            >
-                                <PlusIcon
-                                    aria-hidden="true"
-                                    data-icon="inline-start"
-                                />
-                                添加商品
-                            </Button>
-                        </div>
-                    </div>
-                    <InquiryDemandLines
-                        form={form}
-                        inquiry={inquiry}
-                        disabled={
-                            command.isPending || Boolean(revision && busy)
                         }
-                    />
-                </section>
+                        actions={linesToolbar}
+                    >
+                        {linesContent}
+                    </DetailWorkspaceSection>
+                ) : (
+                    <section
+                        className="min-w-0 space-y-4 border-t border-border/60 pt-5"
+                        aria-label="商品与配送需求"
+                    >
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="space-y-2">
+                                <form.Subscribe
+                                    selector={(state) =>
+                                        state.values.draft.lines
+                                    }
+                                >
+                                    {(lines) => {
+                                        const pending = lines.filter(
+                                            (line) =>
+                                                !deliveryProgress(line)
+                                                    .complete,
+                                        ).length
+                                        return (
+                                            <p className="text-body-compact font-medium">
+                                                共{" "}
+                                                <span className="num">
+                                                    {lines.length}
+                                                </span>{" "}
+                                                项商品
+                                                {pending > 0 ? (
+                                                    <span className="ml-2 text-xs font-normal text-warning-soft-foreground">
+                                                        ·{" "}
+                                                        <span className="num">
+                                                            {pending}
+                                                        </span>{" "}
+                                                        项待完善配送
+                                                    </span>
+                                                ) : null}
+                                                {saved ? (
+                                                    <span
+                                                        role="status"
+                                                        className="ml-2 text-xs font-normal text-muted-foreground"
+                                                    >
+                                                        · 需求已保存
+                                                    </span>
+                                                ) : null}
+                                            </p>
+                                        )
+                                    }}
+                                </form.Subscribe>
+                                {inquiry && (
+                                    <InquiryProgress
+                                        progress={inquiry.sales_progress}
+                                        compact
+                                    />
+                                )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                {linesToolbar}
+                            </div>
+                        </div>
+                        {linesContent}
+                    </section>
+                )}
+
                 {showInlineFooter && (
                     <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border/60 pt-4">
                         <div className="mr-auto space-y-1">
                             <p className="text-body-compact font-medium">
                                 已选{" "}
                                 <span className="num">
-                                    {lineStats.lineCount}
+                                    {editorMeta.lineCount}
                                 </span>{" "}
                                 项商品
-                                {lineStats.pendingDeliveryCount > 0 ? (
+                                {editorMeta.pendingDeliveryCount > 0 ? (
                                     <>
                                         {" "}
                                         ·{" "}
                                         <span className="num">
-                                            {lineStats.pendingDeliveryCount}
+                                            {editorMeta.pendingDeliveryCount}
                                         </span>{" "}
                                         项待完善配送
                                     </>
@@ -749,9 +959,7 @@ function DemandEditorContent({
                                     ? "需求已保存。"
                                     : localFailure
                                       ? "本机保留失败，请保存需求后再离开。"
-                                      : revision
-                                        ? "输入已在当前浏览器保留；取消修改不提交，重新进入可继续编辑。"
-                                        : "输入已在当前浏览器保留，创建后可在详情页继续编辑或提交采购。"}
+                                      : "输入已在当前浏览器保留；取消修改不提交，重新进入可继续编辑。"}
                             </p>
                         </div>
                         <div className="flex shrink-0 flex-wrap items-center gap-3">
@@ -787,12 +995,13 @@ function DemandEditorContent({
                         </div>
                     </div>
                 )}
+
                 <SellableSkuSelectDialog
                     open={pickerOpen}
                     onOpenChange={setPickerOpen}
                     excludeProductKind="VOUCHER"
                     title="选择询价商品"
-                    description="每次选中增加 1 个需求单位。已有唯一需求行的商品累加数量；同一商品有多条需求行时另加一行。销售价不作为采购报价。"
+                    description="已有唯一需求行的商品自动累加 1 个需求单位；同一商品有多条需求行时另加一行。"
                     onConfirm={(picks) => {
                         if (revision && busy) return
                         setFailure(null)

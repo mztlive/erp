@@ -140,12 +140,16 @@ export function DirectImportItemIdentity({
     const name =
         item.object_type === "product_import_row" ||
         item.object_type === "supplier_import_row" ||
-        item.object_type === "brand_import_row"
+        item.object_type === "brand_import_row" ||
+        item.object_type === "customer_import_row"
             ? item.object_id
             : null
     const type = item.result_object_type
     const resource =
-        type === "product" || type === "supplier" || type === "product_brand"
+        type === "product" ||
+        type === "supplier" ||
+        type === "product_brand" ||
+        type === "customer"
             ? type
             : null
     const canRead =
@@ -154,15 +158,27 @@ export function DirectImportItemIdentity({
             account.data?.permissions,
             `${resource}:${resource === "product_brand" ? "list" : "detail"}`,
         )
+    const directory = {
+        product: "/master-data/products",
+        supplier: "/master-data/suppliers",
+        product_brand: "/master-data/brands",
+        customer: "/sales/customers",
+    }
+    const label = {
+        product: "查看商品资料",
+        supplier: "查看供应商资料",
+        product_brand: "查看品牌资料",
+        customer: "查看客户资料",
+    }
     const href =
         resource && item.result_object_id
-            ? `/master-data/${resource === "product_brand" ? "brands" : resource === "product" ? "products" : "suppliers"}/${encodeURIComponent(item.result_object_id)}?section=overview`
+            ? `${directory[resource]}/${encodeURIComponent(item.result_object_id)}${resource === "customer" ? "" : "?section=overview"}`
             : null
 
     return (
         <>
             {name && <p className="mt-1 font-medium">{name}</p>}
-            {canRead && href && (
+            {resource && canRead && href && (
                 <Button
                     id={`background-job-import-item-${toAutomationIdSegment(item.id)}-open-object`}
                     size="sm"
@@ -170,11 +186,7 @@ export function DirectImportItemIdentity({
                     className="mt-1 h-auto px-0"
                     render={<Link href={href} />}
                 >
-                    {resource === "product_brand"
-                        ? "查看品牌资料"
-                        : resource === "product"
-                          ? "查看商品资料"
-                          : "查看供应商资料"}
+                    {label[resource]}
                     <ArrowUpRightIcon data-icon="inline-end" aria-hidden />
                 </Button>
             )}

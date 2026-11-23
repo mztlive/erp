@@ -1,12 +1,6 @@
 import { downloadWorkbook } from "@/lib/xlsx"
+import { IMPORT_RESULT_LABELS } from "../labels"
 import type { BackgroundJobItemStatus, ProductImportResults } from "../api"
-
-export const PRODUCT_IMPORT_RESULT_LABELS = {
-    failed: "未成功",
-    skipped: "跳过",
-    unprocessed: "未处理",
-    success: "已写入",
-} satisfies Record<BackgroundJobItemStatus, string>
 
 /** 用文本保留编码、条码和金额原值，源图片公式也按文本写入。 */
 export async function downloadProductImportResults(
@@ -27,7 +21,7 @@ export async function downloadProductImportResults(
                 ? "结果待核对"
                 : status === "failed"
                   ? "执行失败"
-                  : PRODUCT_IMPORT_RESULT_LABELS[status],
+                  : IMPORT_RESULT_LABELS[status],
             row.result_summary ?? "",
             ...row.cells,
         ])
@@ -39,6 +33,6 @@ export async function downloadProductImportResults(
     sheet.getRow(1).font = { bold: true }
     await downloadWorkbook(
         workbook,
-        `商品导入-${jobNo}-${PRODUCT_IMPORT_RESULT_LABELS[status]}.xlsx`,
+        `商品导入-${jobNo}-${IMPORT_RESULT_LABELS[status]}.xlsx`,
     )
 }

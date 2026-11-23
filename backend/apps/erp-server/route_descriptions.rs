@@ -51,6 +51,8 @@ pub(crate) const DESCRIPTIONS: &[(&str, &str, &str)] = &[
     ("POST", "/resource-grants/recompute", "维护指定记录读取授权"),
     ("POST", "/resource-grants/backfill", "维护指定记录读取授权"),
     ("POST", "/customer-profiles", "创建完整客户资料"),
+    ("POST", "/customers/import/jobs", "提交客户导入任务"),
+    ("GET", "/customers/import/jobs/{id}/result-rows", "下载客户导入结果行"),
     ("GET", "/customer-profiles/{id}", "查询完整客户资料"),
     ("GET", "/customer-profiles/{id}/related-summary", "查询客户中心合同与销售摘要"),
     ("GET", "/customer-profiles/{id}/receivable-summary", "查询客户中心应收汇总"),

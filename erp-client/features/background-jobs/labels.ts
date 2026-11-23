@@ -1,7 +1,19 @@
 import type {
     BackgroundJobView,
+    BackgroundJobItemStatus,
     JobStatus,
 } from "@/features/background-jobs/api"
+
+export const IMPORT_RESULT_LABELS = {
+    failed: "未成功",
+    skipped: "跳过",
+    unprocessed: "未处理",
+    success: "已写入",
+} satisfies Record<BackgroundJobItemStatus, string>
+
+export function usesFilteredImportResults(domain: string | null | undefined) {
+    return domain === "PRODUCT_IMPORT" || domain === "CUSTOMER_IMPORT"
+}
 
 export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
     pending: "等待执行",
@@ -28,6 +40,7 @@ export const JOB_DOMAIN_LABELS: Record<string, string> = {
     DATA_TRANSFER: "导入导出",
     SUPPLIER_IMPORT: "供应商导入",
     BRAND_IMPORT: "品牌导入",
+    CUSTOMER_IMPORT: "客户导入",
     SUPPLIER_HEALTH_CHECK: "供应商平台连接检测",
     SUPPLIER_CATALOG_SYNC: "供应商商品同步",
     LEGACY_IMPORT: "历史期初导入",

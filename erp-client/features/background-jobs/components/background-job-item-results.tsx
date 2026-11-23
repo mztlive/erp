@@ -5,6 +5,7 @@ import { BusinessFailureState } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { BackgroundJobView } from "../api"
 import type { useBackgroundJobItemsQuery } from "../queries"
+import { usesFilteredImportResults } from "../labels"
 import { BACKGROUND_JOBS_ID_PREFIX as ID_PREFIX } from "../lib/constants"
 import {
     DirectImportItemIdentity,
@@ -35,7 +36,7 @@ export function BackgroundJobItemResults({
     const totalPages = page
         ? Math.max(1, Math.ceil(page.total / page.page_size))
         : 1
-    const productImport = previewJob.domain_job_type === "PRODUCT_IMPORT"
+    const filteredImport = usesFilteredImportResults(previewJob.domain_job_type)
     return (
         <section className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -67,7 +68,7 @@ export function BackgroundJobItemResults({
                 </div>
             )}
             {itemsQuery.isPending ||
-            (productImport && itemsQuery.isPlaceholderData) ? (
+            (filteredImport && itemsQuery.isPlaceholderData) ? (
                 <p className="text-muted-foreground">正在加载逐项结果…</p>
             ) : itemsQuery.isError ? null : (itemsQuery.data?.items.length ??
                   0) === 0 ? (
@@ -77,7 +78,7 @@ export function BackgroundJobItemResults({
                     {page?.items.map((item) => {
                         const summary =
                             item.result_summary ||
-                            (productImport
+                            (filteredImport
                                 ? item.status === "failed"
                                     ? "未记录失败原因"
                                     : null
@@ -95,12 +96,12 @@ export function BackgroundJobItemResults({
                                     <span
                                         className={
                                             item.status === "failed" &&
-                                            productImport
+                                            filteredImport
                                                 ? "text-xs text-destructive"
                                                 : "text-xs"
                                         }
                                     >
-                                        {productImport ||
+                                        {filteredImport ||
                                         previewJob.domain_job_type ===
                                             "SUPPLIER_IMPORT" ||
                                         previewJob.domain_job_type ===

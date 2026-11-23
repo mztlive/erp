@@ -20,6 +20,17 @@ impl Application {
         )
     }
 
+    /// 装配 HTTP 和 worker 共用的客户导入流程。
+    pub fn customer_import_process(&self) -> erp_data_import::customer_import::CustomerImportProcess {
+        erp_data_import::customer_import::CustomerImportProcess::new(
+            self.db(),
+            self.customer_profile_process(),
+            self.authorization(),
+            self.storage().clone(),
+            self.sensitive_data(),
+        )
+    }
+
     /// 产品报价表异步导入流程。
     /// 返回绑定当前数据库、对象存储与内容指纹密钥的导入流程。
     pub fn product_import_process(&self) -> erp_data_import::ProductImportProcess {

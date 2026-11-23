@@ -27,6 +27,7 @@ import { useBackgroundJobsFilters } from "../hooks/use-background-jobs-filters"
 import { BACKGROUND_JOBS_ID_PREFIX as ID_PREFIX } from "../lib/constants"
 import { BackgroundJobsToolbar } from "./background-jobs-toolbar"
 import { backgroundJobColumns } from "./background-job-columns"
+import { usesFilteredImportResults } from "../labels"
 import { BackgroundJobPreviewSheet } from "./background-job-preview-sheet"
 import {
     BackgroundJobCancelDialog,
@@ -64,7 +65,7 @@ export function BackgroundJobsWorkspace() {
     const itemsQuery = useBackgroundJobItemsQuery(
         canReadItems &&
             detailQuery.data &&
-            detailQuery.data.domain_job_type !== "PRODUCT_IMPORT"
+            !usesFilteredImportResults(detailQuery.data.domain_job_type)
             ? authorizedPreviewId
             : null,
         itemsPage,

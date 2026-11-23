@@ -169,6 +169,7 @@ fn job_domain(permission: &Permission) -> IdentityResult<Option<&'static str>> {
         (internal::PRODUCT_IMPORT_JOB_READ, "PRODUCT_IMPORT"),
         (internal::SUPPLIER_IMPORT_JOB_READ, "SUPPLIER_IMPORT"),
         (internal::BRAND_IMPORT_JOB_READ, "BRAND_IMPORT"),
+        (internal::CUSTOMER_IMPORT_JOB_READ, "CUSTOMER_IMPORT"),
         (internal::DATA_TRANSFER_JOB_READ, "DATA_TRANSFER"),
     ] {
         if permission == &entry {
@@ -251,6 +252,7 @@ mod tests {
             (internal::PRODUCT_IMPORT_JOB_READ, "PRODUCT_IMPORT"),
             (internal::SUPPLIER_IMPORT_JOB_READ, "SUPPLIER_IMPORT"),
             (internal::BRAND_IMPORT_JOB_READ, "BRAND_IMPORT"),
+            (internal::CUSTOMER_IMPORT_JOB_READ, "CUSTOMER_IMPORT"),
             (internal::DATA_TRANSFER_JOB_READ, "DATA_TRANSFER"),
         ] {
             let mut context = context("reader");

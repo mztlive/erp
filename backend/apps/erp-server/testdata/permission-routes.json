@@ -1908,6 +1908,30 @@
     ]
   },
   {
+    "method": "POST",
+    "path": "/customers/import/jobs",
+    "handler": "customer::import::submit",
+    "code": "customer:create",
+    "group": "客户",
+    "group_desc": "客户角色与归属管理",
+    "description": "提交客户导入任务",
+    "guards": [
+      "customer:create"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/customers/import/jobs/{id}/result-rows",
+    "handler": "customer::import::result_rows",
+    "code": "customer:create",
+    "group": "客户",
+    "group_desc": "客户角色与归属管理",
+    "description": "下载客户导入结果行",
+    "guards": [
+      "customer:create"
+    ]
+  },
+  {
     "method": "GET",
     "path": "/customers/{id}/assignments",
     "handler": "customer::customer_assignment_list",
