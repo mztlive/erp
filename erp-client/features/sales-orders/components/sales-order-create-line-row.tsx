@@ -53,6 +53,8 @@ export type SalesOrderCreateLineRowProps = {
     rowIndex: number
     taxRatePercent: string
     inquiryLocked: boolean
+    displayUnit: string
+    quantityFromDelivery: boolean
     selected: boolean
     imageAssetId?: string
     unifiedAddressKey?: string
@@ -124,6 +126,8 @@ export const SalesOrderCreateLineRow = React.memo(
         rowIndex,
         taxRatePercent,
         inquiryLocked,
+        displayUnit,
+        quantityFromDelivery,
         selected,
         imageAssetId,
         unifiedAddressKey,
@@ -163,7 +167,7 @@ export const SalesOrderCreateLineRow = React.memo(
 
         const allocations = line.deliveryAllocations ?? []
         const firstAddr = allocations[0]
-        const addrSummary = allocationSummary(line)
+        const addrSummary = allocationSummary({ ...line, unit: displayUnit })
         const isUnifiedMatch = Boolean(
             unifiedAddressKey &&
             allocations.length === 1 &&
@@ -369,6 +373,12 @@ export const SalesOrderCreateLineRow = React.memo(
                                                 name={field.name}
                                                 type="text"
                                                 inputMode="decimal"
+                                                readOnly={quantityFromDelivery}
+                                                title={
+                                                    quantityFromDelivery
+                                                        ? "数量由询价配送分配合计"
+                                                        : undefined
+                                                }
                                                 value={field.state.value}
                                                 aria-invalid={
                                                     invalid || undefined
@@ -393,20 +403,16 @@ export const SalesOrderCreateLineRow = React.memo(
                                 }}
                             </form.AppField>
                         </div>
-                        <form.AppField name={`lineItems[${rowIndex}].unit`}>
-                            {(field) => (
-                                <span
-                                    className="flex h-control-sm min-w-5 shrink-0 items-center text-left text-xs text-muted-foreground"
-                                    title={
-                                        unitLocked
-                                            ? "单位随商品基础单位带出，不可改"
-                                            : "选择商品后带出基础单位"
-                                    }
-                                >
-                                    {field.state.value || "—"}
-                                </span>
-                            )}
-                        </form.AppField>
+                        <span
+                            className="flex h-control-sm min-w-5 shrink-0 items-center text-left text-xs text-muted-foreground"
+                            title={
+                                unitLocked
+                                    ? "单位随商品基础单位带出，不可改"
+                                    : "选择商品后带出基础单位"
+                            }
+                        >
+                            {displayUnit || "—"}
+                        </span>
                     </div>
                 </TableCell>
 
@@ -697,7 +703,11 @@ export const SalesOrderCreateLineRow = React.memo(
                                     aria-hidden="true"
                                 />
                                 <span>
-                                    {inquiryLocked ? "无实物地址" : "设置地址"}
+                                    {quantityFromDelivery
+                                        ? "选择转入地址"
+                                        : inquiryLocked
+                                          ? "无实物地址"
+                                          : "设置地址"}
                                 </span>
                                 <ChevronRightIcon
                                     className="ml-auto size-3.5 shrink-0 opacity-0 transition-opacity group-hover/addr:opacity-100"

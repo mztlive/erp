@@ -56,6 +56,7 @@ function lineGross(quantity: string, unitPriceGross: string): string {
 
 export function buildSalesOrderSubmitSnapshot(
     values: CreateSalesOrderFormValues,
+    inquiryUnitNames?: ReadonlyMap<string, string>,
 ): SalesOrderSubmitSnapshot {
     const totals = calculateTotals(values.lineItems, values.taxRatePercent)
     const lineItems = values.lineItems
@@ -64,7 +65,9 @@ export function buildSalesOrderSubmitSnapshot(
             rowKey: line.rowKey,
             name: line.name,
             quantity: line.quantity,
-            unit: line.unit,
+            unit: inquiryUnitNames
+                ? (inquiryUnitNames.get(line.unit) ?? "")
+                : line.unit,
             unitPriceGross: line.unitPriceGross,
             procurementSupplyPrice: line.procurementSupplyPrice ?? "",
             deliveryAllocations: line.deliveryAllocations,

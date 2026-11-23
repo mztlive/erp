@@ -268,6 +268,7 @@ export function mapSkuAsSellable(dto: SellableSkuDto): MasterDataListItem {
             barcode: dto.barcode ?? undefined,
             baseUnit,
             baseUnitCode: dto.base_unit_code ?? undefined,
+            baseUnitName: dto.base_unit_name ?? undefined,
             productKindLabel: kindLabel,
             salesVisiblePriceGross: dto.sales_visible_price_gross,
             bulkPriceGross: dto.bulk_price_gross ?? undefined,

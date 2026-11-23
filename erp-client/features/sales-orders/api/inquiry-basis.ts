@@ -1,6 +1,6 @@
 import { apiGet } from "@/lib/api"
 import { createApiError } from "@/lib/api/errors"
-import { compactFixed, compareDecimal } from "@/lib/fixed-decimal"
+import { compactFixed, compareDecimal, sumFixed } from "@/lib/fixed-decimal"
 import { formatEpochDate, throwValidation } from "./mappers"
 import type {
     SalesDeliveryAllocation,
@@ -67,6 +67,68 @@ export type InquirySalesBasis = BackendInquirySalesBasis & {
     lineItems: SalesOrderDraftLineInput[]
 }
 
+export type InquiryDeliveryOption = {
+    id: string
+    delivery: SalesDeliveryAllocation
+    maxQuantity?: string
+}
+
+export function inquiryDeliveryQuantity(
+    allocations: readonly SalesDeliveryAllocation[],
+): string {
+    try {
+        return compactFixed(
+            sumFixed(
+                allocations.map((row) => row.quantity),
+                {
+                    maxScale: 6,
+                    outputScale: 6,
+                },
+            ),
+        )
+    } catch {
+        return ""
+    }
+}
+
+export function inquiryDeliveryOptions(
+    source: InquirySalesBasis | InquirySalesSourceSnapshot,
+): ReadonlyMap<string, readonly InquiryDeliveryOption[]> {
+    const options = new Map<string, InquiryDeliveryOption[]>()
+    if ("lineItems" in source) {
+        for (const { requirement, selection } of source.lines) {
+            const allocations = new Map(
+                requirement.allocations.map((row) => [row.allocation_id, row]),
+            )
+            const rows = selection.allocations.flatMap((row) => {
+                const delivery = allocations.get(row.allocation_id)
+                return delivery
+                    ? [
+                          {
+                              id: row.allocation_id,
+                              delivery: { ...delivery, quantity: row.quantity },
+                              maxQuantity: row.quantity,
+                          },
+                      ]
+                    : []
+            })
+            if (rows.length > 0) options.set(inquiryRowKey(selection), rows)
+        }
+    } else {
+        for (const line of source.lines) {
+            if (line.allocations.length === 0) continue
+            options.set(
+                line.sales_order_line_id,
+                line.allocations.map((row) => ({
+                    id: row.allocation_id,
+                    delivery: row.delivery,
+                })),
+            )
+        }
+    }
+    return options
+}
+
 export async function fetchInquirySalesBasis(
     id: string,
     round: number,
@@ -108,7 +170,7 @@ export async function fetchInquirySalesBasis(
 export function inquiryRowKey(selection: InquirySalesSelection) {
     return `inquiry-${selection.inquiry_line_id}-${selection.price_id}`
 }
-function sameAddress(
+export function sameInquiryAddress(
     left: SalesDeliveryAllocation,
     right: SalesDeliveryAllocation,
 ) {
@@ -148,7 +210,7 @@ export function inquirySourceForLines(
             }
             const maxQuantity = original!.selection.quantity
             if (compareDecimal(line.quantity, maxQuantity, 6) > 0) {
-                const limit = `${compactFixed(maxQuantity)} ${line.unit}`.trim()
+                const limit = compactFixed(maxQuantity)
                 throw createApiError({
                     kind: "Validation",
                     message: `「${line.name}」开单数量超过本次可转数量，请调整数量。`,
@@ -167,7 +229,9 @@ export function inquirySourceForLines(
                                         row.allocation_id ===
                                         selected.allocation_id,
                                 )
-                            return address && sameAddress(address, delivery)
+                            return (
+                                address && sameInquiryAddress(address, delivery)
+                            )
                         },
                     )
                     if (candidates.length !== 1)

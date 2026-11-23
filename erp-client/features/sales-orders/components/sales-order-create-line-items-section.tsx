@@ -17,11 +17,13 @@ import type {
     SalesLineProcurementResponsibility,
     SalesProcurementPriceBasis,
 } from "@/features/sales-orders/types"
-import type {
-    InquirySalesBasis,
-    InquirySalesSourceSnapshot,
+import {
+    inquiryDeliveryOptions,
+    type InquirySalesBasis,
+    type InquirySalesSourceSnapshot,
 } from "../api/inquiry-basis"
 import { useDeliveryCoverage } from "../hooks/use-delivery-coverage"
+import type { SalesLineSkuDetails } from "../hooks/use-sales-line-images-query"
 import type { SalesLineFilterKey } from "../lib/sales-order-create-line-health"
 import { supplyReferencePrice } from "../lib/sales-procurement-price"
 import { SalesDeliverySummaryBar } from "./sales-delivery-allocation-editor"
@@ -33,6 +35,7 @@ import { SalesOrderCreatePriceBasisBatchMenu } from "./sales-order-create-price-
 
 export type SalesOrderCreateLineItemsSectionProps = {
     form: SalesOrderCreateFormApi
+    skuDetails: SalesLineSkuDetails
     draftId?: string
     inquirySource?: InquirySalesBasis | InquirySalesSourceSnapshot
     inquiryLocked?: boolean
@@ -53,6 +56,7 @@ type SkuPickerState = { mode: "add" } | { mode: "replace"; rowIndex: number }
 
 export function SalesOrderCreateLineItemsSection({
     form,
+    skuDetails,
     draftId,
     inquirySource,
     inquiryLocked = false,
@@ -178,6 +182,7 @@ export function SalesOrderCreateLineItemsSection({
             {({ nature, lines }) => (
                 <LineItemsSectionInner
                     form={form}
+                    skuDetails={skuDetails}
                     nature={nature}
                     lines={lines}
                     draftId={draftId}
@@ -209,6 +214,7 @@ export function SalesOrderCreateLineItemsSection({
 
 function LineItemsSectionInner({
     form,
+    skuDetails,
     nature,
     lines,
     draftId,
@@ -234,6 +240,7 @@ function LineItemsSectionInner({
     onOpenOverviewDelivery,
 }: {
     form: SalesOrderCreateFormApi
+    skuDetails: SalesLineSkuDetails
     nature: "physical_service" | "card_voucher"
     lines: ReturnType<SalesOrderCreateFormApi["getFieldValue"]> extends never
         ? never
@@ -264,6 +271,14 @@ function LineItemsSectionInner({
 }) {
     const coverageHint = useDeliveryCoverage(
         nature === "physical_service" && !inquiryLocked ? lines : [],
+    )
+    const inquiryDelivery = React.useMemo(
+        () => inquirySource && inquiryDeliveryOptions(inquirySource),
+        [inquirySource],
+    )
+    const inquiryDeliveryLineKeys = React.useMemo(
+        () => new Set(inquiryDelivery?.keys()),
+        [inquiryDelivery],
     )
     const skuCount = lines.filter((line) => line.sku.trim()).length
 
@@ -376,7 +391,9 @@ function LineItemsSectionInner({
 
                 <SalesOrderCreateLineItemTable
                     form={form}
+                    skuDetails={skuDetails}
                     inquiryLocked={inquiryLocked}
+                    inquiryDeliveryLineKeys={inquiryDeliveryLineKeys}
                     procurementOwners={procurementOwners}
                     procurementFetching={procurementFetching}
                     procurementError={procurementError}
@@ -407,6 +424,7 @@ function LineItemsSectionInner({
             {nature === "physical_service" ? (
                 <SalesDeliveryWorkspaceSheet
                     open={deliveryOpen}
+                    unitNames={skuDetails.unitNames}
                     onOpenChange={onDeliveryOpenChange}
                     tab={deliveryTab}
                     onTabChange={onDeliveryTabChange}
@@ -414,7 +432,7 @@ function LineItemsSectionInner({
                     onActiveRowKeyChange={onActiveDeliveryRowKeyChange}
                     form={form}
                     lines={lines}
-                    inquirySource={inquirySource}
+                    inquiryDelivery={inquiryDelivery}
                     onJumpToTableFilter={onActiveFilterChange}
                 />
             ) : null}

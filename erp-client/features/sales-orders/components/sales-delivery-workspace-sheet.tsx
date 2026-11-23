@@ -56,11 +56,7 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { downloadBlob } from "@/lib/download-blob"
 import { compactFixed, compareDecimal, sumFixed } from "@/lib/fixed-decimal"
 import type { DeliveryCoverageHint as CoverageCode } from "../api/delivery-coverage"
-import type {
-    InquirySalesBasis,
-    InquirySalesSourceSnapshot,
-} from "../api/inquiry-basis"
-import { inquiryRowKey } from "../api/inquiry-basis"
+import type { InquiryDeliveryOption } from "../api/inquiry-basis"
 import { useDeliveryCoverage } from "../hooks/use-delivery-coverage"
 import { allocationSummary } from "../lib/sales-delivery-allocation-summary"
 import {
@@ -94,12 +90,11 @@ import type {
 } from "../types"
 import { DeliveryCoverageHint } from "./delivery-coverage-hint"
 import { DeliveryRegionField } from "./delivery-region-field"
+import { InquiryDeliveryPane } from "./inquiry-delivery-pane"
 import { SalesDeliveryImportPreview } from "./sales-delivery-import-preview"
 import { SalesDeliverySmartPaste } from "./sales-delivery-smart-paste"
 
 export type DeliveryWorkspaceTab = "product" | "overview"
-
-type InquirySource = InquirySalesBasis | InquirySalesSourceSnapshot
 
 const addressFormSchema = z.object({
     recipient: z
@@ -123,47 +118,9 @@ const addressFormSchema = z.object({
 
 const overviewEditSchema = addressFormSchema.omit({ quantity: true })
 
-function inquiryBindings(source: InquirySource, rowKey: string) {
-    if ("lineItems" in source) {
-        const line = source.lines.find(
-            (row) => inquiryRowKey(row.selection) === rowKey,
-        )
-        return (
-            line?.selection.allocations.flatMap((selected) => {
-                const original = line.requirement.allocations.find(
-                    (row) => row.allocation_id === selected.allocation_id,
-                )
-                return original
-                    ? [
-                          {
-                              allocation_id: selected.allocation_id,
-                              delivery: original,
-                          },
-                      ]
-                    : []
-            }) ?? []
-        )
-    }
-    return (
-        source.lines.find((line) => line.sales_order_line_id === rowKey)
-            ?.allocations ?? []
-    )
-}
-
-function sameAddressIdentity(
-    left: SalesDeliveryAllocation,
-    right: SalesDeliveryAllocation,
-) {
-    return (
-        left.recipient === right.recipient &&
-        left.phone === right.phone &&
-        left.region_code === right.region_code &&
-        left.address === right.address
-    )
-}
-
 export type SalesDeliveryWorkspaceSheetProps = {
     open: boolean
+    unitNames: ReadonlyMap<string, string>
     onOpenChange: (open: boolean) => void
     tab: DeliveryWorkspaceTab
     onTabChange: (tab: DeliveryWorkspaceTab) => void
@@ -171,7 +128,7 @@ export type SalesDeliveryWorkspaceSheetProps = {
     onActiveRowKeyChange: (rowKey: string | null) => void
     form: SalesOrderCreateFormApi
     lines: SalesOrderDraftLineInput[]
-    inquirySource?: InquirySource
+    inquiryDelivery?: ReadonlyMap<string, readonly InquiryDeliveryOption[]>
     onJumpToTableFilter?: (filter: SalesLineFilterKey) => void
 }
 
@@ -182,6 +139,7 @@ export type SalesDeliveryWorkspaceSheetProps = {
  */
 export function SalesDeliveryWorkspaceSheet({
     open,
+    unitNames,
     onOpenChange,
     tab,
     onTabChange,
@@ -189,19 +147,17 @@ export function SalesDeliveryWorkspaceSheet({
     onActiveRowKeyChange,
     form,
     lines,
-    inquirySource,
+    inquiryDelivery,
     onJumpToTableFilter,
 }: SalesDeliveryWorkspaceSheetProps) {
     const overview = React.useMemo(() => summarizeOrderDelivery(lines), [lines])
+    const excludedQuantities = React.useRef(new Map<string, string>())
     const coverageHint = useDeliveryCoverage(open ? lines : [])
 
     // 确保按商品视图始终指向一个有效商品行。
-    const effectiveRowKey =
-        activeRowKey && lines.some((line) => line.rowKey === activeRowKey)
-            ? activeRowKey
-            : (lines[0]?.rowKey ?? null)
-
-    const resolvedTab: DeliveryWorkspaceTab = inquirySource ? "product" : tab
+    const activeLine =
+        lines.find((line) => line.rowKey === activeRowKey) ?? lines[0]
+    const effectiveRowKey = activeLine?.rowKey ?? null
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
@@ -212,24 +168,25 @@ export function SalesDeliveryWorkspaceSheet({
                 <SheetHeader className="border-b border-border/60 pb-3">
                     <div className="space-y-1 pr-8">
                         <SheetTitle>
-                            {inquirySource ? "询价配送分配" : "收货安排"}
+                            {inquiryDelivery ? "询价配送分配" : "收货安排"}
                         </SheetTitle>
                         <SheetDescription className="num">
                             共 {overview.totalLines} 项商品 ·{" "}
-                            {overview.uniqueAddressCount} 个收货地址 · 已完整{" "}
-                            {overview.completeLineCount}/{overview.totalLines}{" "}
-                            项
-                            {overview.incompleteLineCount > 0
+                            {inquiryDelivery
+                                ? `本单转入 ${overview.uniqueAddressCount} 个地址`
+                                : `${overview.uniqueAddressCount} 个收货地址 · 已完整 ${overview.completeLineCount}/${overview.totalLines} 项`}
+                            {!inquiryDelivery &&
+                            overview.incompleteLineCount > 0
                                 ? ` · ${overview.incompleteLineCount} 项待核对`
                                 : ""}
-                            {overview.unsetLineCount > 0
+                            {!inquiryDelivery && overview.unsetLineCount > 0
                                 ? ` · ${overview.unsetLineCount} 项未设置`
                                 : ""}
                         </SheetDescription>
                     </div>
-                    {!inquirySource ? (
+                    {!inquiryDelivery ? (
                         <DetailWorkspaceSubTabs
-                            value={resolvedTab}
+                            value={tab}
                             onValueChange={(next) =>
                                 onTabChange(next as DeliveryWorkspaceTab)
                             }
@@ -260,43 +217,57 @@ export function SalesDeliveryWorkspaceSheet({
                     ) : null}
                 </SheetHeader>
 
-                <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-                    {resolvedTab === "product" ? (
-                        effectiveRowKey ? (
-                            <ProductDeliveryPane
+                {inquiryDelivery && activeLine ? (
+                    <InquiryDeliveryPane
+                        form={form}
+                        lines={lines}
+                        line={activeLine}
+                        displayUnit={unitNames.get(activeLine.unit) ?? ""}
+                        options={inquiryDelivery.get(activeLine.rowKey) ?? []}
+                        excludedQuantities={excludedQuantities.current}
+                        coverageHint={coverageHint}
+                        onSelectLine={onActiveRowKeyChange}
+                    />
+                ) : (
+                    <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                        {tab === "product" ? (
+                            effectiveRowKey ? (
+                                <ProductDeliveryPane
+                                    form={form}
+                                    lines={lines}
+                                    activeRowKey={effectiveRowKey}
+                                    onSelectRowKey={onActiveRowKeyChange}
+                                    addressPool={overview.groups}
+                                    coverageHint={coverageHint}
+                                />
+                            ) : (
+                                <p className="py-12 text-center text-xs text-muted-foreground">
+                                    请先在销售明细中添加商品。
+                                </p>
+                            )
+                        ) : (
+                            <AddressOverviewPane
                                 form={form}
                                 lines={lines}
-                                activeRowKey={effectiveRowKey}
-                                onSelectRowKey={onActiveRowKeyChange}
-                                addressPool={overview.groups}
-                                coverageHint={coverageHint}
-                                inquirySource={inquirySource}
+                                overview={overview}
+                                onInspectLine={(rowKey) => {
+                                    onActiveRowKeyChange(rowKey)
+                                    onTabChange("product")
+                                }}
+                                onFilterUnset={() => {
+                                    onOpenChange(false)
+                                    onJumpToTableFilter?.("no_address")
+                                }}
                             />
-                        ) : (
-                            <p className="py-12 text-center text-xs text-muted-foreground">
-                                请先在销售明细中添加商品。
-                            </p>
-                        )
-                    ) : (
-                        <AddressOverviewPane
-                            form={form}
-                            lines={lines}
-                            overview={overview}
-                            onInspectLine={(rowKey) => {
-                                onActiveRowKeyChange(rowKey)
-                                onTabChange("product")
-                            }}
-                            onFilterUnset={() => {
-                                onOpenChange(false)
-                                onJumpToTableFilter?.("no_address")
-                            }}
-                        />
-                    )}
-                </div>
+                        )}
+                    </div>
+                )}
 
                 <SheetFooter className="border-t border-border/60">
                     <p className="mr-auto text-xs text-muted-foreground">
-                        修改会实时同步到当前销售单表单，关闭后可继续保存或提交。
+                        {inquiryDelivery
+                            ? "勾选和数量会同步到销售明细。"
+                            : "修改会实时同步到当前销售单表单，关闭后可继续保存或提交。"}
                     </p>
                     <Button
                         id="sales-delivery-workspace-done"
@@ -319,7 +290,6 @@ function ProductDeliveryPane({
     onSelectRowKey,
     addressPool,
     coverageHint,
-    inquirySource,
 }: {
     form: SalesOrderCreateFormApi
     lines: SalesOrderDraftLineInput[]
@@ -327,7 +297,6 @@ function ProductDeliveryPane({
     onSelectRowKey: (rowKey: string) => void
     addressPool: readonly DeliveryAddressGroup[]
     coverageHint: (sku: string, regionCode: string) => CoverageCode
-    inquirySource?: InquirySource
 }) {
     const regions = useRegionIndex()
     const [onlyPendingNav, setOnlyPendingNav] = React.useState(false)
@@ -486,10 +455,6 @@ function ProductDeliveryPane({
         }
     }
 
-    const bindings = inquirySource
-        ? inquiryBindings(inquirySource, line.rowKey)
-        : []
-
     return (
         <div className="space-y-4">
             {/* 商品快速切换条：支持 100 项商品连续配置而不关闭抽屉 */}
@@ -631,147 +596,136 @@ function ProductDeliveryPane({
                 ) : null}
             </div>
 
-            {/* 非询价单：操作工具条（新增 / 从本单复用 / 粘贴多行 / 清空） */}
-            {!inquirySource ? (
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                        <Button
-                            id={`${prefix}-add`}
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={rows.length >= 100}
-                            onClick={() => {
-                                setPastePanelOpen(false)
-                                setEditingState({ mode: "add" })
-                            }}
-                        >
-                            <PlusIcon
-                                data-icon="inline-start"
-                                className="size-3.5"
-                                aria-hidden="true"
-                            />
-                            添加收货地址
-                        </Button>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                    <Button
+                        id={`${prefix}-add`}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={rows.length >= 100}
+                        onClick={() => {
+                            setPastePanelOpen(false)
+                            setEditingState({ mode: "add" })
+                        }}
+                    >
+                        <PlusIcon
+                            data-icon="inline-start"
+                            className="size-3.5"
+                            aria-hidden="true"
+                        />
+                        添加收货地址
+                    </Button>
 
-                        {reusablePool.length > 0 ? (
-                            <Popover
-                                open={reusePopoverOpen}
-                                onOpenChange={setReusePopoverOpen}
-                            >
-                                <PopoverTrigger
-                                    id={`${prefix}-reuse-pool`}
-                                    render={
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            className={
-                                                detailWorkspaceStyles.subtleButton
-                                            }
-                                        />
-                                    }
-                                    disabled={rows.length >= 100}
-                                >
-                                    <CopyIcon
-                                        data-icon="inline-start"
-                                        className="size-3.5"
-                                        aria-hidden="true"
+                    {reusablePool.length > 0 ? (
+                        <Popover
+                            open={reusePopoverOpen}
+                            onOpenChange={setReusePopoverOpen}
+                        >
+                            <PopoverTrigger
+                                id={`${prefix}-reuse-pool`}
+                                render={
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className={
+                                            detailWorkspaceStyles.subtleButton
+                                        }
                                     />
-                                    从本单地址库选用（{reusablePool.length}）
-                                </PopoverTrigger>
-                                <PopoverContent
-                                    align="start"
-                                    className="w-96 max-w-[calc(100vw-2rem)]"
-                                >
-                                    <PopoverTitle>
-                                        本单已有收货地址
-                                    </PopoverTitle>
-                                    <PopoverDescription>
-                                        点击直接添加到当前商品，默认填入剩余待分数量。
-                                    </PopoverDescription>
-                                    <div className="max-h-64 space-y-1 overflow-y-auto pt-1">
-                                        {reusablePool.map((group) => (
-                                            <button
-                                                key={group.key}
-                                                id={`${prefix}-reuse-${toAutomationIdSegment(group.key).slice(0, 32)}`}
-                                                type="button"
-                                                onClick={() =>
-                                                    handleReuseFromPool(group)
-                                                }
-                                                className="flex w-full cursor-pointer items-start justify-between gap-2 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
-                                            >
-                                                <div className="min-w-0 space-y-0.5">
-                                                    <p className="truncate text-body-compact font-medium text-foreground">
-                                                        {group.recipient}
-                                                        <span className="num ml-2 font-normal text-muted-foreground">
-                                                            {group.phone}
-                                                        </span>
-                                                    </p>
-                                                    <p className="truncate text-xs text-muted-foreground">
-                                                        <RegionName
-                                                            code={
-                                                                group.region_code
-                                                            }
-                                                        />
-                                                        {group.address}
-                                                    </p>
-                                                </div>
-                                                <span className="num shrink-0 rounded-sm bg-muted/80 px-1.5 py-0.5 text-tiny text-muted-foreground">
-                                                    {group.lineCount} 项
-                                                </span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </PopoverContent>
-                            </Popover>
-                        ) : null}
-
-                        <Button
-                            id={`${prefix}-paste-toggle`}
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            aria-expanded={pastePanelOpen}
-                            className={detailWorkspaceStyles.subtleButton}
-                            onClick={() => {
-                                setEditingState(null)
-                                setPastePanelOpen((v) => !v)
-                            }}
-                        >
-                            <ClipboardPasteIcon
-                                data-icon="inline-start"
-                                className="size-3.5"
-                                aria-hidden="true"
-                            />
-                            批量粘贴多行
-                        </Button>
-                    </div>
-
-                    {rows.length > 0 ? (
-                        <Button
-                            id={`${prefix}-clear-all`}
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className={detailWorkspaceStyles.quietDangerButton}
-                            onClick={() => {
-                                updateAllocations([])
-                                setEditingState(null)
-                            }}
-                        >
-                            清空本商品地址
-                        </Button>
+                                }
+                                disabled={rows.length >= 100}
+                            >
+                                <CopyIcon
+                                    data-icon="inline-start"
+                                    className="size-3.5"
+                                    aria-hidden="true"
+                                />
+                                从本单地址库选用（{reusablePool.length}）
+                            </PopoverTrigger>
+                            <PopoverContent
+                                align="start"
+                                className="w-96 max-w-[calc(100vw-2rem)]"
+                            >
+                                <PopoverTitle>本单已有收货地址</PopoverTitle>
+                                <PopoverDescription>
+                                    点击直接添加到当前商品，默认填入剩余待分数量。
+                                </PopoverDescription>
+                                <div className="max-h-64 space-y-1 overflow-y-auto pt-1">
+                                    {reusablePool.map((group) => (
+                                        <button
+                                            key={group.key}
+                                            id={`${prefix}-reuse-${toAutomationIdSegment(group.key).slice(0, 32)}`}
+                                            type="button"
+                                            onClick={() =>
+                                                handleReuseFromPool(group)
+                                            }
+                                            className="flex w-full cursor-pointer items-start justify-between gap-2 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+                                        >
+                                            <div className="min-w-0 space-y-0.5">
+                                                <p className="truncate text-body-compact font-medium text-foreground">
+                                                    {group.recipient}
+                                                    <span className="num ml-2 font-normal text-muted-foreground">
+                                                        {group.phone}
+                                                    </span>
+                                                </p>
+                                                <p className="truncate text-xs text-muted-foreground">
+                                                    <RegionName
+                                                        code={group.region_code}
+                                                    />
+                                                    {group.address}
+                                                </p>
+                                            </div>
+                                            <span className="num shrink-0 rounded-sm bg-muted/80 px-1.5 py-0.5 text-tiny text-muted-foreground">
+                                                {group.lineCount} 项
+                                            </span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </PopoverContent>
+                        </Popover>
                     ) : null}
+
+                    <Button
+                        id={`${prefix}-paste-toggle`}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        aria-expanded={pastePanelOpen}
+                        className={detailWorkspaceStyles.subtleButton}
+                        onClick={() => {
+                            setEditingState(null)
+                            setPastePanelOpen((v) => !v)
+                        }}
+                    >
+                        <ClipboardPasteIcon
+                            data-icon="inline-start"
+                            className="size-3.5"
+                            aria-hidden="true"
+                        />
+                        批量粘贴多行
+                    </Button>
                 </div>
-            ) : (
-                <p className="text-xs text-muted-foreground">
-                    询价地址资料已固定，可调整本次承担数量或移除暂不转单的地址；变更收件信息请返回询价确认。
-                </p>
-            )}
+
+                {rows.length > 0 ? (
+                    <Button
+                        id={`${prefix}-clear-all`}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={detailWorkspaceStyles.quietDangerButton}
+                        onClick={() => {
+                            updateAllocations([])
+                            setEditingState(null)
+                        }}
+                    >
+                        清空本商品地址
+                    </Button>
+                ) : null}
+            </div>
 
             {/* 内联新增/编辑单个地址面板 */}
-            {!inquirySource && editingState ? (
+            {editingState ? (
                 <SingleAddressInlineForm
                     key={
                         editingState.mode === "edit"
@@ -813,7 +767,7 @@ function ProductDeliveryPane({
             ) : null}
 
             {/* 内联批量粘贴多行 Excel 地址（针对当前单个商品） */}
-            {!inquirySource && pastePanelOpen ? (
+            {pastePanelOpen ? (
                 <SingleProductBulkPastePanel
                     prefix={prefix}
                     line={line}
@@ -862,9 +816,7 @@ function ProductDeliveryPane({
                         该商品暂未设置收货地址
                     </p>
                     <p className="max-w-sm text-xs text-muted-foreground">
-                        {inquirySource
-                            ? "按原询价交付要求办理，当前无实物配送地址。"
-                            : "可在建单时直接添加或复用本单地址，也可留空在履约前补充。"}
+                        可在建单时直接添加或复用本单地址，也可留空在履约前补充。
                     </p>
                 </div>
             ) : (
@@ -896,17 +848,7 @@ function ProductDeliveryPane({
                                 </TableRow>
                             ) : (
                                 visibleRows.map(({ row, index }) => {
-                                    const inquiryBinding = inquirySource
-                                        ? bindings.find((item) =>
-                                              sameAddressIdentity(
-                                                  item.delivery,
-                                                  row,
-                                              ),
-                                          )
-                                        : undefined
-                                    const rowPrefix = inquiryBinding
-                                        ? `inquiry-sales-delivery-${toAutomationIdSegment(line.rowKey)}-${toAutomationIdSegment(inquiryBinding.allocation_id)}`
-                                        : `${prefix}-addr-${index + 1}`
+                                    const rowPrefix = `${prefix}-addr-${index + 1}`
                                     const hint = coverageHint(
                                         line.sku,
                                         row.region_code,
@@ -1007,8 +949,7 @@ function ProductDeliveryPane({
                                                             </span>
                                                         ) : null}
                                                     </div>
-                                                    {remaining &&
-                                                    !inquirySource ? (
+                                                    {remaining ? (
                                                         <button
                                                             id={`${rowPrefix}-fill-remaining`}
                                                             type="button"
@@ -1026,36 +967,31 @@ function ProductDeliveryPane({
                                             </TableCell>
                                             <TableCell className="py-2.5 text-right align-top">
                                                 <div className="flex items-center justify-end gap-0.5">
-                                                    {!inquirySource ? (
-                                                        <Button
-                                                            id={`${rowPrefix}-edit`}
-                                                            type="button"
-                                                            variant="ghost"
-                                                            size="icon-sm"
-                                                            aria-label={`编辑 ${row.recipient || `地址 ${index + 1}`}`}
-                                                            className={
-                                                                detailWorkspaceStyles.quietButton
-                                                            }
-                                                            onClick={() => {
-                                                                setPastePanelOpen(
-                                                                    false,
-                                                                )
-                                                                setEditingState(
-                                                                    {
-                                                                        mode: "edit",
-                                                                        index,
-                                                                        initial:
-                                                                            row,
-                                                                    },
-                                                                )
-                                                            }}
-                                                        >
-                                                            <PencilIcon
-                                                                className="size-3.5"
-                                                                aria-hidden="true"
-                                                            />
-                                                        </Button>
-                                                    ) : null}
+                                                    <Button
+                                                        id={`${rowPrefix}-edit`}
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon-sm"
+                                                        aria-label={`编辑 ${row.recipient || `地址 ${index + 1}`}`}
+                                                        className={
+                                                            detailWorkspaceStyles.quietButton
+                                                        }
+                                                        onClick={() => {
+                                                            setPastePanelOpen(
+                                                                false,
+                                                            )
+                                                            setEditingState({
+                                                                mode: "edit",
+                                                                index,
+                                                                initial: row,
+                                                            })
+                                                        }}
+                                                    >
+                                                        <PencilIcon
+                                                            className="size-3.5"
+                                                            aria-hidden="true"
+                                                        />
+                                                    </Button>
                                                     <Button
                                                         id={`${rowPrefix}-remove`}
                                                         type="button"

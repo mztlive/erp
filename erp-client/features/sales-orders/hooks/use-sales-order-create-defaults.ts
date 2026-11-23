@@ -1,7 +1,10 @@
 "use client"
 
 import * as React from "react"
-import type { InquirySalesBasis } from "../api/inquiry-basis"
+import {
+    inquiryDeliveryQuantity,
+    type InquirySalesBasis,
+} from "../api/inquiry-basis"
 import type { SalesOrderSelectionBasis } from "@/features/sales-orders/api/selection-basis"
 
 import type { SalesOrderDraftResumeData } from "@/features/sales-orders/api/sales-orders"
@@ -49,6 +52,11 @@ export function useSalesOrderCreateDefaults({
                     )
                     return {
                         ...line,
+                        quantity: source?.deliveryAllocations?.length
+                            ? inquiryDeliveryQuantity(
+                                  line.deliveryAllocations ?? [],
+                              )
+                            : line.quantity,
                         unitPriceGross:
                             line.pricingMode === "GIFT" ||
                             line.unitPriceGross.trim()

@@ -71,6 +71,7 @@ import { useSalesOrderCreateDefaults } from "@/features/sales-orders/hooks/use-s
 import { useSalesOrderCreateSubmission } from "@/features/sales-orders/hooks/use-sales-order-create-submission"
 import { useWorkspaceDirtyState } from "@/lib/workspace-form-guard"
 import { useSalesLineProcurementResponsibilities } from "@/features/sales-orders/hooks/use-sales-line-procurement-responsibilities"
+import { useSalesLineImagesQuery } from "@/features/sales-orders/hooks/use-sales-line-images-query"
 import { SalesOrderCreateAlerts } from "@/features/sales-orders/components/sales-order-create-alerts"
 import { SalesOrderCreateContractSection } from "@/features/sales-orders/components/sales-order-create-contract-section"
 import { SalesOrderContractPickerDialog } from "./sales-order-contract-picker-dialog"
@@ -436,6 +437,14 @@ export function SalesOrderCreateForm({
         orderBasis === "evidence" ? selectedCustomerId : "",
     )
     const lineItems = useSelector(form.store, (state) => state.values.lineItems)
+    const skuDetails = useSalesLineImagesQuery(
+        nature === "physical_service" &&
+            !entryOpen &&
+            !uploadOpen &&
+            !waitingForContract
+            ? lineItems.map((line) => line.sku)
+            : [],
+    )
     const procurementResponsibilityQuery =
         useSalesLineProcurementResponsibilities({ nature, lines: lineItems })
     procurementResponsibilityRef.current = {
@@ -1256,6 +1265,7 @@ export function SalesOrderCreateForm({
                             <SalesOrderCreateLineItemsSection
                                 inquirySource={inquirySource}
                                 inquiryLocked={Boolean(inquirySource)}
+                                skuDetails={skuDetails}
                                 draftId={initialDraft?.salesOrderId}
                                 form={form}
                                 procurementOwners={
@@ -1377,7 +1387,10 @@ export function SalesOrderCreateForm({
                     open={submission.submitConfirmOpen}
                     onOpenChange={submission.setSubmitConfirmOpen}
                     pending={submission.isSubmitting}
-                    snapshot={buildSalesOrderSubmitSnapshot(form.state.values)}
+                    snapshot={buildSalesOrderSubmitSnapshot(
+                        form.state.values,
+                        inquirySource ? skuDetails.unitNames : undefined,
+                    )}
                     resubmitting={
                         initialDraft?.rejected ||
                         submission.approval?.instance?.status === "REJECTED"

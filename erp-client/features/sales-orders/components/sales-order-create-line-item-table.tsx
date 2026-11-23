@@ -54,7 +54,7 @@ import {
 import { toast } from "@/components/ui/toast"
 import { useRegionIndex } from "@/features/regions"
 import { buildSalesOrderCreateLineItemColumns } from "@/features/sales-orders/components/sales-order-create-line-item-columns"
-import { useSalesLineImagesQuery } from "@/features/sales-orders/hooks/use-sales-line-images-query"
+import type { SalesLineSkuDetails } from "@/features/sales-orders/hooks/use-sales-line-images-query"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
 import type {
     SalesLineProcurementResponsibility,
@@ -90,7 +90,9 @@ type RemovedEntry = {
 
 export type SalesOrderCreateLineItemTableProps = {
     inquiryLocked?: boolean
+    inquiryDeliveryLineKeys?: ReadonlySet<string>
     form: SalesOrderCreateFormApi
+    skuDetails: SalesLineSkuDetails
     procurementOwners?: ReadonlyMap<string, SalesLineProcurementResponsibility>
     onPickSku?: (rowIndex: number) => void
     onAddProducts?: () => void
@@ -106,7 +108,9 @@ const NOOP_COVERAGE = (): CoverageCode => "NONE"
 
 export function SalesOrderCreateLineItemTable({
     form,
+    skuDetails,
     inquiryLocked = false,
+    inquiryDeliveryLineKeys,
     procurementOwners,
     onPickSku,
     onAddProducts,
@@ -143,16 +147,12 @@ export function SalesOrderCreateLineItemTable({
     const [batchDueDateOpen, setBatchDueDateOpen] = React.useState(false)
     const [batchDueDate, setBatchDueDate] = React.useState("")
 
-    const skuImages = useSalesLineImagesQuery(
-        nature === "physical_service" ? lines.map((line) => line.sku) : [],
-    )
-
     // 方案带入的行尚无商品池参考价；仅补齐同一修订，后台刷新不覆盖已编辑单价。
     React.useEffect(() => {
         if (inquiryLocked || nature !== "physical_service") return
         form.getFieldValue("lineItems").forEach((line, index) => {
             if (line.referencePrices) return
-            const reference = skuImages.references.get(line.skuRevisionId)
+            const reference = skuDetails.references.get(line.skuRevisionId)
             if (!reference || reference.skuId !== line.sku) return
             form.setFieldValue(`lineItems[${index}].referencePrices`, reference)
             if (
@@ -169,7 +169,7 @@ export function SalesOrderCreateLineItemTable({
                 )
             }
         })
-    }, [form, inquiryLocked, nature, skuImages.references])
+    }, [form, inquiryLocked, nature, skuDetails.references])
 
     // 清理已删除行的选中态
     React.useEffect(() => {
@@ -344,7 +344,7 @@ export function SalesOrderCreateLineItemTable({
                             onPickSku,
                             procurementStatus,
                             inquiryLocked,
-                            skuImages.images,
+                            skuDetails.images,
                         )
                         return (
                             <>
@@ -563,12 +563,16 @@ export function SalesOrderCreateLineItemTable({
 
     return (
         <div className="space-y-2.5">
-            {skuImages.error ? (
+            {skuDetails.error ? (
                 <BusinessFailureState
                     id="sales-orders-create-line-images"
-                    title="商品图片资料读取失败"
-                    error={skuImages.error}
-                    onRetry={() => void skuImages.refetch()}
+                    title={
+                        inquiryLocked
+                            ? "商品图片和单位资料读取失败"
+                            : "商品图片资料读取失败"
+                    }
+                    error={skuDetails.error}
+                    onRetry={() => void skuDetails.refetch()}
                 />
             ) : null}
 
@@ -1020,8 +1024,20 @@ export function SalesOrderCreateLineItemTable({
                                     rowIndex={rowIndex}
                                     taxRatePercent={taxRatePercent}
                                     inquiryLocked={inquiryLocked}
+                                    displayUnit={
+                                        inquiryLocked
+                                            ? (skuDetails.unitNames.get(
+                                                  line.unit,
+                                              ) ?? "")
+                                            : line.unit
+                                    }
+                                    quantityFromDelivery={
+                                        inquiryDeliveryLineKeys?.has(
+                                            line.rowKey,
+                                        ) ?? false
+                                    }
                                     selected={selectedKeys.has(line.rowKey)}
-                                    imageAssetId={skuImages.images.get(
+                                    imageAssetId={skuDetails.images.get(
                                         line.sku,
                                     )}
                                     unifiedAddressKey={unifiedAddressKey}
