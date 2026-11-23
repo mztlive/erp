@@ -497,6 +497,7 @@ export function DetailWorkspaceSection({
             )}
         >
             <div
+                data-section-width={width}
                 className={cn(
                     "min-w-0 space-y-4",
                     width === "form" && "max-w-4xl",
@@ -577,7 +578,10 @@ export function DetailWorkspaceBody({
             ) : null}
 
             {sidebar != null ? (
-                <div className="grid items-start gap-x-8 gap-y-0 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_320px] 2xl:grid-cols-[minmax(0,1fr)_360px]">
+                <div
+                    data-slot="detail-workspace-split"
+                    className="grid items-start gap-x-6 gap-y-0 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_320px] 2xl:grid-cols-[minmax(0,1fr)_360px]"
+                >
                     <div className="min-w-0">
                         {alerts ? (
                             <div

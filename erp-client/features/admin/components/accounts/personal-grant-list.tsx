@@ -112,10 +112,10 @@ export function PersonalGrantList({
                             <div
                                 key={grant.key}
                                 className={cn(
-                                    "min-w-0 rounded-lg border",
+                                    "min-w-0 rounded-lg border bg-card transition-colors",
                                     expanded
-                                        ? "border-foreground/25"
-                                        : "border-grid",
+                                        ? "border-primary/40 ring-1 ring-primary/10"
+                                        : "border-border/80",
                                 )}
                             >
                                 <div className="flex items-start justify-between gap-2 p-3">

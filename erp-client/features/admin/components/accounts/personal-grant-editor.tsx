@@ -307,10 +307,10 @@ export function PersonalGrantEditor({
                                     key={mode}
                                     htmlFor={`${idPrefix}-mode-${mode}`}
                                     className={cn(
-                                        "flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors",
+                                        "flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-xs transition-colors",
                                         value.mode === mode
-                                            ? "border-foreground/50 bg-accent text-accent-foreground"
-                                            : "border-input bg-background hover:bg-muted/50",
+                                            ? "border-primary/40 bg-sidebar-accent/75 font-medium text-sidebar-accent-foreground"
+                                            : "border-input bg-card hover:bg-muted/50",
                                     )}
                                 >
                                     <RadioGroupItem

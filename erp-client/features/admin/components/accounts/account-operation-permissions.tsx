@@ -1,19 +1,30 @@
 "use client"
 
 import * as React from "react"
-import { SearchIcon } from "lucide-react"
+import Link from "next/link"
+import {
+    ArrowUpRightIcon,
+    SearchIcon,
+    ShieldCheckIcon,
+    XIcon,
+} from "lucide-react"
 
 import {
     BusinessFailureState,
     DetailWorkspaceSection,
+    detailWorkspaceStyles,
 } from "@/components/business"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
     InputGroup,
     InputGroupAddon,
     InputGroupInput,
 } from "@/components/ui/input-group"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { PERMISSION_CATALOG } from "@/lib/permission-catalog"
+import { cn } from "@/lib/utils"
 import type { useRolesQuery } from "../../hooks/queries"
 import {
     accountPermissionGroups,
@@ -45,32 +56,48 @@ function permissionActionLabel(item: AccountPermissionItem, groupName: string) {
     return item.label
 }
 
-function PermissionGroup({ group }: { group: PermissionGroupView }) {
+function PermissionModuleRow({
+    group,
+    multiRole,
+}: {
+    group: PermissionGroupView
+    multiRole: boolean
+}) {
     return (
-        <section className="min-w-0 border-t border-border/60 py-3">
-            <div className="flex items-center justify-between gap-2">
-                <h3 className="min-w-0 truncate font-medium">{group.name}</h3>
-                <span className="num shrink-0 text-xs text-muted-foreground">
-                    {group.items.length} 项
+        <div className="grid gap-x-6 gap-y-2.5 py-3.5 md:grid-cols-[13rem_minmax(0,1fr)] md:items-baseline">
+            <div className="flex min-w-0 items-baseline justify-between gap-2 md:block">
+                <h3 className="truncate font-medium text-foreground">
+                    {group.name}
+                </h3>
+                <span className="num shrink-0 text-xs text-muted-foreground md:mt-0.5 md:block">
+                    {group.items.length} 项权限
                 </span>
             </div>
-            <ul className="mt-3 flex flex-wrap gap-1.5">
-                {group.items.map((item) => (
-                    <li key={item.code} className="min-w-0">
-                        <span
-                            title={`${item.label} · 来源：${item.sources
-                                .map((role) => role.name)
-                                .join("、")}`}
-                            className="inline-flex max-w-full items-center rounded-md bg-muted px-2 py-1 text-xs text-foreground"
-                        >
-                            <span className="truncate">
-                                {permissionActionLabel(item, group.name)}
+            <ul className="flex min-w-0 flex-wrap gap-1.5">
+                {group.items.map((item) => {
+                    const sourceText = item.sources
+                        .map((role) => role.name)
+                        .join("、")
+                    return (
+                        <li key={item.code} className="min-w-0">
+                            <span
+                                title={`${item.label} · 来源角色：${sourceText}`}
+                                className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border/70 bg-surface-sunken px-2.5 py-1 text-xs text-foreground"
+                            >
+                                <span className="truncate">
+                                    {permissionActionLabel(item, group.name)}
+                                </span>
+                                {multiRole && item.sources.length > 1 ? (
+                                    <span className="num shrink-0 text-tiny text-muted-foreground">
+                                        {item.sources.length}
+                                    </span>
+                                ) : null}
                             </span>
-                        </span>
-                    </li>
-                ))}
+                        </li>
+                    )
+                })}
             </ul>
-        </section>
+        </div>
     )
 }
 
@@ -78,52 +105,78 @@ export function AccountOperationPermissions({
     account,
     roles,
     canRead,
+    canEditRoles = false,
 }: {
     account: AdminAccount
     roles: ReturnType<typeof useRolesQuery>
     canRead: boolean
+    canEditRoles?: boolean
 }) {
     const [search, setSearch] = React.useState("")
-    const preview = accountPermissionGroups(account, roles.data ?? [])
+    const [selectedRoleId, setSelectedRoleId] = React.useState<string>("all")
+
+    const preview = React.useMemo(
+        () => accountPermissionGroups(account, roles.data ?? []),
+        [account, roles.data],
+    )
+
+    const effectiveRoleId =
+        selectedRoleId !== "all" &&
+        preview.assigned.some((role) => role.id === selectedRoleId)
+            ? selectedRoleId
+            : "all"
+
     const keyword = search.trim().toLocaleLowerCase()
-    const groups = preview.groups
-        .map((group) => ({
-            ...group,
-            items: group.items.filter((item) =>
-                [
-                    group.name,
-                    item.label,
-                    ...item.sources.map((role) => role.name),
-                ]
-                    .join(" ")
-                    .toLocaleLowerCase()
-                    .includes(keyword),
-            ),
-        }))
-        .filter((group) => group.items.length > 0)
-        .sort((left, right) => groupRank(left.name) - groupRank(right.name))
-    const groupGridClassName =
-        groups.length === 1
-            ? "grid gap-4"
-            : groups.length === 2
-              ? "grid items-start gap-4 md:grid-cols-2"
-              : "grid items-start gap-4 md:grid-cols-2 2xl:grid-cols-3"
+    const groups = React.useMemo(() => {
+        return preview.groups
+            .map((group) => ({
+                ...group,
+                items: group.items.filter((item) => {
+                    if (
+                        effectiveRoleId !== "all" &&
+                        !item.sources.some(
+                            (role) => role.id === effectiveRoleId,
+                        )
+                    ) {
+                        return false
+                    }
+                    if (!keyword) return true
+                    return [
+                        group.name,
+                        item.label,
+                        ...item.sources.map((role) => role.name),
+                    ]
+                        .join(" ")
+                        .toLocaleLowerCase()
+                        .includes(keyword)
+                }),
+            }))
+            .filter((group) => group.items.length > 0)
+            .sort((left, right) => groupRank(left.name) - groupRank(right.name))
+    }, [effectiveRoleId, keyword, preview.groups])
+
+    const visibleCount = groups.reduce(
+        (sum, group) => sum + group.items.length,
+        0,
+    )
+    const hasFilter = Boolean(keyword) || effectiveRoleId !== "all"
+    const multiRole = preview.assigned.length > 1
 
     return (
         <DetailWorkspaceSection
-            title="已有操作权限"
+            title="操作权限"
             headingId="account-operation-permissions-title"
-            contentClassName="text-body-compact"
+            width="full"
             badge={
-                canRead && preview.permissionCount > 0 ? (
-                    <Badge variant="secondary">
+                canRead && roles.isSuccess && preview.permissionCount > 0 ? (
+                    <Badge variant="secondary" className="num">
                         {preview.allPermissions
-                            ? "全部"
+                            ? "全部权限"
                             : `${preview.permissionCount} 项`}
                     </Badge>
                 ) : null
             }
-            subtitle="按已保存角色合并，权限按业务模块分组展示。"
+            subtitle="按已保存角色合并去重，悬停具体权限可查看授予来源角色。"
             actions={
                 canRead && roles.isSuccess && preview.permissionCount > 0 ? (
                     <InputGroup className="w-full sm:w-72">
@@ -134,7 +187,7 @@ export function AccountOperationPermissions({
                             id="account-operation-permissions-search"
                             type="search"
                             aria-label="搜索已有操作权限"
-                            placeholder="搜索业务、操作或角色"
+                            placeholder="搜索业务模块、操作或角色"
                             value={search}
                             onChange={(event) => setSearch(event.target.value)}
                         />
@@ -142,73 +195,238 @@ export function AccountOperationPermissions({
                 ) : null
             }
         >
-            {canRead && preview.assigned.length > 0 ? (
-                <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                    <span className="mr-1 text-muted-foreground">来源角色</span>
-                    {preview.assigned.map((role) => (
-                        <span
-                            key={role.id}
-                            className="rounded-md bg-muted px-2 py-1 font-medium text-foreground"
-                        >
-                            {role.name}
-                        </span>
-                    ))}
-                </div>
-            ) : null}
-
             {!canRead ? (
-                <p>没有查看角色权限的权限，请联系管理员。</p>
+                <p className="text-muted-foreground">
+                    没有查看角色权限的权限，请联系管理员。
+                </p>
             ) : roles.isError ? (
                 <BusinessFailureState
                     id="account-operation-permissions-retry"
                     error={roles.error}
                     onRetry={() => void roles.refetch()}
                 />
-            ) : roles.isPending ? (
-                <p role="status">正在读取操作权限…</p>
+            ) : roles.isPending && !roles.data ? (
+                <div className="space-y-3" aria-busy="true">
+                    <div className="h-9 w-72 animate-pulse rounded-md bg-muted" />
+                    <div className="h-14 animate-pulse rounded-md bg-muted/65" />
+                    <div className="h-14 animate-pulse rounded-md bg-muted/50" />
+                </div>
             ) : (
-                <>
-                    {preview.missingRoleCount > 0 ? (
-                        <p role="status" className="text-xs text-warning">
-                            有 {preview.missingRoleCount}{" "}
-                            个角色信息未返回，以下仅展示已读取的权限，请联系管理员核对。
-                        </p>
+                <div className="space-y-4">
+                    {preview.assigned.length > 0 ? (
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div
+                                role="group"
+                                aria-label="按来源角色筛选"
+                                className="flex flex-wrap items-center gap-1.5"
+                            >
+                                <span className="mr-1 text-xs text-muted-foreground">
+                                    来源角色
+                                </span>
+                                {multiRole ? (
+                                    <>
+                                        <button
+                                            id="account-operation-permissions-role-all"
+                                            type="button"
+                                            aria-pressed={
+                                                effectiveRoleId === "all"
+                                            }
+                                            onClick={() =>
+                                                setSelectedRoleId("all")
+                                            }
+                                            className={cn(
+                                                "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-primary",
+                                                effectiveRoleId === "all"
+                                                    ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                                                    : "bg-muted/65 text-muted-foreground hover:bg-muted hover:text-foreground",
+                                            )}
+                                        >
+                                            <span>全部角色</span>
+                                            <span className="num text-tiny opacity-80">
+                                                {preview.allPermissions
+                                                    ? "全部"
+                                                    : preview.permissionCount}
+                                            </span>
+                                        </button>
+                                        {preview.assigned.map((role) => {
+                                            const active =
+                                                effectiveRoleId === role.id
+                                            const count =
+                                                role.permissions.includes(
+                                                    "*:*",
+                                                ) ||
+                                                role.permissions.includes("*")
+                                                    ? "全部"
+                                                    : new Set(role.permissions)
+                                                          .size
+                                            return (
+                                                <button
+                                                    key={role.id}
+                                                    id={`account-operation-permissions-role-${toAutomationIdSegment(role.id)}`}
+                                                    type="button"
+                                                    aria-pressed={active}
+                                                    onClick={() =>
+                                                        setSelectedRoleId(
+                                                            active
+                                                                ? "all"
+                                                                : role.id,
+                                                        )
+                                                    }
+                                                    className={cn(
+                                                        "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-primary",
+                                                        active
+                                                            ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                                                            : "bg-muted/65 text-muted-foreground hover:bg-muted hover:text-foreground",
+                                                    )}
+                                                >
+                                                    <span>{role.name}</span>
+                                                    <span className="num text-tiny opacity-80">
+                                                        {count}
+                                                    </span>
+                                                </button>
+                                            )
+                                        })}
+                                    </>
+                                ) : (
+                                    preview.assigned.map((role) =>
+                                        canEditRoles ? (
+                                            <Link
+                                                key={role.id}
+                                                id={`account-operation-permissions-source-${toAutomationIdSegment(role.id)}`}
+                                                href={`/system/roles/${encodeURIComponent(role.id)}/edit?returnTo=${encodeURIComponent(`/system/accounts/${account.id}`)}`}
+                                                className="inline-flex h-7 items-center gap-1 rounded-md bg-muted/65 px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-sidebar-accent/70 hover:text-primary"
+                                            >
+                                                <span>{role.name}</span>
+                                                <ArrowUpRightIcon
+                                                    className="size-3 text-muted-foreground"
+                                                    aria-hidden="true"
+                                                />
+                                            </Link>
+                                        ) : (
+                                            <span
+                                                key={role.id}
+                                                className="inline-flex h-7 items-center rounded-md bg-muted/65 px-2.5 text-xs font-medium text-foreground"
+                                            >
+                                                {role.name}
+                                            </span>
+                                        ),
+                                    )
+                                )}
+                            </div>
+                            {hasFilter ? (
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span className="num">
+                                        匹配 {visibleCount} 项（{groups.length}{" "}
+                                        个模块）
+                                    </span>
+                                    <Button
+                                        id="account-operation-permissions-clear-filter"
+                                        type="button"
+                                        variant="ghost"
+                                        size="xs"
+                                        className={
+                                            detailWorkspaceStyles.quietButton
+                                        }
+                                        onClick={() => {
+                                            setSearch("")
+                                            setSelectedRoleId("all")
+                                        }}
+                                    >
+                                        <XIcon
+                                            data-icon="inline-start"
+                                            aria-hidden="true"
+                                        />
+                                        重置筛选
+                                    </Button>
+                                </div>
+                            ) : null}
+                        </div>
                     ) : null}
+
+                    {preview.missingRoleCount > 0 ? (
+                        <Alert variant="warning">
+                            <AlertTitle>部分角色信息未返回</AlertTitle>
+                            <AlertDescription>
+                                有 {preview.missingRoleCount}{" "}
+                                个角色信息未返回，以下仅展示已读取的权限，请联系管理员核对。
+                            </AlertDescription>
+                        </Alert>
+                    ) : null}
+
+                    {preview.allPermissions ? (
+                        <Alert variant="info">
+                            <ShieldCheckIcon aria-hidden="true" />
+                            <AlertTitle>拥有全部模块操作权限</AlertTitle>
+                            <AlertDescription>
+                                由「
+                                {preview.assigned
+                                    .filter(
+                                        (role) =>
+                                            role.permissions.includes("*:*") ||
+                                            role.permissions.includes("*"),
+                                    )
+                                    .map((role) => role.name)
+                                    .join("、")}
+                                」授予全部功能操作权限；具体可查看和处理的业务单据仍遵循「数据范围」与审批条件。
+                            </AlertDescription>
+                        </Alert>
+                    ) : null}
+
                     {preview.permissionCount > 0 ? (
                         <>
-                            {groups.length ? (
-                                <div className={groupGridClassName}>
+                            {groups.length > 0 ? (
+                                <div className="divide-y divide-border/60 border-y border-border/60">
                                     {groups.map((group) => (
-                                        <PermissionGroup
+                                        <PermissionModuleRow
                                             key={group.name}
                                             group={group}
+                                            multiRole={
+                                                multiRole &&
+                                                effectiveRoleId === "all"
+                                            }
                                         />
                                     ))}
                                 </div>
                             ) : (
-                                <p
-                                    role="status"
-                                    className="py-6 text-xs text-muted-foreground"
-                                >
-                                    {keyword
-                                        ? "没有匹配的权限，请修改搜索内容。"
-                                        : "尚未读取到可展示的权限。"}
-                                </p>
+                                <div className="flex flex-col items-start gap-2.5 border-y border-border/60 py-8">
+                                    <p
+                                        role="status"
+                                        className="text-body-compact text-muted-foreground"
+                                    >
+                                        {hasFilter
+                                            ? "没有符合当前筛选条件的操作权限。"
+                                            : "尚未读取到可展示的权限。"}
+                                    </p>
+                                    {hasFilter ? (
+                                        <Button
+                                            id="account-operation-permissions-empty-clear"
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                                setSearch("")
+                                                setSelectedRoleId("all")
+                                            }}
+                                        >
+                                            清除筛选
+                                        </Button>
+                                    ) : null}
+                                </div>
                             )}
                             <p className="text-xs text-muted-foreground">
-                                可访问的数据见“数据范围”；具体操作仍需满足业务及审批条件。
+                                可访问的数据见「数据范围」；具体操作仍需满足业务及审批条件。
                             </p>
                         </>
                     ) : (
-                        <p className="text-muted-foreground">
+                        <p className="border-y border-border/60 py-8 text-muted-foreground">
                             {preview.missingRoleCount > 0
                                 ? "尚未读取到操作权限，当前无法确认完整授权。"
-                                : account.role_ids.length
+                                : account.role_ids.length > 0
                                   ? "当前角色尚未授予操作权限。"
                                   : "尚未分配角色，暂无操作权限。"}
                         </p>
                     )}
-                </>
+                </div>
             )}
         </DetailWorkspaceSection>
     )

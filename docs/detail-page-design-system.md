@@ -19,9 +19,9 @@
 2. **身份头 + 分区 Tabs 一体化吸顶**
    - `DetailWorkspaceChrome` 将对象缩略图、标题、主状态、元信息、操作按钮与底部分区 Tabs 整合为一块纯白通栏吸顶头部（`sticky top-0 z-20 bg-card border-b border-border/60`）。
    - 静止态零阴影，仅在页面向下滚动产生遮挡时（`data-scrolled="true"`）显现柔和底影（`0 2px 8px -2px rgb(31 35 41 / 0.06)`），确保长表单或宽 SKU 表滚动时「保存更新」等主操作始终触手可及。
-3. **表单限宽保舒适，表格全宽保密度**
+3. **单栏表单限宽保舒适，双栏主列贴齐竖细线，表格全宽保密度**
    - `DetailWorkspaceSection` 提供两档语义宽度：
-     - `width="form"`（`max-w-4xl`，约 `896px`）：用于基础资料表单、版本时间线等阅读/录入块，杜绝 1440px 宽屏下出现 1100px 超长空白输入框；
+     - `width="form"`（单栏下 `max-w-4xl`，约 `896px`）：用于单栏工作面的基础资料表单、版本时间线等阅读/录入块，杜绝 1440px 宽屏下出现 1100px 超长空白输入框；**在带右侧栏的双栏工作面（`[data-slot="detail-workspace-split"]`）中，主列已由右侧栏与 `1px` 竖细线收束，`width="form"` 自动解除 `max-w-4xl` 截断并保持竖线两侧对称 `24px` 留白，杜绝主列与竖线间出现断层白带**；
      - `width="full"`（100% 铺满）：用于 SKU 价格矩阵、单据行项目表、图片画廊等宽表/多列内容。
 4. **标签克制退后，数据与操作成为主角，保存按需浮现**
    - 标题严格对齐列表页的 `18px`（`text-page-title`），分区标题 `15px`（`text-section-title`），输入值/正文 `13px`（`text-body-compact`），表单字段标签收紧为 `12px`（`text-xs font-medium text-foreground/75`），彻底纠正「标签比输入值还大还黑」的倒置问题。

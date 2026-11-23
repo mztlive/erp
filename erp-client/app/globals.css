@@ -660,6 +660,14 @@
     + [data-slot="detail-workspace-section"] {
     border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
 }
+/* 双栏详情工作面中，主列边界已由右侧摘要栏与 1px 竖细线收束；
+   取消分区外层的 max-w-4xl 截断，避免主列内容与竖细线之间产生无意义死白带。 */
+.erp-detail-workspace-page
+    [data-slot="detail-workspace-split"]
+    [data-slot="detail-workspace-section"]
+    > [data-section-width="form"] {
+    max-width: none;
+}
 .erp-detail-workspace-page [data-slot="approval-surface"] {
     border-width: 0;
     border-radius: 0;

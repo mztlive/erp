@@ -22,8 +22,12 @@ import { LoadingButton } from "@/components/ui/loading-button"
 import {
     BusinessDiffPanel,
     BusinessFailureState,
+    DetailWorkspaceDirtyBadge,
     DiscardConfirmDialog,
 } from "@/components/business"
+import { XIcon } from "lucide-react"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import { roleCapabilitySummary } from "../../lib/role-summary"
 import { getErrorMessage } from "@/lib/api/errors"
 import { useAdminMutations } from "../../hooks/queries"
 import {
@@ -290,9 +294,7 @@ export function AccountProfileEditor({
                         <div className="flex flex-wrap items-center gap-2">
                             <DialogTitle>编辑账号资料</DialogTitle>
                             {changed && !completed ? (
-                                <span className="rounded-md bg-warning-soft px-2 py-1 text-xs font-medium text-warning-soft-foreground">
-                                    有未保存的修改
-                                </span>
+                                <DetailWorkspaceDirtyBadge label="有未保存的修改" />
                             ) : null}
                         </div>
                         <DialogDescription>
@@ -441,6 +443,92 @@ export function AccountProfileEditor({
                                                             至少选择一个角色。
                                                         </p>
                                                     ) : null}
+                                                </div>
+                                                <div className="space-y-2 rounded-lg border border-border/70 bg-surface-sunken/70 p-3">
+                                                    <div className="flex items-center justify-between gap-2 text-xs">
+                                                        <span className="font-medium text-muted-foreground">
+                                                            已选角色
+                                                        </span>
+                                                        <span className="num text-muted-foreground">
+                                                            {
+                                                                field.state
+                                                                    .value
+                                                                    .length
+                                                            }{" "}
+                                                            个
+                                                        </span>
+                                                    </div>
+                                                    {field.state.value.length >
+                                                    0 ? (
+                                                        <ul className="space-y-1.5">
+                                                            {field.state.value.map(
+                                                                (roleId) => {
+                                                                    const matched =
+                                                                        roleOptions.find(
+                                                                            (
+                                                                                role,
+                                                                            ) =>
+                                                                                role.id ===
+                                                                                roleId,
+                                                                        )
+                                                                    const label =
+                                                                        matched?.name ??
+                                                                        "角色信息待确认"
+                                                                    return (
+                                                                        <li
+                                                                            key={
+                                                                                roleId
+                                                                            }
+                                                                            className="flex items-start justify-between gap-2 rounded-md bg-card px-2.5 py-1.5 text-xs"
+                                                                        >
+                                                                            <div className="min-w-0 space-y-0.5">
+                                                                                <p className="truncate font-medium text-foreground">
+                                                                                    {
+                                                                                        label
+                                                                                    }
+                                                                                </p>
+                                                                                <p className="truncate text-muted-foreground">
+                                                                                    {roleCapabilitySummary(
+                                                                                        matched?.permissions,
+                                                                                    )}
+                                                                                </p>
+                                                                            </div>
+                                                                            <button
+                                                                                id={`account-profile-role-remove-${toAutomationIdSegment(roleId)}`}
+                                                                                type="button"
+                                                                                disabled={
+                                                                                    !rolesReady
+                                                                                }
+                                                                                aria-label={`移除角色 ${label}`}
+                                                                                onClick={() => {
+                                                                                    field.handleChange(
+                                                                                        field.state.value.filter(
+                                                                                            (
+                                                                                                id,
+                                                                                            ) =>
+                                                                                                id !==
+                                                                                                roleId,
+                                                                                        ),
+                                                                                    )
+                                                                                    field.handleBlur()
+                                                                                }}
+                                                                                className="mt-0.5 shrink-0 cursor-pointer rounded-sm p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-default disabled:opacity-50"
+                                                                            >
+                                                                                <XIcon
+                                                                                    className="size-3.5"
+                                                                                    aria-hidden="true"
+                                                                                />
+                                                                            </button>
+                                                                        </li>
+                                                                    )
+                                                                },
+                                                            )}
+                                                        </ul>
+                                                    ) : (
+                                                        <p className="text-xs text-muted-foreground">
+                                                            尚未选择任何角色。
+                                                        </p>
+                                                    )}
                                                 </div>
                                             </div>
                                         )}

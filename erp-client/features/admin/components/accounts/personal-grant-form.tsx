@@ -344,7 +344,7 @@ export function PersonalGrantForm({
                         void form.handleSubmit()
                     }}
                 >
-                    <div className="grid min-h-0 gap-5 overflow-y-auto p-5 md:grid-cols-[minmax(0,1fr)_13rem]">
+                    <div className="grid min-h-0 gap-5 overflow-y-auto p-5 md:grid-cols-[minmax(0,1fr)_16rem]">
                         <fieldset
                             disabled={save.isPending}
                             className="min-w-0 space-y-4"
@@ -369,7 +369,7 @@ export function PersonalGrantForm({
                             )}
                             {business && (
                                 <>
-                                    <div className="flex items-start gap-2 rounded-lg bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
+                                    <div className="flex items-start gap-2 rounded-lg border border-border/70 bg-surface-sunken px-3 py-2.5 text-xs text-muted-foreground">
                                         <LockKeyholeIcon
                                             className="mt-0.5 size-4 shrink-0"
                                             aria-hidden
@@ -404,7 +404,7 @@ export function PersonalGrantForm({
                             )}
                         </fieldset>
                         {business && (
-                            <aside className="self-start rounded-lg bg-muted/40 p-4 md:sticky md:top-0">
+                            <aside className="self-start rounded-lg border border-border/70 bg-surface-sunken/70 p-4 md:sticky md:top-0">
                                 <ProposedScopeSummary
                                     value={value}
                                     incompleteKeys={incompleteKeys}
