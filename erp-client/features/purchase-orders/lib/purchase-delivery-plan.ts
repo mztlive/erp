@@ -3,9 +3,6 @@ import { compactFixed, compareDecimal, sumFixed } from "@/lib/fixed-decimal"
 import type { PurchaseDeliveryAllocation } from "../types"
 import { purchasePaperFileNamePart } from "./purchase-paper-image"
 
-/** 在线纸质预览默认直接展开的最大地址分配条数；超过后切换为摘要与侧栏检索。 */
-export const PREVIEW_INLINE_ADDRESS_LIMIT = 8
-
 /** 单张采购单图片内联展示的最大地址分配条数；超过后主图仅展示摘要并配套导出 Excel 地址表。 */
 export const IMAGE_INLINE_ADDRESS_LIMIT = 12
 
@@ -50,18 +47,12 @@ export type PurchaseDeliveryAddressGroup = Readonly<{
     items: readonly PurchaseDeliveryAddressItem[]
 }>
 
-export type PurchaseDeliveryRegionCount = Readonly<{
-    name: string
-    count: number
-}>
-
 export type PurchaseDeliveryPlanSummary = Readonly<{
     itemGroups: readonly PurchaseDeliveryItemGroup[]
     addressGroups: readonly PurchaseDeliveryAddressGroup[]
     totalRows: number
     uniqueAddressCount: number
     unassignedLineCount: number
-    topRegions: readonly PurchaseDeliveryRegionCount[]
 }>
 
 function isActiveDeliveryLine(line: PurchaseDeliveryPlanLine): boolean {
@@ -123,7 +114,7 @@ function safeSumFixed(values: readonly string[]): string {
     }
 }
 
-/** 将采购单各行交付安排汇总为按商品分组、按收货地址分组与地区分布统计。 */
+/** 将采购单各行交付安排按商品和收货地址汇总。 */
 export function buildPurchaseDeliveryPlanSummary(
     lines: readonly PurchaseDeliveryPlanLine[],
 ): PurchaseDeliveryPlanSummary {
@@ -141,8 +132,6 @@ export function buildPurchaseDeliveryPlanSummary(
             items: PurchaseDeliveryAddressItem[]
         }
     >()
-    const regionCounts = new Map<string, number>()
-
     let totalRows = 0
     let unassignedLineCount = 0
 
@@ -198,19 +187,9 @@ export function buildPurchaseDeliveryPlanSummary(
                     fullAddress: fullDeliveryAddress(row),
                     items: [itemEntry],
                 })
-                if (regionName) {
-                    regionCounts.set(
-                        regionName,
-                        (regionCounts.get(regionName) ?? 0) + 1,
-                    )
-                }
             }
         }
     })
-
-    const topRegions = [...regionCounts.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .map(([name, count]) => ({ name, count }))
 
     return {
         itemGroups,
@@ -218,7 +197,6 @@ export function buildPurchaseDeliveryPlanSummary(
         totalRows,
         uniqueAddressCount: addressMap.size,
         unassignedLineCount,
-        topRegions,
     }
 }
 

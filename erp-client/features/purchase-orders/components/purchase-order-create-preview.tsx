@@ -251,6 +251,7 @@ export function PurchaseOrderCreatePreviewDialog({
 
                         <PaperDocumentViewport
                             fitMode="width"
+                            className="bg-transparent"
                             role="region"
                             aria-label="采购单预览"
                             tabIndex={0}

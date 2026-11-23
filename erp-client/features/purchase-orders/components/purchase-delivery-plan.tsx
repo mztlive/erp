@@ -2,9 +2,7 @@
 
 import * as React from "react"
 import {
-    ChevronDownIcon,
     ChevronRightIcon,
-    ChevronUpIcon,
     DownloadIcon,
     MapPinIcon,
     SearchIcon,
@@ -29,8 +27,6 @@ import { fullDeliveryAddress } from "@/lib/delivery-address"
 import { compactFixed } from "@/lib/fixed-decimal"
 import {
     buildPurchaseDeliveryPlanSummary,
-    IMAGE_INLINE_ADDRESS_LIMIT,
-    PREVIEW_INLINE_ADDRESS_LIMIT,
     type PurchaseDeliveryAddressGroup,
     type PurchaseDeliveryItemGroup,
     type PurchaseDeliveryPlanLine,
@@ -67,15 +63,13 @@ export function PurchaseDeliveryPlan({
         [lines],
     )
     const isInteractive = mode === "interactive"
-    const isLarge = summary.totalRows > PREVIEW_INLINE_ADDRESS_LIMIT
-    const [expanded, setExpanded] = React.useState(false)
+    const canViewAddresses = isInteractive && summary.totalRows > 0
     const [sheetOpen, setSheetOpen] = React.useState(false)
     const [query, setQuery] = React.useState("")
     const [viewBy, setViewBy] = React.useState<"item" | "address">("item")
     const [exporting, setExporting] = React.useState(false)
 
     React.useEffect(() => {
-        setExpanded(false)
         setSheetOpen(false)
         setQuery("")
         setViewBy("item")
@@ -144,9 +138,6 @@ export function PurchaseDeliveryPlan({
                 : `共 ${summary.totalRows} 条分配 · ${summary.uniqueAddressCount} 处独立地址`
             : "暂未指定收货地址"
 
-    const showSummaryOnly =
-        mode === "export-summary" || (isInteractive && isLarge && !expanded)
-
     return (
         <section
             aria-label="交付安排"
@@ -164,51 +155,25 @@ export function PurchaseDeliveryPlan({
                     </span>
                 </div>
 
-                {isInteractive && summary.totalRows > 0 && isLarge ? (
-                    <div className="flex flex-wrap items-center gap-2 print:hidden">
-                        <Button
-                            id={`${idPrefix}-open-sheet`}
-                            type="button"
-                            variant="outline"
-                            size="xs"
-                            onClick={() => setSheetOpen(true)}
-                        >
-                            <MapPinIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            核对全部地址（{summary.totalRows}）
-                            <ChevronRightIcon
-                                data-icon="inline-end"
-                                aria-hidden="true"
-                            />
-                        </Button>
-                        <Button
-                            id={`${idPrefix}-toggle-expand`}
-                            type="button"
-                            variant="ghost"
-                            size="xs"
-                            onClick={() => setExpanded((prev) => !prev)}
-                        >
-                            {expanded ? (
-                                <>
-                                    <ChevronUpIcon
-                                        data-icon="inline-start"
-                                        aria-hidden="true"
-                                    />
-                                    收起纸面明细
-                                </>
-                            ) : (
-                                <>
-                                    <ChevronDownIcon
-                                        data-icon="inline-start"
-                                        aria-hidden="true"
-                                    />
-                                    纸面展开
-                                </>
-                            )}
-                        </Button>
-                    </div>
+                {canViewAddresses ? (
+                    <Button
+                        id={`${idPrefix}-open-sheet`}
+                        type="button"
+                        variant="outline"
+                        size="xs"
+                        className="print:hidden"
+                        onClick={() => setSheetOpen(true)}
+                    >
+                        <MapPinIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        查看收货地址
+                        <ChevronRightIcon
+                            data-icon="inline-end"
+                            aria-hidden="true"
+                        />
+                    </Button>
                 ) : null}
             </div>
 
@@ -216,55 +181,30 @@ export function PurchaseDeliveryPlan({
                 <p className="text-xs text-muted-foreground">
                     暂无商品交付安排
                 </p>
-            ) : showSummaryOnly ? (
+            ) : mode === "export-summary" ? (
                 <div className="space-y-3">
                     <DeliverySummaryTable groups={summary.itemGroups} />
-                    {mode === "export-summary" ? (
-                        <div className="rounded-sm border border-border bg-muted/30 px-3 py-2.5 text-xs leading-5 text-foreground">
-                            本采购单共含{" "}
-                            <span className="num font-medium">
-                                {summary.totalRows}
-                            </span>{" "}
-                            条收件分配（
-                            <span className="num font-medium">
-                                {summary.uniqueAddressCount}
-                            </span>{" "}
-                            处独立地址）。为保证单据图片清晰可读，完整收货人、联系电话、详细地址及数量请查阅同包配套表格：
-                            <span className="font-medium">
-                                《{attachmentFileName || "发货地址明细.xlsx"}》
-                            </span>
-                            。
-                        </div>
-                    ) : (
-                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border/80 bg-muted/30 px-3 py-2 text-xs text-muted-foreground print:hidden">
-                            <span>
-                                {summary.totalRows > IMAGE_INLINE_ADDRESS_LIMIT
-                                    ? `地址超过 ${IMAGE_INLINE_ADDRESS_LIMIT} 条：下载采购单时将自动导出清晰主单图片及配套 Excel 发货地址明细表。`
-                                    : "可在右侧抽屉按收货人、电话、地址或商品检索核对。"}
-                            </span>
-                            {summary.topRegions.length > 0 ? (
-                                <span className="num">
-                                    主要地区：
-                                    {summary.topRegions
-                                        .slice(0, 2)
-                                        .map(
-                                            (region) =>
-                                                `${region.name} ${region.count} 处`,
-                                        )
-                                        .join("、")}
-                                    {summary.topRegions.length > 2
-                                        ? ` 等 ${summary.topRegions.length} 个地区`
-                                        : ""}
-                                </span>
-                            ) : null}
-                        </div>
-                    )}
+                    <div className="rounded-sm border border-border bg-muted/30 px-3 py-2.5 text-xs leading-5 text-foreground">
+                        本采购单共含{" "}
+                        <span className="num font-medium">
+                            {summary.totalRows}
+                        </span>{" "}
+                        条收件分配（
+                        <span className="num font-medium">
+                            {summary.uniqueAddressCount}
+                        </span>{" "}
+                        处独立地址）。为保证单据图片清晰可读，完整收货人、联系电话、详细地址及数量请查阅同包配套表格：
+                        <span className="font-medium">
+                            《{attachmentFileName || "发货地址明细.xlsx"}》
+                        </span>
+                        。
+                    </div>
                 </div>
-            ) : (
+            ) : mode === "export-full" ? (
                 <GroupedDeliveryTables groups={summary.itemGroups} />
-            )}
+            ) : null}
 
-            {isInteractive && summary.totalRows > 0 ? (
+            {canViewAddresses ? (
                 <QuickPreviewSheet
                     idPrefix={`${idPrefix}-sheet`}
                     open={sheetOpen}

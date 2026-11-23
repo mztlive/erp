@@ -323,7 +323,7 @@ function PurchasePaper({
     const snapshot = preview.snapshot
     return (
         <PaperDocument
-            frame="bare"
+            frame="borderless"
             title="采购单"
             subtitle="采购成本"
             documentNumber={preview.number}

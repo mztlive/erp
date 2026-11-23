@@ -35,7 +35,7 @@ export function PurchaseOrderPaperDocument({
 
     return (
         <PaperDocument<PurchaseOrderPaperLine>
-            frame="bare"
+            frame="borderless"
             title="采购单"
             subtitle={PURCHASE_TYPE_LABEL[header.purchaseType]}
             documentNumber={documentNumber}

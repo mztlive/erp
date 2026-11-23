@@ -52,7 +52,7 @@ export function PurchaseOrderPreviewPaper({
     return (
         <div data-testid={`purchase-create-preview-${preview.supplierId}`}>
             <PaperDocument<PurchaseOrderPreviewLine>
-                frame="bare"
+                frame={isSupplierView ? "bare" : "borderless"}
                 title="采购单"
                 subtitle={isSupplierView ? "待确认采购单" : "提交预览"}
                 documentNumber={documentNumber}
