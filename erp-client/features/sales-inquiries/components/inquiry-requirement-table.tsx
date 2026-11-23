@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { TruckIcon } from "lucide-react"
+import { ChevronRightIcon, TruckIcon } from "lucide-react"
 import {
     BusinessFailureState,
     MoneyValue,
@@ -14,21 +14,22 @@ import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Table,
-    TableHeader,
     TableBody,
-    TableRow,
-    TableHead,
     TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from "@/components/ui/table"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { cn } from "@/lib/utils"
+import { useInquirySkuDetailsQuery } from "../hooks/queries"
 import { deliveryProgress } from "../lib/delivery-progress"
 import { inquiryDateInput } from "../lib/format"
-import { useInquirySkuDetailsQuery } from "../hooks/queries"
 import type { InquiryLine, InquiryRequirement } from "../types"
-import { InquiryRequirementDetail } from "./inquiry-requirement-detail"
 import { InquiryProductImage } from "./inquiry-product-image"
+import { InquiryRequirementDetail } from "./inquiry-requirement-detail"
 
-/** 与草稿商品表保持同一列顺序、配送状态及侧栏入口，只读展示已提交需求。 */
+/** 与草稿商品表保持同一列顺序、缩略图融合与配送抽屉入口，只读展示已提交需求。 */
 export function InquiryRequirementTable({
     requirement,
     procurement = false,
@@ -47,12 +48,12 @@ export function InquiryRequirementTable({
         (line) => line.line_id === activeLineId,
     )
     const unitLabel = (code: string) =>
-        skuDetails.units.get(code) ??
-        (skuDetails.isPending ? "单位加载中" : "单位未匹配")
+        skuDetails.units.get(code) ?? (skuDetails.isPending ? "加载中" : "")
     const productImage = (line: InquiryLine, detail = false) => (
         <InquiryProductImage
             key={line.sku_id}
             idPrefix={`${idPrefix}-${detail ? "detail" : toAutomationIdSegment(line.line_id)}-image`}
+            size="sm"
             assetId={skuDetails.images.get(line.sku_id)}
             label={line.product_name}
             pending={
@@ -83,32 +84,31 @@ export function InquiryRequirementTable({
                     <Table
                         className={
                             procurement
-                                ? "min-w-[1072px] table-fixed"
-                                : "min-w-[1232px] table-fixed"
+                                ? "min-w-[760px] table-fixed"
+                                : "min-w-[880px] table-fixed"
                         }
                     >
                         <TableHeader>
                             <TableRow>
-                                <TableHead className="w-20">图片</TableHead>
                                 <TableHead>商品 / 规格</TableHead>
-                                <TableHead data-align="end" className="w-36">
+                                <TableHead data-align="end" className="w-32">
                                     需求数量
                                 </TableHead>
                                 {!procurement && (
                                     <TableHead
                                         data-align="end"
-                                        className="w-40 text-right"
+                                        className="w-32 text-right"
                                     >
                                         销售价
                                     </TableHead>
                                 )}
-                                <TableHead className="w-52">
+                                <TableHead className="w-28">
                                     要求交付日
                                 </TableHead>
                                 <TableHead className="w-48">
                                     配送 / 交付
                                 </TableHead>
-                                <TableHead className="sticky right-0 z-20 w-32 border-l text-right">
+                                <TableHead className="sticky right-0 z-20 w-28 text-right">
                                     操作
                                 </TableHead>
                             </TableRow>
@@ -117,8 +117,8 @@ export function InquiryRequirementTable({
                             {requirement.lines.length === 0 ? (
                                 <TableRow>
                                     <TableCell
-                                        colSpan={procurement ? 6 : 7}
-                                        className="h-32 text-center text-muted-foreground"
+                                        colSpan={procurement ? 5 : 6}
+                                        className="h-28 text-center text-muted-foreground"
                                     >
                                         暂无商品需求
                                     </TableCell>
@@ -132,6 +132,18 @@ export function InquiryRequirementTable({
                                         unit_code: unit,
                                     })
                                     const active = line.line_id === activeLineId
+                                    const specLine = [
+                                        line.specification &&
+                                        line.specification !== "无规格"
+                                            ? line.specification
+                                            : null,
+                                        `SKU ${line.sku_code}`,
+                                    ]
+                                        .filter(Boolean)
+                                        .join(" · ")
+                                    const dueDate = inquiryDateInput(
+                                        line.delivery_due_at,
+                                    )
                                     return (
                                         <TableRow
                                             key={line.line_id}
@@ -139,25 +151,25 @@ export function InquiryRequirementTable({
                                                 active ? "selected" : undefined
                                             }
                                         >
-                                            <TableCell>
-                                                {productImage(line)}
-                                            </TableCell>
-                                            <TableCell className="whitespace-normal py-4">
-                                                <p className="font-medium leading-5 wrap-anywhere">
-                                                    {line.product_name}
-                                                </p>
-                                                <p className="mt-1 text-xs text-muted-foreground wrap-anywhere">
-                                                    {line.specification &&
-                                                    line.specification !==
-                                                        "无规格"
-                                                        ? `${line.specification} · `
-                                                        : ""}
-                                                    SKU {line.sku_code}
-                                                </p>
+                                            <TableCell className="whitespace-normal py-3 align-top">
+                                                <div className="flex items-start gap-2.5">
+                                                    {productImage(line)}
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="font-medium leading-5 text-foreground wrap-anywhere">
+                                                            {line.product_name}
+                                                        </p>
+                                                        <p
+                                                            className="num mt-0.5 truncate text-xs text-muted-foreground"
+                                                            title={specLine}
+                                                        >
+                                                            {specLine}
+                                                        </p>
+                                                    </div>
+                                                </div>
                                             </TableCell>
                                             <TableCell
                                                 data-align="end"
-                                                className="num text-right"
+                                                className="num py-3 text-right align-top"
                                             >
                                                 <QuantityValue
                                                     value={line.quantity}
@@ -167,13 +179,15 @@ export function InquiryRequirementTable({
                                             {!procurement && (
                                                 <TableCell
                                                     data-align="end"
-                                                    className="num text-right"
+                                                    className="num py-3 text-right align-top"
                                                 >
                                                     {line.sales_reference_price_gross ? (
                                                         <MoneyValue
                                                             value={
                                                                 line.sales_reference_price_gross
                                                             }
+                                                            display="exact"
+                                                            showHint={false}
                                                         />
                                                     ) : (
                                                         <span className="text-muted-foreground">
@@ -182,33 +196,59 @@ export function InquiryRequirementTable({
                                                     )}
                                                 </TableCell>
                                             )}
-                                            <TableCell className="num">
-                                                {inquiryDateInput(
-                                                    line.delivery_due_at,
-                                                ) || "未设置"}
+                                            <TableCell className="num py-3 align-top">
+                                                {dueDate ? (
+                                                    <span>{dueDate}</span>
+                                                ) : (
+                                                    <span className="text-muted-foreground">
+                                                        未设置
+                                                    </span>
+                                                )}
                                             </TableCell>
-                                            <TableCell>
-                                                <div className="min-w-0 max-w-full space-y-1.5 whitespace-normal">
-                                                    <StatusBadge
-                                                        className="h-auto min-h-5 max-w-full justify-start text-left leading-5 whitespace-normal wrap-anywhere"
-                                                        tone={
-                                                            progress.complete &&
-                                                            !progress.overAllocated
-                                                                ? "neutral"
-                                                                : "warning"
-                                                        }
-                                                        label={progress.label}
-                                                    />
+                                            <TableCell className="whitespace-normal py-3 align-top">
+                                                <button
+                                                    id={`${prefix}-delivery-preview`}
+                                                    type="button"
+                                                    onClick={(event) => {
+                                                        returnFocus.current =
+                                                            event.currentTarget
+                                                        setActiveLineId(
+                                                            line.line_id,
+                                                        )
+                                                    }}
+                                                    className={cn(
+                                                        "group/delivery -mx-1.5 -my-1 flex w-[calc(100%+0.75rem)] flex-col items-start gap-1 rounded-md px-1.5 py-1 text-left transition-colors",
+                                                        "hover:bg-muted/70 focus-visible:outline-2 focus-visible:outline-ring",
+                                                    )}
+                                                >
+                                                    <span className="flex w-full items-center justify-between gap-1">
+                                                        <StatusBadge
+                                                            className="h-auto min-h-5 max-w-full justify-start text-left leading-5 whitespace-normal wrap-anywhere"
+                                                            tone={
+                                                                progress.complete &&
+                                                                !progress.overAllocated
+                                                                    ? "neutral"
+                                                                    : "warning"
+                                                            }
+                                                            label={
+                                                                progress.label
+                                                            }
+                                                        />
+                                                        <ChevronRightIcon
+                                                            aria-hidden="true"
+                                                            className="size-3.5 shrink-0 text-muted-foreground/45 transition-colors group-hover/delivery:text-primary"
+                                                        />
+                                                    </span>
                                                     {line.delivery_terms && (
-                                                        <p className="text-xs text-muted-foreground wrap-anywhere">
+                                                        <span className="line-clamp-2 text-xs text-muted-foreground wrap-anywhere">
                                                             {
                                                                 line.delivery_terms
                                                             }
-                                                        </p>
+                                                        </span>
                                                     )}
-                                                </div>
+                                                </button>
                                             </TableCell>
-                                            <TableCell className="sticky right-0 z-1 border-l bg-card group-hover/row:bg-row-hover">
+                                            <TableCell className="sticky right-0 z-1 bg-card py-3 align-top group-hover/row:bg-row-hover group-data-[state=selected]/row:bg-row-selected">
                                                 <TableRowActions
                                                     moreId={`${prefix}-more`}
                                                     moreLabel={`${line.product_name}更多操作`}

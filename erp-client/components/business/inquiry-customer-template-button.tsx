@@ -1,5 +1,6 @@
 "use client"
 
+import type * as React from "react"
 import { useMutation } from "@tanstack/react-query"
 import { DownloadIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -18,6 +19,9 @@ type InquiryCustomerTemplateButtonProps = {
     inquiry_no?: string
     id?: string
     disabled?: boolean
+    size?: React.ComponentProps<typeof Button>["size"]
+    variant?: React.ComponentProps<typeof Button>["variant"]
+    buttonClassName?: string
 }
 
 export function InquiryCustomerTemplateButton({
@@ -27,6 +31,9 @@ export function InquiryCustomerTemplateButton({
     inquiry_no,
     id = "sales-inquiry-download-customer-template",
     disabled = false,
+    size = "default",
+    variant = "outline",
+    buttonClassName,
 }: InquiryCustomerTemplateButtonProps) {
     const download = useMutation({
         mutationFn: async () => {
@@ -46,7 +53,9 @@ export function InquiryCustomerTemplateButton({
             <Button
                 id={id}
                 type="button"
-                variant="outline"
+                variant={variant}
+                size={size}
+                className={buttonClassName}
                 disabled={disabled || !products.length || download.isPending}
                 onClick={() => download.mutate()}
             >

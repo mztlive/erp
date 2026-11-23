@@ -1,13 +1,14 @@
 "use client"
 
 import * as React from "react"
-import { MapPinIcon, TruckIcon, TriangleAlertIcon } from "lucide-react"
+import { MapPinIcon, TriangleAlertIcon, TruckIcon } from "lucide-react"
 import {
     BusinessFailureState,
     MoneyValue,
     QuantityValue,
-    RateValue,
     QuickPreviewSheet,
+    RateValue,
+    detailWorkspaceStyles,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -27,16 +28,16 @@ import {
 } from "@/lib/fixed-decimal"
 import { useInquirySkuDetailsQuery } from "../hooks/queries"
 import { deliveryAttention } from "../lib/delivery-progress"
-import { inquiryDate } from "../lib/format"
+import { inquiryDateInput } from "../lib/format"
 import {
     INQUIRY_CONCLUSION_LABEL,
     type InquiryFeedback,
-    type InquiryRequirement,
-    type InquiryLine,
     type InquiryFeedbackLine,
+    type InquiryLine,
+    type InquiryRequirement,
 } from "../types"
-import { InquiryRequirementDetail } from "./inquiry-requirement-detail"
 import { InquiryProductImage } from "./inquiry-product-image"
+import { InquiryRequirementDetail } from "./inquiry-requirement-detail"
 
 export function InquiryProductsTable({
     requirement,
@@ -59,8 +60,8 @@ export function InquiryProductsTable({
         feedback?.data.lines.map((line) => [line.line_id, line]),
     )
     const unitLabel = (code: string) =>
-        details.units.get(code) ??
-        (details.isPending ? "单位加载中" : "单位未匹配")
+        details.units.get(code) ?? (details.isPending ? "加载中" : "")
+
     return (
         <>
             {details.error && (
@@ -75,34 +76,30 @@ export function InquiryProductsTable({
                 data-slot="detail-inline-table"
                 className="min-w-0 border-y border-border/70"
             >
-                <Table className="min-w-[1200px] table-fixed">
+                <Table className="min-w-[880px] table-fixed">
                     <TableHeader>
                         <TableRow>
-                            <TableHead className="w-20">图片</TableHead>
                             <TableHead>商品 / 规格</TableHead>
                             <TableHead
                                 data-align="end"
-                                className="w-[15%] text-right"
+                                className="w-40 text-right"
                             >
                                 需求 / 可供
                             </TableHead>
                             <TableHead
                                 data-align="end"
-                                className="w-[16%] text-right"
+                                className="w-36 text-right"
                             >
                                 含税供给单价
                             </TableHead>
                             <TableHead
                                 data-align="end"
-                                className="w-[9%] text-right"
+                                className="w-20 text-right"
                             >
                                 税率
                             </TableHead>
-                            <TableHead className="w-[12%]">
-                                要求交付日
-                            </TableHead>
-
-                            <TableHead className="w-32 text-right">
+                            <TableHead className="w-28">要求交付日</TableHead>
+                            <TableHead className="w-28 text-right">
                                 操作
                             </TableHead>
                         </TableRow>
@@ -117,6 +114,7 @@ export function InquiryProductsTable({
                                 image={
                                     <InquiryProductImage
                                         idPrefix={`sales-inquiry-product-${toAutomationIdSegment(line.line_id)}-image`}
+                                        size="sm"
                                         assetId={details.images.get(
                                             line.sku_id,
                                         )}
@@ -143,7 +141,7 @@ export function InquiryProductsTable({
                         {requirement.lines.length === 0 && (
                             <TableRow>
                                 <TableCell
-                                    colSpan={7}
+                                    colSpan={6}
                                     className="h-24 text-center text-muted-foreground"
                                 >
                                     暂无商品需求
@@ -174,7 +172,7 @@ export function InquiryProductsTable({
                 summary={
                     <p className="text-muted-foreground">
                         {feedback
-                            ? `第 ${feedback.round} 轮反馈对应需求第 ${feedback.requirement_version} 版`
+                            ? `第 ${feedback.round} 轮反馈 · 需求第 ${feedback.requirement_version} 版`
                             : "当前商品需求"}
                     </p>
                 }
@@ -191,10 +189,17 @@ export function InquiryProductsTable({
                 {activeLine && (
                     <>
                         {results.get(activeLine.line_id)?.public_note && (
-                            <p className="whitespace-pre-wrap rounded-lg bg-muted/40 p-3">
-                                采购说明：
-                                {results.get(activeLine.line_id)?.public_note}
-                            </p>
+                            <div className="mb-4 rounded-lg border border-border/60 bg-surface-sunken/70 p-3 text-body-compact">
+                                <p className="text-xs font-medium text-muted-foreground">
+                                    采购说明
+                                </p>
+                                <p className="mt-1 whitespace-pre-wrap text-foreground wrap-anywhere">
+                                    {
+                                        results.get(activeLine.line_id)
+                                            ?.public_note
+                                    }
+                                </p>
+                            </div>
                         )}
                         <InquiryRequirementDetail
                             line={activeLine}
@@ -244,6 +249,16 @@ function ProductRow({
                   outputScale: line.quantity_scale,
               })
             : null
+    const specLine = [
+        line.specification && line.specification !== "无规格"
+            ? line.specification
+            : null,
+        `SKU ${line.sku_code}`,
+    ]
+        .filter(Boolean)
+        .join(" · ")
+    const dueDate = inquiryDateInput(line.delivery_due_at)
+
     return (
         <>
             {prices.map((price) => (
@@ -255,75 +270,74 @@ function ProductRow({
                         <>
                             <TableCell
                                 rowSpan={prices.length}
-                                className="py-2.5"
+                                className="whitespace-normal py-3 align-top"
                             >
-                                {image}
-                            </TableCell>
-                            <TableCell
-                                rowSpan={prices.length}
-                                className="whitespace-normal py-2.5"
-                            >
-                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                    <span className="font-medium leading-5 wrap-anywhere">
-                                        {line.product_name}
-                                    </span>
-                                    {result ? (
-                                        <StatusBadge
-                                            label={
-                                                INQUIRY_CONCLUSION_LABEL[
-                                                    result.conclusion
-                                                ]
-                                            }
-                                            tone={
-                                                result.conclusion ===
-                                                "available"
-                                                    ? "success"
-                                                    : result.conclusion ===
-                                                        "pending"
-                                                      ? "neutral"
-                                                      : "warning"
-                                            }
-                                        />
-                                    ) : (
-                                        <span className="text-xs text-muted-foreground">
-                                            {hasFeedback
-                                                ? "反馈缺失"
-                                                : waiting
-                                                  ? "待采购反馈"
-                                                  : "暂无报价"}
-                                        </span>
-                                    )}
+                                <div className="flex items-start gap-2.5">
+                                    {image}
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                            <span className="font-medium leading-5 text-foreground wrap-anywhere">
+                                                {line.product_name}
+                                            </span>
+                                            {result ? (
+                                                <StatusBadge
+                                                    label={
+                                                        INQUIRY_CONCLUSION_LABEL[
+                                                            result.conclusion
+                                                        ]
+                                                    }
+                                                    tone={
+                                                        result.conclusion ===
+                                                        "available"
+                                                            ? "success"
+                                                            : result.conclusion ===
+                                                                "pending"
+                                                              ? "neutral"
+                                                              : "warning"
+                                                    }
+                                                />
+                                            ) : (
+                                                <span className="text-xs text-muted-foreground">
+                                                    {hasFeedback
+                                                        ? "反馈缺失"
+                                                        : waiting
+                                                          ? "待采购反馈"
+                                                          : "暂无报价"}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p
+                                            className="num mt-0.5 truncate text-xs text-muted-foreground"
+                                            title={specLine}
+                                        >
+                                            {specLine}
+                                        </p>
+                                    </div>
                                 </div>
-                                <p className="mt-1 text-xs leading-4 text-muted-foreground wrap-anywhere">
-                                    {line.specification &&
-                                    line.specification !== "无规格"
-                                        ? `${line.specification} · `
-                                        : ""}
-                                    SKU {line.sku_code}
-                                </p>
                             </TableCell>
                             <TableCell
                                 rowSpan={prices.length}
-                                className="py-2.5 text-right"
+                                data-align="end"
+                                className="py-3 text-right align-top"
                             >
-                                <div>
+                                <div className="num">
                                     <QuantityValue
                                         value={line.quantity}
                                         unit=""
                                     />{" "}
-                                    /{" "}
+                                    <span className="text-muted-foreground">
+                                        /
+                                    </span>{" "}
                                     {result ? (
                                         <QuantityValue
                                             value={result.available_quantity}
                                             unit={unit}
+                                            className="font-medium text-foreground"
                                         />
                                     ) : (
-                                        <>
-                                            —{" "}
-                                            <span className="text-xs text-muted-foreground">
-                                                {unit}
-                                            </span>
-                                        </>
+                                        <span className="text-muted-foreground">
+                                            —{unit ? ` ${unit}` : ""}
+                                        </span>
                                     )}
                                 </div>
                                 {shortage && (
@@ -345,7 +359,7 @@ function ProductRow({
                                         onClick={onDetails}
                                     >
                                         <TriangleAlertIcon
-                                            className="mt-0.5 size-3.5"
+                                            className="mt-0.5 size-3.5 shrink-0"
                                             aria-hidden="true"
                                         />
                                         <span className="min-w-0 wrap-anywhere">
@@ -358,7 +372,7 @@ function ProductRow({
                                         id={`${prefix}-note`}
                                         variant="link"
                                         size="sm"
-                                        className="h-auto p-0 text-xs"
+                                        className="mt-0.5 h-auto p-0 text-xs"
                                         onClick={onDetails}
                                     >
                                         查看
@@ -371,12 +385,20 @@ function ProductRow({
                             </TableCell>
                         </>
                     )}
-                    <TableCell className="py-2.5 text-right">
+                    <TableCell
+                        data-align="end"
+                        className="py-3 text-right align-top"
+                    >
                         <div>
                             {price?.unit_price_gross != null ? (
-                                <MoneyValue value={price.unit_price_gross} />
+                                <MoneyValue
+                                    value={price.unit_price_gross}
+                                    display="exact"
+                                    showHint={false}
+                                    className="font-medium text-foreground"
+                                />
                             ) : (
-                                "—"
+                                <span className="text-muted-foreground">—</span>
                             )}
                         </div>
                         {line.sales_reference_price_gross != null && (
@@ -384,11 +406,16 @@ function ProductRow({
                                 销售价{" "}
                                 <MoneyValue
                                     value={line.sales_reference_price_gross}
+                                    display="exact"
+                                    showHint={false}
                                 />
                             </div>
                         )}
                     </TableCell>
-                    <TableCell className="py-2.5 text-right">
+                    <TableCell
+                        data-align="end"
+                        className="py-3 text-right align-top"
+                    >
                         {price?.tax_rate != null ? (
                             <RateValue
                                 value={multiplyFixed(price.tax_rate, "100", {
@@ -399,30 +426,45 @@ function ProductRow({
                                 precision={2}
                             />
                         ) : (
-                            "—"
+                            <span className="text-muted-foreground">—</span>
                         )}
                     </TableCell>
-                    <TableCell className="py-2.5">
-                        <CompactDate value={line.delivery_due_at} />
+                    <TableCell className="num py-3 align-top">
+                        {dueDate ? (
+                            <span>{dueDate}</span>
+                        ) : (
+                            <span className="text-muted-foreground">
+                                未设置
+                            </span>
+                        )}
                     </TableCell>
-
                     {price === prices[0] && (
                         <TableCell
                             rowSpan={prices.length}
-                            className="py-2.5 text-right"
+                            className="py-3 text-right align-top"
                         >
                             <Button
                                 id={`${prefix}-detail`}
                                 aria-haspopup="dialog"
-                                variant="link"
+                                variant="ghost"
                                 size="sm"
-                                className="px-0"
+                                className={
+                                    detailWorkspaceStyles.inlineLinkButton
+                                }
                                 onClick={onDetails}
                             >
                                 {line.fulfillment_kind === "physical" ? (
-                                    <MapPinIcon aria-hidden="true" />
+                                    <MapPinIcon
+                                        aria-hidden="true"
+                                        data-icon="inline-start"
+                                        className="size-3.5"
+                                    />
                                 ) : (
-                                    <TruckIcon aria-hidden="true" />
+                                    <TruckIcon
+                                        aria-hidden="true"
+                                        data-icon="inline-start"
+                                        className="size-3.5"
+                                    />
                                 )}
                                 {line.fulfillment_kind === "physical"
                                     ? "配送地址"
@@ -433,17 +475,5 @@ function ProductRow({
                 </TableRow>
             ))}
         </>
-    )
-}
-
-function CompactDate({ value }: { value: number }) {
-    const [date, time] = inquiryDate(value).split(" ")
-    return (
-        <div className="num">
-            <p>{date}</p>
-            {time && (
-                <p className="mt-1 text-xs text-muted-foreground">{time}</p>
-            )}
-        </div>
     )
 }

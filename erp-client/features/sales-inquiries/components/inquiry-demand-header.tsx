@@ -7,12 +7,11 @@ import {
     DetailWorkspaceFacts,
     DetailWorkspaceSection,
 } from "@/components/business"
-import { inquiryDate } from "../lib/format"
 import type { ProcurementInquiry, SalesInquiry } from "../types"
 
 /**
- * 询价需求只读概要区：置于 DetailWorkspaceBody 顶部自然流中，
- * 不再通过 Portal 撑高吸顶头部 DetailWorkspaceChrome。
+ * 询价需求只读概要区：仅在存在需求说明、整单费用责任或来源询价时展示，
+ * 避免无内容时占用首屏纵向空间或重复渲染已在页头/摘要带展示的截止日期。
  */
 export function InquiryDemandOverview({
     inquiry,
@@ -31,20 +30,20 @@ export function InquiryDemandOverview({
               ? "由我维护"
               : "已指定责任采购")
         : null
+    const note = inquiry.draft.note.trim()
+
+    if (!note && !feeOwnerLabel && !copySourceHref) {
+        return null
+    }
 
     return (
         <DetailWorkspaceSection
             ariaLabel="需求概要"
             width="form"
             divider={false}
-            className="py-4"
+            className="border-b border-border/60 py-3.5 first:pt-3.5 last:pb-3.5"
         >
             <DetailWorkspaceFacts columns={3}>
-                <DetailWorkspaceFact
-                    label="询价截止"
-                    value={inquiryDate(inquiry.deadline_at)}
-                    numeric
-                />
                 {feeOwnerLabel ? (
                     <DetailWorkspaceFact
                         label="整单费用责任"
@@ -65,19 +64,17 @@ export function InquiryDemandOverview({
                         }
                     />
                 ) : null}
-                <DetailWorkspaceFact
-                    label={isCurrentNote ? "需求说明" : "当前需求说明"}
-                    value={
-                        inquiry.draft.note ? (
+                {note ? (
+                    <DetailWorkspaceFact
+                        label={isCurrentNote ? "需求说明" : "当前需求说明"}
+                        value={
                             <span className="whitespace-pre-wrap wrap-anywhere">
-                                {inquiry.draft.note}
+                                {note}
                             </span>
-                        ) : (
-                            "未填写"
-                        )
-                    }
-                    span="full"
-                />
+                        }
+                        span="full"
+                    />
+                ) : null}
             </DetailWorkspaceFacts>
         </DetailWorkspaceSection>
     )

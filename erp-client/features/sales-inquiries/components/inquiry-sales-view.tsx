@@ -9,14 +9,18 @@ import {
     DetailWorkspaceChrome,
     DetailWorkspaceDirtyBadge,
     DetailWorkspaceMeta,
+    DetailWorkspaceMetricItem,
+    DetailWorkspaceMetrics,
     DetailWorkspacePage,
     DetailWorkspaceSaveDock,
+    MoneyValue,
     detailWorkspaceStyles,
 } from "@/components/business"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { apiPost } from "@/lib/api"
 import { transferFileInput, transferJson } from "@/lib/data-transfer"
+import { sumFixed } from "@/lib/fixed-decimal"
 import { hasPermission } from "@/lib/permissions"
 import { useWorkspaceDirtyState } from "@/lib/workspace-form-guard"
 import { inquiryPath } from "../api"
@@ -28,13 +32,15 @@ import {
     downloadInquiryCustomerWorkbook,
     type InquiryCustomerWorkbookProduct,
 } from "../lib/customer-workbook"
+import { summarizeDemand } from "../lib/demand-summary"
 import { salesInquiryFeedback } from "../lib/feedback-view"
-import { inquiryDate } from "../lib/format"
+import { inquiryDateInput } from "../lib/format"
 import { inquiryStorageKey } from "../lib/local-draft"
 import { resolveInquiryBackLink } from "../lib/navigation"
 import {
     INQUIRY_STATUS_LABEL,
     INQUIRY_STATUS_TONE,
+    type InquiryFee,
     type SalesInquiry,
 } from "../types"
 import { InquiryActions } from "./inquiry-actions"
@@ -51,8 +57,21 @@ import {
     InquiryImportDialog,
     type InquiryImportPreview,
 } from "./inquiry-import-dialog"
+import { TRANSFER_LABEL, VALIDITY_LABEL } from "./inquiry-progress"
 import { InquiryRequirementTable } from "./inquiry-requirement-table"
 import { SalesInquiryProducts } from "./sales-inquiry-products"
+
+function sumFeesGross(fees: readonly InquiryFee[]): string | null {
+    if (fees.length === 0) return null
+    try {
+        return sumFixed(
+            fees.map((fee) => fee.amount_gross),
+            { maxScale: 2, outputScale: 2 },
+        )
+    } catch {
+        return null
+    }
+}
 
 export function InquirySalesView({
     inquiry,
@@ -73,14 +92,26 @@ export function InquirySalesView({
     const [editorEpoch, setEditorEpoch] = React.useState(0)
     const demandEditorRef = React.useRef<InquiryDemandEditorHandle>(null)
     const [demandStatus, setDemandStatus] =
-        React.useState<InquiryDemandEditorStatus>({
-            dirty: false,
-            saving: false,
-            disabled: false,
-            lineCount: inquiry.draft.lines.length,
-            pendingDeliveryCount: 0,
-            canSave: false,
-            customerId: inquiry.customer_id,
+        React.useState<InquiryDemandEditorStatus>(() => {
+            const initialSummary = summarizeDemand({
+                customer_id: inquiry.customer_id,
+                customer_name: inquiry.customer_name,
+                sales_owner_user_id: inquiry.sales_owner_user_id,
+                business_org_unit_id: inquiry.business_org_unit_id,
+                deadline_at: inquiry.deadline_at,
+                draft: inquiry.draft,
+            })
+            return {
+                dirty: false,
+                saving: false,
+                disabled: false,
+                lineCount: initialSummary.lineCount,
+                pendingDeliveryCount: initialSummary.pendingDeliveryCount,
+                canSave: false,
+                customerId: inquiry.customer_id,
+                pricedLineCount: initialSummary.pricedLineCount,
+                referenceTotal: initialSummary.referenceTotal,
+            }
         })
 
     const roundContext = `${inquiry.requirement_version}:${inquiry.feedback_round}:${inquiry.status}`
@@ -204,6 +235,9 @@ export function InquirySalesView({
                 hasPermission(permissions, "sellable_sku:list") && (
                     <InquiryCustomerTemplateButton
                         id="sales-inquiry-download-template"
+                        size="sm"
+                        variant="ghost"
+                        buttonClassName={detailWorkspaceStyles.subtleButton}
                         products={inquiry.draft.lines.map((line) => ({
                             sku_code: line.sku_code,
                             product_name: line.product_name,
@@ -218,12 +252,14 @@ export function InquirySalesView({
             {canImport && (
                 <Button
                     id="sales-inquiry-detail-import"
-                    variant="outline"
+                    variant="ghost"
+                    size="sm"
+                    className={detailWorkspaceStyles.subtleButton}
                     type="button"
                     onClick={() => setImportOpen(true)}
                 >
                     <UploadIcon aria-hidden="true" data-icon="inline-start" />
-                    导入客户选品文件
+                    导入客户选品
                 </Button>
             )}
         </>
@@ -236,6 +272,148 @@ export function InquirySalesView({
     })
 
     const saveDockOpen = canEdit && dirty && demandStatus.canSave
+    const deadlineText = inquiryDateInput(inquiry.deadline_at) || "未设置"
+    const feeCount = selectedFeedback?.data.fees.length ?? 0
+    const feeTotal = sumFeesGross(selectedFeedback?.data.fees ?? [])
+
+    const availableCount =
+        productFeedback?.data.lines.filter(
+            (item) => item.conclusion === "available",
+        ).length ?? 0
+    const partialCount =
+        productFeedback?.data.lines.filter(
+            (item) => item.conclusion === "partially_available",
+        ).length ?? 0
+    const unavailableCount =
+        productFeedback?.data.lines.filter(
+            (item) => item.conclusion === "unavailable",
+        ).length ?? 0
+
+    const summaryBar = revising ? undefined : canEdit ? (
+        <DetailWorkspaceMetrics columns={4} variant="bar" ariaLabel="询价概览">
+            <DetailWorkspaceMetricItem
+                label="商品需求"
+                emphasis="primary"
+                value={
+                    <span>
+                        <span className="num">{demandStatus.lineCount}</span>{" "}
+                        <span className="text-body-compact font-normal text-muted-foreground">
+                            项
+                        </span>
+                    </span>
+                }
+                detail={
+                    demandStatus.lineCount === 0
+                        ? "尚未添加商品"
+                        : demandStatus.pendingDeliveryCount === 0
+                          ? "配送资料已完善"
+                          : `${demandStatus.pendingDeliveryCount} 项待完善配送`
+                }
+            />
+            <DetailWorkspaceMetricItem
+                label="销售参考合计"
+                value={
+                    demandStatus.referenceTotal !== null ? (
+                        <MoneyValue
+                            value={demandStatus.referenceTotal}
+                            display="exact"
+                            showHint={false}
+                        />
+                    ) : (
+                        <span className="text-muted-foreground">—</span>
+                    )
+                }
+                detail={
+                    demandStatus.pricedLineCount > 0
+                        ? `已填 ${demandStatus.pricedLineCount} / ${demandStatus.lineCount} 项`
+                        : "销售价为选填项"
+                }
+            />
+            <DetailWorkspaceMetricItem
+                label="询价截止"
+                value={deadlineText}
+                detail={
+                    inquiry.requirement_version > 0
+                        ? `需求第 ${inquiry.requirement_version} 版`
+                        : "草稿尚未提交"
+                }
+            />
+            <DetailWorkspaceMetricItem
+                label="反馈轮次"
+                value={
+                    inquiry.feedback_round > 0
+                        ? `第 ${inquiry.feedback_round} 轮`
+                        : "待提交采购"
+                }
+                detail={
+                    inquiry.status === "awaiting_sales_supplement"
+                        ? "采购退回待补充"
+                        : "完善需求后提交采购"
+                }
+            />
+        </DetailWorkspaceMetrics>
+    ) : (
+        <DetailWorkspaceMetrics columns={4} variant="bar" ariaLabel="询价概览">
+            <DetailWorkspaceMetricItem
+                label="商品与反馈"
+                emphasis="primary"
+                value={
+                    <span>
+                        <span className="num">
+                            {inquiry.draft.lines.length}
+                        </span>{" "}
+                        <span className="text-body-compact font-normal text-muted-foreground">
+                            项
+                        </span>
+                    </span>
+                }
+                detail={
+                    productFeedback
+                        ? `可供 ${availableCount} · 部分 ${partialCount} · 不供应 ${unavailableCount}`
+                        : "等待采购反馈"
+                }
+            />
+            <DetailWorkspaceMetricItem
+                label="额外费用"
+                value={
+                    feeTotal !== null ? (
+                        <MoneyValue
+                            value={feeTotal}
+                            display="exact"
+                            showHint={false}
+                        />
+                    ) : (
+                        <span className="text-muted-foreground">—</span>
+                    )
+                }
+                detail={feeCount > 0 ? `共 ${feeCount} 项费用` : "暂无额外费用"}
+            />
+            <DetailWorkspaceMetricItem
+                label="转单进度"
+                value={
+                    <span>
+                        <span className="num">
+                            {inquiry.sales_progress.completed_lines}
+                        </span>
+                        <span className="text-muted-foreground"> / </span>
+                        <span className="num">
+                            {inquiry.sales_progress.total_lines}
+                        </span>
+                    </span>
+                }
+                detail={`${TRANSFER_LABEL[inquiry.sales_progress.transfer_status]} · ${VALIDITY_LABEL[inquiry.sales_progress.quote_validity]}`}
+            />
+            <DetailWorkspaceMetricItem
+                label="询价截止"
+                value={deadlineText}
+                detail={
+                    inquiry.feedback_round > 0
+                        ? `需求第 ${inquiry.requirement_version} 版 · 反馈第 ${inquiry.feedback_round} 轮`
+                        : `需求第 ${inquiry.requirement_version} 版 · 待首次反馈`
+                }
+            />
+        </DetailWorkspaceMetrics>
+    )
 
     return (
         <DetailWorkspacePage>
@@ -360,9 +538,7 @@ export function InquirySalesView({
                                 workspace
                                 inquiry={inquiry}
                                 procurement={false}
-                                feeCount={
-                                    selectedFeedback?.data.fees.length ?? 0
-                                }
+                                feeCount={feeCount}
                                 renderLayout={(navigation, panels) => (
                                     <>
                                         <DetailWorkspaceChrome
@@ -391,33 +567,40 @@ export function InquirySalesView({
                                             meta={
                                                 <DetailWorkspaceMeta
                                                     items={[
-                                                        <span
-                                                            key="req"
-                                                            className="num"
-                                                        >
-                                                            需求第{" "}
-                                                            {
-                                                                inquiry.requirement_version
-                                                            }{" "}
-                                                            版
-                                                        </span>,
-                                                        <span
-                                                            key="round"
-                                                            className="num"
-                                                        >
-                                                            反馈第{" "}
-                                                            {
-                                                                inquiry.feedback_round
-                                                            }{" "}
-                                                            轮
-                                                        </span>,
-                                                        !canEdit && (
+                                                        inquiry.requirement_version >
+                                                            0 && (
+                                                            <span
+                                                                key="req"
+                                                                className="num"
+                                                            >
+                                                                需求第{" "}
+                                                                {
+                                                                    inquiry.requirement_version
+                                                                }{" "}
+                                                                版
+                                                            </span>
+                                                        ),
+                                                        inquiry.feedback_round >
+                                                            0 && (
+                                                            <span
+                                                                key="round"
+                                                                className="num"
+                                                            >
+                                                                反馈第{" "}
+                                                                {
+                                                                    inquiry.feedback_round
+                                                                }{" "}
+                                                                轮
+                                                            </span>
+                                                        ),
+                                                        inquiry.deadline_at >
+                                                            0 && (
                                                             <span key="deadline">
-                                                                询价截止：
+                                                                截止：
                                                                 <span className="num">
-                                                                    {inquiryDate(
-                                                                        inquiry.deadline_at,
-                                                                    )}
+                                                                    {
+                                                                        deadlineText
+                                                                    }
                                                                 </span>
                                                             </span>
                                                         ),
@@ -440,6 +623,7 @@ export function InquirySalesView({
                                             tabs={navigation}
                                         />
                                         <DetailWorkspaceBody
+                                            summary={summaryBar}
                                             alerts={alerts}
                                             saveDockOpen={saveDockOpen}
                                         >
@@ -532,7 +716,7 @@ export function InquirySalesView({
                                     description={
                                         demandStatus.pendingDeliveryCount > 0
                                             ? `${demandStatus.pendingDeliveryCount} 项待完善配送 · 保存后可提交采购`
-                                            : "保存后可提交采购（Cmd/Ctrl + S）"
+                                            : "保存后可提交采购"
                                     }
                                     onSave={() =>
                                         demandEditorRef.current?.save()

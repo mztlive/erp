@@ -37,6 +37,7 @@ export function SupplierQuoteExportButton({
             <Button
                 id="procurement-inquiry-export-supplier-quotes"
                 variant="outline"
+                size="sm"
                 type="button"
                 onClick={() => setOpen(true)}
             >

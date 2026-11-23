@@ -1,53 +1,53 @@
 "use client"
 
 import * as React from "react"
-import { useSupplierOfferingsForSkusQuery } from "@/features/supplier-offerings/hooks/queries"
-import {
-    latestSupplierQuotes,
-    type InternalQuote,
-} from "../lib/internal-quotes"
-import { InquiryQuoteHint } from "./inquiry-quote-hint"
-import { useInternalQuotes } from "../hooks/use-internal-quotes"
 import { ReceiptTextIcon } from "lucide-react"
 import { BusinessFailureState } from "@/components/business"
+import { OptionCombobox } from "@/components/business/option-combobox"
 import {
     TableToolbar,
     TableToolbarScope,
 } from "@/components/business/table-toolbar"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
 import {
     Table,
+    TableBody,
+    TableCell,
+    TableHead,
     TableHeader,
     TableRow,
-    TableHead,
-    TableCell,
-    TableBody,
 } from "@/components/ui/table"
-import { OptionCombobox } from "@/components/business/option-combobox"
+import { useSupplierOfferingsForSkusQuery } from "@/features/supplier-offerings/hooks/queries"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { inquiryDateInput } from "../lib/format"
 import { useInquirySkuDetailsQuery } from "../hooks/queries"
+import { useInternalQuotes } from "../hooks/use-internal-quotes"
 import {
-    feedbackIssues,
-    changeFeedbackConclusion,
-    newFeedbackPrice,
-    feedbackFieldTarget,
-    feedbackCommonTerms,
     applyFeedbackTerms,
+    changeFeedbackConclusion,
+    feedbackCommonTerms,
+    feedbackFieldTarget,
+    feedbackIssues,
+    newFeedbackPrice,
 } from "../lib/feedback-editing"
+import { inquiryDateInput } from "../lib/format"
+import {
+    latestSupplierQuotes,
+    type InternalQuote,
+} from "../lib/internal-quotes"
 import {
     INQUIRY_CONCLUSION_LABEL,
     type InquiryFeedbackLine,
     type InquiryLine,
     type InquiryPrice,
 } from "../types"
-import { InquiryFeedbackDemand } from "./inquiry-feedback-demand"
-import { InquiryProductImage } from "./inquiry-product-image"
-import { InquiryFeedbackLineIssues } from "./inquiry-feedback-line-issues"
-import { InquiryTaxRateInput } from "./inquiry-tax-rate-input"
 import { InquiryFeedbackCommonTerms } from "./inquiry-feedback-common-terms"
+import { InquiryFeedbackDemand } from "./inquiry-feedback-demand"
+import { InquiryFeedbackLineIssues } from "./inquiry-feedback-line-issues"
+import { InquiryProductImage } from "./inquiry-product-image"
+import { InquiryQuoteHint } from "./inquiry-quote-hint"
+import { InquiryTaxRateInput } from "./inquiry-tax-rate-input"
 
 type EditableFeedbackTableProps = {
     readOnly?: false
@@ -190,6 +190,8 @@ export function InquiryFeedbackTable({
                 : "所选商品已有供给结论，已保留原内容。",
         )
     }
+    const columnCount = readOnly ? 5 : 6
+
     return (
         <TableToolbarScope>
             <section className="min-w-0 space-y-3" aria-label="采购商品反馈">
@@ -238,6 +240,7 @@ export function InquiryFeedbackTable({
                                 <Button
                                     id="procurement-feedback-batch-available"
                                     type="button"
+                                    size="sm"
                                     variant="outline"
                                     disabled={disabled || selected.size === 0}
                                     onClick={markSelectedAvailable}
@@ -250,20 +253,19 @@ export function InquiryFeedbackTable({
                         <div className="flex flex-wrap items-center gap-3">
                             {toolbarSummary}
                             {selected.size > 0 && (
-                                <span className="inline-flex items-center gap-1 text-body-compact">
+                                <span className="inline-flex items-center gap-1.5 rounded-md bg-sidebar-accent/70 px-2 py-0.5 text-xs font-medium text-sidebar-accent-foreground">
                                     已选{" "}
-                                    <span className="num font-medium">
-                                        {selected.size}
-                                    </span>{" "}
+                                    <span className="num">{selected.size}</span>{" "}
                                     件
                                     <Button
                                         id="procurement-feedback-clear-selection"
                                         type="button"
-                                        size="sm"
+                                        size="xs"
                                         variant="ghost"
+                                        className="h-5 px-1 text-xs"
                                         onClick={() => setSelected(new Set())}
                                     >
-                                        清空选择
+                                        清空
                                     </Button>
                                 </span>
                             )}
@@ -271,7 +273,7 @@ export function InquiryFeedbackTable({
                     </TableToolbar>
                 )}
                 {batchMessage && (
-                    <p role="status" className="text-muted-foreground">
+                    <p role="status" className="text-xs text-muted-foreground">
                         {batchMessage}
                     </p>
                 )}
@@ -281,20 +283,24 @@ export function InquiryFeedbackTable({
                 >
                     <Table
                         data-density="comfortable"
-                        className="min-w-[1232px] table-fixed [--table-cell-inline:0.75rem]"
+                        className={
+                            readOnly
+                                ? "min-w-[880px] table-fixed [--table-cell-inline:0.75rem]"
+                                : "min-w-[960px] table-fixed [--table-cell-inline:0.75rem]"
+                        }
                     >
                         <colgroup>
-                            <col className="w-10" />
+                            {!readOnly && <col className="w-10" />}
                             <col />
-                            <col className="w-56" />
+                            <col className="w-48" />
                             <col className="w-34" />
-                            <col className="w-42" />
-                            <col className="w-32" />
+                            <col className="w-40" />
+                            <col className="w-28" />
                         </colgroup>
                         <TableHeader className="sticky top-0 z-10">
                             <TableRow>
-                                <TableHead className="text-center">
-                                    {!readOnly && (
+                                {!readOnly && (
+                                    <TableHead className="text-center">
                                         <Checkbox
                                             id="procurement-feedback-select-visible"
                                             aria-label="选择全部商品"
@@ -325,8 +331,8 @@ export function InquiryFeedbackTable({
                                                 })
                                             }
                                         />
-                                    )}
-                                </TableHead>
+                                    </TableHead>
+                                )}
                                 <TableHead>商品 / 规格</TableHead>
                                 <TableHead
                                     data-align="end"
@@ -355,7 +361,7 @@ export function InquiryFeedbackTable({
                             {rows.length === 0 && (
                                 <TableRow>
                                     <TableCell
-                                        colSpan={6}
+                                        colSpan={columnCount}
                                         className="py-12 text-center text-muted-foreground"
                                     >
                                         暂无商品需求
@@ -366,7 +372,7 @@ export function InquiryFeedbackTable({
                                 const prefix = `${rowPrefix}-line-${toAutomationIdSegment(line.line_id)}`
                                 const unit =
                                     sku.units.get(line.unit_code) ??
-                                    (sku.isPending ? "加载中" : "单位未匹配")
+                                    (sku.isPending ? "加载中" : "")
                                 const price = value.prices[0]
                                 const unavailable =
                                     value.conclusion === "unavailable"
@@ -386,19 +392,33 @@ export function InquiryFeedbackTable({
                                         prices: [{ ...next, ...patch }],
                                     })
                                 }
+                                const specLine = [
+                                    line.specification &&
+                                    line.specification !== "无规格"
+                                        ? line.specification
+                                        : null,
+                                    `SKU ${line.sku_code}`,
+                                ]
+                                    .filter(Boolean)
+                                    .join(" · ")
+                                const dueDate =
+                                    inquiryDateInput(line.delivery_due_at) ||
+                                    "未设置"
+
                                 return (
                                     <React.Fragment key={line.line_id}>
                                         <TableRow
                                             className="[&>td]:py-3 [&>td]:align-top"
                                             data-state={
+                                                !readOnly &&
                                                 selected.has(line.line_id)
                                                     ? "selected"
                                                     : undefined
                                             }
                                         >
-                                            <TableCell>
-                                                <div className="flex h-control items-center justify-center">
-                                                    {!readOnly && (
+                                            {!readOnly && (
+                                                <TableCell>
+                                                    <div className="flex h-control-sm items-center justify-center">
                                                         <Checkbox
                                                             id={`${prefix}-selected`}
                                                             aria-label={`选择${line.product_name}`}
@@ -431,13 +451,14 @@ export function InquiryFeedbackTable({
                                                                 )
                                                             }
                                                         />
-                                                    )}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-start gap-3">
+                                                    </div>
+                                                </TableCell>
+                                            )}
+                                            <TableCell className="whitespace-normal">
+                                                <div className="flex items-start gap-2.5">
                                                     <InquiryProductImage
                                                         idPrefix={`${prefix}-image`}
+                                                        size="sm"
                                                         label={
                                                             line.product_name
                                                         }
@@ -449,49 +470,36 @@ export function InquiryFeedbackTable({
                                                             sku.error,
                                                         )}
                                                     />
-                                                    <div className="min-w-0 space-y-1">
+                                                    <div className="min-w-0 flex-1 space-y-0.5">
                                                         <p
-                                                            className="line-clamp-2 font-medium whitespace-normal wrap-anywhere"
+                                                            className="line-clamp-2 font-medium leading-5 text-foreground wrap-anywhere"
                                                             title={
                                                                 line.product_name
                                                             }
                                                         >
                                                             {line.product_name}
                                                         </p>
-                                                        {line.specification && (
-                                                            <p
-                                                                className="truncate text-xs text-muted-foreground"
-                                                                title={
-                                                                    line.specification
-                                                                }
-                                                            >
-                                                                {
-                                                                    line.specification
-                                                                }
-                                                            </p>
-                                                        )}
                                                         <p
-                                                            className="truncate text-xs text-muted-foreground"
-                                                            title={`SKU ${line.sku_code}`}
+                                                            className="num truncate text-xs text-muted-foreground"
+                                                            title={specLine}
                                                         >
-                                                            SKU {line.sku_code}
+                                                            {specLine}
                                                         </p>
-                                                        <p className="text-xs text-muted-foreground">
-                                                            要求交付{" "}
-                                                            {inquiryDateInput(
-                                                                line.delivery_due_at,
-                                                            )}
+                                                        <p className="num text-xs text-muted-foreground">
+                                                            要求交付：{dueDate}
                                                         </p>
                                                     </div>
                                                 </div>
                                             </TableCell>
-                                            <TableCell className="text-right tabular-nums">
-                                                <div className="flex min-h-control items-center justify-end gap-3">
-                                                    <span className="inline-flex shrink-0 items-center gap-1 font-medium">
+                                            <TableCell className="num text-right">
+                                                <div className="flex min-h-control-sm flex-wrap items-center justify-end gap-2">
+                                                    <span className="inline-flex shrink-0 items-center gap-1 font-medium text-foreground">
                                                         {line.quantity}
-                                                        <span className="text-xs text-muted-foreground">
-                                                            {unit}
-                                                        </span>
+                                                        {unit ? (
+                                                            <span className="text-xs font-normal text-muted-foreground">
+                                                                {unit}
+                                                            </span>
+                                                        ) : null}
                                                     </span>
                                                     <InquiryFeedbackDemand
                                                         line={line}
@@ -501,7 +509,7 @@ export function InquiryFeedbackTable({
                                                     />
                                                 </div>
                                                 {onInternalQuote && (
-                                                    <div className="flex justify-end">
+                                                    <div className="mt-1 flex justify-end">
                                                         <Button
                                                             id={`${prefix}-internal-quotes`}
                                                             type="button"
@@ -540,8 +548,8 @@ export function InquiryFeedbackTable({
                                                     allowClear={false}
                                                     options={Object.entries(
                                                         INQUIRY_CONCLUSION_LABEL,
-                                                    ).map(([value, label]) => ({
-                                                        value,
+                                                    ).map(([val, label]) => ({
+                                                        value: val,
                                                         label,
                                                     }))}
                                                     onValueChange={(
@@ -560,7 +568,7 @@ export function InquiryFeedbackTable({
                                                 {value.conclusion ===
                                                     "partially_available" &&
                                                     !unavailable && (
-                                                        <div className="mt-2 flex items-center gap-2">
+                                                        <div className="mt-2 flex items-center gap-1.5">
                                                             <span className="shrink-0 text-xs text-muted-foreground">
                                                                 可供
                                                             </span>
@@ -572,7 +580,7 @@ export function InquiryFeedbackTable({
                                                                 disabled={
                                                                     disabled
                                                                 }
-                                                                className="text-right tabular-nums"
+                                                                className="h-control-sm num text-right"
                                                                 aria-label={`${line.product_name}可供数量`}
                                                                 inputMode="decimal"
                                                                 value={
@@ -595,35 +603,45 @@ export function InquiryFeedbackTable({
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 {unavailable ? (
-                                                    <span className="flex h-control items-center justify-end">
+                                                    <span className="flex h-control-sm items-center justify-end text-muted-foreground">
                                                         —
                                                     </span>
                                                 ) : (
-                                                    <Input
-                                                        id={`${prefix}-gross-price`}
-                                                        readOnly={readOnly}
-                                                        disabled={disabled}
-                                                        className="text-right tabular-nums"
-                                                        aria-label={`${line.product_name}含税供给单价`}
-                                                        inputMode="decimal"
-                                                        placeholder={
-                                                            readOnly
-                                                                ? "未记录"
-                                                                : "填写单价"
-                                                        }
-                                                        value={
-                                                            price?.unit_price_gross ??
-                                                            ""
-                                                        }
-                                                        onChange={(event) =>
-                                                            updatePrice({
-                                                                unit_price_gross:
-                                                                    event.target
-                                                                        .value ||
-                                                                    null,
-                                                            })
-                                                        }
-                                                    />
+                                                    <div className="relative">
+                                                        <span
+                                                            aria-hidden="true"
+                                                            className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-xs text-muted-foreground/70"
+                                                        >
+                                                            ¥
+                                                        </span>
+                                                        <Input
+                                                            id={`${prefix}-gross-price`}
+                                                            readOnly={readOnly}
+                                                            disabled={disabled}
+                                                            className="h-control-sm num pl-6 text-right"
+                                                            aria-label={`${line.product_name}含税供给单价`}
+                                                            inputMode="decimal"
+                                                            placeholder={
+                                                                readOnly
+                                                                    ? "未记录"
+                                                                    : "填写单价"
+                                                            }
+                                                            value={
+                                                                price?.unit_price_gross ??
+                                                                ""
+                                                            }
+                                                            onChange={(event) =>
+                                                                updatePrice({
+                                                                    unit_price_gross:
+                                                                        event.target.value.replaceAll(
+                                                                            "¥",
+                                                                            "",
+                                                                        ) ||
+                                                                        null,
+                                                                })
+                                                            }
+                                                        />
+                                                    </div>
                                                 )}
                                                 {!unavailable &&
                                                     onInternalQuote && (
@@ -656,13 +674,13 @@ export function InquiryFeedbackTable({
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 {unavailable ? (
-                                                    <span className="flex h-control items-center justify-end">
+                                                    <span className="flex h-control-sm items-center justify-end text-muted-foreground">
                                                         —
                                                     </span>
                                                 ) : (
                                                     <InquiryTaxRateInput
                                                         id={`${prefix}-tax-rate`}
-                                                        className="text-right tabular-nums"
+                                                        className="h-control-sm num text-right"
                                                         readOnly={readOnly}
                                                         disabled={disabled}
                                                         aria-label={`${line.product_name}税率（%）`}
@@ -694,11 +712,11 @@ export function InquiryFeedbackTable({
                                         (readOnly && value.public_note) ? (
                                             <TableRow>
                                                 <TableCell
-                                                    colSpan={6}
+                                                    colSpan={columnCount}
                                                     className="whitespace-normal bg-muted/20 px-4 py-2"
                                                 >
                                                     {readOnly ? (
-                                                        <p className="whitespace-pre-wrap wrap-anywhere text-muted-foreground">
+                                                        <p className="whitespace-pre-wrap text-xs text-muted-foreground wrap-anywhere">
                                                             {value.public_note}
                                                         </p>
                                                     ) : (

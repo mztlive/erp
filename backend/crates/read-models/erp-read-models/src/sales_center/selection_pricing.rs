@@ -18,7 +18,7 @@ use crate::Result;
 
 type OriginalPrices = BTreeMap<(String, String), SelectionReferencePrices>;
 
-/// 组装选品册冻结参考价时，为已授权选品册补齐冻结参考价与相对集采价的加价比例。
+/// 为已授权选品册补齐冻结参考价与相对初始客户售价的加价比例。
 ///
 /// # 参数
 /// `db` 为数据库，`view` 必须来自已完成册权限校验的详情，`executor` 为调用方读取边界。
@@ -121,19 +121,14 @@ fn apply_comparisons(
                         .iter()
                         .find(|sku| sku.sku_id_str() == member.sku_id)
                         .and_then(|sku| reference_prices(sku, originals));
-                    member.price_comparison = SelectionPriceComparison::new(
-                        member.price,
-                        member.reference_prices.as_ref().and_then(|prices| prices.bulk_price_gross),
-                    );
+                    member.price_comparison =
+                        SelectionPriceComparison::new(member.price, member.reference_prices.as_ref());
                 }
                 Some(package_references(members, originals)?)
             },
         };
 
-        view.price_comparison = SelectionPriceComparison::new(
-            view.price,
-            references.as_ref().and_then(|prices| prices.bulk_price_gross),
-        );
+        view.price_comparison = SelectionPriceComparison::new(view.price, references.as_ref());
         view.reference_prices = references;
     }
     Ok(())
@@ -151,10 +146,10 @@ mod tests {
 
     use super::*;
 
-    fn prices(bulk: &str) -> SelectionReferencePrices {
+    fn prices(dropship: &str, bulk: &str) -> SelectionReferencePrices {
         SelectionReferencePrices {
+            dropship_price_gross: Some(dropship.parse().unwrap()),
             bulk_price_gross: Some(bulk.parse().unwrap()),
-            dropship_price_gross: Some("150".parse().unwrap()),
             market_price: Some("200".parse().unwrap()),
         }
     }
@@ -243,8 +238,8 @@ mod tests {
 
     #[test]
     fn frozen_references_survive_storage_and_override_revision_prices() {
-        let mut frozen = sku("a", "121");
-        frozen.reference_prices = Some(prices("100"));
+        let mut frozen = sku("a", "120");
+        frozen.reference_prices = Some(prices("120", "100"));
         let frozen: SkuSnapshot = serde_json::from_value(serde_json::to_value(frozen).unwrap()).unwrap();
         let item = SalesSelectionDisplayItem::single_sku(
             SalesSelectionDisplayItemId::new("single"),
@@ -254,14 +249,15 @@ mod tests {
         )
         .unwrap();
         let mut views = vec![view(&item)];
-        let changed = BTreeMap::from([(("a".into(), "rev-a".into()), prices("500"))]);
+        let changed = BTreeMap::from([(("a".into(), "rev-a".into()), prices("150", "500"))]);
 
         apply_comparisons(&mut views, slice::from_ref(&item), &changed).unwrap();
-        assert_eq!(views[0].reference_prices, Some(prices("100")));
-        assert_eq!(views[0].price_comparison.markup_percent, Some("21".parse().unwrap()));
+        assert_eq!(views[0].reference_prices, Some(prices("120", "100")));
+        assert_eq!(views[0].price_comparison.markup_percent, Some(Amount::zero()));
 
         apply_comparisons(&mut views, &[item], &BTreeMap::new()).unwrap();
-        assert_eq!(views[0].reference_prices, Some(prices("100")));
+        assert_eq!(views[0].reference_prices, Some(prices("120", "100")));
+        assert_eq!(views[0].price_comparison.markup_percent, Some(Amount::zero()));
     }
 
     #[test]
@@ -280,31 +276,31 @@ mod tests {
         )
         .unwrap();
         let mut views = vec![view(&item)];
-        let changed = BTreeMap::from([(("a".into(), "rev-a".into()), prices("500"))]);
+        let changed = BTreeMap::from([(("a".into(), "rev-a".into()), prices("150", "500"))]);
         apply_comparisons(&mut views, &[item], &changed).unwrap();
         assert_eq!(views[0].reference_prices, Some(SelectionReferencePrices::default()));
         assert_eq!(views[0].price_comparison, SelectionPriceComparison::default());
     }
 
     #[test]
-    fn original_uses_exact_frozen_revision_and_never_the_current_price() {
+    fn legacy_baseline_uses_exact_frozen_revision() {
         let item = SalesSelectionDisplayItem::single_sku(
             SalesSelectionDisplayItemId::new("single"),
             SalesSelectionBookletId::new("book"),
             "batch".into(),
-            sku("a", "121"),
+            sku("a", "132"),
         )
         .unwrap();
         let originals = BTreeMap::from([
-            (("a".into(), "rev-a".into()), prices("100")),
-            (("a".into(), "new-rev-a".into()), prices("500")),
+            (("a".into(), "rev-a".into()), prices("120", "100")),
+            (("a".into(), "new-rev-a".into()), prices("150", "500")),
         ]);
         let mut views = vec![view(&item)];
 
         apply_comparisons(&mut views, &[item], &originals).unwrap();
         assert_eq!(views[0].price_comparison.original_price, Some("100".parse().unwrap()));
-        assert_eq!(views[0].price_comparison.markup_percent, Some("21".parse().unwrap()));
-        assert_eq!(views[0].price, "121".parse().unwrap());
+        assert_eq!(views[0].price_comparison.markup_percent, Some("10".parse().unwrap()));
+        assert_eq!(views[0].price, "132".parse().unwrap());
 
         // 旧响应没有新增对比字段时仍可恢复。
         let mut legacy = serde_json::to_value(&views[0]).unwrap();
@@ -315,7 +311,7 @@ mod tests {
     }
 
     #[test]
-    fn package_comparison_sums_member_originals_and_preserves_member_quotes() {
+    fn package_comparison_sums_member_initial_prices_and_preserves_member_quotes() {
         let item = SalesSelectionDisplayItem::package(
             SalesSelectionDisplayItemId::new("package"),
             SalesSelectionBookletId::new("book"),
@@ -331,21 +327,25 @@ mod tests {
         )
         .unwrap();
         let originals = BTreeMap::from([
-            (("a".into(), "rev-a".into()), prices("100")),
-            (("b".into(), "rev-b".into()), prices("200")),
+            (("a".into(), "rev-a".into()), prices("100", "80")),
+            (("b".into(), "rev-b".into()), prices("200", "150")),
         ]);
         let mut views = vec![view(&item)];
 
         apply_comparisons(&mut views, slice::from_ref(&item), &originals).unwrap();
-        assert_eq!(views[0].price_comparison.original_price, Some("300".parse().unwrap()));
+        assert_eq!(views[0].price_comparison.original_price, Some("230".parse().unwrap()));
         assert_eq!(views[0].price_comparison.markup_percent, Some("16.67".parse().unwrap()));
         assert_eq!(views[0].members[0].price_comparison.markup_percent, Some("10".parse().unwrap()));
         assert_eq!(views[0].members[1].price_comparison.markup_percent, Some("20".parse().unwrap()));
         assert_eq!(views[0].members[1].price, "240".parse().unwrap());
 
-        let incomplete = BTreeMap::from([(("other-sku".into(), "rev-b".into()), prices("200"))]);
+        let incomplete = BTreeMap::from([
+            (("a".into(), "rev-a".into()), prices("100", "80")),
+            (("other-sku".into(), "rev-b".into()), prices("200", "150")),
+        ]);
         apply_comparisons(&mut views, &[item], &incomplete).unwrap();
         assert_eq!(views[0].price_comparison, SelectionPriceComparison::default());
+        assert_eq!(views[0].members[0].price_comparison.markup_percent, Some("10".parse().unwrap()));
         assert_eq!(views[0].members[1].price_comparison, SelectionPriceComparison::default());
     }
 }

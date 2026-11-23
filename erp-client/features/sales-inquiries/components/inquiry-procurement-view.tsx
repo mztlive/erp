@@ -7,19 +7,24 @@ import {
     DetailWorkspaceChrome,
     DetailWorkspaceDirtyBadge,
     DetailWorkspaceMeta,
+    DetailWorkspaceMetricItem,
+    DetailWorkspaceMetrics,
     DetailWorkspacePage,
     DetailWorkspaceSaveDock,
+    MoneyValue,
     QuickPreviewSheet,
 } from "@/components/business"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { sumFixed } from "@/lib/fixed-decimal"
 import { hasPermission } from "@/lib/permissions"
 import { useWorkspaceDirtyState } from "@/lib/workspace-form-guard"
-import { inquiryDate } from "../lib/format"
+import { inquiryDateInput } from "../lib/format"
 import { resolveInquiryBackLink } from "../lib/navigation"
 import {
     INQUIRY_STATUS_LABEL,
     INQUIRY_STATUS_TONE,
+    type InquiryFee,
     type ProcurementInquiry,
 } from "../types"
 import { InquiryActions } from "./inquiry-actions"
@@ -37,6 +42,18 @@ import { InquiryReinquiryNotice } from "./inquiry-reinquiry-notice"
 import { InquiryRequirementTable } from "./inquiry-requirement-table"
 import { SupplierQuoteExportButton } from "./supplier-quote-export-dialog"
 import { SupplierQuoteImportButton } from "./supplier-quote-import-dialog"
+
+function sumFeesGross(fees: readonly InquiryFee[]): string | null {
+    if (fees.length === 0) return null
+    try {
+        return sumFixed(
+            fees.map((fee) => fee.amount_gross),
+            { maxScale: 2, outputScale: 2 },
+        )
+    } catch {
+        return null
+    }
+}
 
 export function InquiryProcurementView({
     inquiry,
@@ -155,6 +172,91 @@ export function InquiryProcurementView({
     )
 
     const saveDockOpen = !embedded && canProcess && feedbackDirty
+    const deadlineText = inquiryDateInput(inquiry.deadline_at) || "未设置"
+    const feeCount = selectedFeedback?.data.fees.length ?? 0
+    const feeTotal = sumFeesGross(selectedFeedback?.data.fees ?? [])
+    const scopeLineCount = task
+        ? task.line_ids.length
+        : inquiry.draft.lines.length
+    const publishedAvailable =
+        selectedFeedback?.data.lines.filter(
+            (item) => item.conclusion === "available",
+        ).length ?? 0
+    const publishedPartial =
+        selectedFeedback?.data.lines.filter(
+            (item) => item.conclusion === "partially_available",
+        ).length ?? 0
+    const publishedUnavailable =
+        selectedFeedback?.data.lines.filter(
+            (item) => item.conclusion === "unavailable",
+        ).length ?? 0
+
+    const summaryBar = embedded ? undefined : (
+        <DetailWorkspaceMetrics
+            columns={4}
+            variant="bar"
+            ariaLabel="采购询价概览"
+        >
+            <DetailWorkspaceMetricItem
+                label={canProcess ? "负责商品" : "商品与反馈"}
+                emphasis="primary"
+                value={
+                    <span>
+                        <span className="num">
+                            {canProcess
+                                ? feedbackStatus.totalCount
+                                : scopeLineCount}
+                        </span>{" "}
+                        <span className="text-body-compact font-normal text-muted-foreground">
+                            项
+                        </span>
+                    </span>
+                }
+                detail={
+                    canProcess
+                        ? `已填写完整 ${feedbackStatus.completeCount} / ${feedbackStatus.totalCount} 项`
+                        : selectedFeedback
+                          ? `可供 ${publishedAvailable} · 部分 ${publishedPartial} · 不供应 ${publishedUnavailable}`
+                          : "等待报价处理"
+                }
+            />
+            <DetailWorkspaceMetricItem
+                label="额外费用"
+                value={
+                    feeTotal !== null ? (
+                        <MoneyValue
+                            value={feeTotal}
+                            display="exact"
+                            showHint={false}
+                        />
+                    ) : (
+                        <span className="text-muted-foreground">—</span>
+                    )
+                }
+                detail={
+                    feeCount > 0 ? `共 ${feeCount} 项额外费用` : "暂无额外费用"
+                }
+            />
+            <DetailWorkspaceMetricItem
+                label="询价截止"
+                value={deadlineText}
+                detail={
+                    inquiry.shared_fee_owner_user_id
+                        ? `整单费用：${inquiry.shared_fee_owner_name || (inquiry.shared_fee_owner_user_id === userId ? "由我维护" : "已指定责任采购")}`
+                        : undefined
+                }
+            />
+            <DetailWorkspaceMetricItem
+                label="反馈轮次"
+                value={
+                    inquiry.feedback_round > 0
+                        ? `第 ${inquiry.feedback_round} 轮`
+                        : "待首次反馈"
+                }
+                detail={`对应需求第 ${inquiry.requirement_version} 版`}
+            />
+        </DetailWorkspaceMetrics>
+    )
 
     const content = (
         <InquiryActions
@@ -191,15 +293,17 @@ export function InquiryProcurementView({
                             <span key="req" className="num">
                                 需求第 {inquiry.requirement_version} 版
                             </span>,
-                            <span key="round" className="num">
-                                反馈第 {inquiry.feedback_round} 轮
-                            </span>,
-                            <span key="deadline">
-                                询价截止：
-                                <span className="num">
-                                    {inquiryDate(inquiry.deadline_at)}
+                            inquiry.feedback_round > 0 && (
+                                <span key="round" className="num">
+                                    反馈第 {inquiry.feedback_round} 轮
                                 </span>
-                            </span>,
+                            ),
+                            inquiry.deadline_at > 0 && (
+                                <span key="deadline">
+                                    截止：
+                                    <span className="num">{deadlineText}</span>
+                                </span>
+                            ),
                         ]}
                     />
                 )
@@ -332,7 +436,7 @@ export function InquiryProcurementView({
                             workspace={!embedded}
                             inquiry={inquiry}
                             procurement
-                            feeCount={selectedFeedback?.data.fees.length ?? 0}
+                            feeCount={feeCount}
                             feedbackActions={feedbackActions}
                             feedback={feedbackPanel}
                             publishedFeedback={publishedPanel}
@@ -410,6 +514,7 @@ export function InquiryProcurementView({
                                             tabs={navigation}
                                         />
                                         <DetailWorkspaceBody
+                                            summary={summaryBar}
                                             alerts={alerts}
                                             saveDockOpen={saveDockOpen}
                                         >
@@ -424,7 +529,7 @@ export function InquiryProcurementView({
                             <DetailWorkspaceSaveDock
                                 open={saveDockOpen}
                                 changeCount={0}
-                                description={`已填写完整 ${feedbackStatus.completeCount} / ${feedbackStatus.totalCount} 项（Cmd/Ctrl + S 保存进度）`}
+                                description={`已填写完整 ${feedbackStatus.completeCount} / ${feedbackStatus.totalCount} 项`}
                                 onSave={() => feedbackEditor.current?.save()}
                                 saving={feedbackStatus.saving}
                                 actions={

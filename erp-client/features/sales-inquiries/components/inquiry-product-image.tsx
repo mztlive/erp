@@ -16,6 +16,7 @@ export function InquiryProductImage({
     lookupFailed,
     idPrefix,
     detail = false,
+    size = "md",
 }: {
     assetId?: string
     label: string
@@ -23,6 +24,7 @@ export function InquiryProductImage({
     lookupFailed: boolean
     idPrefix: string
     detail?: boolean
+    size?: "sm" | "md"
 }) {
     const query = useFileAssetQuery(assetId)
     const [failedUrl, setFailedUrl] = React.useState<string | null>(null)
@@ -47,13 +49,21 @@ export function InquiryProductImage({
         <span
             className={cn(
                 "block min-w-0",
-                detail ? "space-y-2" : "size-12 shrink-0",
+                detail
+                    ? "space-y-2"
+                    : size === "sm"
+                      ? "size-10 shrink-0"
+                      : "size-12 shrink-0",
             )}
         >
             <span
                 className={cn(
-                    "flex items-center justify-center overflow-hidden rounded-lg border bg-card",
-                    detail ? "h-48 w-full" : "size-12",
+                    "flex items-center justify-center overflow-hidden border bg-card",
+                    detail
+                        ? "h-48 w-full rounded-lg"
+                        : size === "sm"
+                          ? "size-10 rounded-md"
+                          : "size-12 rounded-lg",
                 )}
                 title={
                     showImage

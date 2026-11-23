@@ -54,39 +54,98 @@ export function SalesInquiryProducts({
         inquiry.acceptances.some(
             (item) => item.feedback_round === feedback.round,
         )
+
     if (revision) return revision
+    if (editing) return <div className="min-w-0">{demand}</div>
+
+    const availableCount =
+        feedback?.data.lines.filter((item) => item.conclusion === "available")
+            .length ?? 0
+    const partialCount =
+        feedback?.data.lines.filter(
+            (item) => item.conclusion === "partially_available",
+        ).length ?? 0
+    const unavailableCount =
+        feedback?.data.lines.filter((item) => item.conclusion === "unavailable")
+            .length ?? 0
+
     return (
         <div className="min-w-0 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-body-compact">
-                    <span className="font-medium">
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-body-compact">
+                    <h2 className="text-section-title font-semibold tracking-tight text-foreground">
                         {feedback ? (
                             <span className="num">
                                 第 {feedback.round} 轮反馈
                             </span>
                         ) : (
-                            "当前商品需求"
+                            "商品需求"
                         )}
-                    </span>
-                    <span className="num text-muted-foreground">
+                    </h2>
+                    <span className="num text-xs text-muted-foreground">
                         {feedback
-                            ? `对应需求第 ${feedback.requirement_version} 版 · 发布于 ${inquiryDate(feedback.published_at)}`
+                            ? `对应需求第 ${feedback.requirement_version} 版 · ${inquiryDate(feedback.published_at)}`
                             : `需求第 ${inquiry.requirement_version} 版`}
                     </span>
                     {historical && (
                         <StatusBadge label="历史反馈" tone="neutral" />
                     )}
                     {accepted && <StatusBadge label="已接受" tone="success" />}
+                    {deliveryAttentionCount > 0 && (
+                        <StatusBadge
+                            tone="warning"
+                            label={`配送待核对 ${deliveryAttentionCount} 项`}
+                        />
+                    )}
                 </div>
-                {!editing &&
-                    (rounds.length > 1 ||
+
+                <div className="flex flex-wrap items-center gap-3">
+                    {feedback && (
+                        <div className="flex flex-wrap items-center gap-3 text-xs">
+                            <span className="inline-flex items-center gap-1.5 text-foreground">
+                                <span
+                                    aria-hidden="true"
+                                    className="size-1.5 rounded-full bg-success"
+                                />
+                                可供{" "}
+                                <span className="num">{availableCount}</span>
+                            </span>
+                            {partialCount > 0 && (
+                                <span className="inline-flex items-center gap-1.5 text-warning-soft-foreground">
+                                    <span
+                                        aria-hidden="true"
+                                        className="size-1.5 rounded-full bg-warning"
+                                    />
+                                    部分可供{" "}
+                                    <span className="num">{partialCount}</span>
+                                </span>
+                            )}
+                            {unavailableCount > 0 && (
+                                <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                                    <span
+                                        aria-hidden="true"
+                                        className="size-1.5 rounded-full bg-muted-foreground/55"
+                                    />
+                                    不供应{" "}
+                                    <span className="num">
+                                        {unavailableCount}
+                                    </span>
+                                </span>
+                            )}
+                        </div>
+                    )}
+                    {(rounds.length > 1 ||
                         (!currentFeedback && rounds.length > 0)) && (
                         <div className="flex items-center gap-2">
-                            <Label htmlFor="sales-inquiry-products-round">
-                                查看轮次
+                            <Label
+                                htmlFor="sales-inquiry-products-round"
+                                className="shrink-0 text-xs text-muted-foreground"
+                            >
+                                轮次
                             </Label>
                             <NativeSelect
                                 id="sales-inquiry-products-round"
+                                className="h-control-sm"
                                 value={
                                     feedback
                                         ? String(feedback.round)
@@ -125,62 +184,33 @@ export function SalesInquiryProducts({
                             </NativeSelect>
                         </div>
                     )}
-                <div className="flex flex-wrap items-center gap-2">
-                    {feedback && (
-                        <p className="num text-xs text-muted-foreground">
-                            可供{" "}
-                            {
-                                feedback.data.lines.filter(
-                                    (item) => item.conclusion === "available",
-                                ).length
-                            }{" "}
-                            项 · 部分可供{" "}
-                            {
-                                feedback.data.lines.filter(
-                                    (item) =>
-                                        item.conclusion ===
-                                        "partially_available",
-                                ).length
-                            }{" "}
-                            项 · 不供应{" "}
-                            {
-                                feedback.data.lines.filter(
-                                    (item) => item.conclusion === "unavailable",
-                                ).length
-                            }{" "}
-                            项
-                        </p>
-                    )}
-                    {deliveryAttentionCount > 0 && (
-                        <StatusBadge
-                            tone="warning"
-                            label={`配送待核对 ${deliveryAttentionCount} 项`}
-                        />
-                    )}
                 </div>
             </div>
+
             {waiting && !feedback && (
                 <Alert variant="info">
                     <AlertDescription>
                         {rounds.length
-                            ? "当前需求正在重新询价，等待采购发布新反馈。上一轮报价可通过“查看轮次”查阅。"
-                            : "需求已提交，等待采购反馈。"}
+                            ? "当前需求正在重新询价，等待采购发布新反馈。上一轮报价可通过右上角“轮次”切换查阅。"
+                            : "需求已提交，等待采购处理并发布报价反馈。"}
                     </AlertDescription>
                 </Alert>
             )}
+
             {historical && (
                 <p className="text-xs text-muted-foreground">
-                    正在查看第 {feedback.requirement_version}{" "}
-                    版需求及其报价；最新需求为第 {inquiry.requirement_version}{" "}
+                    正在查看第{" "}
+                    <span className="num">{feedback.requirement_version}</span>{" "}
+                    版需求及反馈；最新需求为第{" "}
+                    <span className="num">{inquiry.requirement_version}</span>{" "}
                     版。
                     {requirement?.note
                         ? `本版需求说明：${requirement.note}`
                         : ""}
                 </p>
             )}
-            {editing ? (
-                demand
-            ) : requirement ? (
+
+            {requirement ? (
                 <InquiryProductsTable
                     key={feedback ? `round-${feedback.round}` : "current"}
                     requirement={requirement}
@@ -193,11 +223,6 @@ export function SalesInquiryProducts({
                         该轮报价对应的历史需求明细加载失败，请刷新页面重试。
                     </AlertDescription>
                 </Alert>
-            )}
-            {!editing && (
-                <p className="text-xs text-muted-foreground">
-                    交付日期与配送范围沿用对应需求，可在“配送地址”或“交付要求”中核对。
-                </p>
             )}
         </div>
     )

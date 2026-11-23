@@ -1,5 +1,6 @@
 "use client"
 
+import { ReceiptTextIcon } from "lucide-react"
 import { MoneyValue, RateValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -13,7 +14,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { multiplyFixed } from "@/lib/fixed-decimal"
+import { multiplyFixed, sumFixed } from "@/lib/fixed-decimal"
 import { inquiryFeeBasisRound } from "../lib/fee-basis"
 import { inquiryDate } from "../lib/format"
 import type {
@@ -46,12 +47,21 @@ export function InquiryFees({
     const rounds = [...inquiry.feedbacks].sort((a, b) => b.round - a.round)
     const feedback =
         rounds.find((item) => item.round === selectedRound) ?? rounds[0]
-    if (!feedback)
+    if (!feedback) {
         return (
-            <p className="text-xs text-muted-foreground">
-                采购尚未发布费用结果。
-            </p>
+            <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border/80 bg-surface-sunken/50 px-6 py-10 text-center">
+                <div className="flex size-9 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <ReceiptTextIcon aria-hidden="true" className="size-4" />
+                </div>
+                <p className="text-body-compact font-medium text-foreground">
+                    暂无额外费用
+                </p>
+                <p className="text-xs text-muted-foreground">
+                    采购发布反馈后，物流、打样等额外费用与办理进度将展示在此处。
+                </p>
+            </div>
         )
+    }
     const acceptances = "acceptances" in inquiry ? inquiry.acceptances : []
     const basisRound = procurement
         ? inquiryFeeBasisRound(inquiry)
@@ -70,32 +80,46 @@ export function InquiryFees({
     const historical = !isCurrent(feedback)
     const hasHandling = handlingEnabled && Boolean(basis?.data.fees.length)
     const showHandling = hasHandling && basis?.round === feedback.round
+    let feeTotal: string | null = null
+    if (feedback.data.fees.length > 0) {
+        try {
+            feeTotal = sumFixed(
+                feedback.data.fees.map((fee) => fee.amount_gross),
+                { maxScale: 4, outputScale: 2 },
+            )
+        } catch {
+            feeTotal = null
+        }
+    }
     const context =
         inquiry.status === "closed"
-            ? "询价已关闭，费用及办理记录仅供核对，不能新增分摊或办理。"
+            ? "询价已关闭，费用及办理记录仅供核对。"
             : procurement
               ? showHandling
-                  ? `办理依据为第 ${basis.round} 轮反馈，各项费用的办理条件和进度见下表。`
+                  ? `办理依据为第 ${basis.round} 轮反馈。`
                   : "本轮费用仅供核对，不改变当前费用办理依据。"
               : showHandling
-                ? `${waiting ? `当前需求第 ${inquiry.requirement_version} 版正在询价。` : ""}办理依据为第 ${basis.round} 轮已接受结果，可办理范围以各项费用状态为准。`
+                ? `${waiting ? `当前需求第 ${inquiry.requirement_version} 版正在询价，` : ""}办理依据为第 ${basis.round} 轮已接受结果。`
                 : waiting
-                  ? `当前需求第 ${inquiry.requirement_version} 版正在询价，本轮费用仅供参考。${accepted ? "" : "本轮结果尚未接受，暂不能分摊或办理。"}`
+                  ? `当前需求第 ${inquiry.requirement_version} 版正在询价，本轮费用仅供参考。${accepted ? "" : "本轮尚未接受，暂不能分摊或办理。"}`
                   : !accepted
                     ? "本轮结果尚未接受，暂不能分摊或办理。"
                     : historical
-                      ? "本轮费用为历史反馈，仅供核对；查看历史不会改变当前办理依据。"
+                      ? "本轮费用为历史反馈，仅供核对。"
                       : "本轮结果已接受。"
     return (
         <section className="space-y-4" aria-label="询价费用">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2 text-body-compact">
-                        <span className="font-medium">
-                            第 {feedback.round} 轮反馈
-                        </span>
-                        <span className="text-muted-foreground">
-                            对应需求第 {feedback.requirement_version} 版
+                        <h2 className="text-section-title font-semibold tracking-tight text-foreground">
+                            <span className="num">
+                                第 {feedback.round} 轮反馈
+                            </span>
+                        </h2>
+                        <span className="num text-xs text-muted-foreground">
+                            对应需求第 {feedback.requirement_version} 版 ·{" "}
+                            {inquiryDate(feedback.published_at)}
                         </span>
                         {historical && (
                             <StatusBadge tone="neutral" label="历史反馈" />
@@ -103,59 +127,72 @@ export function InquiryFees({
                         {accepted && (
                             <StatusBadge tone="success" label="已接受" />
                         )}
-                        <span className="text-muted-foreground">
-                            额外费用 {feedback.data.fees.length} 项
-                        </span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                        发布于 {inquiryDate(feedback.published_at)}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        <span>{context}</span>
+                        {feeTotal !== null && (
+                            <span>
+                                合计{" "}
+                                <MoneyValue
+                                    value={feeTotal}
+                                    display="exact"
+                                    showHint={false}
+                                    className="font-medium text-foreground"
+                                />
+                            </span>
+                        )}
+                    </div>
                 </div>
-                {rounds.length > 1 && (
-                    <div className="flex items-center gap-2">
-                        <Label htmlFor="sales-inquiry-fees-round">
-                            反馈轮次
-                        </Label>
-                        <NativeSelect
-                            id="sales-inquiry-fees-round"
-                            value={String(feedback.round)}
-                            onChange={(event) => {
-                                const next = rounds.find(
-                                    (item) =>
-                                        String(item.round) ===
-                                        event.target.value,
-                                )
-                                if (next) onRoundChange(next.round)
-                            }}
+                <div className="flex flex-wrap items-center gap-2">
+                    {hasHandling && !showHandling && basis && (
+                        <Button
+                            id="sales-inquiry-fees-view-basis"
+                            variant="link"
+                            size="sm"
+                            onClick={() => onRoundChange(basis.round)}
                         >
-                            {rounds.map((item) => (
-                                <NativeSelectOption
-                                    key={item.round}
-                                    id={`sales-inquiry-fees-round-${item.round}`}
-                                    value={String(item.round)}
-                                >
-                                    第 {item.round} 轮 · 需求第{" "}
-                                    {item.requirement_version} 版
-                                    {isCurrent(item) ? "（当前）" : "（历史）"}
-                                </NativeSelectOption>
-                            ))}
-                        </NativeSelect>
-                    </div>
-                )}
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 text-body-compact text-muted-foreground">
-                <p>{context}</p>
-                {hasHandling && !showHandling && basis && (
-                    <Button
-                        id="sales-inquiry-fees-view-basis"
-                        variant="link"
-                        size="sm"
-                        onClick={() => onRoundChange(basis.round)}
-                    >
-                        查看第 {basis.round} 轮{procurement ? "" : "已接受"}
-                        费用及办理进度
-                    </Button>
-                )}
+                            查看第 {basis.round} 轮{procurement ? "" : "已接受"}
+                            费用及办理进度
+                        </Button>
+                    )}
+                    {rounds.length > 1 && (
+                        <div className="flex items-center gap-2">
+                            <Label
+                                htmlFor="sales-inquiry-fees-round"
+                                className="shrink-0 text-xs text-muted-foreground"
+                            >
+                                轮次
+                            </Label>
+                            <NativeSelect
+                                id="sales-inquiry-fees-round"
+                                className="h-control-sm"
+                                value={String(feedback.round)}
+                                onChange={(event) => {
+                                    const next = rounds.find(
+                                        (item) =>
+                                            String(item.round) ===
+                                            event.target.value,
+                                    )
+                                    if (next) onRoundChange(next.round)
+                                }}
+                            >
+                                {rounds.map((item) => (
+                                    <NativeSelectOption
+                                        key={item.round}
+                                        id={`sales-inquiry-fees-round-${item.round}`}
+                                        value={String(item.round)}
+                                    >
+                                        第 {item.round} 轮 · 需求第{" "}
+                                        {item.requirement_version} 版
+                                        {isCurrent(item)
+                                            ? "（当前）"
+                                            : "（历史）"}
+                                    </NativeSelectOption>
+                                ))}
+                            </NativeSelect>
+                        </div>
+                    )}
+                </div>
             </div>
             {!showHandling && <FeeQuoteTable feedback={feedback} />}
             {hasHandling && (
@@ -177,9 +214,9 @@ export function InquiryFees({
 function FeeQuoteTable({ feedback }: { feedback: InquiryFeedback }) {
     if (feedback.data.fees.length === 0)
         return (
-            <p className="text-xs text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-border/80 bg-surface-sunken/50 px-6 py-8 text-center text-xs text-muted-foreground">
                 本轮未提出额外费用。
-            </p>
+            </div>
         )
     return (
         <div
@@ -190,10 +227,10 @@ function FeeQuoteTable({ feedback }: { feedback: InquiryFeedback }) {
                 <TableHeader>
                     <TableRow>
                         <TableHead>费用名称</TableHead>
-                        <TableHead data-align="end" className="text-right">
+                        <TableHead data-align="end" className="w-40 text-right">
                             含税金额
                         </TableHead>
-                        <TableHead data-align="end" className="text-right">
+                        <TableHead data-align="end" className="w-28 text-right">
                             税率
                         </TableHead>
                     </TableRow>
@@ -201,8 +238,10 @@ function FeeQuoteTable({ feedback }: { feedback: InquiryFeedback }) {
                 <TableBody>
                     {feedback.data.fees.map((fee) => (
                         <TableRow key={fee.fee_id}>
-                            <TableCell className="max-w-96 whitespace-normal">
-                                <p className="font-medium">{fee.name}</p>
+                            <TableCell className="max-w-96 whitespace-normal py-3">
+                                <p className="font-medium text-foreground">
+                                    {fee.name}
+                                </p>
                                 {fee.public_note && (
                                     <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">
                                         {fee.public_note}
@@ -211,13 +250,17 @@ function FeeQuoteTable({ feedback }: { feedback: InquiryFeedback }) {
                             </TableCell>
                             <TableCell
                                 data-align="end"
-                                className="num text-right"
+                                className="num py-3 text-right"
                             >
-                                <MoneyValue value={fee.amount_gross} />
+                                <MoneyValue
+                                    value={fee.amount_gross}
+                                    display="exact"
+                                    showHint={false}
+                                />
                             </TableCell>
                             <TableCell
                                 data-align="end"
-                                className="num text-right"
+                                className="num py-3 text-right"
                             >
                                 <RateValue
                                     value={multiplyFixed(fee.tax_rate, "100", {

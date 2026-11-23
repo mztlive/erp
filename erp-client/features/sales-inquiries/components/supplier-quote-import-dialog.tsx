@@ -118,9 +118,11 @@ export function SupplierQuoteImportButton({
             <Button
                 id="procurement-inquiry-import-quotes"
                 variant="outline"
+                size="sm"
+                type="button"
                 onClick={() => setOpen(true)}
             >
-                <UploadIcon aria-hidden="true" />
+                <UploadIcon aria-hidden="true" data-icon="inline-start" />
                 导入供应商报价
             </Button>
             <Dialog

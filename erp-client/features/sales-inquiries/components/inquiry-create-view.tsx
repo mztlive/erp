@@ -60,6 +60,8 @@ export function InquiryCreateView({
             pendingDeliveryCount: 0,
             canSave: true,
             customerId: "",
+            pricedLineCount: 0,
+            referenceTotal: null,
         })
 
     const title = copyFromId ? "复制为新询价" : "新建销售询价"

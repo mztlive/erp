@@ -13,7 +13,7 @@ pub struct DisplayItemView {
     /// 准备时冻结的含税参考价。
     #[serde(default)]
     pub reference_prices: Option<SelectionReferencePrices>,
-    /// 仅管理端展示的集采价和累计加价比例。
+    /// 管理端集采价和相对初始客户售价的累计加价比例。
     #[serde(flatten)]
     pub price_comparison: SelectionPriceComparison,
     /// 单品的册内 SKU 身份，仅管理端改价使用；套餐为空。
@@ -61,7 +61,7 @@ pub struct DisplayMemberView {
     /// 成员准备时冻结的含税参考价。
     #[serde(default)]
     pub reference_prices: Option<SelectionReferencePrices>,
-    /// 成员商品集采价与累计加价比例。
+    /// 成员集采价和相对成员初始客户售价的累计加价比例。
     #[serde(flatten)]
     pub price_comparison: SelectionPriceComparison,
     /// SKU 稳定身份；公开页不展示编号，内部预览可用。

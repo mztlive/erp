@@ -22,6 +22,7 @@ import type { DemandFormValues } from "../lib/demand-form"
 import {
     isLineQuantityValid,
     isLineReferencePriceValid,
+    summarizeDemand,
 } from "../lib/demand-summary"
 import { inquiryDateSeconds } from "../lib/format"
 import {
@@ -48,6 +49,8 @@ export type InquiryDemandEditorStatus = {
     pendingDeliveryCount: number
     canSave: boolean
     customerId: string
+    pricedLineCount: number
+    referenceTotal: string | null
 }
 
 type DemandRevision = {
@@ -291,13 +294,16 @@ function DemandEditorContent({
     const [saved, setSaved] = React.useState(false)
     const [dirty, setDirty] = React.useState(restoredDirty)
     const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
-    const [editorMeta, setEditorMeta] = React.useState(() => ({
-        lineCount: initial.draft.lines.length,
-        pendingDeliveryCount: initial.draft.lines.filter(
-            (line) => !deliveryProgress(line).complete,
-        ).length,
-        customerId: initial.customer_id,
-    }))
+    const [editorMeta, setEditorMeta] = React.useState(() => {
+        const summary = summarizeDemand(initial)
+        return {
+            lineCount: summary.lineCount,
+            pendingDeliveryCount: summary.pendingDeliveryCount,
+            customerId: initial.customer_id,
+            pricedLineCount: summary.pricedLineCount,
+            referenceTotal: summary.referenceTotal,
+        }
+    })
     const canSave =
         hasPermission(permissions, "sellable_sku:list") &&
         hasPermission(
@@ -317,13 +323,13 @@ function DemandEditorContent({
                 setDirty(true)
                 onDirtyChange?.(true)
                 const values = formApi.state.values
-                const lines = values.draft.lines
+                const summary = summarizeDemand(values)
                 setEditorMeta({
-                    lineCount: lines.length,
-                    pendingDeliveryCount: lines.filter(
-                        (line) => !deliveryProgress(line).complete,
-                    ).length,
+                    lineCount: summary.lineCount,
+                    pendingDeliveryCount: summary.pendingDeliveryCount,
                     customerId: values.customer_id,
+                    pricedLineCount: summary.pricedLineCount,
+                    referenceTotal: summary.referenceTotal,
                 })
                 try {
                     writeInquiryLocalValue(storageKey, {
@@ -498,12 +504,13 @@ function DemandEditorContent({
         setSaved(false)
         setDirty(false)
         onDirtyChange?.(false)
+        const freshSummary = summarizeDemand(fresh)
         setEditorMeta({
-            lineCount: fresh.draft.lines.length,
-            pendingDeliveryCount: fresh.draft.lines.filter(
-                (line) => !deliveryProgress(line).complete,
-            ).length,
+            lineCount: freshSummary.lineCount,
+            pendingDeliveryCount: freshSummary.pendingDeliveryCount,
             customerId: fresh.customer_id,
+            pricedLineCount: freshSummary.pricedLineCount,
+            referenceTotal: freshSummary.referenceTotal,
         })
         toast.add({
             title: copyFrom ? "已恢复原询价内容" : "已清空未创建内容",
@@ -531,6 +538,8 @@ function DemandEditorContent({
             pendingDeliveryCount: editorMeta.pendingDeliveryCount,
             canSave,
             customerId: editorMeta.customerId,
+            pricedLineCount: editorMeta.pricedLineCount,
+            referenceTotal: editorMeta.referenceTotal,
         })
     }, [
         canSave,
@@ -539,6 +548,8 @@ function DemandEditorContent({
         editorMeta.customerId,
         editorMeta.lineCount,
         editorMeta.pendingDeliveryCount,
+        editorMeta.pricedLineCount,
+        editorMeta.referenceTotal,
         onStatusChange,
         saveDisabled,
     ])
@@ -876,7 +887,7 @@ function DemandEditorContent({
                         aria-label="商品与配送需求"
                     >
                         <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div className="space-y-2">
+                            <div className="space-y-1.5">
                                 <form.Subscribe
                                     selector={(state) =>
                                         state.values.draft.lines
@@ -889,15 +900,15 @@ function DemandEditorContent({
                                                     .complete,
                                         ).length
                                         return (
-                                            <p className="text-body-compact font-medium">
-                                                共{" "}
-                                                <span className="num">
-                                                    {lines.length}
-                                                </span>{" "}
-                                                项商品
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <h2 className="text-section-title font-semibold tracking-tight text-foreground">
+                                                    商品需求
+                                                </h2>
+                                                <span className="num rounded-sm bg-muted/80 px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+                                                    {lines.length} 项
+                                                </span>
                                                 {pending > 0 ? (
-                                                    <span className="ml-2 text-xs font-normal text-warning-soft-foreground">
-                                                        ·{" "}
+                                                    <span className="text-xs text-warning-soft-foreground">
                                                         <span className="num">
                                                             {pending}
                                                         </span>{" "}
@@ -907,21 +918,24 @@ function DemandEditorContent({
                                                 {saved ? (
                                                     <span
                                                         role="status"
-                                                        className="ml-2 text-xs font-normal text-muted-foreground"
+                                                        className="text-xs text-muted-foreground"
                                                     >
                                                         · 需求已保存
                                                     </span>
                                                 ) : null}
-                                            </p>
+                                            </div>
                                         )
                                     }}
                                 </form.Subscribe>
-                                {inquiry && (
-                                    <InquiryProgress
-                                        progress={inquiry.sales_progress}
-                                        compact
-                                    />
-                                )}
+                                {inquiry &&
+                                    (inquiry.feedback_round > 0 ||
+                                        inquiry.sales_progress.completed_lines >
+                                            0) && (
+                                        <InquiryProgress
+                                            progress={inquiry.sales_progress}
+                                            compact
+                                        />
+                                    )}
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                                 {linesToolbar}
