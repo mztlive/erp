@@ -1,11 +1,13 @@
 "use client"
 
 import {
+    DetailWorkspaceMetricItem,
+    DetailWorkspaceMetrics,
+    DetailWorkspaceSection,
     MoneyValue,
-    workspaceTaskSurfacePadClassName,
 } from "@/components/business"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import {
     paymentReviewBasis,
@@ -41,58 +43,49 @@ export function RequestReviewSummary({
         compareDecimal(request.closed_amount, "0", 4) > 0 ||
         request.status === "closed"
     return (
-        <section
-            aria-label="付款申请与金额依据"
-            className={cn(
-                workspaceTaskSurfacePadClassName,
-                "space-y-4 border-b border-grid bg-info-soft/30 py-4",
-            )}
+        <DetailWorkspaceSection
+            ariaLabel="付款申请与金额依据"
+            className="py-5 first:pt-5 last:pb-5"
         >
-            <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+            <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-3">
                 <div className="min-w-0 flex-1 space-y-1">
-                    <h2 className="text-section-title font-semibold wrap-anywhere tracking-tight">
+                    <h2 className="text-section-title font-semibold wrap-anywhere tracking-tight text-foreground">
                         {purchaseSummary(request.lines)}
                     </h2>
-                    <p className="text-body-compact wrap-anywhere">
-                        {request.supplier_name}
-                    </p>
                     <p className="num text-xs text-muted-foreground break-all">
                         {request.lines.length === 1
-                            ? request.lines[0].purchase_order_no
-                            : `共 ${request.lines.length} 张采购单`}
+                            ? `关联采购单：${request.lines[0].purchase_order_no}`
+                            : `合并 ${request.lines.length} 张采购单`}
                     </p>
                 </div>
-                <div className="min-w-0 space-y-1 @min-[640px]/payment-review:border-l @min-[640px]/payment-review:border-grid @min-[640px]/payment-review:pl-6">
+                <div className="min-w-0 space-y-1 @min-[640px]/payment-review:border-l @min-[640px]/payment-review:border-border/60 @min-[640px]/payment-review:pl-6">
                     <p className="text-xs text-muted-foreground">本次申请</p>
-                    <p className="num text-value-section font-semibold tracking-tight">
+                    <p className="num text-value-summary font-semibold tracking-tight text-foreground">
                         <MoneyValue value={request.total_amount} />
                     </p>
                 </div>
             </div>
-            <div className="space-y-2">
-                <dl className="grid grid-cols-2 gap-x-6 gap-y-3 @min-[640px]/payment-review:grid-cols-4">
-                    {[
-                        ["采购总额", basis.total],
-                        ["有效已付", basis.paid],
-                        ["其他申请占用", basis.reserved],
-                        ["本次可申请", basis.available],
-                    ].map(([label, value]) => (
-                        <div key={label} className="min-w-0 space-y-1">
-                            <dt className="text-xs text-muted-foreground">
-                                {label}
-                            </dt>
-                            <dd
-                                className={
-                                    label === "本次可申请"
-                                        ? "text-body-compact font-semibold"
-                                        : "text-body-compact"
-                                }
-                            >
-                                <MoneyValue value={value} />
-                            </dd>
-                        </div>
-                    ))}
-                </dl>
+
+            <div className="space-y-2 border-t border-border/60 pt-4">
+                <DetailWorkspaceMetrics columns={4} variant="inline">
+                    <DetailWorkspaceMetricItem
+                        label="采购总额"
+                        value={<MoneyValue value={basis.total} />}
+                    />
+                    <DetailWorkspaceMetricItem
+                        label="有效已付"
+                        value={<MoneyValue value={basis.paid} />}
+                    />
+                    <DetailWorkspaceMetricItem
+                        label="其他申请占用"
+                        value={<MoneyValue value={basis.reserved} />}
+                    />
+                    <DetailWorkspaceMetricItem
+                        label="本次可申请"
+                        value={<MoneyValue value={basis.available} />}
+                        emphasis="primary"
+                    />
+                </DetailWorkspaceMetrics>
                 <p className="text-xs text-muted-foreground">
                     {basis.current
                         ? "当前采购余额 · 可申请金额包含本申请未付占用"
@@ -103,18 +96,25 @@ export function RequestReviewSummary({
                             : "提交时的金额依据"}
                 </p>
             </div>
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-grid pt-3 text-body-compact">
+
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-border/60 pt-3.5 text-body-compact">
                 <p>
-                    <span className="text-muted-foreground">付款条件 </span>
+                    <span className="text-xs text-muted-foreground">
+                        付款条件{" "}
+                    </span>
                     {terms.length === 1 ? terms[0] : "见各采购单"}
                 </p>
                 <p>
-                    <span className="text-muted-foreground">希望付款日 </span>
+                    <span className="text-xs text-muted-foreground">
+                        希望付款日{" "}
+                    </span>
                     <span className="num">{request.desired_payment_date}</span>
                 </p>
                 {dates.length > 0 && (
                     <p>
-                        <span className="text-muted-foreground">应付日期 </span>
+                        <span className="text-xs text-muted-foreground">
+                            应付日期{" "}
+                        </span>
                         <span className="num">
                             {dates.length === 1
                                 ? dates[0]
@@ -123,24 +123,26 @@ export function RequestReviewSummary({
                     </p>
                 )}
                 {progress.length === 1 && (
-                    <Badge variant="secondary">{progress[0]}</Badge>
+                    <Badge variant="neutral">{progress[0]}</Badge>
                 )}
             </div>
+
             {request.lines.some((line) => line.source_changed) && (
-                <p
-                    role="alert"
-                    className="rounded-md bg-warning-soft px-4 py-3 text-body-compact text-warning-soft-foreground"
-                >
-                    采购或收款依据已变化，请核对后处理。
-                </p>
+                <Alert variant="warning">
+                    <AlertDescription>
+                        采购或收款依据已变化，请核对后处理。
+                    </AlertDescription>
+                </Alert>
             )}
             {basis.exceeds && (
-                <p role="alert" className="text-body-compact text-destructive">
-                    有采购单的申请未付金额超过可申请余额，请逐单核对。
-                </p>
+                <Alert variant="destructive">
+                    <AlertDescription>
+                        有采购单的申请未付金额超过可申请余额，请逐单核对。
+                    </AlertDescription>
+                </Alert>
             )}
             {(closed || compareDecimal(request.paid_amount, "0", 4) > 0) && (
-                <div className="flex flex-wrap gap-x-6 gap-y-2 border-t border-grid pt-3 text-body-compact">
+                <div className="flex flex-wrap gap-x-6 gap-y-2 border-t border-border/60 pt-3 text-body-compact">
                     <span>
                         本申请已付 <MoneyValue value={request.paid_amount} />
                     </span>
@@ -154,7 +156,7 @@ export function RequestReviewSummary({
                         </span>
                     )}
                     {request.status === "closed" && (
-                        <p className="w-full text-muted-foreground">
+                        <p className="w-full text-xs text-muted-foreground">
                             本申请已终止后续付款：
                             {request.close_reason || "未记录原因"}
                             。冲正后不再恢复付款资格。
@@ -162,6 +164,6 @@ export function RequestReviewSummary({
                     )}
                 </div>
             )}
-        </section>
+        </DetailWorkspaceSection>
     )
 }

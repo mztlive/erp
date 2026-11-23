@@ -41,7 +41,7 @@ type WorkspaceDocumentPaperDialogProps = {
 }
 
 /**
- * 工作台纸质预览：透明浮层，点开后再拉该类型只读详情，不跳目标工作面。
+ * 工作台单据与提交资料预览：带吸顶顶部栏的纯白浮层，避免关闭按钮遮挡滚动正文。
  * 当前任务单据和来源销售单共用同一套预览。
  */
 export function WorkspaceDocumentPaperDialog({
@@ -50,23 +50,43 @@ export function WorkspaceDocumentPaperDialog({
     open,
     onOpenChange,
 }: WorkspaceDocumentPaperDialogProps) {
+    const dialogTitle =
+        target?.materialsView === "current-source-sales"
+            ? "当前生效销售单预览"
+            : target?.materialsView === "source-sales"
+              ? "销售单预览"
+              : target?.materialsView === "attachments"
+                ? "合同、凭证及附件"
+                : target?.title
+                  ? `${target.title} ${target.kind === "approval_snapshot" ? "提交资料" : "纸质预览"}`
+                  : "单据纸质预览"
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 showCloseButton={false}
-                className="flex max-h-[min(96vh,56rem)] w-full max-w-[calc(100%-1.5rem)] flex-col gap-0 overflow-hidden border-0 bg-transparent p-0 shadow-none ring-0 sm:max-w-5xl dark:ring-0"
+                className="flex max-h-[min(94dvh,56rem)] w-full max-w-[calc(100%-1.5rem)] flex-col gap-0 overflow-hidden rounded-xl border border-border/80 bg-card p-0 shadow-xl sm:max-w-5xl"
             >
-                <DialogTitle className="sr-only">
-                    {target?.materialsView === "current-source-sales"
-                        ? "当前生效销售单预览"
-                        : target?.materialsView === "source-sales"
-                          ? "销售单预览"
-                          : target?.materialsView === "attachments"
-                            ? "合同、凭证及附件"
-                            : target?.title
-                              ? `${target.title} ${target.kind === "approval_snapshot" ? "提交资料" : "纸质预览"}`
-                              : "单据纸质预览"}
-                </DialogTitle>
+                <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border/60 bg-card px-6 py-3.5 print:hidden">
+                    <DialogTitle className="min-w-0 truncate text-section-title font-semibold tracking-tight text-foreground">
+                        {dialogTitle}
+                    </DialogTitle>
+                    <DialogClose
+                        id="workspace-document-paper-dialog-close"
+                        render={
+                            <Button
+                                id="workspace-document-paper-dialog-close"
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                className="shrink-0 text-muted-foreground hover:text-foreground"
+                            />
+                        }
+                    >
+                        <XIcon aria-hidden="true" />
+                        <span className="sr-only">关闭预览</span>
+                    </DialogClose>
+                </div>
                 <DialogDescription className="sr-only">
                     {target?.materialsView === "current-source-sales"
                         ? "当前生效销售版本的完整明细与合同凭证。"
@@ -80,53 +100,34 @@ export function WorkspaceDocumentPaperDialog({
                     按 Esc 或点击遮罩关闭。
                 </DialogDescription>
 
-                <div className="relative min-h-0 flex-1">
-                    <DialogClose
-                        id="workspace-document-paper-dialog-close"
-                        render={
-                            <Button
-                                id="workspace-document-paper-dialog-close"
-                                type="button"
-                                variant="secondary"
-                                size="icon-sm"
-                                className="absolute top-3 right-3 z-10 rounded-full border border-border bg-card/95 shadow-md backdrop-blur-sm print:hidden"
-                            />
-                        }
-                    >
-                        <XIcon aria-hidden="true" />
-                        <span className="sr-only">关闭预览</span>
-                    </DialogClose>
-
-                    <div className="max-h-[min(96vh,56rem)] overflow-y-auto overscroll-contain">
-                        {target?.kind === "approval_snapshot" &&
-                        target.materialsView === "current-source-sales" ? (
-                            <ApprovalCurrentSalesMaterials
-                                instanceId={target.objectId}
-                                revisionId={target.sourceRevisionId}
-                                enabled={open}
-                            />
-                        ) : target?.kind === "approval_snapshot" ? (
-                            <ApprovalSubmittedMaterials
-                                instanceId={target.objectId}
-                                reference={reference}
-                                enabled={open}
-                                view={
-                                    target.materialsView ===
-                                    "current-source-sales"
-                                        ? "source-sales"
-                                        : target.materialsView
-                                }
-                                sourceRevisionId={target.sourceRevisionId}
-                            />
-                        ) : target ? (
-                            <WorkspacePaperBody
-                                kind={target.kind}
-                                reference={reference}
-                                objectId={target.objectId}
-                                enabled={open}
-                            />
-                        ) : null}
-                    </div>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-card">
+                    {target?.kind === "approval_snapshot" &&
+                    target.materialsView === "current-source-sales" ? (
+                        <ApprovalCurrentSalesMaterials
+                            instanceId={target.objectId}
+                            revisionId={target.sourceRevisionId}
+                            enabled={open}
+                        />
+                    ) : target?.kind === "approval_snapshot" ? (
+                        <ApprovalSubmittedMaterials
+                            instanceId={target.objectId}
+                            reference={reference}
+                            enabled={open}
+                            view={
+                                target.materialsView === "current-source-sales"
+                                    ? "source-sales"
+                                    : target.materialsView
+                            }
+                            sourceRevisionId={target.sourceRevisionId}
+                        />
+                    ) : target ? (
+                        <WorkspacePaperBody
+                            kind={target.kind}
+                            reference={reference}
+                            objectId={target.objectId}
+                            enabled={open}
+                        />
+                    ) : null}
                 </div>
             </DialogContent>
         </Dialog>
@@ -169,7 +170,11 @@ function WorkspacePaperBody({
             )
         }
         if (!salesQuery.data) return <PaperMissingState />
-        return <SalesOrderPaperDocument order={salesQuery.data} />
+        return (
+            <div className="p-6 sm:p-8">
+                <SalesOrderPaperDocument order={salesQuery.data} />
+            </div>
+        )
     }
 
     if (purchaseQuery.isPending) return <PaperLoadingState />
@@ -203,12 +208,16 @@ function WorkspacePaperBody({
             />
         )
     }
-    return <PurchaseOrderPaperDocument order={purchaseQuery.data} />
+    return (
+        <div className="p-6 sm:p-8">
+            <PurchaseOrderPaperDocument order={purchaseQuery.data} />
+        </div>
+    )
 }
 
 function PaperLoadingState() {
     return (
-        <div className="flex min-h-64 items-center justify-center rounded-lg bg-card px-6 py-12 shadow-lg">
+        <div className="flex min-h-64 items-center justify-center bg-card px-6 py-12">
             <p className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Spinner aria-label="正在读取单据" />
                 正在读取单据…
@@ -227,7 +236,7 @@ function PaperErrorState({
     onRetry: () => void
 }) {
     return (
-        <div className="rounded-lg bg-card px-6 py-8 shadow-lg">
+        <div className="bg-card px-6 py-8">
             <BusinessFailureState
                 id={`workspace-document-paper-dialog-${toAutomationIdSegment(objectId)}`}
                 title="单据读取失败"
@@ -240,7 +249,7 @@ function PaperErrorState({
 
 function PaperMissingState() {
     return (
-        <div className="rounded-lg bg-card px-6 py-8 text-center text-body-compact text-muted-foreground shadow-lg">
+        <div className="bg-card px-6 py-8 text-center text-body-compact text-muted-foreground">
             未找到这张单据，可能已删除或当前角色无权查看。
         </div>
     )

@@ -1,72 +1,25 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { detailWorkspaceStyles } from "@/components/business"
 import {
     WorkspaceTaskPageProvider,
     WorkspaceTaskPane,
     type WorkspaceTaskPaneProps,
-    useWorkspaceTaskPage,
-    useWorkspaceTaskPane,
 } from "@/components/business/workspace-task-pane"
-import { cn } from "@/lib/utils"
 import { NativeCheckbox } from "@/components/ui/checkbox"
-import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import type { WorkspaceWorkItem } from "../types"
-import {
-    isApprovalWorkbenchTask,
-    isPurchaseApprovalTask,
-} from "../lib/navigation-eligibility"
+import { isApprovalWorkbenchTask } from "../lib/navigation-eligibility"
 import { WorkspaceApprovalProgress } from "./workspace-approval-progress"
 import { WorkspaceTaskInstructions } from "./workspace-task-instructions"
 import { WorkspaceMoney } from "./workspace-money"
 
-const processingPaneClassName = cn(
-    "[&>div:first-child]:-mx-(--scaffold-px) [&>div:first-child]:gap-0 [&>div:first-child]:bg-card [&>div:first-child]:px-(--scaffold-px) [&>div:first-child]:py-0",
-    "[&>div:first-child>div:first-child]:contents [&>div:first-child>div:first-child>[data-slot=workspace-task-header]]:hidden",
-    "[&>div:first-child>div:nth-child(2)]:mx-0 [&>div:first-child>div:nth-child(2)]:max-w-none [&>div:first-child>div:nth-child(2)]:gap-x-8 [&>div:first-child>div:nth-child(2)]:gap-y-0",
-    "[&>div:first-child>div:nth-child(2)>[data-slot=workspace-task-body]]:rounded-none [&>div:first-child>div:nth-child(2)>[data-slot=workspace-task-body]]:border-0 [&>div:first-child>div:nth-child(2)>[data-slot=workspace-task-body]]:shadow-none",
-    "[&>div:first-child>div:nth-child(2)>aside]:rounded-none [&>div:first-child>div:nth-child(2)>aside]:border-0 [&>div:first-child>div:nth-child(2)>aside]:border-t [&>div:first-child>div:nth-child(2)>aside]:border-border/60 [&>div:first-child>div:nth-child(2)>aside]:px-0 [&>div:first-child>div:nth-child(2)>aside]:shadow-none xl:[&>div:first-child>div:nth-child(2)>aside]:static xl:[&>div:first-child>div:nth-child(2)>aside]:self-stretch xl:[&>div:first-child>div:nth-child(2)>aside]:border-t-0 xl:[&>div:first-child>div:nth-child(2)>aside]:border-l xl:[&>div:first-child>div:nth-child(2)>aside]:pl-6",
-    "[&>div:first-child>div:nth-child(2)>[data-slot=workspace-task-body]>div:last-child]:px-0",
-    "[&>footer]:-mx-(--scaffold-px) [&>footer]:w-auto [&>footer]:px-(--scaffold-px)",
-    "[&_:has(>[data-slot=workspace-processing-summary])]:border-b [&_:has(>[data-slot=workspace-processing-summary])]:border-border/60 [&_:has(>[data-slot=workspace-processing-summary])]:px-0 [&_:has(>[data-slot=workspace-processing-summary])]:py-3.5 [&_:has(>[data-slot=workspace-processing-summary]:empty+div:empty)]:hidden",
-)
-
-// 完整办理页保留原面板的滚动与插槽；弹窗继续使用原面板布局。
-export function WorkspaceProcessingPane({
-    header,
-    headerSupplement,
-    className,
-    ...props
-}: WorkspaceTaskPaneProps) {
-    const fullPage = useWorkspaceTaskPage()
-    const nested = useWorkspaceTaskPane()
-    if (!fullPage || nested)
-        return (
-            <WorkspaceTaskPane
-                header={header}
-                headerSupplement={headerSupplement}
-                className={className}
-                {...props}
-            />
-        )
-    return (
-        <WorkspaceTaskPane
-            {...props}
-            className={cn(processingPaneClassName, className)}
-            header={null}
-            headerSupplement={
-                <>
-                    {header}
-                    {headerSupplement}
-                </>
-            }
-        />
-    )
+/** 完整办理页直接复用纯白通栏骨架，弹窗继续使用卡片布局。 */
+export function WorkspaceProcessingPane(props: WorkspaceTaskPaneProps) {
+    return <WorkspaceTaskPane {...props} />
 }
 
-/** 所有审批、执行与只读跟踪入口共用完整办理页，动作仍由各业务模块提供。 */
+/** 所有审批、执行与只读跟踪入口共用纯白通栏办理页，动作仍由各业务模块提供。 */
 export function WorkspaceProcessingLayout({
     item,
     reworkTask,
@@ -76,6 +29,9 @@ export function WorkspaceProcessingLayout({
     onAutoNextChange,
     onBack,
     backLabel,
+    queueNavigation,
+    onRefresh,
+    refreshing = false,
 }: {
     item: WorkspaceWorkItem
     reworkTask?: WorkspaceWorkItem
@@ -85,21 +41,22 @@ export function WorkspaceProcessingLayout({
     onAutoNextChange: (value: boolean) => void
     onBack: () => void
     backLabel: string
+    queueNavigation?: ReactNode
+    onRefresh?: () => void
+    refreshing?: boolean
 }) {
     const fulfillment = item.workItemType === "FULFILLMENT_OPERATION"
     const approval = item.approval
-    const purchaseApproval = isPurchaseApprovalTask(item)
-    const salesApproval =
-        ["sales_order", "voucher_sales_order"].includes(
-            item.businessObjectType,
-        ) &&
-        (isApprovalWorkbenchTask(
+    const approvalDocument =
+        Boolean(approval || item.approvalProcessInstanceId) ||
+        isApprovalWorkbenchTask(
             item.allowedActions,
             item.approvalProcessInstanceId,
             item.approvalNodeExecutionId,
         ) ||
-            item.workItemType === "APPROVAL_INSTANCE" ||
-            item.workItemType === "DOCUMENT_APPROVAL")
+        item.workItemType === "DOCUMENT_APPROVAL" ||
+        item.workItemType === "APPROVAL_INSTANCE" ||
+        item.workItemType === "APPROVAL_REWORK"
     const payment = item.businessObjectType === "purchase_payment_request"
     const paymentReview =
         payment && item.workItemType !== "SUPPLIER_PAYMENT_EXECUTION"
@@ -112,12 +69,28 @@ export function WorkspaceProcessingLayout({
     const actionable = (reworkTask ?? item).allowedActions.some((action) =>
         ["PROCESS", "APPROVE", "REJECT"].includes(action),
     )
+    const showAutoNext =
+        allowAutoNext &&
+        actionable &&
+        (Boolean(reworkTask) || item.workItemType !== "APPROVAL_INSTANCE")
+
     return (
         <WorkspaceTaskPageProvider
+            flat
+            navigation={{
+                back: {
+                    id: "workspace-processing-back",
+                    label: backLabel,
+                    onClick: onBack,
+                    visibility: "always",
+                },
+                meta: queueNavigation,
+                onRefresh,
+                refreshing,
+            }}
             singleColumn={
                 fulfillment ||
-                purchaseApproval ||
-                salesApproval ||
+                approvalDocument ||
                 paymentReview ||
                 inquiryProcessing
             }
@@ -132,17 +105,15 @@ export function WorkspaceProcessingLayout({
                     item.allowedActions.includes("PROCESS"))
             }
             summary={
-                <div
-                    data-slot="workspace-processing-summary"
-                    className={
-                        fulfillment
-                            ? "flex flex-wrap items-start justify-between gap-x-6 gap-y-2"
-                            : undefined
-                    }
-                >
-                    {payment ||
-                    paymentArrangement ||
-                    purchaseApproval ? undefined : (
+                payment || paymentArrangement || approvalDocument ? null : (
+                    <div
+                        data-slot="workspace-processing-summary"
+                        className={
+                            fulfillment
+                                ? "flex flex-wrap items-start justify-between gap-x-6 gap-y-2"
+                                : undefined
+                        }
+                    >
                         <dl
                             className={
                                 fulfillment
@@ -163,24 +134,10 @@ export function WorkspaceProcessingLayout({
                             )}
                             <Fact
                                 inline={fulfillment}
-                                label={
-                                    reworkTask || !approval
-                                        ? "当前处理人"
-                                        : ["RUNNING", "BLOCKED"].includes(
-                                                approval.status,
-                                            )
-                                          ? "当前审批人"
-                                          : "审批状态"
-                                }
+                                label="当前处理人"
                                 value={
                                     reworkTask?.ownerUserLabel ||
-                                    (approval &&
-                                    !["RUNNING", "BLOCKED"].includes(
-                                        approval.status,
-                                    )
-                                        ? item.statusLabel
-                                        : approval?.currentAssigneeLabel ||
-                                          item.ownerUserLabel)
+                                    item.ownerUserLabel
                                 }
                             />
                             {!fulfillment && (
@@ -205,8 +162,8 @@ export function WorkspaceProcessingLayout({
                                 />
                             )}
                         </dl>
-                    )}
-                </div>
+                    </div>
+                )
             }
             aside={
                 <>
@@ -230,7 +187,7 @@ export function WorkspaceProcessingLayout({
                     ) : (
                         <section className="space-y-4">
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                                <h3 className="font-medium">办理状态</h3>
+                                <h3 className="font-semibold">办理状态</h3>
                                 <StatusBadge
                                     label={item.statusLabel}
                                     tone={item.statusTone}
@@ -263,58 +220,30 @@ export function WorkspaceProcessingLayout({
                         item.impactSummary ||
                         item.actionBlockers.length > 0) && (
                         <section className="space-y-4 border-t border-border/60 pt-5 text-body-compact leading-6">
-                            <h3 className="font-medium">处理说明</h3>
+                            <h3 className="font-semibold">处理说明</h3>
                             <WorkspaceTaskInstructions item={item} />
                         </section>
                     )}
                 </>
             }
             footerLeading={
-                <>
-                    {allowAutoNext &&
-                    actionable &&
-                    (reworkTask ||
-                        item.workItemType !== "APPROVAL_INSTANCE") ? (
-                        <label
-                            htmlFor="workspace-processing-auto-next"
-                            className="mr-auto flex items-center gap-2 text-xs text-muted-foreground"
-                        >
-                            <NativeCheckbox
-                                id="workspace-processing-auto-next"
-                                checked={autoNext}
-                                onCheckedChange={(value) =>
-                                    onAutoNextChange(value === true)
-                                }
-                            />
-                            {fulfillment ? "完成后下一项" : "处理后进入下一项"}
-                        </label>
-                    ) : (
-                        <span className="mr-auto text-xs text-muted-foreground">
-                            {item.workItemType === "APPROVAL_INSTANCE"
-                                ? "审批进度与提交记录"
-                                : "当前任务资料"}
-                        </span>
-                    )}
-                    {purchaseApproval && actionable && !reworkTask && (
-                        <span className="text-xs text-muted-foreground">
-                            本次操作审批整张采购单
-                        </span>
-                    )}
-                </>
-            }
-            footer={
-                fulfillment ? null : (
-                    <Button
-                        id="workspace-processing-footer-back"
-                        variant="ghost"
-                        size="sm"
-                        className={detailWorkspaceStyles.quietButton}
-                        onClick={onBack}
+                showAutoNext ? (
+                    <label
+                        htmlFor="workspace-processing-auto-next"
+                        className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none hover:text-foreground"
                     >
-                        {backLabel}
-                    </Button>
-                )
+                        <NativeCheckbox
+                            id="workspace-processing-auto-next"
+                            checked={autoNext}
+                            onCheckedChange={(value) =>
+                                onAutoNextChange(value === true)
+                            }
+                        />
+                        {fulfillment ? "完成后下一项" : "处理后自动进入下一项"}
+                    </label>
+                ) : null
             }
+            footer={null}
         >
             {children}
         </WorkspaceTaskPageProvider>

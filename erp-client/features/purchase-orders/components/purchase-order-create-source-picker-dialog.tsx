@@ -87,6 +87,10 @@ export function PurchaseOrderCreateSourcePickerDialog({
                     ) : null}
 
                     <PaperDocumentViewport
+                        fitMode="width"
+                        role="region"
+                        aria-label="来源销售单预览"
+                        tabIndex={0}
                         fitKey={draftOrder?.salesOrderId ?? "empty"}
                     >
                         {draftOrder ? (

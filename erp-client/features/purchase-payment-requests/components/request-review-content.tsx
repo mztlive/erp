@@ -2,9 +2,13 @@
 
 import { useState, type ReactNode } from "react"
 import { ChevronDownIcon } from "lucide-react"
+import {
+    DetailWorkspaceFact,
+    DetailWorkspaceFacts,
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { workspaceTaskSurfacePadClassName } from "@/components/business"
-import { cn } from "@/lib/utils"
 import type { PaymentRequest } from "../types"
 import { RequestMaterials } from "./request-materials"
 import { RequestReviewSummary } from "./request-review-summary"
@@ -12,7 +16,7 @@ import { RequestReviewOrders } from "./request-review-orders"
 import { RequestReviewHistory } from "./request-review-history"
 import { RequestSubmissionHistory } from "./request-submission-history"
 
-/** 付款审批单栏阅读面；审批命令继续由现有底栏承载。 */
+/** 付款审批纯白通栏阅读面；审批路线位于页头下方，审批命令由底栏承载。 */
 export function RequestReviewContent({
     request,
     account,
@@ -38,57 +42,71 @@ export function RequestReviewContent({
                 request={request}
                 submissionVersion={submissionVersion}
             />
-            <div
-                className={cn(
-                    workspaceTaskSurfacePadClassName,
-                    "space-y-4 border-b border-grid py-4",
-                )}
-            >
+            <DetailWorkspaceSection ariaLabel="采购明细与付款记录">
                 <RequestReviewOrders request={request} />
                 <RequestReviewHistory
                     request={request}
                     workItemId={workItemId}
                     submissionVersion={submissionVersion}
                 />
-            </div>
-            <section
-                aria-label="收款与材料"
-                className={cn(
-                    workspaceTaskSurfacePadClassName,
-                    "space-y-4 py-4",
-                )}
+            </DetailWorkspaceSection>
+            <DetailWorkspaceSection
+                title={bank ? "收款与材料" : "预存款与材料"}
+                ariaLabel="收款与材料"
             >
-                <h2 className="text-section-title font-semibold tracking-tight">
-                    {bank ? "收款与材料" : "预存款与材料"}
-                </h2>
-                <dl className="grid gap-x-8 gap-y-3 text-body-compact @min-[640px]/payment-review:grid-cols-2 @min-[1100px]/payment-review:grid-cols-3">
-                    <Info label="付款主体">{request.our_company_name}</Info>
+                <DetailWorkspaceFacts columns={3}>
+                    <DetailWorkspaceFact
+                        label="付款主体"
+                        value={request.our_company_name}
+                    />
                     {bank ? (
                         <>
-                            <Info label="收款户名">
-                                {request.payment_recipient?.account_name ??
-                                    "未记录"}
-                            </Info>
-                            <Info label="开户行">
-                                {request.payment_recipient?.bank_name ??
-                                    "未记录"}
-                            </Info>
-                            <Info label="收款账号">{account}</Info>
+                            <DetailWorkspaceFact
+                                label="收款户名"
+                                value={
+                                    request.payment_recipient?.account_name ??
+                                    "未记录"
+                                }
+                            />
+                            <DetailWorkspaceFact
+                                label="开户行"
+                                value={
+                                    request.payment_recipient?.bank_name ??
+                                    "未记录"
+                                }
+                            />
+                            <DetailWorkspaceFact
+                                label="收款账号"
+                                value={account}
+                            />
                         </>
                     ) : (
                         <>
-                            <Info label="付款方式">供应商预存款</Info>
-                            <Info label="预存款账户">
-                                {request.deposit_account?.identity
-                                    .external_account_ref
-                                    ? `人民币预存款 · ****${request.deposit_account.identity.external_account_ref.slice(-4)}`
-                                    : "未记录账户标识"}
-                            </Info>
+                            <DetailWorkspaceFact
+                                label="付款方式"
+                                value="供应商预存款"
+                            />
+                            <DetailWorkspaceFact
+                                label="预存款账户"
+                                numeric
+                                value={
+                                    request.deposit_account?.identity
+                                        .external_account_ref
+                                        ? `人民币预存款 · ****${request.deposit_account.identity.external_account_ref.slice(-4)}`
+                                        : "未记录账户标识"
+                                }
+                            />
                         </>
                     )}
-                    <Info label="申请人">{request.applicant_name}</Info>
-                    <Info label="申请说明">{request.description || "—"}</Info>
-                </dl>
+                    <DetailWorkspaceFact
+                        label="申请人"
+                        value={request.applicant_name}
+                    />
+                    <DetailWorkspaceFact
+                        label="申请说明"
+                        value={request.description || "—"}
+                    />
+                </DetailWorkspaceFacts>
                 {!bank && (
                     <p className="text-xs text-muted-foreground">
                         批准后占用预存款额度，实际扣款核实后核销，不登记银行付款。
@@ -100,19 +118,24 @@ export function RequestReviewContent({
                     submissionVersion={submissionVersion}
                     concise
                 />
-                {showHistory && (
-                    <div className="border-t pt-4">
+                {showHistory && !embedded && (
+                    <div className="border-t border-border/60 pt-4">
                         <Button
                             id="ppr-review-history-toggle"
                             variant="ghost"
+                            size="sm"
+                            className={detailWorkspaceStyles.quietButton}
                             aria-expanded={historyOpen}
                             aria-controls="ppr-review-history-content"
                             onClick={() => setHistoryOpen((open) => !open)}
                         >
                             审批记录
                             <ChevronDownIcon
+                                aria-hidden="true"
                                 className={
-                                    historyOpen ? "rotate-180" : undefined
+                                    historyOpen
+                                        ? "rotate-180 transition-transform"
+                                        : "transition-transform"
                                 }
                             />
                         </Button>
@@ -126,27 +149,12 @@ export function RequestReviewContent({
                                         尚未提交财务审核。
                                     </p>
                                 )}
-                                {!embedded && (
-                                    <RequestSubmissionHistory
-                                        request={request}
-                                    />
-                                )}
+                                <RequestSubmissionHistory request={request} />
                             </div>
                         )}
                     </div>
                 )}
-            </section>
-        </div>
-    )
-}
-
-function Info({ label, children }: { label: string; children: ReactNode }) {
-    return (
-        <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-3">
-            <dt className="text-muted-foreground">{label}</dt>
-            <dd className="min-w-0 whitespace-pre-wrap break-words">
-                {children}
-            </dd>
+            </DetailWorkspaceSection>
         </div>
     )
 }

@@ -18,8 +18,8 @@ export function ApprovalCurrentSalesMaterials({
     const query = useApprovalMaterials(instanceId, enabled)
     const basis = query.data?.current_sales_basis
     return (
-        <article className="space-y-6 rounded-lg bg-card p-6 shadow-lg sm:p-10">
-            <header className="space-y-2 border-b pb-5 pr-8">
+        <article className="space-y-6 bg-card p-6 sm:p-8">
+            <header className="space-y-2 border-b border-border/60 pb-5">
                 <h2 className="text-section-title font-semibold tracking-tight">
                     销售单预览
                 </h2>
@@ -27,8 +27,10 @@ export function ApprovalCurrentSalesMaterials({
                     当前生效销售版本及关联合同、凭证
                 </p>
             </header>
-            {query.isPending || query.isFetching ? (
-                <p role="status">正在读取销售资料…</p>
+            {query.isPending || (!query.data && query.isFetching) ? (
+                <p role="status" className="text-xs text-muted-foreground">
+                    正在读取销售资料…
+                </p>
             ) : query.isError ? (
                 <BusinessFailureState
                     id="approval-current-sales-retry"

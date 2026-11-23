@@ -39,7 +39,95 @@ type Props = {
     className?: string
     hasUnsavedChanges?: boolean
     onSaved?: () => void | Promise<void>
+    idPrefix?: string
+    unitLabels?: Readonly<Record<string, string>>
 }
+
+/** 受控的收货安排编辑弹窗；打开时读取最新范围，取消不改变原安排。 */
+export function ArrangementDialog({
+    scope,
+    objectId,
+    open,
+    onOpenChange,
+    hasUnsavedChanges,
+    onSaved,
+    idPrefix,
+    unitLabels,
+}: {
+    scope: ArrangementScope
+    objectId: string
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    hasUnsavedChanges?: boolean
+    onSaved?: () => void | Promise<void>
+    idPrefix?: string
+    unitLabels?: Readonly<Record<string, string>>
+}) {
+    const [busy, setBusy] = useState(false)
+    const [editingData, setEditingData] = useState<ArrangementView | null>(null)
+    const query = useArrangement(scope, objectId, open)
+    useEffect(() => {
+        if (!open) {
+            setEditingData(null)
+            return
+        }
+        if (!editingData && !query.isFetching && query.isSuccess)
+            setEditingData(query.data)
+    }, [open, editingData, query.isFetching, query.isSuccess, query.data])
+    const prefix =
+        idPrefix ??
+        `delivery-arrangement-${scope}-${toAutomationIdSegment(objectId)}`
+    return (
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!busy) onOpenChange(next)
+            }}
+        >
+            <DialogContent
+                className="max-h-[90vh] overflow-y-auto sm:max-w-5xl"
+                closeButtonId={`${prefix}-close`}
+                showCloseButton={!busy}
+            >
+                <DialogHeader>
+                    <DialogTitle>补充或调整收货安排</DialogTitle>
+                    <DialogDescription>
+                        未分配的数量可暂留待补，已有地址的商品可以先发货。已发包裹保持原地址；价格、运费变化另行办理改单。
+                    </DialogDescription>
+                </DialogHeader>
+                {editingData ? (
+                    <ArrangementEditor
+                        key={prefix}
+                        scope={scope}
+                        objectId={objectId}
+                        prefix={prefix}
+                        hasUnsavedChanges={hasUnsavedChanges}
+                        onSaved={onSaved}
+                        unitLabels={unitLabels}
+                        data={editingData}
+                        onBusyChange={setBusy}
+                        onClose={() => onOpenChange(false)}
+                    />
+                ) : query.isError ? (
+                    <div role="alert" className="space-y-3">
+                        <p>{query.error.message}</p>
+                        <Button
+                            id={`${prefix}-retry`}
+                            onClick={() => void query.refetch()}
+                        >
+                            重新读取
+                        </Button>
+                    </div>
+                ) : (
+                    <p className="text-xs text-muted-foreground">
+                        正在读取收货安排…
+                    </p>
+                )}
+            </DialogContent>
+        </Dialog>
+    )
+}
+
 /** 销售详情与履约任务共用操作；打开时读取最新范围，取消不改变原安排。 */
 export function ArrangementButton({
     scope,
@@ -50,16 +138,13 @@ export function ArrangementButton({
     className,
     hasUnsavedChanges,
     onSaved,
+    idPrefix,
+    unitLabels,
 }: Props) {
     const [open, setOpen] = useState(false)
-    const [busy, setBusy] = useState(false)
-    const [editingData, setEditingData] = useState<ArrangementView | null>(null)
-    const query = useArrangement(scope, objectId, open)
-    useEffect(() => {
-        if (open && !editingData && !query.isFetching && query.isSuccess)
-            setEditingData(query.data)
-    }, [open, editingData, query.isFetching, query.isSuccess, query.data])
-    const prefix = `delivery-arrangement-${scope}-${toAutomationIdSegment(objectId)}`
+    const prefix =
+        idPrefix ??
+        `delivery-arrangement-${scope}-${toAutomationIdSegment(objectId)}`
     return (
         <>
             <Button
@@ -69,62 +154,21 @@ export function ArrangementButton({
                 size="sm"
                 className={className}
                 disabled={disabled}
-                onClick={() => {
-                    setEditingData(null)
-                    setOpen(true)
-                }}
+                onClick={() => setOpen(true)}
             >
                 <MapPinIcon data-icon="inline-start" />
                 {label}
             </Button>
-            <Dialog
+            <ArrangementDialog
+                scope={scope}
+                objectId={objectId}
                 open={open}
-                onOpenChange={(next) => {
-                    if (!busy) setOpen(next)
-                }}
-            >
-                <DialogContent
-                    className="max-h-[90vh] overflow-y-auto sm:max-w-5xl"
-                    closeButtonId={`${prefix}-close`}
-                    showCloseButton={!busy}
-                >
-                    <DialogHeader>
-                        <DialogTitle>补充或调整收货安排</DialogTitle>
-                        <DialogDescription>
-                            未分配的数量可暂留待补，已有地址的商品可以先发货。已发包裹保持原地址；价格、运费变化另行办理改单。
-                        </DialogDescription>
-                    </DialogHeader>
-                    {editingData ? (
-                        <ArrangementEditor
-                            key={prefix}
-                            {...{
-                                scope,
-                                objectId,
-                                prefix,
-                                hasUnsavedChanges,
-                                onSaved,
-                            }}
-                            data={editingData}
-                            onBusyChange={setBusy}
-                            onClose={() => setOpen(false)}
-                        />
-                    ) : query.isError ? (
-                        <div role="alert" className="space-y-3">
-                            <p>{query.error.message}</p>
-                            <Button
-                                id={`${prefix}-retry`}
-                                onClick={() => void query.refetch()}
-                            >
-                                重新读取
-                            </Button>
-                        </div>
-                    ) : (
-                        <p className="text-xs text-muted-foreground">
-                            正在读取收货安排…
-                        </p>
-                    )}
-                </DialogContent>
-            </Dialog>
+                onOpenChange={setOpen}
+                hasUnsavedChanges={hasUnsavedChanges}
+                onSaved={onSaved}
+                idPrefix={prefix}
+                unitLabels={unitLabels}
+            />
         </>
     )
 }
@@ -147,6 +191,7 @@ function ArrangementEditor({
     onClose,
     onSaved,
     hasUnsavedChanges,
+    unitLabels,
 }: Props & {
     prefix: string
     data: ArrangementView
@@ -279,6 +324,8 @@ function ArrangementEditor({
                     <div className="space-y-4">
                         {lines.map((line, index) => {
                             const source = data.lines[index]
+                            const displayUnit =
+                                unitLabels?.[source.line_id] || source.unit
                             const linePrefix = `${prefix}-${toAutomationIdSegment(line.line_id)}`
                             return (
                                 <section
@@ -293,14 +340,14 @@ function ArrangementEditor({
                                             <p className="text-xs text-muted-foreground">
                                                 共{" "}
                                                 {compactFixed(source.quantity)}{" "}
-                                                {source.unit} · 待补地址{" "}
+                                                {displayUnit} · 待补地址{" "}
                                                 {compactFixed(
                                                     remainder(
                                                         index,
                                                         line.allocations,
                                                     ),
                                                 )}{" "}
-                                                {source.unit}
+                                                {displayUnit}
                                             </p>
                                         </div>
                                         <Button
@@ -359,7 +406,7 @@ function ArrangementEditor({
                                                         {compactFixed(
                                                             row.quantity,
                                                         )}{" "}
-                                                        {source.unit}
+                                                        {displayUnit}
                                                     </p>
                                                 ),
                                             )}

@@ -24,6 +24,7 @@ import { PURCHASE_TYPE_LABEL } from "@/features/purchase-orders/types"
 import type { SourcingEditorRow } from "../lib/sourcing/editor-rows"
 import { DownloadIcon } from "lucide-react"
 import { toast } from "@/components/ui/toast"
+import { shouldBundleDeliveryWorkbook } from "../lib/purchase-delivery-plan"
 import { PurchaseOrderPreviewPaper } from "./purchase-order-create-preview-paper"
 
 export type PurchaseOrderCreatePreviewDialogProps = {
@@ -63,6 +64,13 @@ export function PurchaseOrderCreatePreviewDialog({
     const downloadLock = React.useRef(false)
     const downloading = downloadProgress !== null
 
+    const hasCompanionWorkbooks = previews.some((preview) =>
+        shouldBundleDeliveryWorkbook(
+            preview.lines,
+            preview.fulfillmentResponsibility === "WAREHOUSE",
+        ),
+    )
+
     async function downloadImages() {
         if (downloadLock.current || previews.length === 0) return
         downloadLock.current = true
@@ -70,19 +78,36 @@ export function PurchaseOrderCreatePreviewDialog({
         try {
             const { downloadPurchasePreviewImages } =
                 await import("../lib/download-purchase-preview-images")
-            await downloadPurchasePreviewImages(
+            const result = await downloadPurchasePreviewImages(
                 previews,
                 sourceOrder,
                 setDownloadProgress,
             )
-            toast.add({
-                title: `已生成 ${previews.length} 张采购单图片`,
-                description: "图片已打包下载，请在浏览器下载列表中查看。",
-                type: "success",
-            })
+            if (!result.archived) {
+                toast.add({
+                    title: "采购单图片已下载",
+                    description:
+                        "已保存为供应商版 PNG 图片（已隐藏来源销售与客户资料），请在浏览器下载列表中查看。",
+                    type: "success",
+                })
+            } else if (result.workbookCount > 0) {
+                toast.add({
+                    title: `已生成 ${result.imageCount} 张采购单图片与 ${result.workbookCount} 份地址表`,
+                    description:
+                        "已打包下载（主单图片已隐藏来源销售与客户资料），请在浏览器下载列表中查看。",
+                    type: "success",
+                })
+            } else {
+                toast.add({
+                    title: `已生成 ${result.imageCount} 张采购单图片`,
+                    description:
+                        "供应商版图片已打包下载（已隐藏来源销售与客户资料），请在浏览器下载列表中查看。",
+                    type: "success",
+                })
+            }
         } catch {
             toast.add({
-                title: "采购单图片下载失败",
+                title: "采购单文件下载失败",
                 description: "请稍后重试。",
                 type: "error",
             })
@@ -221,6 +246,10 @@ export function PurchaseOrderCreatePreviewDialog({
                     ) : null}
 
                     <PaperDocumentViewport
+                        fitMode="width"
+                        role="region"
+                        aria-label="采购单预览"
+                        tabIndex={0}
                         fitKey={activePreview?.key ?? "empty"}
                     >
                         {activePreview ? (
@@ -247,12 +276,24 @@ export function PurchaseOrderCreatePreviewDialog({
                             loading={downloading}
                             disabled={creating || unresolved || downloading}
                             onClick={() => void downloadImages()}
-                            title="每张采购单保存为 PNG 图片，打包下载"
+                            title={
+                                hasCompanionWorkbooks
+                                    ? "地址较多的采购单将导出清晰主单 PNG 与 Excel 发货地址明细表并打包下载（已隐藏来源销售与客户资料）"
+                                    : previews.length === 1
+                                      ? "保存为供应商版 PNG 图片（已隐藏来源销售与客户资料）"
+                                      : "每张采购单保存为供应商版 PNG 图片并打包下载（已隐藏来源销售与客户资料）"
+                            }
                         >
                             <DownloadIcon data-icon="inline-start" />
                             {downloading
-                                ? `生成图片 ${downloadProgress}/${previews.length}`
-                                : `下载全部采购单图片（${previews.length}）`}
+                                ? `生成中 ${downloadProgress}/${previews.length}`
+                                : hasCompanionWorkbooks
+                                  ? previews.length === 1
+                                      ? "下载采购单及地址表"
+                                      : `下载全部采购单及地址表（${previews.length}）`
+                                  : previews.length === 1
+                                    ? "下载采购单图片"
+                                    : `下载全部采购单图片（${previews.length}）`}
                         </LoadingButton>
                     ) : null}
                     <Button

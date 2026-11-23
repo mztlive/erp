@@ -13,6 +13,7 @@ import {
     fetchCandidates,
     fetchCandidatePage,
     fetchCandidateIds,
+    fetchMaterialPreview,
     fetchMaterials,
     fetchRequest,
     fetchRequests,
@@ -171,6 +172,22 @@ export function useRequestPaymentMutation() {
                 }),
             ])
         },
+    })
+}
+export function useRequestMaterialPreviewMutation() {
+    return useMutation({
+        mutationFn: (input: {
+            requestId: string
+            attachment: Parameters<typeof fetchMaterialPreview>[1]
+            workItemId?: string
+            submissionVersion?: number
+        }) =>
+            fetchMaterialPreview(
+                input.requestId,
+                input.attachment,
+                input.workItemId,
+                input.submissionVersion,
+            ),
     })
 }
 export function useRequestDownloadMutation() {

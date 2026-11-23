@@ -9,6 +9,11 @@ import {
 } from "lucide-react"
 import {
     BusinessFailureState,
+    DetailWorkspaceFact,
+    DetailWorkspaceFacts,
+    DetailWorkspaceMetricItem,
+    DetailWorkspaceMetrics,
+    DetailWorkspaceSection,
     MoneyValue,
     detailWorkspaceStyles,
 } from "@/components/business"
@@ -29,8 +34,6 @@ import type {
 } from "../api/invoice-review"
 import type { WorkspaceWorkItem } from "../types"
 import type { WorkspacePaperTarget } from "./workspace-document-paper-dialog"
-
-const sectionClass = "space-y-3 border-b border-border/60 py-6"
 
 /** 当前核对依据和原提交材料分区展示，只消费审批实例授权的接口。 */
 export function WorkspaceInvoiceApproval({
@@ -53,6 +56,14 @@ export function WorkspaceInvoiceApproval({
                 (source) =>
                     source.revision_id !== currentBasis.source.revision_id,
             ))
+    const sourceCount =
+        (materials.data?.display.source_sales?.length ?? 0) +
+        (showCurrent ? 1 : 0)
+    const attachmentCount =
+        (materials.data?.attachments.length ?? 0) +
+        (currentBasis && (showCurrent || !materials.data?.attachments.length)
+            ? currentBasis.attachments.length
+            : 0)
     const preview = (
         view: "source-sales" | "attachments" | "current-source-sales",
         revisionId?: string,
@@ -65,10 +76,10 @@ export function WorkspaceInvoiceApproval({
         })
     return (
         <>
-            <section className={sectionClass} aria-label="本次提交的开票资料">
-                <h2 className={detailWorkspaceStyles.sectionTitle}>
-                    本次提交的开票资料
-                </h2>
+            <DetailWorkspaceSection
+                title="本次提交的开票资料"
+                ariaLabel="本次提交的开票资料"
+            >
                 {materials.isPending ? (
                     <Loading>正在读取开票资料…</Loading>
                 ) : materials.isError ? (
@@ -83,12 +94,11 @@ export function WorkspaceInvoiceApproval({
                         data={submittedInvoiceDetails(materials.data)}
                     />
                 ) : null}
-            </section>
-            <section className={sectionClass} aria-label="当前票款核对">
-                <header className="flex flex-wrap items-center justify-between gap-2">
-                    <h2 className={detailWorkspaceStyles.sectionTitle}>
-                        当前票款核对
-                    </h2>
+            </DetailWorkspaceSection>
+            <DetailWorkspaceSection
+                title="当前票款核对"
+                ariaLabel="当前票款核对"
+                actions={
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         {review.data && (
                             <time
@@ -106,6 +116,7 @@ export function WorkspaceInvoiceApproval({
                             id={`${prefix}-refresh`}
                             size="sm"
                             variant="ghost"
+                            className={detailWorkspaceStyles.quietButton}
                             disabled={review.isFetching}
                             onClick={() => {
                                 void review.refetch()
@@ -116,7 +127,8 @@ export function WorkspaceInvoiceApproval({
                             刷新票款
                         </Button>
                     </div>
-                </header>
+                }
+            >
                 {review.isPending ? (
                     <Loading>正在读取开票额度与回款…</Loading>
                 ) : review.isError ? (
@@ -133,137 +145,200 @@ export function WorkspaceInvoiceApproval({
                         idPrefix={prefix}
                     />
                 )}
-            </section>
-            <details
-                key={instanceId}
-                id={`${prefix}-sales-basis`}
-                className={sectionClass}
-            >
-                <summary
-                    id={`${prefix}-sales-basis-toggle`}
-                    className="cursor-pointer text-body-compact font-semibold"
+            </DetailWorkspaceSection>
+            <DetailWorkspaceSection ariaLabel="销售来源与开票依据">
+                <details
+                    key={instanceId}
+                    id={`${prefix}-sales-basis`}
+                    className="group/sales-basis"
                 >
-                    销售来源与开票依据
-                </summary>
-                {materials.isPending ? (
-                    <Loading>正在读取提交时销售依据…</Loading>
-                ) : materials.isError ? (
-                    <BusinessFailureState
-                        id={`${prefix}-materials-retry`}
-                        title="提交依据读取失败"
-                        error={materials.error}
-                        onRetry={() => void materials.refetch()}
-                    />
-                ) : (
-                    <>
-                        {materials.data.display.source_sales?.length ? (
-                            materials.data.display.source_sales.map(
-                                (source) => (
+                    <summary
+                        id={`${prefix}-sales-basis-toggle`}
+                        className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
+                    >
+                        <span className="flex min-w-0 flex-wrap items-center gap-2">
+                            <ChevronRightIcon
+                                aria-hidden="true"
+                                className="size-4 shrink-0 text-muted-foreground transition-transform group-open/sales-basis:rotate-90"
+                            />
+                            <span
+                                className={detailWorkspaceStyles.sectionTitle}
+                            >
+                                销售来源与开票依据
+                            </span>
+                            {sourceCount > 0 ? (
+                                <span className="num text-xs text-muted-foreground">
+                                    共 {sourceCount} 份销售单
+                                </span>
+                            ) : null}
+                        </span>
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                            <span className="group-open/sales-basis:hidden">
+                                展开查看
+                            </span>
+                            <span className="hidden group-open/sales-basis:inline">
+                                收起
+                            </span>
+                        </span>
+                    </summary>
+                    <div className="mt-4 space-y-4">
+                        {materials.isPending ? (
+                            <Loading>正在读取提交时销售依据…</Loading>
+                        ) : materials.isError ? (
+                            <BusinessFailureState
+                                id={`${prefix}-materials-retry`}
+                                title="提交依据读取失败"
+                                error={materials.error}
+                                onRetry={() => void materials.refetch()}
+                            />
+                        ) : (
+                            <>
+                                {materials.data.display.source_sales?.length ? (
+                                    materials.data.display.source_sales.map(
+                                        (source) => (
+                                            <Source
+                                                key={source.revision_id}
+                                                source={source}
+                                                frozen
+                                                id={`${prefix}-sales-${toAutomationIdSegment(source.revision_id)}`}
+                                                onOpen={() =>
+                                                    preview(
+                                                        "source-sales",
+                                                        source.revision_id,
+                                                    )
+                                                }
+                                            />
+                                        ),
+                                    )
+                                ) : (
+                                    <p className="text-xs text-muted-foreground">
+                                        本次申请的销售依据按当前生效版本展示。
+                                    </p>
+                                )}
+                                {showCurrent && (
                                     <Source
-                                        key={source.revision_id}
-                                        source={source}
-                                        frozen
-                                        id={`${prefix}-sales-${toAutomationIdSegment(source.revision_id)}`}
+                                        source={currentBasis.source}
+                                        frozen={false}
+                                        id={`${prefix}-current-sales`}
                                         onOpen={() =>
                                             preview(
-                                                "source-sales",
-                                                source.revision_id,
+                                                "current-source-sales",
+                                                currentBasis.source.revision_id,
                                             )
                                         }
                                     />
-                                ),
-                            )
-                        ) : (
-                            <p className="text-xs text-muted-foreground">
-                                本次申请的销售依据按当前生效版本展示。
-                            </p>
+                                )}
+                                {!materials.data.display.source_sales?.length &&
+                                    !currentBasis && (
+                                        <p
+                                            role="alert"
+                                            className="text-xs text-muted-foreground"
+                                        >
+                                            {materials.data
+                                                .current_sales_basis_error ??
+                                                "销售依据暂不可读取，请刷新后重试。"}
+                                        </p>
+                                    )}
+                            </>
                         )}
-                        {showCurrent && (
-                            <Source
-                                source={currentBasis.source}
-                                frozen={false}
-                                id={`${prefix}-current-sales`}
-                                onOpen={() =>
-                                    preview(
-                                        "current-source-sales",
-                                        currentBasis.source.revision_id,
-                                    )
-                                }
-                            />
-                        )}
-                        {!materials.data.display.source_sales?.length &&
-                            !currentBasis && (
-                                <p
-                                    role="alert"
-                                    className="text-xs text-muted-foreground"
-                                >
-                                    {materials.data.current_sales_basis_error ??
-                                        "销售依据暂不可读取，请刷新后重试。"}
-                                </p>
-                            )}
-                    </>
-                )}
-            </details>
-            <details
-                key={`${instanceId}-materials`}
-                id={`${prefix}-materials`}
-                className={sectionClass}
-            >
-                <summary
-                    id={`${prefix}-materials-toggle`}
-                    className="cursor-pointer text-body-compact font-semibold"
+                    </div>
+                </details>
+            </DetailWorkspaceSection>
+            <DetailWorkspaceSection ariaLabel="合同与提交凭证">
+                <details
+                    key={`${instanceId}-materials`}
+                    id={`${prefix}-materials`}
+                    open
+                    className="group/materials"
                 >
-                    合同与提交凭证
-                </summary>
-                {materials.data?.attachments.length ? (
-                    <div className="flex justify-end">
-                        <Button
-                            id={`${prefix}-attachments`}
-                            size="sm"
-                            variant="outline"
-                            onClick={() => preview("attachments")}
-                        >
-                            <FileTextIcon aria-hidden="true" />
-                            预览材料（{materials.data.attachments.length}）
-                        </Button>
-                    </div>
-                ) : null}
-                {materials.data?.attachments.length ? (
-                    <ApprovalMaterialFiles
-                        instanceId={instanceId}
-                        attachments={materials.data.attachments}
-                        idPrefix={`${prefix}-submitted-file`}
-                    />
-                ) : null}
-                {currentBasis &&
-                (showCurrent || !materials.data?.attachments.length) ? (
-                    <div className="space-y-2">
+                    <summary
+                        id={`${prefix}-materials-toggle`}
+                        className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
+                    >
+                        <span className="flex min-w-0 flex-wrap items-center gap-2">
+                            <ChevronRightIcon
+                                aria-hidden="true"
+                                className="size-4 shrink-0 text-muted-foreground transition-transform group-open/materials:rotate-90"
+                            />
+                            <span
+                                className={detailWorkspaceStyles.sectionTitle}
+                            >
+                                合同与提交凭证
+                            </span>
+                            {attachmentCount > 0 ? (
+                                <span className="num text-xs text-muted-foreground">
+                                    共 {attachmentCount} 个文件
+                                </span>
+                            ) : null}
+                        </span>
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                            <span className="group-open/materials:hidden">
+                                展开查看
+                            </span>
+                            <span className="hidden group-open/materials:inline">
+                                收起
+                            </span>
+                        </span>
+                    </summary>
+                    <div className="mt-4 space-y-3">
+                        {materials.data?.attachments.length ? (
+                            <div className="flex justify-end">
+                                <Button
+                                    id={`${prefix}-attachments`}
+                                    size="sm"
+                                    variant="ghost"
+                                    className={
+                                        detailWorkspaceStyles.subtleButton
+                                    }
+                                    onClick={() => preview("attachments")}
+                                >
+                                    <FileTextIcon aria-hidden="true" />
+                                    预览材料（
+                                    {materials.data.attachments.length}）
+                                </Button>
+                            </div>
+                        ) : null}
+                        {materials.data?.attachments.length ? (
+                            <ApprovalMaterialFiles
+                                instanceId={instanceId}
+                                attachments={materials.data.attachments}
+                                idPrefix={`${prefix}-submitted-file`}
+                            />
+                        ) : null}
+                        {currentBasis &&
+                        (showCurrent || !materials.data?.attachments.length) ? (
+                            <div className="space-y-2">
+                                <p className="text-xs text-muted-foreground">
+                                    来源销售单 · V
+                                    {currentBasis.source.revision_no} ·
+                                    当前生效版本
+                                </p>
+                                <ApprovalMaterialFiles
+                                    instanceId={instanceId}
+                                    attachments={currentBasis.attachments}
+                                    sourceRevisionId={
+                                        currentBasis.source.revision_id
+                                    }
+                                    idPrefix={`${prefix}-current-file`}
+                                    emptyMessage={
+                                        currentBasis.unavailable_reason ??
+                                        "此销售版本未关联可读取的合同或凭证，请联系销售核对归档资料。"
+                                    }
+                                />
+                            </div>
+                        ) : !materials.data?.attachments.length ? (
+                            <p className="text-xs text-muted-foreground">
+                                {materials.isPending
+                                    ? "正在读取销售合同与凭证…"
+                                    : "销售合同与凭证读取失败，请刷新后重试。"}
+                            </p>
+                        ) : null}
                         <p className="text-xs text-muted-foreground">
-                            来源销售单 · V{currentBasis.source.revision_no} ·
-                            当前生效版本
+                            付款条件不等同于开票时点；请结合合同约定核对。审批通过后生成开票任务，实际登记发票后才计入已开票金额。
                         </p>
-                        <ApprovalMaterialFiles
-                            instanceId={instanceId}
-                            attachments={currentBasis.attachments}
-                            sourceRevisionId={currentBasis.source.revision_id}
-                            idPrefix={`${prefix}-current-file`}
-                            emptyMessage={
-                                currentBasis.unavailable_reason ??
-                                "此销售版本未关联可读取的合同或凭证，请联系销售核对归档资料。"
-                            }
-                        />
                     </div>
-                ) : !materials.data?.attachments.length ? (
-                    <p className="text-xs text-muted-foreground">
-                        {materials.isPending
-                            ? "正在读取销售合同与凭证…"
-                            : "销售合同与凭证读取失败，请刷新后重试。"}
-                    </p>
-                ) : null}
-                <p className="text-xs text-muted-foreground">
-                    付款条件不等同于开票时点；请结合合同约定核对。审批通过后生成开票任务，实际登记发票后才计入已开票金额。
-                </p>
-            </details>
+                </details>
+            </DetailWorkspaceSection>
         </>
     )
 }
@@ -346,21 +421,20 @@ function CurrentReview({
                     <AlertTitle>本次申请未超出开票额度</AlertTitle>
                 </Alert>
             )}
-            <dl className="grid gap-4 py-2 @min-[480px]/document:grid-cols-3 @min-[480px]/document:gap-0 @min-[480px]/document:divide-x @min-[480px]/document:divide-grid">
-                {amounts.map(([label, value]) => (
-                    <div
+            <DetailWorkspaceMetrics
+                columns={3}
+                variant="inline"
+                ariaLabel="开票额度摘要"
+            >
+                {amounts.map(([label, value], index) => (
+                    <DetailWorkspaceMetricItem
                         key={label}
-                        className="min-w-0 @min-[480px]/document:px-5 @min-[480px]/document:first:pl-0 @min-[480px]/document:last:pr-0"
-                    >
-                        <dt className="text-xs text-muted-foreground">
-                            {label}
-                        </dt>
-                        <dd className="num mt-2 break-words text-value-section font-semibold tracking-tight">
-                            <MoneyValue value={value} />
-                        </dd>
-                    </div>
+                        label={label}
+                        value={<MoneyValue value={value} />}
+                        emphasis={index === 1 ? "primary" : "default"}
+                    />
                 ))}
-            </dl>
+            </DetailWorkspaceMetrics>
             <details id={`${idPrefix}-amounts`} className="group/amounts">
                 <summary
                     id={`${idPrefix}-amounts-toggle`}
@@ -373,7 +447,7 @@ function CurrentReview({
                               ? "仅本次申请占用"
                               : "暂无申请占用额度"}
                     </span>
-                    <span className="flex items-center gap-1">
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         <span className="group-open/amounts:hidden">
                             查看额度明细
                         </span>
@@ -387,32 +461,64 @@ function CurrentReview({
                     </span>
                 </summary>
                 <div className="space-y-3 pt-3">
-                    <dl className="grid grid-cols-2 gap-x-5 gap-y-3 @min-[640px]/document:grid-cols-4">
-                        <Fact label="本笔应收">
-                            <MoneyValue value={data.gross_total} />
-                        </Fact>
-                        <Fact label="已实际开票（净额）">
-                            <MoneyValue value={data.invoiced_total} />
-                        </Fact>
-                        <Fact label="其他审批中占用">
-                            <MoneyValue value={data.amounts.other_pending} />
-                        </Fact>
-                        <Fact label="其他已批准待开票">
-                            <MoneyValue value={data.amounts.other_approved} />
-                        </Fact>
-                    </dl>
-                    <p className="text-body-compact leading-6 text-muted-foreground">
+                    <DetailWorkspaceFacts columns={4}>
+                        <DetailWorkspaceFact
+                            label="本笔应收"
+                            numeric
+                            value={<MoneyValue value={data.gross_total} />}
+                        />
+                        <DetailWorkspaceFact
+                            label="已实际开票（净额）"
+                            numeric
+                            value={<MoneyValue value={data.invoiced_total} />}
+                        />
+                        <DetailWorkspaceFact
+                            label="其他审批中占用"
+                            numeric
+                            value={
+                                <MoneyValue
+                                    value={data.amounts.other_pending}
+                                />
+                            }
+                        />
+                        <DetailWorkspaceFact
+                            label="其他已批准待开票"
+                            numeric
+                            value={
+                                <MoneyValue
+                                    value={data.amounts.other_approved}
+                                />
+                            }
+                        />
+                    </DetailWorkspaceFacts>
+                    <p className="text-xs leading-5 text-muted-foreground">
                         可再申请金额已扣除本次及其他申请的有效占用；已批准申请仅占用尚未开票部分。
                     </p>
                     <details
                         id={`${idPrefix}-related`}
-                        className="border-t border-grid pt-3"
+                        className="group/related border-t border-grid pt-3"
                     >
                         <summary
                             id={`${idPrefix}-related-toggle`}
-                            className="cursor-pointer text-body-compact font-medium"
+                            className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-sm text-body-compact font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
                         >
-                            占用额度的开票申请（{data.request_count}）
+                            <span className="flex items-center gap-1.5">
+                                <ChevronRightIcon
+                                    aria-hidden="true"
+                                    className="size-4 shrink-0 text-muted-foreground transition-transform group-open/related:rotate-90"
+                                />
+                                <span>
+                                    占用额度的开票申请（{data.request_count}）
+                                </span>
+                            </span>
+                            <span className="text-xs font-normal text-muted-foreground">
+                                <span className="group-open/related:hidden">
+                                    展开
+                                </span>
+                                <span className="hidden group-open/related:inline">
+                                    收起
+                                </span>
+                            </span>
                         </summary>
                         <ul className="mt-2 divide-y divide-grid text-body-compact">
                             {data.requests.map((row) => (
@@ -488,11 +594,11 @@ function CurrentReview({
                             </span>
                             <span>履约：{data.fulfillment_status}</span>
                         </span>
-                        <span className="mt-1 block text-muted-foreground">
+                        <span className="mt-1 block text-xs text-muted-foreground">
                             按合同约定核对开票时点。
                         </span>
                     </span>
-                    <span className="ml-auto flex items-center gap-1 text-body-compact">
+                    <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
                         <span className="group-open/collection:hidden">
                             查看详情
                         </span>
@@ -506,17 +612,26 @@ function CurrentReview({
                     </span>
                 </summary>
                 <div className="space-y-3 pt-4">
-                    <dl className="grid grid-cols-2 gap-x-5 gap-y-3 @min-[640px]/document:grid-cols-4">
-                        <Fact label="本笔已核销回款">
-                            <MoneyValue value={data.settled_total} />
-                        </Fact>
-                        <Fact label="销售状态">{data.sales_status}</Fact>
-                        <Fact label="履约进度">{data.fulfillment_status}</Fact>
-                        <Fact label="负责销售">
-                            {data.sales_owner || "未记录"}
-                        </Fact>
-                    </dl>
-                    <p className="text-body-compact leading-6 text-muted-foreground">
+                    <DetailWorkspaceFacts columns={4}>
+                        <DetailWorkspaceFact
+                            label="本笔已核销回款"
+                            numeric
+                            value={<MoneyValue value={data.settled_total} />}
+                        />
+                        <DetailWorkspaceFact
+                            label="销售状态"
+                            value={data.sales_status}
+                        />
+                        <DetailWorkspaceFact
+                            label="履约进度"
+                            value={data.fulfillment_status}
+                        />
+                        <DetailWorkspaceFact
+                            label="负责销售"
+                            value={data.sales_owner || "未记录"}
+                        />
+                    </DetailWorkspaceFacts>
+                    <p className="text-xs leading-5 text-muted-foreground">
                         仅统计已核销至本笔应收的回款；未回款或未履约不自动代表不能开票。
                     </p>
                     <RecordList
@@ -565,19 +680,24 @@ function Source({
                     ? "提交申请时的销售单内容"
                     : "当前生效销售版本，点击单号查看完整明细与合同凭证"}
             </p>
-            <dl className="grid gap-x-6 gap-y-3 @min-[640px]/document:grid-cols-2">
-                <Fact label="销售客户">
-                    {source.source.customer || "未记录"}
-                </Fact>
-                <Fact label="整单含税金额">
-                    {source.source.amount_label || "未记录"}
-                </Fact>
+            <DetailWorkspaceFacts columns={2}>
+                <DetailWorkspaceFact
+                    label="销售客户"
+                    value={source.source.customer || "未记录"}
+                />
+                <DetailWorkspaceFact
+                    label="整单含税金额"
+                    numeric
+                    value={source.source.amount_label || "未记录"}
+                />
                 {source.source.extra_sections.map((field) => (
-                    <Fact key={field.label} label={field.label}>
-                        {field.value}
-                    </Fact>
+                    <DetailWorkspaceFact
+                        key={field.label}
+                        label={field.label}
+                        value={field.value}
+                    />
                 ))}
-            </dl>
+            </DetailWorkspaceFacts>
             <ul className="divide-y divide-grid border-t border-grid text-body-compact">
                 {source.source.lines.map((line, index) => (
                     <li
@@ -603,14 +723,6 @@ function Source({
     )
 }
 
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-    return (
-        <div className="min-w-0">
-            <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd className="mt-1 break-words text-body-compact">{children}</dd>
-        </div>
-    )
-}
 function Loading({ children }: { children: ReactNode }) {
     return (
         <p
@@ -635,12 +747,26 @@ function RecordList({
     rows: InvoiceReviewRecord[]
 }) {
     return (
-        <details id={id} className="border-t border-grid pt-3">
+        <details id={id} className="group/records border-t border-grid pt-3">
             <summary
                 id={`${id}-toggle`}
-                className="cursor-pointer text-body-compact font-medium"
+                className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-sm text-body-compact font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
             >
-                {title}（{count}）
+                <span className="flex items-center gap-1.5">
+                    <ChevronRightIcon
+                        aria-hidden="true"
+                        className="size-4 shrink-0 text-muted-foreground transition-transform group-open/records:rotate-90"
+                    />
+                    <span>
+                        {title}（{count}）
+                    </span>
+                </span>
+                <span className="text-xs font-normal text-muted-foreground">
+                    <span className="group-open/records:hidden">展开</span>
+                    <span className="hidden group-open/records:inline">
+                        收起
+                    </span>
+                </span>
             </summary>
             {rows.length ? (
                 <ul className="mt-2 divide-y divide-grid text-body-compact">

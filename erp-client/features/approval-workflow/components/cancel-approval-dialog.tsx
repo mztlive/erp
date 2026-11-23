@@ -241,8 +241,19 @@ export function CancelApprovalDialog({
                             <field.TextareaField
                                 id={`${id}-reason`}
                                 label="原因"
+                                description="按 Ctrl / ⌘ + Enter 快速提交"
                                 required
                                 disabled={pending || uncertain}
+                                onKeyDown={(event) => {
+                                    if (
+                                        (event.metaKey || event.ctrlKey) &&
+                                        event.key === "Enter" &&
+                                        !event.nativeEvent.isComposing
+                                    ) {
+                                        event.preventDefault()
+                                        void form.handleSubmit()
+                                    }
+                                }}
                             />
                         )}
                     />
@@ -265,6 +276,7 @@ export function CancelApprovalDialog({
                             <form.SubmitButton
                                 loading={pending}
                                 id={`${id}-submit`}
+                                variant="destructive"
                                 label={
                                     uncertain
                                         ? "核对撤回结果"

@@ -23,6 +23,7 @@ import {
     useSendPurchaseEmail,
     usePurchaseEmails,
 } from "../hooks/use-purchase-correspondence"
+import { shouldBundleDeliveryWorkbook } from "../lib/purchase-delivery-plan"
 import type { PurchaseOrderCenterView } from "../types"
 
 export function PurchaseOrderCorrespondence({
@@ -49,6 +50,10 @@ export function PurchaseOrderCorrespondence({
         ["EFFECTIVE", "PARTIALLY_EXECUTED", "COMPLETED"].includes(
             order.identity.status,
         ) && order.currentContent.source === "REVISION"
+    const hasCompanionWorkbook = shouldBundleDeliveryWorkbook(
+        order.currentContent.lines,
+        order.header.fulfillmentResponsibility === "WAREHOUSE",
+    )
     const buttonClassName = menuItem
         ? "w-full justify-start font-normal text-foreground/85 shadow-none hover:bg-muted/80 hover:text-foreground"
         : detailWorkspaceStyles.quietButton
@@ -63,13 +68,21 @@ export function PurchaseOrderCorrespondence({
                 onClick={async () => {
                     onActionSelect?.()
                     try {
-                        await paper.mutateAsync()
-                        toast.add({
-                            title: "采购单已下载",
-                            description:
-                                "已保存为 PNG 图片，文件名为供应商名称。",
-                            type: "success",
-                        })
+                        const result = await paper.mutateAsync()
+                        toast.add(
+                            result.bundledWorkbook
+                                ? {
+                                      title: "采购单与地址表已下载",
+                                      description: `地址较多（共 ${result.deliveryRowCount} 条），已打包为清晰采购单 PNG 图片与 Excel 发货地址明细表。`,
+                                      type: "success",
+                                  }
+                                : {
+                                      title: "采购单已下载",
+                                      description:
+                                          "已保存为 PNG 图片，文件名为供应商名称。",
+                                      type: "success",
+                                  },
+                        )
                     } catch (error) {
                         toast.add({
                             title: "下载失败",
@@ -80,7 +93,11 @@ export function PurchaseOrderCorrespondence({
                 }}
             >
                 <DownloadIcon data-icon="inline-start" aria-hidden="true" />
-                {paper.isPending ? "正在生成…" : "下载纸质采购单"}
+                {paper.isPending
+                    ? "正在生成…"
+                    : hasCompanionWorkbook
+                      ? "下载采购单及地址表"
+                      : "下载纸质采购单"}
             </Button>
             {canSend ? (
                 <Button

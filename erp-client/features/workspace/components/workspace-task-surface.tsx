@@ -3,6 +3,7 @@
 import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import { PurchasePaymentArrangement } from "@/features/purchase-orders/components/purchase-payment-arrangement"
 import { SalesInquiryDetailPage } from "@/features/sales-inquiries/pages/sales-inquiry-detail-page"
+import { WorkspaceApprovalRouteSummary } from "./workspace-approval-route-summary"
 import { WorkspaceApprovalReworkActions } from "./workspace-approval-rework"
 import { WorkspaceRejectionNotice } from "./workspace-rejection-notice"
 import { useWorkspaceTaskPage } from "@/components/business/workspace-task-pane"
@@ -91,17 +92,26 @@ export function WorkspaceTaskSurface({
                 item.workItemType === "APPROVAL_INSTANCE") &&
                 item.handlerKey === "document_approval"))
     ) {
+        const paymentApprovalInstance =
+            item.workItemType !== "SUPPLIER_PAYMENT_EXECUTION" && item.approval
+                ? {
+                      id: item.approval.instanceId,
+                      status: item.approval.status,
+                      currentRoundNo: item.approval.currentRoundNo,
+                      currentNodeName: item.approval.currentNodeLabel,
+                      currentAssigneeName: item.approval.currentAssigneeLabel,
+                      latestRejection: item.approval.lastRejectReason,
+                      latestRejectionByName: item.approval.lastRejectorLabel,
+                      processName: item.approval.processName,
+                      processVersion: item.approval.processVersion,
+                  }
+                : undefined
         return (
             <WorkspaceProcessingPane
                 header={
                     <WorkspaceTaskIdentityHeader
                         item={item}
-                        title={
-                            !fullPage ||
-                            item.workItemType === "SUPPLIER_PAYMENT_EXECUTION"
-                                ? item.counterpartyName || "付款申请"
-                                : "付款申请审批"
-                        }
+                        title={item.counterpartyName || "付款申请"}
                         badges={
                             item.workItemType === "APPROVAL_INSTANCE" ? (
                                 <StatusBadge
@@ -115,7 +125,7 @@ export function WorkspaceTaskSurface({
                             ) : undefined
                         }
                         subtitle={
-                            <span className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
+                            <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
                                 <span
                                     className="num min-w-0 max-w-full truncate text-xs select-all"
                                     title={item.stableNumber}
@@ -125,7 +135,10 @@ export function WorkspaceTaskSurface({
                                 {item.workItemType === "DOCUMENT_APPROVAL" &&
                                     item.status === "OPEN" && (
                                         <span>
-                                            当前审批人：{item.ownerUserLabel}
+                                            当前审批人：
+                                            <span className="text-foreground">
+                                                {item.ownerUserLabel}
+                                            </span>
                                         </span>
                                     )}
                                 {item.workItemType === "APPROVAL_INSTANCE" &&
@@ -134,12 +147,24 @@ export function WorkspaceTaskSurface({
                                     ) && (
                                         <span>
                                             {item.approval?.currentNodeLabel} ·{" "}
-                                            {item.ownerUserLabel}
+                                            <span className="text-foreground">
+                                                {item.ownerUserLabel}
+                                            </span>
                                         </span>
                                     )}
+                                {item.dueAt ? (
+                                    <span>截止时间：{item.dueAtLabel}</span>
+                                ) : null}
                             </span>
                         }
                     />
+                }
+                headerSupplement={
+                    fullPage && paymentApprovalInstance ? (
+                        <WorkspaceApprovalRouteSummary
+                            instance={paymentApprovalInstance}
+                        />
+                    ) : null
                 }
                 footer={
                     reworkTask &&

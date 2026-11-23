@@ -193,7 +193,9 @@ export function WorkspaceSearchPanel({
     const searchInputRef = useRef<HTMLInputElement>(null)
     useSearchHotkey(searchInputRef)
     const started = state.view === "started"
-    const showDue = !started && state.view !== "history"
+    const hasDueQuickFilter =
+        !started && state.view !== "history" && Boolean(quickFilters)
+    const showDue = !started && state.view !== "history" && !hasDueQuickFilter
     const dueDraft = useRef<WorkspaceFilters["due"]>(undefined)
     const applied = useMemo(
         () => ({ query: state.query ?? "", filters: state.filters ?? {} }),
@@ -249,7 +251,7 @@ export function WorkspaceSearchPanel({
             }
         })
     })
-    if (!showDue && applied.filters.due)
+    if (!showDue && !hasDueQuickFilter && applied.filters.due)
         chips.push({
             key: "due",
             label: applied.filters.due === "today" ? "今日到期" : "已超期",
@@ -418,7 +420,11 @@ export function WorkspaceSearchPanel({
                             item_types: form.state.values.filters.item_types,
                             counterparties:
                                 form.state.values.filters.counterparties,
-                            due: showDue ? dueDraft.current : undefined,
+                            due: showDue
+                                ? dueDraft.current
+                                : hasDueQuickFilter
+                                  ? applied.filters.due
+                                  : undefined,
                         })
                     }
                     commonFilters={

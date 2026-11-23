@@ -1,6 +1,14 @@
 "use client"
 
-import { BusinessFailureState } from "@/components/business"
+import {
+    BusinessFailureState,
+    DetailWorkspaceFact,
+    DetailWorkspaceFacts,
+    DetailWorkspaceMetricItem,
+    DetailWorkspaceMetrics,
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
     Table,
@@ -17,7 +25,6 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceMoney } from "./workspace-money"
 
-const sectionClass = "space-y-3 border-b border-border/60 py-6"
 const primaryFields = new Set([
     "回款金额",
     "到账日",
@@ -68,40 +75,37 @@ export function WorkspaceReceiptApproval({
 
     return (
         <div aria-label="回款审批资料">
-            <section className={sectionClass} aria-label="回款概览">
-                <dl className="grid grid-cols-2 items-end gap-x-6 gap-y-4 @min-[540px]/document:grid-cols-[1.4fr_1fr_1fr]">
-                    <div className="col-span-2 @min-[540px]/document:col-span-1">
-                        <dt className="text-xs text-muted-foreground">
-                            本次登记回款
-                        </dt>
-                        <dd className="num mt-1 text-value-summary font-semibold tracking-tight">
-                            {amount ? (
+            <DetailWorkspaceSection ariaLabel="回款概览" divider={false}>
+                <DetailWorkspaceMetrics
+                    columns={3}
+                    variant="inline"
+                    ariaLabel="回款关键指标"
+                >
+                    <DetailWorkspaceMetricItem
+                        label="本次登记回款"
+                        emphasis="primary"
+                        value={
+                            amount ? (
                                 <WorkspaceMoney value={amount} />
                             ) : (
                                 "金额未记录"
-                            )}
-                        </dd>
-                    </div>
-                    <div>
-                        <dt className="text-xs text-muted-foreground">
-                            到账日期
-                        </dt>
-                        <dd className="num mt-1 text-body-compact font-medium">
-                            {field("到账日") || "未记录"}
-                        </dd>
-                    </div>
-                    <div>
-                        <dt className="text-xs text-muted-foreground">
-                            本次拟核销
-                        </dt>
-                        <dd className="mt-1 text-body-compact font-medium">
-                            {field("待核销") ||
-                                (lines.length
-                                    ? `${lines.length + moreCount} 笔`
-                                    : "未记录分配")}
-                        </dd>
-                    </div>
-                </dl>
+                            )
+                        }
+                    />
+                    <DetailWorkspaceMetricItem
+                        label="到账日期"
+                        value={field("到账日") || "未记录"}
+                    />
+                    <DetailWorkspaceMetricItem
+                        label="本次拟核销"
+                        value={
+                            field("待核销") ||
+                            (lines.length
+                                ? `${lines.length + moreCount} 笔`
+                                : "未记录分配")
+                        }
+                    />
+                </DetailWorkspaceMetrics>
                 <p className="text-xs text-muted-foreground">
                     提交人：{submitter || "未记录姓名"}
                     <span className="mx-2" aria-hidden="true">
@@ -109,31 +113,25 @@ export function WorkspaceReceiptApproval({
                     </span>
                     审批全部通过并入账后，计入已收金额
                 </p>
-            </section>
+            </DetailWorkspaceSection>
 
-            <section className={sectionClass} aria-label="到账依据">
-                <h3 className="font-semibold">到账依据</h3>
-                <dl className="grid gap-3 @min-[540px]/document:grid-cols-2">
-                    <div>
-                        <dt className="text-xs text-muted-foreground">
-                            付款主体
-                        </dt>
-                        <dd className="mt-1 break-words text-body-compact">
-                            {field("往来主体") ||
-                                materials.data?.display.counterparty_label ||
-                                item.counterpartyName ||
-                                "未记录"}
-                        </dd>
-                    </div>
-                    <div>
-                        <dt className="text-xs text-muted-foreground">
-                            银行流水／凭证引用
-                        </dt>
-                        <dd className="num mt-1 break-all text-body-compact">
-                            {bankReference || "本次提交未记录"}
-                        </dd>
-                    </div>
-                </dl>
+            <DetailWorkspaceSection title="到账依据" ariaLabel="到账依据">
+                <DetailWorkspaceFacts columns={2}>
+                    <DetailWorkspaceFact
+                        label="付款主体"
+                        value={
+                            field("往来主体") ||
+                            materials.data?.display.counterparty_label ||
+                            item.counterpartyName ||
+                            "未记录"
+                        }
+                    />
+                    <DetailWorkspaceFact
+                        label="银行流水／凭证引用"
+                        numeric
+                        value={bankReference || "本次提交未记录"}
+                    />
+                </DetailWorkspaceFacts>
                 <div className="space-y-2 border-t border-grid pt-3">
                     <p className="text-xs text-muted-foreground">
                         提交凭证
@@ -164,38 +162,55 @@ export function WorkspaceReceiptApproval({
                         />
                     )}
                 </div>
-            </section>
+            </DetailWorkspaceSection>
 
-            <section className={sectionClass} aria-label="本次拟核销明细">
-                <h3 className="font-semibold">本次拟核销明细</h3>
+            <DetailWorkspaceSection
+                title="本次拟核销明细"
+                subtitle={
+                    lines.length
+                        ? `共 ${lines.length + moreCount} 笔`
+                        : undefined
+                }
+                ariaLabel="本次拟核销明细"
+            >
                 {lines.length ? (
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead scope="col">关联销售单</TableHead>
-                                <TableHead scope="col" className="text-right">
-                                    本次拟核销金额
-                                </TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {lines.map((line, index) => (
-                                <TableRow key={`${index}:${line.title}`}>
-                                    <TableCell className="whitespace-normal break-words">
-                                        {line.title}
-                                        {line.dueLabel ? (
-                                            <p className="mt-1 text-xs text-muted-foreground">
-                                                {line.dueLabel}
-                                            </p>
-                                        ) : null}
-                                    </TableCell>
-                                    <TableCell className="num text-right font-semibold">
-                                        {line.quantity || "未记录"}
-                                    </TableCell>
+                    <div
+                        data-slot="detail-inline-table"
+                        className={detailWorkspaceStyles.inlineTableWrapper}
+                    >
+                        <Table className="[&_:is(th,td):first-child]:ps-0">
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead scope="col">
+                                        关联销售单
+                                    </TableHead>
+                                    <TableHead scope="col" data-align="end">
+                                        本次拟核销金额
+                                    </TableHead>
                                 </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
+                            </TableHeader>
+                            <TableBody>
+                                {lines.map((line, index) => (
+                                    <TableRow key={`${index}:${line.title}`}>
+                                        <TableCell className="whitespace-normal break-words">
+                                            {line.title}
+                                            {line.dueLabel ? (
+                                                <p className="mt-1 text-xs text-muted-foreground">
+                                                    {line.dueLabel}
+                                                </p>
+                                            ) : null}
+                                        </TableCell>
+                                        <TableCell
+                                            data-align="end"
+                                            className="num font-semibold"
+                                        >
+                                            {line.quantity || "未记录"}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
                 ) : (
                     <p className="text-xs text-muted-foreground">
                         暂无可查看的核销分配明细，请联系提交人核对。
@@ -213,24 +228,20 @@ export function WorkspaceReceiptApproval({
                 <p className="text-xs text-muted-foreground">
                     以上为本次提交的分配方案，不代表已核销金额。
                 </p>
-            </section>
+            </DetailWorkspaceSection>
 
             {additionalFields.length ? (
-                <section className={sectionClass} aria-label="补充资料">
-                    <h3 className="font-semibold">补充资料</h3>
-                    <dl className="grid gap-3 @min-[540px]/document:grid-cols-2">
+                <DetailWorkspaceSection title="补充资料" ariaLabel="补充资料">
+                    <DetailWorkspaceFacts columns={2}>
                         {additionalFields.map((entry) => (
-                            <div key={entry.label}>
-                                <dt className="text-xs text-muted-foreground">
-                                    {entry.label}
-                                </dt>
-                                <dd className="mt-1 break-words text-body-compact">
-                                    {entry.value}
-                                </dd>
-                            </div>
+                            <DetailWorkspaceFact
+                                key={entry.label}
+                                label={entry.label}
+                                value={entry.value}
+                            />
                         ))}
-                    </dl>
-                </section>
+                    </DetailWorkspaceFacts>
+                </DetailWorkspaceSection>
             ) : null}
         </div>
     )

@@ -7,6 +7,7 @@ import { ArrowLeftIcon } from "lucide-react"
 import { detailWorkspaceStyles } from "@/components/business/detail-workspace-styles"
 import type { DocumentHeaderProps } from "@/components/business/document"
 import { PageScaffold } from "@/components/business/page"
+import { useWorkspaceTaskNavigation } from "@/components/business/workspace-task-pane"
 import { useWorkspaceTab } from "@/components/layout/workspace-tab-context"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -32,10 +33,7 @@ function findScrollContainer(node: HTMLElement | null): HTMLElement | null {
     let current = node?.parentElement ?? null
     while (current) {
         const overflowY = window.getComputedStyle(current).overflowY
-        if (
-            (overflowY === "auto" || overflowY === "scroll") &&
-            current.scrollHeight > current.clientHeight
-        ) {
+        if (overflowY === "auto" || overflowY === "scroll") {
             return current
         }
         current = current.parentElement
@@ -219,10 +217,13 @@ export function DetailWorkspaceChrome({
     className,
 }: DetailWorkspaceChromeProps) {
     const inWorkspaceTab = useWorkspaceTab()
+    const taskNavigation = useWorkspaceTaskNavigation()
+    const effectiveBack = backNavigation ?? taskNavigation?.back
+    const effectiveNavigationMeta = navigationMeta ?? taskNavigation?.meta
     const back =
-        inWorkspaceTab && backNavigation?.visibility !== "always"
+        inWorkspaceTab && effectiveBack?.visibility !== "always"
             ? undefined
-            : backNavigation
+            : effectiveBack
     const sentinelRef = React.useRef<HTMLDivElement>(null)
     const headerRef = React.useRef<HTMLElement>(null)
     const [scrolled, setScrolled] = React.useState(false)
@@ -282,8 +283,8 @@ export function DetailWorkspaceChrome({
                 data-scrolled={scrolled ? "true" : undefined}
                 className={cn(styles.chrome, className)}
             >
-                {back || navigationMeta ? (
-                    <div className="flex min-w-0 flex-wrap items-center gap-3 pt-2.5">
+                {back || effectiveNavigationMeta ? (
+                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 pt-2.5">
                         {back?.href != null ? (
                             <Link
                                 id={back.id}
@@ -312,9 +313,9 @@ export function DetailWorkspaceChrome({
                                 {back.label}
                             </Button>
                         ) : null}
-                        {navigationMeta ? (
+                        {effectiveNavigationMeta ? (
                             <div className="min-w-0 text-xs text-muted-foreground">
-                                {navigationMeta}
+                                {effectiveNavigationMeta}
                             </div>
                         ) : null}
                     </div>
@@ -324,7 +325,7 @@ export function DetailWorkspaceChrome({
                     className={cn(
                         styles.header,
                         tabs && "pb-2.5",
-                        (back || navigationMeta) && "pt-2",
+                        (back || effectiveNavigationMeta) && "pt-2",
                     )}
                 >
                     <div className="flex min-w-0 flex-1 items-center gap-3">

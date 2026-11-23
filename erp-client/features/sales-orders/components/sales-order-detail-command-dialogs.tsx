@@ -111,6 +111,12 @@ export function SalesOrderDetailSecondaryActions({
 
     if (!showArrangement && moreActionCount === 0) return null
 
+    const unitLabels = Object.fromEntries(
+        order.lineItems
+            .filter((line) => Boolean(line.unit))
+            .map((line) => [line.id, line.unit]),
+    )
+
     return (
         <div className="flex flex-wrap items-center gap-1.5">
             {showArrangement ? (
@@ -120,6 +126,7 @@ export function SalesOrderDetailSecondaryActions({
                     label="收货安排"
                     variant="ghost"
                     className={detailWorkspaceStyles.subtleButton}
+                    unitLabels={unitLabels}
                 />
             ) : null}
             {moreActionCount > 0 ? (

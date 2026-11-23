@@ -19,7 +19,9 @@ import {
 } from "@/components/ui/table"
 import { ArrangementSummary } from "@/features/delivery-arrangements/components/arrangement-summary"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
+import { useSalesOrderDetailPermissions } from "@/features/sales-orders/hooks/use-sales-order-detail-permissions"
 import { paymentTermLabel, welfareScenarioLabel } from "@/lib/business-options"
+import { hasPermission } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 import { SalesOrderDeliverySummary } from "./sales-order-delivery-summary"
 import { SalesOrderInquirySource } from "./sales-order-inquiry-source"
@@ -138,6 +140,28 @@ export function OverviewPanel({
     related?: React.ReactNode
 }) {
     const isCard = order.nature === "card_voucher"
+    const permissions = useSalesOrderDetailPermissions()
+    const canEditArrangement = hasPermission(
+        permissions.granted,
+        "sales_order:update",
+    )
+    const arrangementLineMeta = React.useMemo(
+        () =>
+            Object.fromEntries(
+                order.lineItems.map((line) => [
+                    line.id,
+                    {
+                        unit: line.unit || undefined,
+                        sku:
+                            line.sku && line.sku !== "无规格"
+                                ? line.sku
+                                : undefined,
+                        isGift: line.isGift,
+                    },
+                ]),
+            ),
+        [order.lineItems],
+    )
     return (
         <>
             {isCard ? (
@@ -285,7 +309,11 @@ export function OverviewPanel({
             !isCard &&
             order.primaryStatus.code !== "closed" &&
             order.primaryStatus.code !== "voided" ? (
-                <ArrangementSummary salesOrderId={order.id} />
+                <ArrangementSummary
+                    salesOrderId={order.id}
+                    canEdit={canEditArrangement}
+                    lineMeta={arrangementLineMeta}
+                />
             ) : null}
 
             {related}

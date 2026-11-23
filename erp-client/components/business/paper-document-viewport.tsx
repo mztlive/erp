@@ -44,7 +44,10 @@ export function PaperDocumentViewport({
                 frame.clientHeight -
                 parseFloat(style.paddingTop) -
                 parseFloat(style.paddingBottom)
-            const comfortWidth = Math.min(availableWidth, 48 * 16)
+            const comfortWidth = Math.min(
+                availableWidth,
+                (fitMode === "width" ? 56 : 48) * 16,
+            )
             const scale = Math.min(
                 1,
                 comfortWidth / Math.max(width, 1),
@@ -64,6 +67,12 @@ export function PaperDocumentViewport({
         return () => observer.disconnect()
     }, [fitKey, fitMode, children])
 
+    React.useLayoutEffect(() => {
+        if (fitMode !== "width") return
+        const frame = frameRef.current
+        if (frame) frame.scrollTop = 0
+    }, [fitKey, fitMode])
+
     return (
         <div
             ref={frameRef}
@@ -75,7 +84,10 @@ export function PaperDocumentViewport({
             {...props}
         >
             <div
-                className="shrink-0 overflow-hidden"
+                className={cn(
+                    "shrink-0 overflow-hidden",
+                    fitMode === "width" && "mb-3 sm:mb-4",
+                )}
                 style={{
                     width: fit.width * fit.scale,
                     height: fit.height * fit.scale,

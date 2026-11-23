@@ -1,9 +1,17 @@
 "use client"
 
-import { useEffect, useRef } from "react"
-import { Clock3Icon } from "lucide-react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import {
+    ChevronLeftIcon,
+    ChevronRightIcon,
+    Clock3Icon,
+    HistoryIcon,
+} from "lucide-react"
 
-import { BusinessFailureState } from "@/components/business"
+import {
+    BusinessFailureState,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -12,6 +20,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog"
+import { Skeleton } from "@/components/ui/skeleton"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { ApprovalQueryFeedback } from "@/features/approval-workflow/components/approval-query-feedback"
 import { ExecutionHistory } from "@/features/approval-workflow/components/execution-history"
@@ -28,6 +37,7 @@ import type {
 } from "@/features/approval-workflow/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
+import { WorkspaceDescriptionText } from "./workspace-description-text"
 
 type RouteStep = {
     key: string
@@ -38,7 +48,7 @@ type RouteStep = {
     current?: boolean
 }
 
-/** 单栏销售审批首屏用一行步骤展示完整冻结路线，历史意见按需查看。 */
+/** 统一单栏审批工作面顶部路线条：展示完整冻结审批链，历史意见按需弹窗查看。 */
 export function WorkspaceApprovalRouteSummary({
     instance,
 }: {
@@ -51,29 +61,51 @@ export function WorkspaceApprovalRouteSummary({
     const route = historyQuery.data?.pages[0]?.route
     const history = historyQuery.data?.pages.flatMap((page) => page.items) ?? []
     const prefix = `workspace-approval-route-${toAutomationIdSegment(instance.id)}`
+    const historyCount = history.length
+    const processName = displayReadableName(instance.processName)
 
     return (
         <section
             aria-label="审批流程"
-            className="space-y-1.5 border-t border-border/60 py-2.5"
+            className="space-y-2 border-b border-border/60 bg-card py-3"
         >
             <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-3">
-                    <h2 className="text-section-title font-semibold tracking-tight">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
+                    <h2 className="text-body-compact font-semibold text-foreground">
                         审批流程
                     </h2>
-                    <span className="text-xs text-muted-foreground">
-                        {displayRound(
-                            route?.roundNo ?? instance.currentRoundNo,
-                        )}
+                    <span className="num text-xs text-muted-foreground">
+                        {[
+                            processName && processName !== "审批流程"
+                                ? processName
+                                : null,
+                            displayRound(
+                                route?.roundNo ?? instance.currentRoundNo,
+                            ),
+                        ]
+                            .filter(Boolean)
+                            .join(" · ")}
                     </span>
                 </div>
                 <Dialog>
                     <DialogTrigger
                         id={`${prefix}-history`}
-                        render={<Button variant="ghost" size="sm" />}
+                        render={
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className={detailWorkspaceStyles.quietButton}
+                            />
+                        }
                     >
+                        <HistoryIcon aria-hidden="true" />
                         查看审批记录
+                        {historyCount > 0 ? (
+                            <span className="num text-xs text-muted-foreground">
+                                ({historyCount}
+                                {historyQuery.hasNextPage ? "+" : ""})
+                            </span>
+                        ) : null}
                     </DialogTrigger>
                     <DialogContent
                         closeButtonId={`${prefix}-history-close`}
@@ -116,13 +148,22 @@ export function WorkspaceApprovalRouteSummary({
             {route?.nodes.length ? (
                 <ApprovalRouteStepper
                     id={`${prefix}-steps`}
+                    prefix={prefix}
                     route={route}
                     instanceStatus={instance.status}
+                    latestRejection={instance.latestRejection}
+                    latestRejectionByName={instance.latestRejectionByName}
                 />
             ) : historyQuery.isPending ? (
-                <p role="status" className="text-xs text-muted-foreground">
-                    正在加载审批流程…
-                </p>
+                <div
+                    role="status"
+                    aria-label="正在加载审批流程"
+                    className="flex items-center gap-3 py-1"
+                >
+                    <Skeleton className="h-5 w-24" />
+                    <Skeleton className="h-5 w-32" />
+                    <Skeleton className="h-5 w-24" />
+                </div>
             ) : !historyQuery.isError ? (
                 <BusinessFailureState
                     id={`${prefix}-missing`}
@@ -144,12 +185,18 @@ export function WorkspaceApprovalRouteSummary({
 
 function ApprovalRouteStepper({
     id,
+    prefix,
     route,
     instanceStatus,
+    latestRejection,
+    latestRejectionByName,
 }: {
     id: string
+    prefix: string
     route: ApprovalRoute
     instanceStatus: string
+    latestRejection?: string | null
+    latestRejectionByName?: string | null
 }) {
     const steps = routeSteps(route, instanceStatus)
     const focusKey =
@@ -157,18 +204,56 @@ function ApprovalRouteStepper({
         (isTerminalStatus(instanceStatus) ? "done" : undefined)
     const listRef = useRef<HTMLOListElement>(null)
     const focusRef = useRef<HTMLLIElement>(null)
+    const [overflow, setOverflow] = useState({ left: false, right: false })
+
+    const updateOverflow = useCallback(() => {
+        const list = listRef.current
+        if (!list) return
+        const left = list.scrollLeft > 4
+        const right = list.scrollLeft + list.clientWidth < list.scrollWidth - 4
+        setOverflow((current) =>
+            current.left === left && current.right === right
+                ? current
+                : { left, right },
+        )
+    }, [])
+
     useEffect(() => {
         const list = listRef.current
         const step = focusRef.current
-        if (!list || !step) return
-        const listRect = list.getBoundingClientRect()
-        const stepRect = step.getBoundingClientRect()
-        const delta =
-            stepRect.left -
-            listRect.left -
-            (listRect.width - stepRect.width) / 2
-        list.scrollLeft += delta
-    }, [focusKey, route.roundNo])
+        if (list && step) {
+            const listRect = list.getBoundingClientRect()
+            const stepRect = step.getBoundingClientRect()
+            const delta =
+                stepRect.left -
+                listRect.left -
+                (listRect.width - stepRect.width) / 2
+            list.scrollLeft += delta
+        }
+        updateOverflow()
+    }, [focusKey, route.roundNo, updateOverflow])
+
+    useEffect(() => {
+        const list = listRef.current
+        if (!list) return
+        updateOverflow()
+        const observer =
+            typeof ResizeObserver !== "undefined"
+                ? new ResizeObserver(updateOverflow)
+                : null
+        observer?.observe(list)
+        return () => observer?.disconnect()
+    }, [steps.length, updateOverflow])
+
+    const scrollStep = (direction: -1 | 1) => {
+        const list = listRef.current
+        if (!list) return
+        list.scrollBy({
+            left: direction * Math.max(180, list.clientWidth * 0.6),
+            behavior: "smooth",
+        })
+    }
+
     const opinions = route.nodes.flatMap((node) => {
         const failed = node.result === "REJECTED" || node.result === "BLOCKED"
         const reason = node.execution?.decisionReason?.trim()
@@ -179,54 +264,97 @@ function ApprovalRouteStepper({
     })
 
     return (
-        <div className="space-y-1">
-            <ol
-                id={id}
-                ref={listRef}
-                aria-label="完整审批人链条"
-                className="flex min-w-0 items-center overflow-x-auto overscroll-x-contain py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            >
-                {steps.map((step, index) => (
-                    <li
-                        key={step.key}
-                        ref={step.key === focusKey ? focusRef : undefined}
-                        aria-current={step.current ? "step" : undefined}
-                        className="flex shrink-0 items-center whitespace-nowrap text-xs"
+        <div className="space-y-1.5">
+            <div className="relative flex min-w-0 items-center gap-1">
+                {overflow.left ? (
+                    <Button
+                        id={`${prefix}-scroll-prev`}
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label="向左查看审批节点"
+                        className="shrink-0 text-muted-foreground hover:text-foreground"
+                        onClick={() => scrollStep(-1)}
                     >
-                        {index > 0 ? (
-                            <span
-                                aria-hidden="true"
-                                className="mx-2 h-px w-3 bg-border"
-                            />
-                        ) : null}
-                        <StatusBadge
-                            appearance="text"
-                            tone={step.tone}
-                            icon={
-                                step.tone === "warning" ? Clock3Icon : undefined
-                            }
-                            label={step.status}
-                        />
-                        <span
-                            className={cn(
-                                "ml-1.5",
-                                step.current
-                                    ? "font-semibold text-foreground"
-                                    : step.tone === "neutral"
-                                      ? "text-muted-foreground"
-                                      : "text-foreground",
-                            )}
+                        <ChevronLeftIcon aria-hidden="true" />
+                    </Button>
+                ) : null}
+                <ol
+                    id={id}
+                    ref={listRef}
+                    aria-label="完整审批人链条"
+                    onScroll={updateOverflow}
+                    className="flex min-w-0 flex-1 items-center overflow-x-auto overscroll-x-contain py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                >
+                    {steps.map((step, index) => (
+                        <li
+                            key={step.key}
+                            ref={step.key === focusKey ? focusRef : undefined}
+                            aria-current={step.current ? "step" : undefined}
+                            className="flex shrink-0 items-center whitespace-nowrap text-xs"
                         >
-                            {step.name}
-                        </span>
-                        {step.assignee ? (
-                            <span className="ml-1 text-muted-foreground">
-                                · {step.assignee}
+                            {index > 0 ? (
+                                <span
+                                    aria-hidden="true"
+                                    className="mx-2 h-px w-4 bg-border"
+                                />
+                            ) : null}
+                            <span
+                                className={cn(
+                                    "inline-flex items-center gap-1.5 rounded-md px-2 py-1 transition-colors",
+                                    step.current &&
+                                        step.tone === "destructive" &&
+                                        "bg-destructive-soft/75",
+                                    step.current &&
+                                        step.tone !== "destructive" &&
+                                        "bg-info-soft/75",
+                                )}
+                            >
+                                <StatusBadge
+                                    appearance="text"
+                                    tone={step.tone}
+                                    icon={
+                                        step.current &&
+                                        step.tone !== "destructive"
+                                            ? Clock3Icon
+                                            : undefined
+                                    }
+                                    label={step.status}
+                                />
+                                <span
+                                    className={cn(
+                                        step.current
+                                            ? "font-semibold text-foreground"
+                                            : step.tone === "neutral"
+                                              ? "text-muted-foreground"
+                                              : "text-foreground",
+                                    )}
+                                >
+                                    {step.name}
+                                </span>
+                                {step.assignee ? (
+                                    <span className="text-muted-foreground">
+                                        · {step.assignee}
+                                    </span>
+                                ) : null}
                             </span>
-                        ) : null}
-                    </li>
-                ))}
-            </ol>
+                        </li>
+                    ))}
+                </ol>
+                {overflow.right ? (
+                    <Button
+                        id={`${prefix}-scroll-next`}
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label="向右查看审批节点"
+                        className="shrink-0 text-muted-foreground hover:text-foreground"
+                        onClick={() => scrollStep(1)}
+                    >
+                        <ChevronRightIcon aria-hidden="true" />
+                    </Button>
+                ) : null}
+            </div>
             {opinions.map((opinion) => (
                 <p
                     key={opinion.key}
@@ -236,6 +364,21 @@ function ApprovalRouteStepper({
                     {opinion.name}：{opinion.reason}
                 </p>
             ))}
+            {opinions.length === 0 &&
+            instanceStatus !== "REJECTED" &&
+            latestRejection?.trim() ? (
+                <p className="text-xs text-warning-soft-foreground">
+                    <span className="font-medium">
+                        {latestRejectionByName
+                            ? `上轮驳回（${displayActorName(latestRejectionByName)}）：`
+                            : "上轮驳回原因："}
+                    </span>
+                    <WorkspaceDescriptionText
+                        text={latestRejection.trim()}
+                        splitClauses={false}
+                    />
+                </p>
+            ) : null}
         </div>
     )
 }
@@ -284,7 +427,7 @@ function nodePresentation(result: string): {
         case "NOT_REACHED":
             return { status: "未执行", tone: "neutral", current: false }
         case "ACTIVE":
-            return { status: "当前审批", tone: "warning", current: true }
+            return { status: "当前审批", tone: "info", current: true }
         case "SUPERSEDED":
             return {
                 status: "已由后续轮次替代",

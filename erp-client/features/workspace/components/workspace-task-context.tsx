@@ -1,9 +1,14 @@
 "use client"
 
 import { type ReactNode } from "react"
-import { CircleHelpIcon } from "lucide-react"
+import { CircleHelpIcon, RefreshCwIcon } from "lucide-react"
 
-import { useWorkspaceTaskPage } from "@/components/business/workspace-task-pane"
+import {
+    useWorkspaceTaskNavigation,
+    useWorkspaceTaskPage,
+} from "@/components/business/workspace-task-pane"
+import { IconActionButton } from "@/components/business"
+import { cn } from "@/lib/utils"
 import { TaskTimeline } from "@/features/document-timeline/components/task-timeline"
 import { timelineDocumentTypes } from "@/features/document-timeline/types"
 import { Button } from "@/components/ui/button"
@@ -228,6 +233,7 @@ export function WorkspaceTaskHeaderActions({
     contextVariant?: "ghost" | "outline"
 }) {
     const fullPage = useWorkspaceTaskPage()
+    const navigation = useWorkspaceTaskNavigation()
     return (
         <div className="flex max-w-full flex-wrap items-center justify-end gap-1">
             {children}
@@ -245,6 +251,20 @@ export function WorkspaceTaskHeaderActions({
                     }}
                 />
             )}
+            {fullPage && navigation?.onRefresh ? (
+                <IconActionButton
+                    id="workspace-processing-refresh"
+                    testId="workspace-processing-refresh"
+                    label="刷新当前任务"
+                    disabled={navigation.refreshing}
+                    onClick={navigation.onRefresh}
+                >
+                    <RefreshCwIcon
+                        aria-hidden="true"
+                        className={cn(navigation.refreshing && "animate-spin")}
+                    />
+                </IconActionButton>
+            ) : null}
             <WorkspaceTaskContextHelp
                 item={item}
                 label={contextLabel}

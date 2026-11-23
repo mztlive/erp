@@ -476,18 +476,32 @@ export async function commitPayment(
         form,
     )
 }
+function materialQueryString(workItemId?: string, submissionVersion?: number) {
+    return submissionVersion != null
+        ? `?submission_version=${submissionVersion}`
+        : workItemId
+          ? `?work_item_id=${encodeURIComponent(workItemId)}`
+          : ""
+}
+export async function fetchMaterialPreview(
+    requestId: string,
+    attachment: RequestAttachment,
+    workItemId?: string,
+    submissionVersion?: number,
+) {
+    const query = materialQueryString(workItemId, submissionVersion)
+    return apiGetBlob(
+        `${ROOT}/${encodeURIComponent(requestId)}/materials/${encodeURIComponent(attachment.file_asset_id)}/preview${query}`,
+        { timeoutMs: 30_000, cache: "no-store" },
+    )
+}
 export async function downloadAttachment(
     requestId: string,
     attachment: RequestAttachment,
     workItemId?: string,
     submissionVersion?: number,
 ) {
-    const query =
-        submissionVersion != null
-            ? `?submission_version=${submissionVersion}`
-            : workItemId
-              ? `?work_item_id=${encodeURIComponent(workItemId)}`
-              : ""
+    const query = materialQueryString(workItemId, submissionVersion)
     const blob = await apiGetBlob(
         `${ROOT}/${encodeURIComponent(requestId)}/materials/${encodeURIComponent(attachment.file_asset_id)}/download${query}`,
         { cache: "no-store" },

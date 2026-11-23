@@ -17,32 +17,53 @@ import {
     PO_STATUS_TONE,
     PURCHASE_TYPE_LABEL,
 } from "@/features/purchase-orders/types"
-import { PurchaseDeliveryPlan } from "./purchase-delivery-plan"
+import {
+    PurchaseDeliveryPlan,
+    type PurchaseDeliveryPlanMode,
+} from "./purchase-delivery-plan"
 import { inputTaxRatePercent } from "@/features/purchase-orders/lib/input-tax-rate"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 /**
  * 把拆单预览投影成纸质采购单，金额与明细以当前选源结果为准。
+ * audience="supplier" 用于对外导出，隐藏来源销售单号、终端客户、合同与内部销售人员信息。
  */
 export function PurchaseOrderPreviewPaper({
     preview,
     index,
     sourceOrder,
+    audience = "internal",
+    deliveryMode = "interactive",
+    deliveryAttachmentName,
 }: {
     preview: PurchaseOrderPreview
     index: number
     sourceOrder?: SourcingSalesOrder
+    audience?: "internal" | "supplier"
+    deliveryMode?: PurchaseDeliveryPlanMode
+    deliveryAttachmentName?: string
 }) {
+    const isSupplierView = audience === "supplier"
+    const documentNumber = isSupplierView
+        ? `待确认 ${index + 1}`
+        : `预览 ${index + 1}`
+    const deliveryDate = earliestDeliveryDate(preview.lines)
+
     return (
         <div data-testid={`purchase-create-preview-${preview.supplierId}`}>
             <PaperDocument<PurchaseOrderPreviewLine>
                 frame="bare"
                 title="采购单"
-                subtitle="提交预览"
-                documentNumber={`预览 ${index + 1}`}
-                status={{
-                    label: PO_STATUS_LABEL.PENDING_REVIEW,
-                    tone: PO_STATUS_TONE.PENDING_REVIEW,
-                }}
+                subtitle={isSupplierView ? "待确认采购单" : "提交预览"}
+                documentNumber={documentNumber}
+                status={
+                    isSupplierView
+                        ? { label: "待确认", tone: "neutral" }
+                        : {
+                              label: PO_STATUS_LABEL.PENDING_REVIEW,
+                              tone: PO_STATUS_TONE.PENDING_REVIEW,
+                          }
+                }
                 parties={[
                     {
                         id: "supplier",
@@ -63,25 +84,55 @@ export function PurchaseOrderPreviewPaper({
                             },
                         ],
                     },
-                    {
-                        id: "source",
-                        label: "来源销售单",
-                        name: sourceOrder?.customerName ?? "—",
-                        reference: sourceOrder?.salesOrderNo,
-                        fields: [
-                            {
-                                id: "contract",
-                                label: "合同",
-                                value: sourceOrder?.contractNumber ?? "无合同",
-                                numeric: true,
-                            },
-                            {
-                                id: "owner",
-                                label: "负责销售",
-                                value: sourceOrder?.salesOwnerName ?? "—",
-                            },
-                        ],
-                    },
+                    isSupplierView
+                        ? {
+                              id: "fulfillment-info",
+                              label: "履约与交付",
+                              name: preview.routeLabel,
+                              fields: [
+                                  {
+                                      id: "due",
+                                      label: "预计交期",
+                                      value: deliveryDate,
+                                      numeric: true,
+                                  },
+                                  preview.fulfillmentResponsibility ===
+                                  "WAREHOUSE"
+                                      ? {
+                                            id: "warehouse",
+                                            label: "目标仓库",
+                                            value:
+                                                preview.targetWarehouseName?.trim() ||
+                                                "以采购入库安排为准",
+                                        }
+                                      : {
+                                            id: "delivery-note",
+                                            label: "交付方式",
+                                            value: "按本单交付安排执行",
+                                        },
+                              ],
+                          }
+                        : {
+                              id: "source",
+                              label: "来源销售单",
+                              name: sourceOrder?.customerName ?? "—",
+                              reference: sourceOrder?.salesOrderNo,
+                              fields: [
+                                  {
+                                      id: "contract",
+                                      label: "合同",
+                                      value:
+                                          sourceOrder?.contractNumber ??
+                                          "无合同",
+                                      numeric: true,
+                                  },
+                                  {
+                                      id: "owner",
+                                      label: "负责销售",
+                                      value: sourceOrder?.salesOwnerName ?? "—",
+                                  },
+                              ],
+                          },
                 ]}
                 metadata={[
                     {
@@ -109,7 +160,7 @@ export function PurchaseOrderPreviewPaper({
                     {
                         id: "delivery",
                         label: "预计交期",
-                        value: earliestDeliveryDate(preview.lines),
+                        value: deliveryDate,
                         numeric: true,
                     },
                     {
@@ -231,16 +282,25 @@ export function PurchaseOrderPreviewPaper({
                         emphasized: true,
                     },
                 ]}
-                afterLineItems={
+                remarks={
+                    isSupplierView
+                        ? "本单据用于采购前核对商品、数量、价格及交付安排，最终内容以生效采购单为准。"
+                        : "本预览按当前选源结果拆单，确认后创建采购单并提交审批，金额以系统计算为准。"
+                }
+                appendix={
                     <PurchaseDeliveryPlan
                         lines={preview.lines}
                         warehouse={
                             preview.fulfillmentResponsibility === "WAREHOUSE"
                         }
                         warehouseName={preview.targetWarehouseName}
+                        supplierName={preview.supplierName}
+                        documentLabel={documentNumber}
+                        mode={deliveryMode}
+                        attachmentFileName={deliveryAttachmentName}
+                        idPrefix={`purchase-create-preview-${toAutomationIdSegment(preview.key)}-delivery`}
                     />
                 }
-                remarks="本预览按当前选源结果拆单，确认后创建采购单并提交审批，金额以系统计算为准。"
             />
         </div>
     )

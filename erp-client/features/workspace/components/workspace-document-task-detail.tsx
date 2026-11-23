@@ -9,6 +9,8 @@ import { downloadFileAsset } from "@/features/file-assets/api"
 import { usePathname, useSearchParams } from "next/navigation"
 import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
+import { ApprovalMaterialFiles } from "@/features/approval-workflow/components/approval-material-files"
+import { ApprovalSubmittedSummary } from "@/features/approval-workflow/components/approval-submitted-summary"
 import {
     approvalSalesTaxPoint,
     displayUnixSeconds,
@@ -21,7 +23,6 @@ import { WorkspaceDeliveryBrief } from "./workspace-delivery-brief"
 import { WorkspaceInvoiceApproval } from "./workspace-invoice-approval"
 import { WorkspaceReceiptApproval } from "./workspace-receipt-approval"
 import { WorkspaceMoney } from "./workspace-money"
-import { WorkspacePurchaseApprovalStatus } from "./workspace-purchase-approval-status"
 import { WorkspacePurchaseApproval } from "./workspace-purchase-approval"
 import { WorkspaceSalesApproval } from "./workspace-sales-approval"
 import { WorkspaceApprovalProgress } from "./workspace-approval-progress"
@@ -50,7 +51,6 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { displayName } from "@/lib/display-name"
 import { hasPermission } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
-import { StatusBadge } from "@/components/ui/status-badge"
 import { WorkspaceDocumentBadge } from "./workspace-document-badge"
 import { WorkspaceTaskHeaderActions } from "./workspace-task-context"
 import { stripDocumentNumberPrefix } from "../lib/stable-number"
@@ -159,6 +159,11 @@ export function WorkspaceDocumentTaskDetail({
         item.businessObjectType === "sales_invoice_request" &&
         Boolean(instanceId) &&
         canReadSubmission
+    const specializedApproval =
+        salesApproval ||
+        purchaseApproval ||
+        receiptApproval ||
+        item.businessObjectType === "sales_invoice_request"
     const readActionLabel = approvalDocument
         ? salesApproval
             ? "预览完整销售单"
@@ -179,13 +184,22 @@ export function WorkspaceDocumentTaskDetail({
     }, [item.workItemId])
     const documentFacts = useWorkspaceDocumentFacts(item)
     const sourceSales = useWorkspaceSourceSalesOrder(item)
+    const shouldReadSubmission =
+        canReadSubmission &&
+        Boolean(instanceId) &&
+        (salesApproval || rework || (approvalDocument && !specializedApproval))
     const materials = useApprovalMaterials(
         instanceId ?? "",
-        (salesApproval || rework) && canReadSubmission,
+        shouldReadSubmission,
         item,
     )
     const submission = canReadSubmission ? materials.data : undefined
     const salesSubmission = submission?.sales_order
+    const useInlineGenericSummary =
+        approvalDocument &&
+        !specializedApproval &&
+        Boolean(submission) &&
+        !salesSubmission
     const reworkFacts =
         rework && submission
             ? workspaceApprovalListFacts({
@@ -229,9 +243,7 @@ export function WorkspaceDocumentTaskDetail({
         ? counterpartyName ||
           workspaceDocumentName(item.businessObjectType) ||
           "原单资料"
-        : purchaseApproval
-          ? "采购单审批"
-          : counterpartyName || item.objectTitle
+        : counterpartyName || item.objectTitle
     const headerItem = rework
         ? {
               ...item,
@@ -357,20 +369,22 @@ export function WorkspaceDocumentTaskDetail({
               processVersion: item.approval.processVersion,
           }
         : undefined
-    const specializedApproval =
-        salesApproval ||
-        purchaseApproval ||
-        receiptApproval ||
-        item.businessObjectType === "sales_invoice_request"
     const showCurrentAssignee = rework
         ? item.status === "OPEN"
-        : salesApproval &&
-          (reworkTask ||
+        : approvalDocument &&
+          (Boolean(reworkTask) ||
               ["RUNNING", "BLOCKED"].includes(instance?.status ?? ""))
     const deliveryBrief =
         item.workItemType === "FULFILLMENT_OPERATION" &&
         item.businessObjectType === "delivery" &&
         item.deliveryLines !== undefined
+    const blockers = [
+        ...new Set(
+            item.actionBlockers
+                .map(({ message }) => message.trim())
+                .filter(Boolean),
+        ),
+    ]
     const actions = reworkTask ? (
         <WorkspaceApprovalReworkActions
             item={reworkTask}
@@ -417,7 +431,7 @@ export function WorkspaceDocumentTaskDetail({
     const purchaseInformation = purchaseApproval ? (
         <FieldGrid
             inline
-            className="border-t border-grid/60 pt-3"
+            className="border-t border-border/60 pt-3.5"
             sections={documentFields.filter(
                 (field) =>
                     field.label !== "供应商" &&
@@ -447,40 +461,14 @@ export function WorkspaceDocumentTaskDetail({
             header={
                 <DetailWorkspaceChrome
                     title={canReadSensitive ? headerTitle : "业务详情"}
-                    primaryStatus={
-                        !purchaseApproval || rework
-                            ? {
-                                  label:
-                                      rework && item.status === "OPEN"
-                                          ? item.workItemTypeLabel
-                                          : item.statusLabel,
-                                  tone: item.statusTone,
-                              }
-                            : undefined
-                    }
-                    titleExtra={
-                        (!purchaseApproval || rework) && (
-                            <>
-                                {rework ? (
-                                    <WorkspaceDocumentBadge item={item} />
-                                ) : (
-                                    <span className="text-xs text-muted-foreground">
-                                        {item.workItemTypeLabel}
-                                    </span>
-                                )}
-                                {salesApproval &&
-                                    instance?.currentNodeName &&
-                                    (instance.status === "RUNNING" ||
-                                        instance.status === "BLOCKED") && (
-                                        <StatusBadge
-                                            tone="warning"
-                                            label={instance.currentNodeName}
-                                            aria-label={`当前审批：${instance.currentNodeName}`}
-                                        />
-                                    )}
-                            </>
-                        )
-                    }
+                    primaryStatus={{
+                        label:
+                            rework && item.status === "OPEN"
+                                ? item.workItemTypeLabel
+                                : item.statusLabel,
+                        tone: item.statusTone,
+                    }}
+                    titleExtra={<WorkspaceDocumentBadge item={item} />}
                     meta={
                         <DetailWorkspaceMeta
                             items={[
@@ -497,7 +485,7 @@ export function WorkspaceDocumentTaskDetail({
                                 ) : !rework && documentNumber ? (
                                     <span
                                         key="number"
-                                        className="num"
+                                        className="num select-all"
                                         data-workspace-document-number={
                                             documentNumber
                                         }
@@ -505,7 +493,7 @@ export function WorkspaceDocumentTaskDetail({
                                         {documentNumber}
                                     </span>
                                 ) : null,
-                                submission && (rework || salesApproval)
+                                submission
                                     ? `提交版本 ${submission.subject_version}`
                                     : null,
                                 fullPage && showCurrentAssignee ? (
@@ -521,7 +509,7 @@ export function WorkspaceDocumentTaskDetail({
                                         </span>
                                     </span>
                                 ) : null,
-                                fullPage && showCurrentAssignee && item.dueAt
+                                fullPage && item.dueAt
                                     ? `截止时间：${item.dueAtLabel}`
                                     : null,
                             ]}
@@ -594,7 +582,7 @@ export function WorkspaceDocumentTaskDetail({
                 />
             }
             headerSupplement={
-                salesApproval && fullPage && instance ? (
+                approvalDocument && fullPage && instance ? (
                     <WorkspaceApprovalRouteSummary instance={instance} />
                 ) : null
             }
@@ -611,6 +599,24 @@ export function WorkspaceDocumentTaskDetail({
                     )}
                 />
             )}
+            {blockers.length > 0 ? (
+                <div className="pt-4">
+                    <Alert variant="warning">
+                        <AlertTitle>当前无法继续办理</AlertTitle>
+                        <AlertDescription>
+                            {blockers.length === 1 ? (
+                                blockers[0]
+                            ) : (
+                                <ul className="list-disc space-y-1 pl-4">
+                                    {blockers.map((message) => (
+                                        <li key={message}>{message}</li>
+                                    ))}
+                                </ul>
+                            )}
+                        </AlertDescription>
+                    </Alert>
+                </div>
+            ) : null}
             <div className="@container/delivery-brief flex w-full min-w-0 flex-col">
                 {rework && (!instanceId || !canReadSubmission) ? (
                     <DetailBlock>
@@ -623,7 +629,9 @@ export function WorkspaceDocumentTaskDetail({
                                 : "当前账号无权查看本次提交资料。"}
                         </p>
                     </DetailBlock>
-                ) : rework && !specializedApproval && materials.isPending ? (
+                ) : shouldReadSubmission &&
+                  !specializedApproval &&
+                  materials.isPending ? (
                     <DetailBlock>
                         <p
                             className="text-xs text-muted-foreground"
@@ -632,16 +640,19 @@ export function WorkspaceDocumentTaskDetail({
                             正在读取本次提交资料…
                         </p>
                     </DetailBlock>
-                ) : rework && !specializedApproval && materials.isError ? (
+                ) : shouldReadSubmission &&
+                  !specializedApproval &&
+                  materials.isError ? (
                     <BusinessFailureState
                         id={`workspace-rework-materials-${toAutomationIdSegment(item.workItemId)}`}
-                        title="原单资料读取失败"
+                        title="提交资料读取失败"
                         error={materials.error}
                         onRetry={() => void materials.refetch()}
                         className="my-4"
                     />
                 ) : null}
                 {!salesSubmission &&
+                !useInlineGenericSummary &&
                 item.documentSummaryResolved &&
                 !item.summarySections?.length &&
                 !item.briefLines?.length ? (
@@ -679,29 +690,30 @@ export function WorkspaceDocumentTaskDetail({
                     />
                 ) : null}
                 {deliveryBrief ? <WorkspaceDeliveryBrief item={item} /> : null}
-                {!receiptApproval && !deliveryBrief && primaryAmount ? (
-                    <DetailBlock>
-                        <div className="flex flex-wrap items-end gap-x-8 gap-y-2">
+                {!receiptApproval &&
+                !deliveryBrief &&
+                !useInlineGenericSummary &&
+                primaryAmount ? (
+                    <DetailBlock compact>
+                        <div className="flex flex-wrap items-start gap-x-8 gap-y-3 py-1">
                             <div className="flex flex-col gap-1">
-                                <span
-                                    className={cn(
-                                        "num text-value-summary font-semibold tracking-tight",
-                                        "text-foreground",
-                                    )}
-                                >
+                                <span className="text-xs text-muted-foreground">
+                                    {primaryAmount.label}
+                                </span>
+                                <span className="num text-value-summary font-semibold tracking-tight text-foreground">
                                     <WorkspaceMoney
                                         value={primaryAmount.value}
                                     />
-                                </span>
-                                <span className="text-xs text-muted-foreground">
-                                    {primaryAmount.label}
                                 </span>
                             </div>
                             {otherAmounts.map((amount) => (
                                 <div
                                     key={amount.label}
-                                    className="flex flex-col gap-1"
+                                    className="flex flex-col gap-1 border-l border-border/60 pl-6"
                                 >
+                                    <span className="text-xs text-muted-foreground">
+                                        {amount.label}
+                                    </span>
                                     <span
                                         className={cn(
                                             "num text-value-compact font-semibold tracking-tight",
@@ -710,42 +722,34 @@ export function WorkspaceDocumentTaskDetail({
                                     >
                                         <WorkspaceMoney value={amount.value} />
                                     </span>
-                                    <span className="text-xs text-muted-foreground">
-                                        {amount.label}
-                                    </span>
                                 </div>
                             ))}
                             {purchaseApproval && lineCount > 0 && (
-                                <div className="flex flex-col gap-1">
-                                    <span className="num text-value-compact font-semibold tracking-tight">
-                                        {lineCount} 项
-                                    </span>
+                                <div className="flex flex-col gap-1 border-l border-border/60 pl-6">
                                     <span className="text-xs text-muted-foreground">
                                         采购明细
+                                    </span>
+                                    <span className="num text-value-compact font-semibold tracking-tight text-foreground">
+                                        {lineCount} 项
                                     </span>
                                 </div>
                             )}
                             {purchaseApproval && purchasePaymentTerm && (
-                                <div className="flex flex-col gap-1">
-                                    <span className="text-body-compact font-medium">
-                                        {purchasePaymentTerm}
-                                    </span>
+                                <div className="flex flex-col gap-1 border-l border-border/60 pl-6">
                                     <span className="text-xs text-muted-foreground">
                                         付款条件
                                     </span>
+                                    <span className="mt-1 text-body-compact font-medium text-foreground">
+                                        {purchasePaymentTerm}
+                                    </span>
                                 </div>
-                            )}
-                            {purchaseApproval && (
-                                <WorkspacePurchaseApprovalStatus
-                                    item={item}
-                                    instance={instance}
-                                />
                             )}
                         </div>
                         {purchaseInformation}
                     </DetailBlock>
                 ) : !receiptApproval &&
                   !deliveryBrief &&
+                  !useInlineGenericSummary &&
                   documentFacts.isPending ? (
                     <DetailBlock title="金额">
                         <p className="text-xs text-muted-foreground">
@@ -754,15 +758,9 @@ export function WorkspaceDocumentTaskDetail({
                     </DetailBlock>
                 ) : null}
 
-                {purchaseApproval && !primaryAmount && (
-                    <DetailBlock>
-                        <WorkspacePurchaseApprovalStatus
-                            item={item}
-                            instance={instance}
-                        />
-                        {purchaseInformation}
-                    </DetailBlock>
-                )}
+                {purchaseApproval && !primaryAmount && purchaseInformation ? (
+                    <DetailBlock compact>{purchaseInformation}</DetailBlock>
+                ) : null}
                 {purchaseApproval && instanceId ? (
                     <WorkspacePurchaseApproval
                         item={item}
@@ -770,6 +768,35 @@ export function WorkspaceDocumentTaskDetail({
                         instanceId={instanceId}
                         onPreview={setPaper}
                     />
+                ) : useInlineGenericSummary && submission && instanceId ? (
+                    <>
+                        <DetailBlock>
+                            <div className="space-y-6">
+                                <ApprovalSubmittedSummary
+                                    source={submission.display.source}
+                                    submitterName={submitter}
+                                    impactSummary={
+                                        submission.display.impact_summary
+                                    }
+                                />
+                            </div>
+                        </DetailBlock>
+                        <DetailBlock
+                            title="合同、凭证及附件"
+                            description={
+                                submission.attachments.length
+                                    ? `共 ${submission.attachments.length} 个文件`
+                                    : undefined
+                            }
+                        >
+                            <ApprovalMaterialFiles
+                                instanceId={instanceId}
+                                attachments={submission.attachments}
+                                idPrefix={`workspace-inline-material-${toAutomationIdSegment(item.workItemId)}`}
+                                emptyMessage="本次提交未附带合同、凭证或其他附件。"
+                            />
+                        </DetailBlock>
+                    </>
                 ) : (
                     <>
                         {!receiptApproval &&
@@ -820,6 +847,7 @@ export function WorkspaceDocumentTaskDetail({
                 ) : null}
 
                 {!invoiceApproval &&
+                !useInlineGenericSummary &&
                 !(salesApproval && instanceId && canReadSubmission) &&
                 !deliveryBrief &&
                 !receiptApproval &&
@@ -899,17 +927,6 @@ export function WorkspaceDocumentTaskDetail({
                     </DetailBlock>
                 ) : null}
 
-                {item.actionBlockers.length > 0 ? (
-                    <DetailBlock title="处理受阻">
-                        <Alert variant="warning">
-                            <AlertTitle>当前无法继续</AlertTitle>
-                            <AlertDescription>
-                                {item.actionBlockers[0]?.message}
-                            </AlertDescription>
-                        </Alert>
-                    </DetailBlock>
-                ) : null}
-
                 {!fullPage && !purchaseApproval && approvalTask && instance ? (
                     <DetailBlock compact={purchaseApproval || receiptApproval}>
                         <WorkspaceApprovalProgress
@@ -950,7 +967,7 @@ function DetailBlock({
             title={title}
             width={width}
             subtitle={description}
-            className={compact ? "py-3 first:pt-3 last:pb-3" : undefined}
+            className={compact ? "py-4 first:pt-4 last:pb-4" : undefined}
         >
             {children}
         </DetailWorkspaceSection>

@@ -79,6 +79,8 @@ interface PaperDocumentProps<Row> extends Omit<
     remarks?: React.ReactNode
     signature?: React.ReactNode
     seal?: React.ReactNode
+    /** 置于金额汇总、备注及签章之后的附表区（如多地址交付安排）。 */
+    appendix?: React.ReactNode
     footer?: React.ReactNode
     /**
      * framed：浅底外框 + 内边距，适合页面内嵌。
@@ -118,6 +120,7 @@ function PaperDocument<Row>({
     remarks,
     signature,
     seal,
+    appendix,
     footer,
     frame = "framed",
     className,
@@ -384,6 +387,8 @@ function PaperDocument<Row>({
                         <div className="flex min-w-0 justify-end">{seal}</div>
                     </section>
                 ) : null}
+
+                {appendix}
 
                 <footer className="mt-12 break-inside-avoid border-t border-border pt-4 text-xs text-muted-foreground">
                     {footer ?? (

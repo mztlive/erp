@@ -1,7 +1,8 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useMemo, useState } from "react"
 import { ChevronLeftIcon, ChevronRightIcon, SearchIcon } from "lucide-react"
+import { detailWorkspaceStyles } from "@/components/business"
 import {
     TableToolbar,
     TableToolbarScope,
@@ -44,11 +45,16 @@ export function WorkspacePurchaseComparisonTable({
     const [attentionOnly, setAttentionOnly] = useState(false)
     const [page, setPage] = useState(1)
     const [pageSize, setPageSize] = useState(20)
-    const [expanded, setExpanded] = useState<string | null>(null)
-    const scrollRef = useRef<HTMLDivElement>(null)
-    const changePage = (value: number) => {
-        setPage(value)
-        if (scrollRef.current) scrollRef.current.scrollTop = 0
+    const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(
+        () => new Set(),
+    )
+    const toggleExpanded = (id: string) => {
+        setExpandedIds((current) => {
+            const next = new Set(current)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+        })
     }
     const rows = useMemo(
         () =>
@@ -91,43 +97,60 @@ export function WorkspacePurchaseComparisonTable({
     const clearFilters = () => {
         setSearch("")
         setAttentionOnly(false)
-        changePage(1)
+        setPage(1)
     }
+    const showPagination = filtered.length > 20 || pageSize !== 20
+
     return (
         <TableToolbarScope>
-            <div className="space-y-2">
+            <div className="space-y-3">
                 <div
                     className="flex flex-wrap items-center justify-between gap-3"
                     aria-label="商品对照筛选"
                 >
-                    <Button
-                        id={`${prefix}-filter-attention`}
-                        variant="ghost"
-                        size="sm"
-                        aria-pressed={attentionOnly}
-                        title={
-                            attentionOnly ? "取消需关注筛选" : "仅显示需关注项"
-                        }
-                        className={cn(
-                            "gap-2 px-0 hover:bg-transparent",
-                            attentionOnly &&
-                                "text-primary underline underline-offset-4 hover:text-primary",
-                        )}
-                        onClick={() => {
-                            setAttentionOnly((value) => !value)
-                            changePage(1)
-                        }}
+                    <div
+                        role="group"
+                        aria-label="异常筛选"
+                        className={detailWorkspaceStyles.subTabs}
                     >
-                        需关注
-                        <Badge
-                            variant={
-                                attentionCount > 0 ? "warning" : "secondary"
-                            }
-                            className="rounded-full tabular-nums"
+                        <button
+                            id={`${prefix}-filter-all`}
+                            type="button"
+                            aria-pressed={!attentionOnly}
+                            data-active={!attentionOnly ? "true" : undefined}
+                            className={detailWorkspaceStyles.subTab}
+                            onClick={() => {
+                                setAttentionOnly(false)
+                                setPage(1)
+                            }}
                         >
-                            {attentionCount}
-                        </Badge>
-                    </Button>
+                            <span>全部</span>
+                            <span className="num text-xs text-muted-foreground">
+                                {lines.length}
+                            </span>
+                        </button>
+                        <button
+                            id={`${prefix}-filter-attention`}
+                            type="button"
+                            aria-pressed={attentionOnly}
+                            data-active={attentionOnly ? "true" : undefined}
+                            className={detailWorkspaceStyles.subTab}
+                            onClick={() => {
+                                setAttentionOnly(true)
+                                setPage(1)
+                            }}
+                        >
+                            <span>需关注</span>
+                            <Badge
+                                variant={
+                                    attentionCount > 0 ? "warning" : "neutral"
+                                }
+                                className="rounded-full px-1.5 py-0 text-tiny tabular-nums"
+                            >
+                                {attentionCount}
+                            </Badge>
+                        </button>
+                    </div>
                     <div className="relative w-full sm:w-64">
                         <SearchIcon
                             className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
@@ -138,11 +161,11 @@ export function WorkspacePurchaseComparisonTable({
                             value={search}
                             onChange={(event) => {
                                 setSearch(event.target.value)
-                                changePage(1)
+                                setPage(1)
                             }}
                             placeholder="搜索商品名称 / 规格"
                             aria-label="搜索商品名称或规格"
-                            className="h-9 pl-9"
+                            className="h-control pl-9"
                         />
                     </div>
                 </div>
@@ -153,6 +176,7 @@ export function WorkspacePurchaseComparisonTable({
                                 id={`${prefix}-clear-filters`}
                                 variant="ghost"
                                 size="sm"
+                                className={detailWorkspaceStyles.quietButton}
                                 onClick={clearFilters}
                             >
                                 清除筛选
@@ -168,25 +192,29 @@ export function WorkspacePurchaseComparisonTable({
                         共 {lines.length} 项
                         {search || attentionOnly
                             ? ` · 筛选结果 ${filtered.length} 项`
-                            : ""}{" "}
-                        · 当前显示{" "}
-                        {visible.length ? (currentPage - 1) * pageSize + 1 : 0}–
-                        {Math.min(currentPage * pageSize, filtered.length)} 项
+                            : ""}
+                        {showPagination
+                            ? ` · 当前显示 ${visible.length ? (currentPage - 1) * pageSize + 1 : 0}–${Math.min(currentPage * pageSize, filtered.length)} 项`
+                            : ""}
+                        {rows.some(({ comparison }) =>
+                            Boolean(comparison.warnings.length),
+                        )
+                            ? " · 点击异常行可展开明细对比"
+                            : ""}
                     </span>
                 </TableToolbar>
                 <div
                     id={`${prefix}-table-scroll`}
                     data-slot="detail-inline-table"
-                    ref={scrollRef}
                     role="region"
-                    aria-label="采购与销售明细，可滚动查看"
-                    className="max-h-[36rem] overflow-auto border-y border-border/70 outline-none focus-visible:ring-2 focus-visible:ring-info [&>[data-slot=table-container]]:overflow-visible"
+                    aria-label="采购与销售明细，可横向滚动查看"
+                    className={detailWorkspaceStyles.dataTableWrapper}
                 >
-                    <Table className="min-w-[1120px]">
+                    <Table className="min-w-[1080px]">
                         <TableCaption className="sr-only">
                             本次提交的采购与来源销售逐行对照；筛选及分页不改变整单审批范围。
                         </TableCaption>
-                        <TableHeader className="sticky top-0 z-10">
+                        <TableHeader>
                             <TableRow>
                                 <TableHead scope="col" className="w-10">
                                     <span className="sr-only">行号</span>
@@ -194,19 +222,23 @@ export function WorkspacePurchaseComparisonTable({
                                 <TableHead scope="col" className="min-w-44">
                                     商品 / 规格
                                 </TableHead>
-                                <TableHead scope="col">
-                                    数量（销售 / 采购）
+                                <TableHead scope="col" data-align="end">
+                                    数量（销 / 采）
                                 </TableHead>
-                                <TableHead scope="col">销售含税单价</TableHead>
+                                <TableHead scope="col" data-align="end">
+                                    销售含税单价
+                                </TableHead>
                                 <TableHead scope="col">采购供给价</TableHead>
-                                <TableHead scope="col">本次采购单价</TableHead>
+                                <TableHead scope="col" data-align="end">
+                                    本次采购单价
+                                </TableHead>
                                 <TableHead scope="col">
-                                    交期（销售 / 采购）
+                                    交期（销 / 采）
                                 </TableHead>
                                 <TableHead scope="col" className="min-w-36">
                                     核对提示
                                 </TableHead>
-                                <TableHead scope="col" className="w-12">
+                                <TableHead scope="col" className="w-10">
                                     <span className="sr-only">补充信息</span>
                                 </TableHead>
                             </TableRow>
@@ -227,14 +259,8 @@ export function WorkspacePurchaseComparisonTable({
                                             : undefined
                                     }
                                     prefix={`${prefix}-line-${toAutomationIdSegment(line.id)}`}
-                                    expanded={expanded === line.id}
-                                    onToggle={() =>
-                                        setExpanded(
-                                            expanded === line.id
-                                                ? null
-                                                : line.id,
-                                        )
-                                    }
+                                    expanded={expandedIds.has(line.id)}
+                                    onToggle={() => toggleExpanded(line.id)}
                                     onPreview={onPreview}
                                 />
                             ))}
@@ -256,82 +282,87 @@ export function WorkspacePurchaseComparisonTable({
                 <p className="text-xs text-muted-foreground">
                     供给价为销售开单时填写的预计采购含税单价；销售数量为来源行全部需求，本次采购仅覆盖其中的采购数量。部分数量采购不直接视为异常。销售日期为客户承诺交期，采购日期为预计交付日。
                 </p>
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <label htmlFor={`${prefix}-page-size`}>每页</label>
-                        <NativeSelect
-                            id={`${prefix}-page-size`}
-                            size="sm"
-                            value={pageSize}
-                            onChange={(event) => {
-                                setPageSize(
-                                    event.target.value === "50" ? 50 : 20,
-                                )
-                                changePage(1)
-                            }}
-                        >
-                            <NativeSelectOption
-                                id={`${prefix}-page-size-20`}
-                                value="20"
+                {showPagination ? (
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <label htmlFor={`${prefix}-page-size`}>每页</label>
+                            <NativeSelect
+                                id={`${prefix}-page-size`}
+                                size="sm"
+                                value={pageSize}
+                                onChange={(event) => {
+                                    setPageSize(
+                                        event.target.value === "50" ? 50 : 20,
+                                    )
+                                    setPage(1)
+                                }}
                             >
-                                20 项
-                            </NativeSelectOption>
-                            <NativeSelectOption
-                                id={`${prefix}-page-size-50`}
-                                value="50"
-                            >
-                                50 项
-                            </NativeSelectOption>
-                        </NativeSelect>
-                        <span>
-                            第 {currentPage} / {pageCount} 页
-                        </span>
-                    </div>
-                    <nav
-                        aria-label="采购明细分页"
-                        className="flex items-center gap-1"
-                    >
-                        <Button
-                            id={`${prefix}-page-previous`}
-                            variant="outline"
-                            size="icon-sm"
-                            aria-label="上一页商品"
-                            disabled={currentPage === 1}
-                            onClick={() => changePage(currentPage - 1)}
+                                <NativeSelectOption
+                                    id={`${prefix}-page-size-20`}
+                                    value="20"
+                                >
+                                    20 项
+                                </NativeSelectOption>
+                                <NativeSelectOption
+                                    id={`${prefix}-page-size-50`}
+                                    value="50"
+                                >
+                                    50 项
+                                </NativeSelectOption>
+                            </NativeSelect>
+                            <span className="num">
+                                第 {currentPage} / {pageCount} 页
+                            </span>
+                        </div>
+                        <nav
+                            aria-label="采购明细分页"
+                            className="flex items-center gap-1"
                         >
-                            <ChevronLeftIcon aria-hidden="true" />
-                        </Button>
-                        {pageNumbers.map((value) => (
                             <Button
-                                id={`${prefix}-page-${value}`}
-                                key={value}
-                                variant="ghost"
+                                id={`${prefix}-page-previous`}
+                                variant="outline"
                                 size="icon-sm"
-                                aria-label={`第 ${value} 页商品`}
-                                aria-current={
-                                    value === currentPage ? "page" : undefined
-                                }
-                                className={cn(
-                                    value === currentPage &&
-                                        "border-info-border bg-info-soft text-info-soft-foreground",
-                                )}
-                                onClick={() => changePage(value)}
+                                aria-label="上一页商品"
+                                disabled={currentPage === 1}
+                                onClick={() => setPage(currentPage - 1)}
                             >
-                                {value}
+                                <ChevronLeftIcon aria-hidden="true" />
                             </Button>
-                        ))}
-                        <Button
-                            id={`${prefix}-page-next`}
-                            variant="outline"
-                            size="icon-sm"
-                            aria-label="下一页商品"
-                            disabled={currentPage === pageCount}
-                            onClick={() => changePage(currentPage + 1)}
-                        >
-                            <ChevronRightIcon aria-hidden="true" />
-                        </Button>
-                    </nav>
-                </div>
+                            {pageNumbers.map((value) => (
+                                <Button
+                                    id={`${prefix}-page-${value}`}
+                                    key={value}
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    aria-label={`第 ${value} 页商品`}
+                                    aria-current={
+                                        value === currentPage
+                                            ? "page"
+                                            : undefined
+                                    }
+                                    className={cn(
+                                        "num",
+                                        value === currentPage &&
+                                            "border-info-border bg-info-soft text-info-soft-foreground",
+                                    )}
+                                    onClick={() => setPage(value)}
+                                >
+                                    {value}
+                                </Button>
+                            ))}
+                            <Button
+                                id={`${prefix}-page-next`}
+                                variant="outline"
+                                size="icon-sm"
+                                aria-label="下一页商品"
+                                disabled={currentPage === pageCount}
+                                onClick={() => setPage(currentPage + 1)}
+                            >
+                                <ChevronRightIcon aria-hidden="true" />
+                            </Button>
+                        </nav>
+                    </div>
+                ) : null}
             </div>
         </TableToolbarScope>
     )

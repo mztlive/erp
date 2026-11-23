@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useRouter } from "@/lib/navigation"
 
+import { useWorkspaceTaskNavigation } from "@/components/business/workspace-task-pane"
 import { Button } from "@/components/ui/button"
 
 import { RECOVERY_ACTION_LABEL } from "../display"
@@ -49,6 +50,7 @@ export function ApprovalActionBar({
     hiddenActions = [],
     decisionContext,
     onDecisionApplied,
+    onRefreshTask,
     presentation = "default",
     id = "governance-approval-action-bar",
 }: {
@@ -76,11 +78,14 @@ export function ApprovalActionBar({
         impactSummary?: string
     }>
     onDecisionApplied?: (view: ApprovalCommandView) => void
+    onRefreshTask?: () => void
     /** 工作台侧栏使用紧凑动作顺序；其它页面保留原样。 */
     presentation?: "default" | "workspace"
     id?: string
 }) {
     const router = useRouter()
+    const taskNavigation = useWorkspaceTaskNavigation()
+    const resolvedRefresh = onRefreshTask ?? taskNavigation?.onRefresh
     const [dialog, setDialog] = React.useState<DialogKind>(null)
     const hidden = new Set(hiddenActions)
     const actions = new Set(
@@ -122,6 +127,11 @@ export function ApprovalActionBar({
                     type="button"
                     variant={
                         presentation === "workspace" ? "outline" : "destructive"
+                    }
+                    className={
+                        presentation === "workspace"
+                            ? "border-destructive-border text-destructive-soft-foreground hover:border-destructive/50 hover:bg-destructive-soft hover:text-destructive-soft-foreground"
+                            : undefined
                     }
                     onClick={() => setDialog("reject")}
                 >
@@ -213,6 +223,7 @@ export function ApprovalActionBar({
                     documentType={documentType}
                     allowedActions={allowedActions}
                     context={decisionContext}
+                    onRefreshTask={resolvedRefresh}
                     onApplied={onDecisionApplied}
                 />
             ) : null}

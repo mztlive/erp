@@ -13,6 +13,7 @@ import {
 } from "@/features/purchase-orders/types"
 import { PurchaseDeliveryPlan } from "./purchase-delivery-plan"
 import { inputTaxRatePercent } from "@/features/purchase-orders/lib/input-tax-rate"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 type PurchaseOrderPaperLine =
     PurchaseOrderCenterView["currentContent"]["lines"][number]
@@ -255,13 +256,6 @@ export function PurchaseOrderPaperDocument({
                     emphasized: true,
                 },
             ]}
-            afterLineItems={
-                <PurchaseDeliveryPlan
-                    lines={currentContent.lines}
-                    warehouseName={header.targetWarehouseName}
-                    warehouse={header.fulfillmentResponsibility === "WAREHOUSE"}
-                />
-            }
             remarks={
                 costMasked
                     ? "当前角色无成本字段权限：金额已隐藏。状态以系统记录为准。"
@@ -282,6 +276,16 @@ export function PurchaseOrderPaperDocument({
                         </div>
                     </div>
                 </div>
+            }
+            appendix={
+                <PurchaseDeliveryPlan
+                    lines={currentContent.lines}
+                    warehouseName={header.targetWarehouseName}
+                    warehouse={header.fulfillmentResponsibility === "WAREHOUSE"}
+                    supplierName={header.supplierSnapshot}
+                    documentLabel={documentNumber}
+                    idPrefix={`purchase-order-paper-${toAutomationIdSegment(identity.purchaseOrderId)}-delivery`}
+                />
             }
         />
     )

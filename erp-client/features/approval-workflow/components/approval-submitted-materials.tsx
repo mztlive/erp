@@ -33,16 +33,16 @@ export function ApprovalSubmittedMaterials({
     reference?: MaterialReference
 }) {
     const query = useApprovalMaterials(instanceId, enabled, reference)
-    if (query.isPending || query.isFetching)
+    if (query.isPending || (!query.data && query.isFetching))
         return (
-            <div className="flex min-h-64 items-center justify-center gap-2 rounded-lg bg-card p-8">
+            <div className="flex min-h-64 items-center justify-center gap-2 bg-card p-8 text-xs text-muted-foreground">
                 <Spinner />
                 正在读取提交资料…
             </div>
         )
     if (query.isError)
         return (
-            <div className="rounded-lg bg-card p-8">
+            <div className="bg-card p-8">
                 <BusinessFailureState
                     id="approval-submitted-materials-retry"
                     title="提交资料读取失败"
@@ -106,8 +106,8 @@ export function ApprovalSubmittedMaterialsContent({
         displayReadableName(source.customer)
     const isSummary = view === "all" && !salesOrder
     return (
-        <article className="space-y-6 rounded-lg bg-card p-6 shadow-lg sm:p-10">
-            <header className="space-y-1.5 border-b pb-5 pr-8">
+        <article className="space-y-6 bg-card p-6 sm:p-8">
+            <header className="space-y-1.5 border-b border-border/60 pb-5">
                 {isSummary ? (
                     <>
                         <p className="text-xs font-medium text-muted-foreground">

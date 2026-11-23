@@ -37,6 +37,7 @@ import {
     DialogFooter,
 } from "@/components/ui/dialog"
 import type { ApprovalSalesSubmission } from "@/features/approval-workflow/api/materials"
+import { ApprovalMaterialFiles } from "@/features/approval-workflow/components/approval-material-files"
 import { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-approval-materials"
 import {
     approvalSalesUnit,
@@ -65,21 +66,45 @@ export function WorkspaceSalesApproval({
 }) {
     const query = useApprovalMaterials(instanceId, true, item)
     const submission = query.data?.sales_order
+    const attachments = query.data?.attachments ?? []
     const prefix = `workspace-sales-approval-${toAutomationIdSegment(instanceId)}`
 
     return (
-        <DetailWorkspaceSection
-            title="销售明细"
-            subtitle={
-                submission ? `共 ${submission.lines.length} 行` : undefined
-            }
-            ariaLabel="销售明细"
-            className="@container/sales-lines"
-            actions={
-                <>
-                    {!!query.data?.attachments.length && (
+        <>
+            <DetailWorkspaceSection
+                title="销售明细"
+                subtitle={
+                    submission ? `共 ${submission.lines.length} 行` : undefined
+                }
+                ariaLabel="销售明细"
+                className="@container/sales-lines"
+                actions={
+                    <>
+                        {attachments.length > 0 && (
+                            <Button
+                                id={`${prefix}-attachments`}
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className={detailWorkspaceStyles.subtleButton}
+                                onClick={() =>
+                                    onPreview({
+                                        kind: "approval_snapshot",
+                                        objectId: instanceId,
+                                        title: query.data?.document_no,
+                                        materialsView: "attachments",
+                                    })
+                                }
+                            >
+                                <PaperclipIcon aria-hidden="true" />
+                                合同与附件
+                                <span className="num text-xs text-muted-foreground">
+                                    ({attachments.length})
+                                </span>
+                            </Button>
+                        )}
                         <Button
-                            id={`${prefix}-attachments`}
+                            id={`${prefix}-preview`}
                             type="button"
                             variant="ghost"
                             size="sm"
@@ -89,136 +114,138 @@ export function WorkspaceSalesApproval({
                                     kind: "approval_snapshot",
                                     objectId: instanceId,
                                     title: query.data?.document_no,
-                                    materialsView: "attachments",
                                 })
                             }
                         >
-                            <PaperclipIcon aria-hidden="true" />
-                            查看合同、凭证及附件
+                            <FileTextIcon aria-hidden="true" />
+                            预览完整销售单
                         </Button>
-                    )}
-                    <Button
-                        id={`${prefix}-preview`}
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className={detailWorkspaceStyles.subtleButton}
-                        onClick={() =>
-                            onPreview({
-                                kind: "approval_snapshot",
-                                objectId: instanceId,
-                                title: query.data?.document_no,
-                            })
-                        }
+                    </>
+                }
+            >
+                {query.isPending ? (
+                    <p
+                        role="status"
+                        className="flex items-center gap-2 text-xs text-muted-foreground"
                     >
-                        <FileTextIcon aria-hidden="true" />
-                        预览完整销售单
-                    </Button>
-                </>
-            }
-        >
-            {query.isPending ? (
-                <p
-                    role="status"
-                    className="flex items-center gap-2 text-xs text-muted-foreground"
-                >
-                    <Spinner />
-                    正在读取销售明细…
-                </p>
-            ) : query.isError ? (
-                <BusinessFailureState
-                    id={`${prefix}-retry`}
-                    title="销售明细读取失败"
-                    error={query.error}
-                    onRetry={() => void query.refetch()}
-                />
-            ) : !submission ? (
-                <Alert variant="warning">
-                    <AlertDescription>
-                        本次提交未保留完整销售明细，请查看提交资料及附件核对。
-                    </AlertDescription>
-                </Alert>
-            ) : (
-                <>
-                    {submission.lines.length ? (
-                        <div
-                            data-slot="detail-inline-table"
-                            className={detailWorkspaceStyles.inlineTableWrapper}
-                        >
-                            <Table
-                                aria-label="销售明细"
-                                className="min-w-[1080px] [&_:is(th,td):first-child]:ps-0"
+                        <Spinner />
+                        正在读取销售明细…
+                    </p>
+                ) : query.isError ? (
+                    <BusinessFailureState
+                        id={`${prefix}-retry`}
+                        title="销售明细读取失败"
+                        error={query.error}
+                        onRetry={() => void query.refetch()}
+                    />
+                ) : !submission ? (
+                    <Alert variant="warning">
+                        <AlertDescription>
+                            本次提交未保留完整销售明细，请查看提交资料及附件核对。
+                        </AlertDescription>
+                    </Alert>
+                ) : (
+                    <>
+                        {submission.lines.length ? (
+                            <div
+                                data-slot="detail-inline-table"
+                                className={
+                                    detailWorkspaceStyles.inlineTableWrapper
+                                }
                             >
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>序号</TableHead>
-                                        <TableHead>商品 / 规格</TableHead>
-                                        <TableHead className="text-right">
-                                            数量
-                                        </TableHead>
-                                        <TableHead className="text-right">
-                                            {submission.business_type ===
-                                            "VOUCHER"
-                                                ? "含税单价 / 面额"
-                                                : "含税单价"}
-                                        </TableHead>
-                                        {submission.business_type !==
-                                            "VOUCHER" && (
-                                            <TableHead>
-                                                <div>采购供给价</div>
-                                                <div className="mt-0.5 text-xs font-normal">
-                                                    销售填写的含税单价
-                                                </div>
+                                <Table
+                                    aria-label="销售明细"
+                                    className="min-w-[1080px] [&_:is(th,td):first-child]:ps-0"
+                                >
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>序号</TableHead>
+                                            <TableHead>商品 / 规格</TableHead>
+                                            <TableHead data-align="end">
+                                                数量
                                             </TableHead>
-                                        )}
-                                        {submission.business_type !==
-                                            "VOUCHER" && (
-                                            <TableHead>交付日期</TableHead>
-                                        )}
-                                        <TableHead className="text-right">
-                                            税率 / 税额
-                                        </TableHead>
-                                        <TableHead className="text-right">
-                                            销售金额
-                                        </TableHead>
-                                        <TableHead className="text-right">
-                                            收货分配
-                                        </TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {submission.lines.map((line) => (
-                                        <SalesLine
-                                            key={line.id}
-                                            line={line}
-                                            isCard={
-                                                submission.business_type ===
+                                            <TableHead data-align="end">
+                                                {submission.business_type ===
                                                 "VOUCHER"
-                                            }
-                                            idPrefix={`${prefix}-line-${toAutomationIdSegment(line.id)}`}
-                                        />
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    ) : (
-                        <p className="text-xs text-muted-foreground">
-                            本次提交没有销售明细。
-                        </p>
-                    )}
-                    {submission.business_remark && (
-                        <dl className="border-t border-grid pt-4">
-                            <DescriptionItem>
-                                <DescriptionTerm>业务备注</DescriptionTerm>
-                                <DescriptionDetails className="whitespace-pre-wrap wrap-anywhere">
-                                    {submission.business_remark}
-                                </DescriptionDetails>
-                            </DescriptionItem>
-                        </dl>
-                    )}
-                </>
-            )}
-        </DetailWorkspaceSection>
+                                                    ? "含税单价 / 面额"
+                                                    : "含税单价"}
+                                            </TableHead>
+                                            {submission.business_type !==
+                                                "VOUCHER" && (
+                                                <TableHead>
+                                                    <div>采购供给价</div>
+                                                    <div className="mt-0.5 text-xs font-normal">
+                                                        销售填写的含税单价
+                                                    </div>
+                                                </TableHead>
+                                            )}
+                                            {submission.business_type !==
+                                                "VOUCHER" && (
+                                                <TableHead>交付日期</TableHead>
+                                            )}
+                                            <TableHead data-align="end">
+                                                税率 / 税额
+                                            </TableHead>
+                                            <TableHead data-align="end">
+                                                销售金额
+                                            </TableHead>
+                                            <TableHead data-align="end">
+                                                收货分配
+                                            </TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {submission.lines.map((line) => (
+                                            <SalesLine
+                                                key={line.id}
+                                                line={line}
+                                                isCard={
+                                                    submission.business_type ===
+                                                    "VOUCHER"
+                                                }
+                                                idPrefix={`${prefix}-line-${toAutomationIdSegment(line.id)}`}
+                                            />
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        ) : (
+                            <p className="text-xs text-muted-foreground">
+                                本次提交没有销售明细。
+                            </p>
+                        )}
+                        {submission.business_remark && (
+                            <dl className="border-t border-grid pt-4">
+                                <DescriptionItem>
+                                    <DescriptionTerm>业务备注</DescriptionTerm>
+                                    <DescriptionDetails className="whitespace-pre-wrap wrap-anywhere">
+                                        {submission.business_remark}
+                                    </DescriptionDetails>
+                                </DescriptionItem>
+                            </dl>
+                        )}
+                    </>
+                )}
+            </DetailWorkspaceSection>
+            {query.data ? (
+                <DetailWorkspaceSection
+                    title="合同、凭证及附件"
+                    subtitle={
+                        attachments.length
+                            ? `共 ${attachments.length} 个文件`
+                            : undefined
+                    }
+                    ariaLabel="合同、凭证及附件"
+                >
+                    <ApprovalMaterialFiles
+                        instanceId={instanceId}
+                        attachments={attachments}
+                        idPrefix={`${prefix}-file`}
+                        emptyMessage="本次提交未附带合同或凭证文件。"
+                    />
+                </DetailWorkspaceSection>
+            ) : null}
+        </>
     )
 }
 
@@ -263,14 +290,14 @@ function SalesLine({
                     </p>
                 )}
             </TableCell>
-            <TableCell className="text-right">
+            <TableCell data-align="end">
                 {quantity == null ? (
                     "—"
                 ) : (
                     <QuantityValue value={quantity} unit={unit} />
                 )}
             </TableCell>
-            <TableCell className="text-right">
+            <TableCell data-align="end">
                 <MoneyValue display="exact" value={line.unit_price_gross} />
                 {isCard && (
                     <div className="mt-1 text-xs text-muted-foreground">
@@ -304,7 +331,7 @@ function SalesLine({
             {!isCard && (
                 <TableCell>{dateLabel(line.fulfillment_due_at)}</TableCell>
             )}
-            <TableCell className="text-right">
+            <TableCell data-align="end">
                 <RateValue
                     value={multiplyFixed(line.sales_tax_rate, "100", {
                         leftMaxScale: 6,
@@ -317,7 +344,7 @@ function SalesLine({
                     税额 <MoneyValue display="exact" value={line.tax_amount} />
                 </p>
             </TableCell>
-            <TableCell className="text-right">
+            <TableCell data-align="end">
                 <p className="font-medium">
                     <span className="mr-1 text-xs font-normal text-muted-foreground">
                         含税
@@ -329,7 +356,7 @@ function SalesLine({
                     <MoneyValue display="exact" value={line.net_amount} />
                 </p>
             </TableCell>
-            <TableCell className="text-right">
+            <TableCell data-align="end">
                 {line.delivery_allocations?.length ? (
                     <DeliveryAllocations
                         line={line}
@@ -411,9 +438,7 @@ function DeliveryAllocations({
                         <TableHeader>
                             <TableRow>
                                 <TableHead>序号</TableHead>
-                                <TableHead className="text-right">
-                                    数量
-                                </TableHead>
+                                <TableHead data-align="end">数量</TableHead>
                                 <TableHead>收货人</TableHead>
                                 <TableHead>电话</TableHead>
                                 <TableHead>收货地址</TableHead>
@@ -428,7 +453,7 @@ function DeliveryAllocations({
                                             <TableCell className="num text-muted-foreground">
                                                 {start + index + 1}
                                             </TableCell>
-                                            <TableCell className="text-right">
+                                            <TableCell data-align="end">
                                                 <QuantityValue
                                                     value={allocation.quantity}
                                                     unit={unit}

@@ -9,6 +9,7 @@ import {
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
+import { ApprovalMaterialFiles } from "@/features/approval-workflow/components/approval-material-files"
 import { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-approval-materials"
 import { displayBusinessText, displayName } from "@/lib/display-name"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -39,34 +40,31 @@ export function WorkspacePurchaseApproval({
 
     if (query.isPending)
         return (
-            <>
-                <DetailWorkspaceSection ariaLabel="供应商与客户">
-                    <p
-                        role="status"
-                        className="flex items-center gap-2 text-xs text-muted-foreground"
-                    >
-                        <Spinner />
-                        正在读取供应商与客户…
-                    </p>
-                </DetailWorkspaceSection>
-            </>
+            <DetailWorkspaceSection ariaLabel="供应商与客户">
+                <p
+                    role="status"
+                    className="flex items-center gap-2 text-xs text-muted-foreground"
+                >
+                    <Spinner />
+                    正在读取供应商与客户…
+                </p>
+            </DetailWorkspaceSection>
         )
     if (query.isError)
         return (
-            <>
-                <DetailWorkspaceSection>
-                    <BusinessFailureState
-                        id={`${prefix}-retry`}
-                        title="供应商与客户读取失败"
-                        error={query.error}
-                        onRetry={() => void query.refetch()}
-                    />
-                </DetailWorkspaceSection>
-            </>
+            <DetailWorkspaceSection>
+                <BusinessFailureState
+                    id={`${prefix}-retry`}
+                    title="供应商与客户读取失败"
+                    error={query.error}
+                    onRetry={() => void query.refetch()}
+                />
+            </DetailWorkspaceSection>
         )
 
     const {
         display,
+        attachments,
         purchase_lines: lines,
         extra_cost_summary: extraCost,
     } = query.data
@@ -94,7 +92,7 @@ export function WorkspacePurchaseApproval({
                         rating={query.data.latest_supplier_rating}
                     />
                 </div>
-                <div className="min-w-0 space-y-3 border-t border-grid pt-4 @min-[720px]/document:border-t-0 @min-[720px]/document:border-l @min-[720px]/document:pt-0 @min-[720px]/document:pl-6">
+                <div className="min-w-0 space-y-3 border-t border-border/60 pt-4 @min-[720px]/document:border-t-0 @min-[720px]/document:border-l @min-[720px]/document:pt-0 @min-[720px]/document:pl-6">
                     <h2 className={detailWorkspaceStyles.sectionTitle}>
                         客户与销售单
                     </h2>
@@ -121,9 +119,9 @@ export function WorkspacePurchaseApproval({
                                 </p>
                                 <Button
                                     id={`${prefix}-source-${toAutomationIdSegment(sales.revision_id)}`}
-                                    variant="outline"
+                                    variant="ghost"
                                     size="sm"
-                                    className="ml-auto"
+                                    className={`${detailWorkspaceStyles.subtleButton} ml-auto`}
                                     onClick={() =>
                                         preview(
                                             "source-sales",
@@ -142,7 +140,7 @@ export function WorkspacePurchaseApproval({
                                     .map((field) => (
                                         <p
                                             key={field.label}
-                                            className="text-body-compact text-warning-soft-foreground basis-full"
+                                            className="basis-full text-body-compact text-warning-soft-foreground"
                                         >
                                             {field.value}
                                         </p>
@@ -161,6 +159,19 @@ export function WorkspacePurchaseApproval({
                 title="采购与销售对照"
                 subtitle={lines ? `共 ${lines.length} 项` : undefined}
                 ariaLabel="采购与销售对照"
+                actions={
+                    <Button
+                        id={`${prefix}-submission`}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={detailWorkspaceStyles.subtleButton}
+                        onClick={() => preview("all")}
+                    >
+                        <FileTextIcon aria-hidden="true" />
+                        查看提交资料
+                    </Button>
+                }
             >
                 {extraCost ? (
                     <p className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
@@ -211,17 +222,25 @@ export function WorkspacePurchaseApproval({
                                 行未包含在摘要中，请核对提交资料及附件。
                             </p>
                         )}
-                        <Button
-                            id={`${prefix}-submission`}
-                            variant="outline"
-                            size="sm"
-                            onClick={() => preview("all")}
-                        >
-                            <FileTextIcon aria-hidden="true" />
-                            查看提交资料
-                        </Button>
                     </>
                 )}
+            </DetailWorkspaceSection>
+
+            <DetailWorkspaceSection
+                title="提交附件及关联销售合同、凭证"
+                subtitle={
+                    attachments.length
+                        ? `共 ${attachments.length} 个文件`
+                        : undefined
+                }
+                ariaLabel="提交附件及关联销售合同、凭证"
+            >
+                <ApprovalMaterialFiles
+                    instanceId={instanceId}
+                    attachments={attachments}
+                    idPrefix={`${prefix}-file`}
+                    emptyMessage="本次提交未附带合同、凭证或其他附件。"
+                />
             </DetailWorkspaceSection>
         </>
     )

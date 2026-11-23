@@ -15,6 +15,7 @@ export function IconActionButton({
     label,
     testId,
     href,
+    disabled,
     onClick,
     children,
 }: {
@@ -22,6 +23,7 @@ export function IconActionButton({
     label: string
     testId: string
     href?: string
+    disabled?: boolean
     onClick?: () => void
     children: ReactNode
 }) {
@@ -49,6 +51,7 @@ export function IconActionButton({
                             size="icon-sm"
                             aria-label={label}
                             data-testid={testId}
+                            disabled={disabled}
                             onClick={onClick}
                         />
                     )

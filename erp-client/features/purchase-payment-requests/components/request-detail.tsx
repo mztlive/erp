@@ -290,6 +290,12 @@ export function RequestDetail({
             approval={approvalHistory}
         />
     )
+    const hasManageActions =
+        actions.has("EDIT") ||
+        actions.has("WITHDRAW") ||
+        actions.has("CLOSE") ||
+        actions.has("SUBMIT") ||
+        submitUnknown
     const details = (
         <>
             {!renderChrome && unknownAlerts}
@@ -312,8 +318,10 @@ export function RequestDetail({
                             "VIEW",
                         ]}
                         decisionContext={{
-                            documentLabel: request.request_no,
-                            amountLabel: request.total_amount,
+                            documentLabel: `${request.supplier_name} · ${request.request_no}`,
+                            amountLabel: `¥${request.total_amount}`,
+                            currentNodeLabel:
+                                approval.instance?.currentNodeName,
                             impactSummary:
                                 "批准后交由指定出纳按本申请逐单金额付款；驳回结束本次审核并释放未付金额。",
                         }}
@@ -322,7 +330,7 @@ export function RequestDetail({
                     />
                 </WorkspaceTaskFooter>
             )}
-            {!renderChrome && !isPaymentTask && (
+            {!renderChrome && !isPaymentTask && hasManageActions && (
                 <WorkspaceTaskFooter>
                     <div className="flex flex-wrap justify-end gap-2">
                         {secondaryActions}

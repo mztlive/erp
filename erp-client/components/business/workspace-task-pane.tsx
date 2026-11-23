@@ -20,7 +20,21 @@ type WorkspaceTaskFooterHost = {
 const WorkspaceTaskFooterHostContext =
     createContext<WorkspaceTaskFooterHost | null>(null)
 
+export type WorkspaceTaskBackLink = {
+    id: string
+    label: string
+    visibility?: "standalone-only" | "always"
+} & ({ href: string; onClick?: never } | { href?: never; onClick: () => void })
+
+export type WorkspaceTaskNavigation = {
+    back?: WorkspaceTaskBackLink
+    meta?: ReactNode
+    onRefresh?: () => void
+    refreshing?: boolean
+}
+
 type WorkspaceTaskPageLayout = {
+    flat?: boolean
     compact?: boolean
     fullWidth?: boolean
     fillBody?: boolean
@@ -28,6 +42,7 @@ type WorkspaceTaskPageLayout = {
     summaryInHeader?: boolean
     denseHeader?: boolean
     unframedBody?: boolean
+    navigation?: WorkspaceTaskNavigation
     summary?: ReactNode
     aside: ReactNode
     footerLeading?: ReactNode
@@ -36,6 +51,8 @@ type WorkspaceTaskPageLayout = {
 const WorkspaceTaskPageContext = createContext<WorkspaceTaskPageLayout | null>(
     null,
 )
+const WorkspaceTaskNavigationContext =
+    createContext<WorkspaceTaskNavigation | null>(null)
 const WorkspaceTaskSlotsContext = createContext<{
     summary: HTMLElement | null
     aside: HTMLElement | null
@@ -55,6 +72,11 @@ export function WorkspaceTaskPageProvider({
 
 export function useWorkspaceTaskPage() {
     return useContext(WorkspaceTaskPageContext) !== null
+}
+
+/** 获取当前完整办理页的顶部返回、队列切换与刷新能力；嵌套面板自动隔离。 */
+export function useWorkspaceTaskNavigation() {
+    return useContext(WorkspaceTaskNavigationContext)
 }
 
 /** 业务模块可把已授权的摘要、状态送入完整办理页；独立详情保留原位置。 */
@@ -116,197 +138,311 @@ export function WorkspaceTaskPane({
         return (
             <WorkspaceTaskFooterHostContext.Provider value={hostValue}>
                 <WorkspaceTaskPageContext.Provider value={null}>
-                    <WorkspaceTaskSlotsContext.Provider value={null}>
+                    <WorkspaceTaskNavigationContext.Provider value={null}>
+                        <WorkspaceTaskSlotsContext.Provider value={null}>
+                            <section
+                                className={cn(
+                                    "flex h-full min-h-0 flex-col",
+                                    className,
+                                )}
+                                aria-label={ariaLabel}
+                            >
+                                <header
+                                    data-slot="workspace-task-header"
+                                    className={cn(
+                                        workspaceTaskSurfacePadClassName,
+                                        "flex shrink-0 items-start justify-between gap-3 border-b border-grid bg-card py-5",
+                                    )}
+                                >
+                                    {header}
+                                </header>
+                                {headerSupplement}
+                                <div
+                                    data-slot="workspace-task-body"
+                                    className="min-h-0 flex-1 overflow-auto [&>[data-slot=alert]]:mx-5 [&>[data-slot=alert]]:my-5 [&_[data-slot=page-scaffold]]:h-auto"
+                                >
+                                    {children}
+                                </div>
+                                <footer
+                                    ref={setFooterHost}
+                                    data-slot="workspace-task-footer"
+                                    className={cn(
+                                        workspaceTaskSurfacePadClassName,
+                                        "flex w-full min-w-0 shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border/40 bg-card py-3 empty:hidden",
+                                    )}
+                                >
+                                    {footer}
+                                </footer>
+                            </section>
+                        </WorkspaceTaskSlotsContext.Provider>
+                    </WorkspaceTaskNavigationContext.Provider>
+                </WorkspaceTaskPageContext.Provider>
+            </WorkspaceTaskFooterHostContext.Provider>
+        )
+
+    if (layout.flat)
+        return (
+            <WorkspaceTaskFooterHostContext.Provider value={hostValue}>
+                <WorkspaceTaskNavigationContext.Provider
+                    value={layout.navigation ?? null}
+                >
+                    <WorkspaceTaskSlotsContext.Provider value={slots}>
                         <section
                             className={cn(
-                                "flex h-full min-h-0 flex-col",
+                                "flex h-full min-h-0 min-w-0 flex-col",
                                 className,
                             )}
                             aria-label={ariaLabel}
                         >
-                            <header
-                                data-slot="workspace-task-header"
+                            <div
                                 className={cn(
-                                    workspaceTaskSurfacePadClassName,
-                                    "flex shrink-0 items-start justify-between gap-3 border-b border-grid bg-card py-5",
+                                    "flex min-h-0 flex-1 flex-col -mx-(--scaffold-px) bg-card px-(--scaffold-px) py-0 gap-0 overflow-auto",
+                                    layout.fullWidth && "overflow-hidden",
+                                    layout.fillBody && "lg:overflow-hidden",
                                 )}
                             >
                                 {header}
-                            </header>
-                            {headerSupplement}
-                            <div
-                                data-slot="workspace-task-body"
-                                className="min-h-0 flex-1 overflow-auto [&>[data-slot=alert]]:mx-5 [&>[data-slot=alert]]:my-5 [&_[data-slot=page-scaffold]]:h-auto"
-                            >
-                                {children}
+                                {headerSupplement}
+                                {!layout.fullWidth &&
+                                    (!layout.singleColumn ||
+                                        layout.summaryInHeader) && (
+                                        <div
+                                            className={cn(
+                                                "hidden border-b border-border/60 py-3.5 has-[>:not(:empty)]:block",
+                                                layout.denseHeader && "py-3",
+                                            )}
+                                        >
+                                            {layout.summary}
+                                            <div
+                                                ref={setSummaryHost}
+                                                className="empty:hidden"
+                                            />
+                                        </div>
+                                    )}
+                                <div
+                                    className={cn(
+                                        "min-h-0 min-w-0",
+                                        layout.fullWidth
+                                            ? "flex flex-1 shrink flex-col items-stretch overflow-hidden"
+                                            : layout.singleColumn
+                                              ? "flex flex-1 flex-col"
+                                              : "grid flex-1 items-start gap-x-8 gap-y-0 xl:grid-cols-[minmax(0,1fr)_20rem]",
+                                        layout.fillBody &&
+                                            "lg:flex lg:flex-1 lg:shrink lg:flex-col lg:items-stretch lg:overflow-hidden",
+                                    )}
+                                >
+                                    <div
+                                        data-slot="workspace-task-body"
+                                        className={cn(
+                                            "min-w-0 [&>[data-slot=alert]]:my-4 [&_[data-slot=page-scaffold]]:h-auto",
+                                            layout.fullWidth &&
+                                                "flex min-h-0 flex-1 flex-col overflow-hidden [&_[data-slot=page-scaffold]]:h-full",
+                                            layout.fillBody &&
+                                                "lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden",
+                                        )}
+                                    >
+                                        {children}
+                                    </div>
+                                    {!layout.fullWidth &&
+                                        !layout.singleColumn && (
+                                            <aside
+                                                aria-label="办理进度与状态"
+                                                className="min-w-0 space-y-6 border-t border-border/60 py-5 xl:self-stretch xl:border-t-0 xl:border-l xl:pl-6"
+                                            >
+                                                {layout.aside}
+                                                <div
+                                                    ref={setAsideHost}
+                                                    className="space-y-5 empty:hidden"
+                                                />
+                                            </aside>
+                                        )}
+                                </div>
                             </div>
                             <footer
-                                ref={setFooterHost}
                                 data-slot="workspace-task-footer"
-                                className={cn(
-                                    workspaceTaskSurfacePadClassName,
-                                    "flex w-full min-w-0 shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border/40 bg-card py-3 empty:hidden",
-                                )}
+                                className="-mx-(--scaffold-px) hidden w-auto min-w-0 shrink-0 flex-wrap items-center gap-3 border-t border-border/60 bg-card px-(--scaffold-px) py-3 shadow-footer has-[>:not(:empty)]:flex"
                             >
-                                {footer}
+                                {layout.fillBody && layout.footer}
+                                {layout.footerLeading}
+                                <div
+                                    ref={setFooterSummaryHost}
+                                    className={
+                                        layout.fillBody
+                                            ? "min-w-0 flex-1 empty:hidden"
+                                            : "min-w-0 flex-[1_1_20rem] empty:hidden"
+                                    }
+                                />
+                                {!layout.fillBody && layout.footer}
+                                <div
+                                    ref={setFooterHost}
+                                    className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2 empty:hidden"
+                                >
+                                    {footer}
+                                </div>
                             </footer>
                         </section>
                     </WorkspaceTaskSlotsContext.Provider>
-                </WorkspaceTaskPageContext.Provider>
+                </WorkspaceTaskNavigationContext.Provider>
             </WorkspaceTaskFooterHostContext.Provider>
         )
 
     return (
         <WorkspaceTaskFooterHostContext.Provider value={hostValue}>
-            <WorkspaceTaskSlotsContext.Provider value={layout ? slots : null}>
-                <section
-                    className={cn(
-                        "flex h-full min-h-0 min-w-0 flex-col",
-                        className,
-                    )}
-                    aria-label={ariaLabel}
+            <WorkspaceTaskNavigationContext.Provider
+                value={layout.navigation ?? null}
+            >
+                <WorkspaceTaskSlotsContext.Provider
+                    value={layout ? slots : null}
                 >
-                    <div
+                    <section
                         className={cn(
-                            "flex min-h-0 flex-1 flex-col",
-                            layout &&
-                                "gap-4 overflow-auto bg-background p-3 sm:p-5",
-                            layout?.compact && "gap-5 sm:p-6",
-                            layout.fullWidth &&
-                                "gap-3 overflow-hidden p-3 sm:p-4",
-                            layout.fillBody && "lg:overflow-hidden",
+                            "flex h-full min-h-0 min-w-0 flex-col",
+                            className,
                         )}
+                        aria-label={ariaLabel}
                     >
                         <div
                             className={cn(
+                                "flex min-h-0 flex-1 flex-col",
                                 layout &&
-                                    "shrink-0 rounded-lg border border-border/90 bg-card shadow-2xs",
-                                layout?.compact &&
-                                    "mx-auto w-full max-w-7xl border-0 bg-transparent shadow-none",
-                                layout.unframedBody &&
-                                    "mx-auto w-full max-w-6xl border-0 bg-transparent shadow-none",
-                            )}
-                        >
-                            <header
-                                data-slot="workspace-task-header"
-                                className={cn(
-                                    workspaceTaskSurfacePadClassName,
-                                    "flex shrink-0 items-start justify-between gap-3 bg-card py-4",
-                                    !layout && "border-b border-grid",
-                                    layout.fullWidth && "py-3",
-                                    layout.denseHeader && "py-3",
-                                    layout && "rounded-t-lg sm:px-6",
-                                    layout?.compact &&
-                                        "bg-transparent px-0 py-1 sm:px-0",
-                                    layout.unframedBody &&
-                                        "bg-transparent px-0 py-2 sm:px-0",
-                                )}
-                            >
-                                {header}
-                            </header>
-                            {headerSupplement}
-                            {layout &&
-                                !layout.fullWidth &&
-                                (!layout.singleColumn ||
-                                    layout.summaryInHeader) && (
-                                    <div
-                                        className={cn(
-                                            "px-5 pb-5 sm:px-6",
-                                            layout.compact &&
-                                                "px-0 pb-0 sm:px-0",
-                                            layout.denseHeader && "pb-3",
-                                        )}
-                                    >
-                                        {layout.summary}
-                                        <div ref={setSummaryHost} />
-                                    </div>
-                                )}
-                        </div>
-                        <div
-                            className={cn(
-                                "min-h-0 min-w-0",
-                                layout
-                                    ? layout.compact
-                                        ? "mx-auto grid w-full max-w-7xl shrink-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]"
-                                        : "grid shrink-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(17rem,28%)]"
-                                    : "flex flex-1 flex-col",
+                                    "gap-4 overflow-auto bg-background p-3 sm:p-5",
+                                layout?.compact && "gap-5 sm:p-6",
                                 layout.fullWidth &&
-                                    "flex flex-1 shrink flex-col items-stretch overflow-hidden",
-                                layout.fillBody &&
-                                    "lg:flex lg:flex-1 lg:shrink lg:flex-col lg:items-stretch lg:overflow-hidden",
-                                layout.singleColumn &&
-                                    "grid-cols-1 xl:grid-cols-1",
+                                    "gap-3 overflow-hidden p-3 sm:p-4",
+                                layout.fillBody && "lg:overflow-hidden",
                             )}
                         >
                             <div
-                                data-slot="workspace-task-body"
                                 className={cn(
-                                    "min-w-0",
-                                    layout
-                                        ? "rounded-lg border border-border/90 bg-card shadow-2xs"
-                                        : "min-h-0 flex-1 overflow-auto",
-                                    layout?.compact && "shadow-none",
+                                    layout &&
+                                        "shrink-0 rounded-lg border border-border/90 bg-card shadow-2xs",
+                                    layout?.compact &&
+                                        "mx-auto w-full max-w-7xl border-0 bg-transparent shadow-none",
                                     layout.unframedBody &&
-                                        "border-0 bg-transparent shadow-none",
-                                    "[&>[data-slot=alert]]:mx-5 [&>[data-slot=alert]]:my-5 [&_[data-slot=page-scaffold]]:h-auto",
-                                    layout.fullWidth &&
-                                        "flex min-h-0 flex-1 flex-col overflow-hidden [&_[data-slot=page-scaffold]]:h-full",
-                                    layout.fillBody &&
-                                        "lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden",
+                                        "mx-auto w-full max-w-6xl border-0 bg-transparent shadow-none",
                                 )}
                             >
-                                {children}
-                            </div>
-                            {layout &&
-                                !layout.fullWidth &&
-                                !layout.singleColumn && (
-                                    <aside
-                                        aria-label="办理进度与状态"
-                                        className={cn(
-                                            "space-y-6 rounded-lg border border-border/90 bg-card p-5 shadow-2xs xl:sticky xl:top-0",
-                                            layout.compact &&
-                                                "shadow-none lg:sticky lg:top-0",
-                                        )}
-                                    >
-                                        {layout.aside}
+                                <header
+                                    data-slot="workspace-task-header"
+                                    className={cn(
+                                        workspaceTaskSurfacePadClassName,
+                                        "flex shrink-0 items-start justify-between gap-3 bg-card py-4",
+                                        !layout && "border-b border-grid",
+                                        layout.fullWidth && "py-3",
+                                        layout.denseHeader && "py-3",
+                                        layout && "rounded-t-lg sm:px-6",
+                                        layout?.compact &&
+                                            "bg-transparent px-0 py-1 sm:px-0",
+                                        layout.unframedBody &&
+                                            "bg-transparent px-0 py-2 sm:px-0",
+                                    )}
+                                >
+                                    {header}
+                                </header>
+                                {headerSupplement}
+                                {layout &&
+                                    !layout.fullWidth &&
+                                    (!layout.singleColumn ||
+                                        layout.summaryInHeader) && (
                                         <div
-                                            ref={setAsideHost}
-                                            className="space-y-5 empty:hidden"
-                                        />
-                                    </aside>
-                                )}
-                        </div>
-                    </div>
-                    <footer
-                        data-slot="workspace-task-footer"
-                        className={cn(
-                            workspaceTaskSurfacePadClassName,
-                            "flex w-full min-w-0 shrink-0 flex-wrap items-center gap-3 border-t border-border/60 bg-card py-3",
-                            !layout && "justify-end empty:hidden",
-                        )}
-                    >
-                        {layout.fillBody && layout.footer}
-                        {layout.footerLeading}
-                        <div
-                            ref={setFooterSummaryHost}
-                            className={
-                                layout.fillBody
-                                    ? "min-w-0 flex-1 empty:hidden"
-                                    : "min-w-0 flex-[1_1_24rem] empty:hidden"
-                            }
-                        ></div>
-                        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-                            {!layout.fillBody && layout.footer}
+                                            className={cn(
+                                                "px-5 pb-5 sm:px-6",
+                                                layout.compact &&
+                                                    "px-0 pb-0 sm:px-0",
+                                                layout.denseHeader && "pb-3",
+                                            )}
+                                        >
+                                            {layout.summary}
+                                            <div ref={setSummaryHost} />
+                                        </div>
+                                    )}
+                            </div>
                             <div
-                                ref={setFooterHost}
-                                className="flex min-w-0 flex-wrap items-center justify-end gap-2 empty:hidden"
+                                className={cn(
+                                    "min-h-0 min-w-0",
+                                    layout
+                                        ? layout.compact
+                                            ? "mx-auto grid w-full max-w-7xl shrink-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]"
+                                            : "grid shrink-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(17rem,28%)]"
+                                        : "flex flex-1 flex-col",
+                                    layout.fullWidth &&
+                                        "flex flex-1 shrink flex-col items-stretch overflow-hidden",
+                                    layout.fillBody &&
+                                        "lg:flex lg:flex-1 lg:shrink lg:flex-col lg:items-stretch lg:overflow-hidden",
+                                    layout.singleColumn &&
+                                        "grid-cols-1 xl:grid-cols-1",
+                                )}
                             >
-                                {footer}
+                                <div
+                                    data-slot="workspace-task-body"
+                                    className={cn(
+                                        "min-w-0",
+                                        layout
+                                            ? "rounded-lg border border-border/90 bg-card shadow-2xs"
+                                            : "min-h-0 flex-1 overflow-auto",
+                                        layout?.compact && "shadow-none",
+                                        layout.unframedBody &&
+                                            "border-0 bg-transparent shadow-none",
+                                        "[&>[data-slot=alert]]:mx-5 [&>[data-slot=alert]]:my-5 [&_[data-slot=page-scaffold]]:h-auto",
+                                        layout.fullWidth &&
+                                            "flex min-h-0 flex-1 flex-col overflow-hidden [&_[data-slot=page-scaffold]]:h-full",
+                                        layout.fillBody &&
+                                            "lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden",
+                                    )}
+                                >
+                                    {children}
+                                </div>
+                                {layout &&
+                                    !layout.fullWidth &&
+                                    !layout.singleColumn && (
+                                        <aside
+                                            aria-label="办理进度与状态"
+                                            className={cn(
+                                                "space-y-6 rounded-lg border border-border/90 bg-card p-5 shadow-2xs xl:sticky xl:top-0",
+                                                layout.compact &&
+                                                    "shadow-none lg:sticky lg:top-0",
+                                            )}
+                                        >
+                                            {layout.aside}
+                                            <div
+                                                ref={setAsideHost}
+                                                className="space-y-5 empty:hidden"
+                                            />
+                                        </aside>
+                                    )}
                             </div>
                         </div>
-                    </footer>
-                </section>
-            </WorkspaceTaskSlotsContext.Provider>
+                        <footer
+                            data-slot="workspace-task-footer"
+                            className={cn(
+                                workspaceTaskSurfacePadClassName,
+                                "flex w-full min-w-0 shrink-0 flex-wrap items-center gap-3 border-t border-border/60 bg-card py-3",
+                                !layout && "justify-end empty:hidden",
+                            )}
+                        >
+                            {layout.fillBody && layout.footer}
+                            {layout.footerLeading}
+                            <div
+                                ref={setFooterSummaryHost}
+                                className={
+                                    layout.fillBody
+                                        ? "min-w-0 flex-1 empty:hidden"
+                                        : "min-w-0 flex-[1_1_24rem] empty:hidden"
+                                }
+                            ></div>
+                            <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+                                {!layout.fillBody && layout.footer}
+                                <div
+                                    ref={setFooterHost}
+                                    className="flex min-w-0 flex-wrap items-center justify-end gap-2 empty:hidden"
+                                >
+                                    {footer}
+                                </div>
+                            </div>
+                        </footer>
+                    </section>
+                </WorkspaceTaskSlotsContext.Provider>
+            </WorkspaceTaskNavigationContext.Provider>
         </WorkspaceTaskFooterHostContext.Provider>
     )
 }

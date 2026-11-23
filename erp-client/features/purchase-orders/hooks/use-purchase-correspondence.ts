@@ -12,7 +12,7 @@ export function usePurchasePaper(id: string, supplierName: string) {
             const file = await fetchPurchasePaper(id)
             const { downloadPurchasePaperImage } =
                 await import("../lib/download-purchase-paper-image")
-            await downloadPurchasePaperImage(file.html, supplierName)
+            return downloadPurchasePaperImage(file.html, supplierName)
         },
         retry: false,
     })
