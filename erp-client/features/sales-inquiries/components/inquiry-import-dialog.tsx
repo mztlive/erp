@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { useStore } from "@tanstack/react-form"
 import { useMutation } from "@tanstack/react-query"
 import { DownloadIcon } from "lucide-react"
@@ -86,6 +87,8 @@ type InquiryImportDialogProps = {
     onDownloadTemplate?: () => Promise<void>
     templateBusy?: boolean
     creation?: boolean
+    initialCustomerId?: string
+    finalFocusId?: string
     recovery?: ReactNode
 }
 
@@ -100,6 +103,8 @@ export function InquiryImportDialog({
     onDownloadTemplate,
     templateBusy = false,
     creation = false,
+    initialCustomerId = "",
+    finalFocusId = "sales-inquiries-import-create",
     recovery,
 }: InquiryImportDialogProps) {
     const downloadTemplate = useMutation({
@@ -107,7 +112,7 @@ export function InquiryImportDialog({
     })
     const form = useAppForm({
         defaultValues: {
-            customer_id: "",
+            customer_id: initialCustomerId,
             file: null as File | null,
             preview: null as InquiryImportPreview | null,
             confirm_merge_duplicates: false,

@@ -10,18 +10,20 @@ import { masterDataCopy } from "@/features/master-data/lib/copy"
 
 export function SellableSelectAll({
     idPrefix,
+    label,
     disabled,
     allSelected,
     someSelected,
     onSelectAll,
-    onClear,
+    onDeselectAll,
 }: {
     idPrefix: string
+    label: string
     disabled: boolean
     allSelected: boolean
     someSelected: boolean
     onSelectAll: () => void
-    onClear: () => void
+    onDeselectAll: () => void
 }) {
     return (
         <Checkbox
@@ -29,11 +31,11 @@ export function SellableSelectAll({
             checked={allSelected}
             indeterminate={someSelected}
             disabled={disabled}
-            aria-label={masterDataCopy.sellableSelectAll}
-            title={masterDataCopy.sellableSelectAll}
+            aria-label={label}
+            title={label}
             onCheckedChange={(checked) => {
                 if (checked === true) onSelectAll()
-                else onClear()
+                else onDeselectAll()
             }}
         />
     )
@@ -41,6 +43,7 @@ export function SellableSelectAll({
 
 export function SellableGallerySelectionBar({
     idPrefix,
+    selectAllLabel,
     leadingControl,
     actions,
     resultCount,
@@ -52,6 +55,7 @@ export function SellableGallerySelectionBar({
     onClear,
 }: {
     idPrefix: string
+    selectAllLabel: string
     leadingControl?: ReactNode
     actions?: ReactNode
     resultCount: number
@@ -128,7 +132,7 @@ export function SellableGallerySelectionBar({
                 disabled={busy || !canSelectRows || allSelected}
                 onClick={onSelectAll}
             >
-                {masterDataCopy.sellableSelectAll}
+                {selectAllLabel}
             </Button>
             {actions}
             <Button

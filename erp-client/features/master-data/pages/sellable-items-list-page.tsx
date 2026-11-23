@@ -55,6 +55,9 @@ export function SellableItemsListPage() {
     const { filters } = state
     const layout = filters.layout
     const isGallery = layout === "gallery"
+    const selectAllLabel = isGallery
+        ? masterDataCopy.sellableSelectAll
+        : masterDataCopy.sellableSelectAllPage
     const { canCreate: canExport } = useCreatePermission("sellable_sku:list")
     const { canCreate: canLaunchSelection } = useCreatePermission(
         "sales_selection_booklet:create",
@@ -62,8 +65,10 @@ export function SellableItemsListPage() {
     const canSelect = canExport || canLaunchSelection
     const selection = useSellableGallerySelection(
         state.rows,
-        `${canSelect}:${layout}:${state.selectionResetKey}`,
+        `${canSelect}:${state.selectionResetKey}`,
     )
+    const somePageSelected =
+        selection.pageSelectedCount > 0 && !selection.allPageSelected
     const columns = useSellableListColumns()
     const hasActiveFilters =
         filters.q.trim() !== "" || filters.hasStructuredSellableFilters
@@ -406,14 +411,12 @@ export function SellableItemsListPage() {
                             {canSelect ? (
                                 <SellableSelectAll
                                     idPrefix="master-data-sellable-items-gallery"
+                                    label={selectAllLabel}
                                     disabled={!canSelectRows}
                                     allSelected={selection.allPageSelected}
-                                    someSelected={
-                                        hasSelection &&
-                                        !selection.allPageSelected
-                                    }
+                                    someSelected={somePageSelected}
                                     onSelectAll={selection.selectAllPage}
-                                    onClear={selection.clear}
+                                    onDeselectAll={selection.clearPage}
                                 />
                             ) : null}
                             {!listLoadFailed && state.list.total > 0 ? (
@@ -433,18 +436,22 @@ export function SellableItemsListPage() {
                                     ? "master-data-sellable-items-gallery"
                                     : "master-data-sellable-items-table"
                             }
+                            selectAllLabel={selectAllLabel}
                             leadingControl={
                                 !isGallery ? (
                                     <SellableSelectAll
                                         idPrefix="master-data-sellable-items-table"
+                                        label={selectAllLabel}
                                         disabled={!canSelectRows}
                                         allSelected={selection.allPageSelected}
-                                        someSelected={
-                                            hasSelection &&
-                                            !selection.allPageSelected
-                                        }
+                                        someSelected={somePageSelected}
                                         onSelectAll={selection.selectAllPage}
-                                        onClear={clearSelection}
+                                        onDeselectAll={
+                                            selection.pageSelectedCount ===
+                                            selection.selectedCount
+                                                ? clearSelection
+                                                : selection.clearPage
+                                        }
                                     />
                                 ) : undefined
                             }
@@ -505,7 +512,9 @@ export function SellableItemsListPage() {
                             }
                             rowSelection={selection.rowSelection}
                             onRowSelectionChange={
-                                selection.onRowSelectionChange
+                                canSelectRows
+                                    ? selection.onRowSelectionChange
+                                    : undefined
                             }
                             rowLabel={(row) => `${row.name}（${row.stableNo}）`}
                             rowCount={state.list.total}

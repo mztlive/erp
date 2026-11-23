@@ -69,19 +69,19 @@ export function useListSelection<T>({
         [activeSelected],
     )
 
+    /** 表格的勾选变化只更新当前页，跨页移除使用 remove 或 clear。 */
     const onRowSelectionChange = React.useCallback(
         (next: RowSelectionState) => {
             setState((current) => {
                 const base: ReadonlyMap<string, T> =
                     current.scope === resetKey ? current.map : EMPTY_SELECTION
                 const updated = new Map(base)
-                for (const id of updated.keys()) {
-                    if (!next[id]) updated.delete(id)
-                }
                 for (const row of pageRows) {
                     const id = getRowId(row)
                     if (next[id]) {
                         updated.set(id, row)
+                    } else {
+                        updated.delete(id)
                     }
                 }
                 return { scope: resetKey, map: updated }
@@ -89,6 +89,10 @@ export function useListSelection<T>({
         },
         [getRowId, pageRows, resetKey],
     )
+
+    const clearPage = React.useCallback(() => {
+        onRowSelectionChange({})
+    }, [onRowSelectionChange])
 
     const selectAllPage = React.useCallback(() => {
         setState((current) => {
@@ -149,10 +153,12 @@ export function useListSelection<T>({
         selectedIds,
         selectedRows,
         selectedCount,
+        pageSelectedCount,
         allPageSelected,
         rowSelection,
         onRowSelectionChange,
         selectAllPage,
+        clearPage,
         remove,
         retainOnly,
         clear,

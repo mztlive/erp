@@ -93,6 +93,7 @@ export const masterDataCopy = {
     sellableLayoutGallery: "卡片",
     sellableExportSelected: "导出已选",
     sellableSelectAll: "全选已显示",
+    sellableSelectAllPage: "全选本页",
     sellableClearSelection: "清空已选",
     sellableExportConfirmTitle: "确认导出商品",
     sellableExportConfirmCancel: "返回修改",
