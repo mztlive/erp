@@ -3,11 +3,6 @@
 import * as React from "react"
 import { useRouter } from "@/lib/navigation"
 
-import { useAppForm } from "@/components/form"
-import {
-    useWorkspaceTaskPage,
-    WorkspaceTaskPageSlot,
-} from "@/components/business/workspace-task-pane"
 import { Button } from "@/components/ui/button"
 
 import { RECOVERY_ACTION_LABEL } from "../display"
@@ -55,7 +50,6 @@ export function ApprovalActionBar({
     decisionContext,
     onDecisionApplied,
     presentation = "default",
-    showInlineOpinion = true,
     id = "governance-approval-action-bar",
 }: {
     allowedActions: readonly string[]
@@ -84,13 +78,9 @@ export function ApprovalActionBar({
     onDecisionApplied?: (view: ApprovalCommandView) => void
     /** 工作台侧栏使用紧凑动作顺序；其它页面保留原样。 */
     presentation?: "default" | "workspace"
-    /** 是否在完整工作台页预填意见；关闭后仅在决定弹窗内填写。 */
-    showInlineOpinion?: boolean
     id?: string
 }) {
     const router = useRouter()
-    const fullPage = useWorkspaceTaskPage()
-    const opinionForm = useAppForm({ defaultValues: { reason: "" } })
     const [dialog, setDialog] = React.useState<DialogKind>(null)
     const hidden = new Set(hiddenActions)
     const actions = new Set(
@@ -114,26 +104,6 @@ export function ApprovalActionBar({
 
     return (
         <div className="flex flex-wrap gap-2">
-            {fullPage &&
-                showInlineOpinion &&
-                (showApprove || showReject) &&
-                workItemId &&
-                expectedTaskVersion && (
-                    <WorkspaceTaskPageSlot slot="bodyEnd">
-                        <section className="border-t border-border/60 pt-5">
-                            <opinionForm.AppField name="reason">
-                                {(field) => (
-                                    <field.TextareaField
-                                        id={`${id}-opinion`}
-                                        label="审批意见"
-                                        placeholder="填写核对意见；驳回时请说明原因"
-                                        rows={3}
-                                    />
-                                )}
-                            </opinionForm.AppField>
-                        </section>
-                    </WorkspaceTaskPageSlot>
-                )}
             {showApprove && workItemId && expectedTaskVersion ? (
                 <Button
                     id={`${id}-approve`}
@@ -243,15 +213,7 @@ export function ApprovalActionBar({
                     documentType={documentType}
                     allowedActions={allowedActions}
                     context={decisionContext}
-                    initialReason={
-                        fullPage && showInlineOpinion
-                            ? opinionForm.getFieldValue("reason")
-                            : undefined
-                    }
-                    onApplied={(view) => {
-                        opinionForm.reset()
-                        onDecisionApplied?.(view)
-                    }}
+                    onApplied={onDecisionApplied}
                 />
             ) : null}
             {instance ? (

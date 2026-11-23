@@ -9,6 +9,10 @@ import { downloadFileAsset } from "@/features/file-assets/api"
 import { usePathname, useSearchParams } from "next/navigation"
 import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
+import {
+    approvalSalesTaxPoint,
+    displayUnixSeconds,
+} from "@/features/approval-workflow/display"
 import { WorkspacePurchasePayment } from "./workspace-purchase-payment"
 import { WorkspaceApprovalReworkActions } from "./workspace-approval-rework"
 import { WorkspaceRejectionNotice } from "./workspace-rejection-notice"
@@ -212,14 +216,15 @@ export function WorkspaceDocumentTaskDetail({
               item.businessObjectId,
           )
         : (facts?.counterparty ?? item.counterpartyName)
-    const documentNumber = rework
-        ? displayName(
-              reworkFacts?.documentNumber,
-              item.businessObjectId,
-              item.workItemId,
-              instanceId,
-          )
-        : stripDocumentNumberPrefix(item.stableNumber)
+    const submittedDocumentNumber = displayName(
+        submission?.document_no,
+        item.businessObjectId,
+        item.workItemId,
+        instanceId,
+    )
+    const documentNumber =
+        submittedDocumentNumber ??
+        (rework ? undefined : stripDocumentNumberPrefix(item.stableNumber))
     const headerTitle = rework
         ? counterpartyName ||
           workspaceDocumentName(item.businessObjectType) ||
@@ -243,26 +248,91 @@ export function WorkspaceDocumentTaskDetail({
             ? facts.impact
             : item.impactSummary
     const detailFacts = splitDetailSections(summarySections, counterpartyName)
-    const [primaryAmount, ...otherAmounts] = detailFacts.amounts
-    const documentFields = [
-        ...(detailFacts.submitter
-            ? [{ label: "申请人", value: detailFacts.submitter }]
-            : []),
-        ...(salesSubmission
-            ? [
-                  {
-                      label: "开票要求",
-                      value: salesSubmission.invoice_type || "—",
-                  },
-                  {
-                      label: "收款到期日",
-                      value: salesSubmission.receivable_due_date || "—",
-                  },
-              ]
-            : []),
-        ...detailFacts.keyFields,
-        ...detailFacts.moreFields,
-    ]
+    const [primaryAmount, ...otherAmounts] = salesSubmission
+        ? [
+              { label: "含税金额", value: `¥${salesSubmission.gross_amount}` },
+              { label: "不含税金额", value: `¥${salesSubmission.net_amount}` },
+              { label: "税额", value: `¥${salesSubmission.tax_amount}` },
+          ]
+        : detailFacts.amounts
+    const submitter =
+        displayName(
+            submission?.display.source.submitter_name,
+            salesSubmission?.submitted_by,
+        ) ?? detailFacts.submitter
+    const applicantField = submitter
+        ? [{ label: "申请人", value: submitter }]
+        : []
+    const documentFields: readonly DetailSection[] = salesSubmission
+        ? [
+              {
+                  label: "客户",
+                  value:
+                      displayName(salesSubmission.customer_name) ??
+                      displayName(submission?.display.source.customer) ??
+                      "未记录客户名称",
+              },
+              {
+                  label: "结算主体",
+                  value:
+                      displayName(salesSubmission.settlement_party_name) ?? "—",
+              },
+              {
+                  label: "业务性质",
+                  value:
+                      salesSubmission.business_type === "VOUCHER"
+                          ? "卡券"
+                          : "实物与服务",
+              },
+              {
+                  label: "项目",
+                  value: displayName(salesSubmission.project_name) ?? "—",
+              },
+              {
+                  label: "合同",
+                  value: displayName(salesSubmission.contract_no) ?? "无合同",
+              },
+              {
+                  label: "付款条件",
+                  value: displayName(salesSubmission.payment_term_name) ?? "—",
+              },
+              { label: "开票要求", value: salesSubmission.invoice_type || "—" },
+              {
+                  label: "约定税点",
+                  value: approvalSalesTaxPoint(salesSubmission.tax_point),
+                  numeric: true,
+              },
+              {
+                  label: "收款到期日",
+                  value: salesSubmission.receivable_due_date || "—",
+              },
+              ...(salesSubmission.business_type === "VOUCHER"
+                  ? [
+                        {
+                            label: "卡券履约期限",
+                            value:
+                                salesSubmission.voucher_expiry_at == null
+                                    ? "—"
+                                    : new Date(
+                                          salesSubmission.voucher_expiry_at *
+                                              1000,
+                                      ).toLocaleDateString("zh-CN"),
+                        },
+                    ]
+                  : []),
+              ...applicantField,
+              {
+                  label: "提交时间",
+                  value:
+                      displayUnixSeconds(salesSubmission.submitted_at)?.label ??
+                      "—",
+              },
+          ]
+        : [
+              ...applicantField,
+              ...detailFacts.keyFields,
+              ...detailFacts.moreFields,
+          ]
     const visibleDocumentFields = documentFields.filter(
         ({ label }) =>
             !(
@@ -309,7 +379,6 @@ export function WorkspaceDocumentTaskDetail({
     ) : approvalTask && !trackingTask ? (
         <ApprovalActionBar
             presentation="workspace"
-            showInlineOpinion={!purchaseApproval}
             id={`workspace-task-detail-approval-${toAutomationIdSegment(item.workItemId)}`}
             allowedActions={item.allowedActions}
             recoveryOptions={recoveryQuery.data?.actions ?? []}
@@ -436,7 +505,7 @@ export function WorkspaceDocumentTaskDetail({
                                         {documentNumber}
                                     </span>
                                 ) : null,
-                                rework && submission
+                                submission && (rework || salesApproval)
                                     ? `提交版本 ${submission.subject_version}`
                                     : null,
                                 fullPage && showCurrentAssignee ? (
@@ -572,7 +641,8 @@ export function WorkspaceDocumentTaskDetail({
                         className="my-4"
                     />
                 ) : null}
-                {item.documentSummaryResolved &&
+                {!salesSubmission &&
+                item.documentSummaryResolved &&
                 !item.summarySections?.length &&
                 !item.briefLines?.length ? (
                     <p
@@ -705,7 +775,12 @@ export function WorkspaceDocumentTaskDetail({
                         {!receiptApproval &&
                         !deliveryBrief &&
                         visibleDocumentFields.length > 0 ? (
-                            <DetailBlock width="form">
+                            <DetailBlock
+                                title={
+                                    salesSubmission ? "销售单信息" : undefined
+                                }
+                                width={salesSubmission ? "full" : "form"}
+                            >
                                 <FieldGrid
                                     sections={visibleDocumentFields}
                                     returnTo={returnTo}

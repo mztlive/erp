@@ -142,6 +142,9 @@ export type ApprovalSalesSubmission = {
         sku_id: string | null
         spec_snapshot: string | null
         unit_snapshot: string | null
+        unit_name?: string
+        welfare_scenario?: string | null
+        pricing_mode?: "MANUAL" | "GIFT"
         quantity: string | null
         delivery_allocations?: {
             recipient: string

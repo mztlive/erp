@@ -5,6 +5,7 @@
 import { formatDateTime } from "@/lib/datetime"
 import { displayName } from "@/lib/display-name"
 
+import type { ApprovalSalesSubmission } from "./api/materials"
 import type { RecoveryOption } from "./types"
 
 /** 与 `StatusBadge` tone 对齐，审批状态同时用文字、图标和颜色。 */
@@ -100,6 +101,21 @@ export const displayReadableName = displayName
 
 /** 人员展示名。缺失时由调用方显示占位，不回退到人员标识。 */
 export const displayActorName = displayReadableName
+
+export function approvalSalesUnit(
+    line: ApprovalSalesSubmission["lines"][number],
+    isCard: boolean,
+): string | undefined {
+    return (
+        displayReadableName(line.unit_name ?? line.unit_snapshot) ||
+        (isCard ? "张" : undefined)
+    )
+}
+
+export function approvalSalesTaxPoint(value: string): string {
+    const point = value.trim()
+    return /^\d+(?:\.\d+)?$/.test(point) ? `${point}%` : point || "—"
+}
 
 /**
  * Unix 秒时间戳转本地时间。无效值不上屏。

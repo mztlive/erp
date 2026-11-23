@@ -10,11 +10,17 @@ import {
 } from "@/components/business"
 import { multiplyFixed } from "@/lib/fixed-decimal"
 import { displayBusinessText } from "@/lib/display-name"
+import { welfareScenarioLabel } from "@/lib/business-options"
 import type {
     ApprovalSalesSubmission,
     ApprovalSalesRevision,
 } from "../api/materials"
-import { displayActorName, displayReadableName } from "../display"
+import {
+    approvalSalesTaxPoint,
+    approvalSalesUnit,
+    displayActorName,
+    displayReadableName,
+} from "../display"
 import { fullDeliveryAddress } from "@/lib/delivery-address"
 
 const dateLabel = (value: number | null) =>
@@ -119,6 +125,11 @@ export function ApprovalSalesOrderPaper({
                         displayReadableName(submission.payment_term_name) ||
                         "未记录付款条件名称",
                 },
+                {
+                    id: "tax-point",
+                    label: "约定税点",
+                    value: approvalSalesTaxPoint(submission.tax_point),
+                },
                 ...(isCard
                     ? [
                           {
@@ -159,15 +170,30 @@ export function ApprovalSalesOrderPaper({
                                     )}
                                 </div>
                             )}
+                            {row.pricing_mode === "GIFT" && (
+                                <div className="mt-1 text-xs text-muted-foreground">
+                                    赠品
+                                </div>
+                            )}
+                            {row.welfare_scenario && (
+                                <div className="mt-1 text-xs text-muted-foreground">
+                                    {welfareScenarioLabel(row.welfare_scenario)}
+                                </div>
+                            )}
                             {row.delivery_allocations?.map(
                                 (allocation, index) => (
                                     <div
                                         key={index}
                                         className="mt-2 text-xs text-muted-foreground"
                                     >
-                                        {allocation.quantity}{" "}
-                                        {row.unit_snapshot} →{" "}
-                                        {allocation.recipient} ·{" "}
+                                        <QuantityValue
+                                            value={allocation.quantity}
+                                            unit={approvalSalesUnit(
+                                                row,
+                                                isCard,
+                                            )}
+                                        />{" "}
+                                        → {allocation.recipient} ·{" "}
                                         {allocation.phone}
                                         <br />
                                         {fullDeliveryAddress(allocation)}
@@ -184,10 +210,18 @@ export function ApprovalSalesOrderPaper({
                     cell: (row) => (
                         <QuantityValue
                             value={row.quantity ?? String(row.card_count ?? 0)}
-                            unit={
-                                displayReadableName(row.unit_snapshot) ||
-                                (isCard ? "张" : undefined)
-                            }
+                            unit={approvalSalesUnit(row, isCard)}
+                        />
+                    ),
+                },
+                {
+                    id: "price",
+                    header: "含税单价",
+                    align: "end",
+                    cell: (row) => (
+                        <MoneyValue
+                            display="exact"
+                            value={row.unit_price_gross}
                         />
                     ),
                 },
@@ -224,22 +258,6 @@ export function ApprovalSalesOrderPaper({
                       ]
                     : [
                           {
-                              id: "price",
-                              header: "含税单价",
-                              align: "end" as const,
-                              cell: (
-                                  row: ApprovalSalesSubmission["lines"][number],
-                              ) =>
-                                  row.unit_price_gross ? (
-                                      <MoneyValue
-                                          display="exact"
-                                          value={row.unit_price_gross}
-                                      />
-                                  ) : (
-                                      "—"
-                                  ),
-                          },
-                          {
                               id: "supply-price",
                               header: "采购供给价",
                               align: "end" as const,
@@ -249,6 +267,7 @@ export function ApprovalSalesOrderPaper({
                                   <SalesLinePriceComparison
                                       prices={row}
                                       showSalesPrice={false}
+                                      unit={approvalSalesUnit(row, isCard)}
                                   />
                               ),
                           },
@@ -288,7 +307,19 @@ export function ApprovalSalesOrderPaper({
                     header: "含税金额",
                     align: "end",
                     cell: (row) => (
-                        <MoneyValue display="exact" value={row.gross_amount} />
+                        <div>
+                            <MoneyValue
+                                display="exact"
+                                value={row.gross_amount}
+                            />
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                不含税{" "}
+                                <MoneyValue
+                                    display="exact"
+                                    value={row.net_amount}
+                                />
+                            </p>
+                        </div>
                     ),
                 },
             ]}

@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, type ReactNode } from "react"
-import { FileTextIcon } from "lucide-react"
+import { useState } from "react"
+import { FileTextIcon, PaperclipIcon } from "lucide-react"
 import {
     BusinessFailureState,
     MoneyValue,
@@ -38,8 +38,12 @@ import {
 } from "@/components/ui/dialog"
 import type { ApprovalSalesSubmission } from "@/features/approval-workflow/api/materials"
 import { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-approval-materials"
-import { displayReadableName } from "@/features/approval-workflow/display"
+import {
+    approvalSalesUnit,
+    displayReadableName,
+} from "@/features/approval-workflow/display"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { welfareScenarioLabel } from "@/lib/business-options"
 import { fullDeliveryAddress } from "@/lib/delivery-address"
 import { displayBusinessText } from "@/lib/display-name"
 import { multiplyFixed } from "@/lib/fixed-decimal"
@@ -72,23 +76,45 @@ export function WorkspaceSalesApproval({
             ariaLabel="销售明细"
             className="@container/sales-lines"
             actions={
-                <Button
-                    id={`${prefix}-preview`}
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className={detailWorkspaceStyles.subtleButton}
-                    onClick={() =>
-                        onPreview({
-                            kind: "approval_snapshot",
-                            objectId: instanceId,
-                            title: query.data?.document_no,
-                        })
-                    }
-                >
-                    <FileTextIcon aria-hidden="true" />
-                    预览完整销售单
-                </Button>
+                <>
+                    {!!query.data?.attachments.length && (
+                        <Button
+                            id={`${prefix}-attachments`}
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className={detailWorkspaceStyles.subtleButton}
+                            onClick={() =>
+                                onPreview({
+                                    kind: "approval_snapshot",
+                                    objectId: instanceId,
+                                    title: query.data?.document_no,
+                                    materialsView: "attachments",
+                                })
+                            }
+                        >
+                            <PaperclipIcon aria-hidden="true" />
+                            查看合同、凭证及附件
+                        </Button>
+                    )}
+                    <Button
+                        id={`${prefix}-preview`}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={detailWorkspaceStyles.subtleButton}
+                        onClick={() =>
+                            onPreview({
+                                kind: "approval_snapshot",
+                                objectId: instanceId,
+                                title: query.data?.document_no,
+                            })
+                        }
+                    >
+                        <FileTextIcon aria-hidden="true" />
+                        预览完整销售单
+                    </Button>
+                </>
             }
         >
             {query.isPending ? (
@@ -133,7 +159,7 @@ export function WorkspaceSalesApproval({
                                         <TableHead className="text-right">
                                             {submission.business_type ===
                                             "VOUCHER"
-                                                ? "面额 / 形态"
+                                                ? "含税单价 / 面额"
                                                 : "含税单价"}
                                         </TableHead>
                                         {submission.business_type !==
@@ -180,24 +206,16 @@ export function WorkspaceSalesApproval({
                             本次提交没有销售明细。
                         </p>
                     )}
-                    {submission.business_type === "VOUCHER" ||
-                    submission.business_remark ? (
-                        <dl className="grid grid-cols-2 gap-4 border-t border-grid pt-4 @min-[640px]/sales-lines:grid-cols-3">
-                            {submission.business_type === "VOUCHER" && (
-                                <Fact label="卡券履约期限">
-                                    {dateLabel(submission.voucher_expiry_at)}
-                                </Fact>
-                            )}
-                            {submission.business_remark && (
-                                <DescriptionItem className="col-span-full">
-                                    <DescriptionTerm>业务备注</DescriptionTerm>
-                                    <DescriptionDetails className="whitespace-pre-wrap wrap-anywhere">
-                                        {submission.business_remark}
-                                    </DescriptionDetails>
-                                </DescriptionItem>
-                            )}
+                    {submission.business_remark && (
+                        <dl className="border-t border-grid pt-4">
+                            <DescriptionItem>
+                                <DescriptionTerm>业务备注</DescriptionTerm>
+                                <DescriptionDetails className="whitespace-pre-wrap wrap-anywhere">
+                                    {submission.business_remark}
+                                </DescriptionDetails>
+                            </DescriptionItem>
                         </dl>
-                    ) : null}
+                    )}
                 </>
             )}
         </DetailWorkspaceSection>
@@ -215,8 +233,7 @@ function SalesLine({
     isCard: boolean
     idPrefix: string
 }) {
-    const unit =
-        displayReadableName(line.unit_snapshot) || (isCard ? "张" : undefined)
+    const unit = approvalSalesUnit(line, isCard)
     const spec = displayBusinessText(line.spec_snapshot, line.sku_id)
     const quantity =
         line.quantity ??
@@ -224,6 +241,7 @@ function SalesLine({
     const name =
         displayReadableName(line.item_name_snapshot, line.sku_id) ||
         "未记录商品名称"
+    const welfareScenario = welfareScenarioLabel(line.welfare_scenario ?? "")
     return (
         <TableRow>
             <TableCell className="num text-muted-foreground">
@@ -236,6 +254,14 @@ function SalesLine({
                         {spec}
                     </p>
                 )}
+                {line.pricing_mode === "GIFT" && (
+                    <p className="mt-1 text-xs text-muted-foreground">赠品</p>
+                )}
+                {welfareScenario && (
+                    <p className="mt-1 text-xs text-muted-foreground wrap-anywhere">
+                        {welfareScenario}
+                    </p>
+                )}
             </TableCell>
             <TableCell className="text-right">
                 {quantity == null ? (
@@ -245,18 +271,24 @@ function SalesLine({
                 )}
             </TableCell>
             <TableCell className="text-right">
-                <MoneyValue
-                    display="exact"
-                    value={isCard ? line.face_value : line.unit_price_gross}
-                />
+                <MoneyValue display="exact" value={line.unit_price_gross} />
                 {isCard && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        {line.card_form === "PHYSICAL"
-                            ? "实体卡"
-                            : line.card_form === "ELECTRONIC"
-                              ? "电子券"
-                              : "—"}
-                    </p>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                        <p>
+                            面额{" "}
+                            <MoneyValue
+                                display="exact"
+                                value={line.face_value}
+                            />
+                        </p>
+                        <p>
+                            {line.card_form === "PHYSICAL"
+                                ? "实体卡"
+                                : line.card_form === "ELECTRONIC"
+                                  ? "电子券"
+                                  : "—"}
+                        </p>
+                    </div>
                 )}
             </TableCell>
             {!isCard && (
@@ -460,14 +492,5 @@ function DeliveryAllocations({
                 </DialogFooter>
             </DialogContent>
         </Dialog>
-    )
-}
-
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-    return (
-        <DescriptionItem>
-            <DescriptionTerm>{label}</DescriptionTerm>
-            <DescriptionDetails>{children}</DescriptionDetails>
-        </DescriptionItem>
     )
 }

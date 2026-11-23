@@ -1,10 +1,12 @@
 //! 审批实例授权后读取冻结提交，另列开票当前销售依据和采购最新供应商评估。
 
+use std::collections::{HashMap, HashSet};
 use std::slice;
 
 use application_core::AuditActor;
+use erp_catalog::repository::CatalogExt;
 use erp_core::ids::{SalesOrderId, SalesOrderSubmissionId};
-use erp_sales::dto::sales_order::SubmissionView;
+use erp_sales::dto::sales_order::{SalesOrderWorkingCopyLineView, SubmissionView};
 use erp_sales::entity::sales_order::BusinessType;
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
@@ -205,9 +207,42 @@ async fn sales_submission(
 
     lines.sort_by_key(|line| line.line_no);
     let mut view = submission_view(submission, lines);
+    enrich_unit_names(db, &mut view.lines, executor).await?;
     enrich_line_prices(db, &mut view.lines, executor).await?;
     enrich_inquiry_prices(db, &mut view.lines, slice::from_ref(&materials.document_id), executor).await?;
     Ok(view)
+}
+
+// 用本次销售提交的单位代码批量补齐展示名称，保留原快照与基础单位数量。
+async fn enrich_unit_names(
+    db: &Database,
+    lines: &mut [SalesOrderWorkingCopyLineView],
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let codes = lines
+        .iter()
+        .filter_map(|line| {
+            unit_code_for_display(line.unit_snapshot.as_deref(), line.base_unit_code.as_deref())
+        })
+        .collect::<HashSet<_>>();
+    if codes.is_empty() {
+        return Ok(());
+    }
+
+    let units =
+        db.catalog().historical_units_by_codes(&codes.into_iter().collect::<Vec<_>>(), executor).await?;
+    let names = units.into_iter().map(|unit| (unit.unit_code, unit.name)).collect::<HashMap<_, _>>();
+    for line in lines {
+        line.unit_name = unit_code_for_display(line.unit_snapshot.as_deref(), line.base_unit_code.as_deref())
+            .and_then(|code| names.get(code).cloned());
+    }
+    Ok(())
+}
+
+fn unit_code_for_display<'a>(snapshot: Option<&str>, code: Option<&'a str>) -> Option<&'a str> {
+    let code = code?.trim();
+    let snapshot = snapshot.unwrap_or_default().trim();
+    (!code.is_empty() && (snapshot.is_empty() || snapshot == code)).then_some(code)
 }
 
 // 处理销售审批材料的版本事实时，完整预览必须与已授权资料的单据、提交版本、业务类型及冻结总行数一致。
@@ -340,6 +375,15 @@ mod tests {
         assert!(validate_submission(&materials, "sales-1", 2, BusinessType::GoodsService, 19).is_ok());
         assert!(validate_submission(&materials, "sales-1", 2, BusinessType::GoodsService, 3).is_err());
         assert!(validate_submission(&materials, "sales-1", 2, BusinessType::GoodsService, 0).is_err());
+    }
+
+    #[test]
+    fn unit_name_lookup_preserves_labels_and_uses_frozen_codes() {
+        assert_eq!(unit_code_for_display(Some("J"), Some("J")), Some("J"));
+        assert_eq!(unit_code_for_display(None, Some("T")), Some("T"));
+        assert_eq!(unit_code_for_display(Some("盒"), Some("BOX")), None);
+        assert_eq!(unit_code_for_display(Some("张"), None), None);
+        assert_eq!(unit_code_for_display(None, Some(" ")), None);
     }
 
     #[test]

@@ -20,6 +20,19 @@ impl CatalogRepository<'_> {
         Ok(self.db.unit_of_measures().find_one_by_field("unit_code", code, executor).await?)
     }
 
+    /// 按稳定代码批量读取历史单据引用的单位，包含停用及软删除记录，结果不按输入顺序补位。
+    pub async fn historical_units_by_codes(
+        &self,
+        codes: &[&str],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<UnitOfMeasure>> {
+        Ok(self
+            .db
+            .unit_of_measures()
+            .find_many_by_field_including_deleted("unit_code", doc! { "$in": codes }, executor)
+            .await?)
+    }
+
     /// 查找来源单位对应的全部候选，保留停用和删除记录以拒绝重复建档。至多两个候选；两个即足以确定歧义。
     ///
     /// `name` 为单位文本，`executor` 为调用方执行器。

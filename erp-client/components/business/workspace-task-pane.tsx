@@ -39,7 +39,6 @@ const WorkspaceTaskPageContext = createContext<WorkspaceTaskPageLayout | null>(
 const WorkspaceTaskSlotsContext = createContext<{
     summary: HTMLElement | null
     aside: HTMLElement | null
-    bodyEnd: HTMLElement | null
 } | null>(null)
 
 /** 完整办理页布局仅由工作台入口启用，不改变其他嵌入式消费者。 */
@@ -63,7 +62,7 @@ export function WorkspaceTaskPageSlot({
     slot,
     children,
 }: {
-    slot: "summary" | "aside" | "bodyEnd"
+    slot: "summary" | "aside"
     children: ReactNode
 }) {
     const hosts = useContext(WorkspaceTaskSlotsContext)
@@ -98,14 +97,12 @@ export function WorkspaceTaskPane({
     const layout = parentPane ? null : pageLayout
     const [summaryHost, setSummaryHost] = useState<HTMLElement | null>(null)
     const [asideHost, setAsideHost] = useState<HTMLElement | null>(null)
-    const [bodyEndHost, setBodyEndHost] = useState<HTMLElement | null>(null)
     const slots = useMemo(
         () => ({
             summary: summaryHost,
             aside: asideHost,
-            bodyEnd: bodyEndHost,
         }),
-        [summaryHost, asideHost, bodyEndHost],
+        [summaryHost, asideHost],
     )
     const [footerHost, setFooterHost] = useState<HTMLElement | null>(null)
     const [footerSummaryHost, setFooterSummaryHost] =
@@ -259,10 +256,6 @@ export function WorkspaceTaskPane({
                                 )}
                             >
                                 {children}
-                                <div
-                                    ref={setBodyEndHost}
-                                    className="px-5 pb-6 empty:hidden sm:px-7"
-                                />
                             </div>
                             {layout &&
                                 !layout.fullWidth &&

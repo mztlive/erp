@@ -54,6 +54,7 @@ impl SalesOrderWorkingCopyLineView {
             item_name_snapshot: line.item_name_snapshot.clone(),
             spec_snapshot: line.spec_snapshot.clone(),
             unit_snapshot: line.unit_snapshot.clone(),
+            unit_name: None,
             sku_id: None,
             sku_revision_id: None,
             welfare_scenario: None,

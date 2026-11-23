@@ -615,6 +615,9 @@ pub struct SalesOrderWorkingCopyLineView {
     pub spec_snapshot: Option<String>,
     /// 单位快照。
     pub unit_snapshot: Option<String>,
+    /// 历史快照只保存单位代码时，授权读取补齐的单位名称。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unit_name: Option<String>,
     /// 正式销售项 SKU。
     pub sku_id: Option<SkuId>,
     /// 下单锁定的精确 SKU 修订。

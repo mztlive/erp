@@ -35,6 +35,7 @@ macro_rules! stored_line_view {
                         item_name_snapshot: line.item_name_snapshot,
                         spec_snapshot: line.spec_snapshot,
                         unit_snapshot: line.unit_snapshot,
+                        unit_name: None,
                         sku_id: line.sku_id,
                         sku_revision_id: line.sku_revision_id,
                         welfare_scenario: line.welfare_scenario,
