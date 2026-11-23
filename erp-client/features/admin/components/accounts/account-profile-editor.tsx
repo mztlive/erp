@@ -1,14 +1,18 @@
 "use client"
 
-import { useOrganizationStateQuery } from "@/features/organization/hooks/queries"
-
 import * as React from "react"
 import { useStore } from "@tanstack/react-form"
+import { InfoIcon, XIcon } from "lucide-react"
 import { z } from "zod"
+
+import {
+    BusinessDiffPanel,
+    BusinessFailureState,
+    DetailWorkspaceDirtyBadge,
+    DiscardConfirmDialog,
+} from "@/components/business"
 import { useAppForm } from "@/components/form"
-import { Field, FieldLabel } from "@/components/ui/field"
-import type { RoleOption } from "../../hooks/use-role-filter"
-import { RoleOptionsPanel } from "./role-options-panel"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -18,35 +22,33 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { LoadingButton } from "@/components/ui/loading-button"
+import { RequiredMark } from "@/components/ui/required-mark"
 import {
-    BusinessDiffPanel,
-    BusinessFailureState,
-    DetailWorkspaceDirtyBadge,
-    DiscardConfirmDialog,
-} from "@/components/business"
-import { XIcon } from "lucide-react"
-import { toAutomationIdSegment } from "@/lib/automation-id"
-import { roleCapabilitySummary } from "../../lib/role-summary"
-import { getErrorMessage } from "@/lib/api/errors"
-import { useAdminMutations } from "../../hooks/queries"
-import {
+    useOrganizationStateQuery,
     usePreviewOrganizationChangeMutation,
     useSubmitOrganizationChangeMutation,
 } from "@/features/organization/hooks/queries"
-import { unitLabel } from "@/features/organization/lib/tree"
 import { impactChanges } from "@/features/organization/lib/impact"
+import { unitLabel } from "@/features/organization/lib/tree"
 import type {
     OrganizationChangeReceipt,
     OrganizationChangeRequest,
     OrganizationStateView,
 } from "@/features/organization/types"
+import { getErrorMessage } from "@/lib/api/errors"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import { useAdminMutations } from "../../hooks/queries"
+import type { RoleOption } from "../../hooks/use-role-filter"
 import type { AdminAccount } from "../../types"
+import { RoleOptionsPanel } from "./role-options-panel"
 
 export type AccountProfileSnapshot = {
     account: AdminAccount
     view: OrganizationStateView | undefined
 }
+
 const schema = z.object({
     name: z.string().trim().min(1, "请输入姓名").max(64, "姓名最多64字"),
     roleIds: z.array(z.string()),
@@ -54,6 +56,7 @@ const schema = z.object({
     reason: z.string().max(1000),
 })
 type Values = z.infer<typeof schema>
+
 const sameRoles = (left: readonly string[], right: readonly string[]) =>
     JSON.stringify([...left].sort()) === JSON.stringify([...right].sort())
 
@@ -85,7 +88,7 @@ export function AccountProfileEditor({
 }) {
     const directory = useOrganizationStateQuery(false)
     const { account, view } = snapshot
-    const person = view?.people.find((person) => person.id === account.id)
+    const person = view?.people.find((item) => item.id === account.id)
     const preview = usePreviewOrganizationChangeMutation()
     const submit = useSubmitOrganizationChangeMutation()
     const admin = useAdminMutations()
@@ -96,6 +99,7 @@ export function AccountProfileEditor({
     const [error, setError] = React.useState<string | null>(null)
     const [completed, setCompleted] = React.useState(false)
     const pending = preview.isPending || submit.isPending || admin.isUpdating
+
     const build = (value: Values): OrganizationChangeRequest => ({
         expected_version: view!.organizationVersion,
         idempotency_key: key,
@@ -120,6 +124,7 @@ export function AccountProfileEditor({
             },
         },
     })
+
     const form = useAppForm({
         defaultValues: {
             name: account.name,
@@ -199,6 +204,7 @@ export function AccountProfileEditor({
             }
         },
     })
+
     const values = useStore(form.store, (state) => state.values)
     const changed =
         !sameRoles(values.roleIds, account.role_ids) ||
@@ -206,6 +212,7 @@ export function AccountProfileEditor({
         values.unitId !== (person?.own_org_unit_id ?? "")
     const confirmed =
         receipt && view && previewed === JSON.stringify(build(values))
+
     const confirmRef = React.useRef<HTMLDivElement>(null)
     React.useEffect(() => {
         if (!confirmed) return
@@ -214,6 +221,7 @@ export function AccountProfileEditor({
             behavior: "smooth",
         })
     }, [confirmed])
+
     const [discardOpen, setDiscardOpen] = React.useState(false)
     const close = () => {
         if (pending) return
@@ -223,6 +231,7 @@ export function AccountProfileEditor({
         }
         setDiscardOpen(true)
     }
+
     React.useEffect(() => {
         if (!changed || completed) return
         const unload = (event: BeforeUnloadEvent) => {
@@ -257,10 +266,12 @@ export function AccountProfileEditor({
             document.removeEventListener("click", links, true)
         }
     }, [changed, completed])
+
     const unitOptions =
         (directory.data?.units ?? view?.units)
             ?.filter((unit) => unit.enabled)
             .map((unit) => ({ value: unit.id, label: unit.name })) ?? []
+
     const roleOptions = React.useMemo(
         () => [
             ...assignableRoles,
@@ -277,6 +288,15 @@ export function AccountProfileEditor({
         ],
         [account.role_ids, assignableRoles, roleLabels],
     )
+
+    const footerHint = !changed
+        ? "修改任意内容后可保存"
+        : confirmed
+          ? "请核对上方修改内容，确认后生效"
+          : canOrganization
+            ? "点击「保存」先预览变更影响"
+            : undefined
+
     return (
         <>
             <Dialog
@@ -288,21 +308,26 @@ export function AccountProfileEditor({
                 <DialogContent
                     closeButtonId="account-profile-close"
                     showCloseButton={!pending}
-                    className="flex max-h-[90dvh] flex-col gap-5 overflow-hidden sm:max-w-3xl"
+                    className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl"
                 >
-                    <DialogHeader className="shrink-0 pr-8">
+                    <DialogHeader className="shrink-0 border-b border-border/70 px-5 py-4 pr-14">
                         <div className="flex flex-wrap items-center gap-2">
                             <DialogTitle>编辑账号资料</DialogTitle>
                             {changed && !completed ? (
                                 <DetailWorkspaceDirtyBadge label="有未保存的修改" />
                             ) : null}
                         </div>
-                        <DialogDescription>
-                            姓名、所属部门和角色统一保存后生效；修改密码请在“账号安全”中单独操作。
+                        <DialogDescription className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                            <span className="num font-medium text-foreground/80">
+                                {account.account}
+                            </span>
+                            <span aria-hidden="true">·</span>
+                            <span>姓名、所属部门与角色统一保存后生效</span>
                         </DialogDescription>
                     </DialogHeader>
+
                     <form
-                        className="flex min-h-0 flex-col gap-4"
+                        className="flex min-h-0 flex-1 flex-col"
                         onSubmit={(event) => {
                             event.preventDefault()
                             void form.handleSubmit()
@@ -310,339 +335,326 @@ export function AccountProfileEditor({
                     >
                         <fieldset
                             disabled={pending}
-                            className="min-h-0 space-y-5 overflow-y-auto pr-1"
+                            className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4"
                         >
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                {canName && (
-                                    <form.AppField name="name">
-                                        {(field) => (
-                                            <field.TextField
-                                                id="account-profile-name"
-                                                label="姓名"
-                                                required
-                                            />
-                                        )}
-                                    </form.AppField>
-                                )}
-                                <Field>
-                                    <FieldLabel>登录账号</FieldLabel>
-                                    <div className="flex h-control items-center gap-2 rounded-lg border border-input bg-muted/35 px-3 text-body-compact">
-                                        <span className="min-w-0 truncate text-muted-foreground">
-                                            {account.account}
-                                        </span>
-                                        <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                                            不可修改
-                                        </span>
-                                    </div>
-                                </Field>
-                                {canOrganization && (
-                                    <form.AppField name="unitId">
-                                        {(field) => (
-                                            <field.SelectField
-                                                id="account-profile-department"
-                                                label="所属部门"
-                                                className="sm:col-span-2"
-                                                options={unitOptions}
-                                                onRefresh={() =>
-                                                    directory.refetch({
-                                                        throwOnError: true,
-                                                    })
-                                                }
-                                                allowClear={false}
-                                                placeholder={
-                                                    person?.own_org_unit_id
-                                                        ? unitLabel(
-                                                              view?.units ?? [],
-                                                              person.own_org_unit_id,
-                                                          )
-                                                        : "未分配部门"
-                                                }
-                                            />
-                                        )}
-                                    </form.AppField>
-                                )}
-                            </div>
-                            {canEditRoles && (
-                                <div className="space-y-3 border-t border-border/70 pt-4">
-                                    <div className="space-y-1">
-                                        <h3
-                                            id="account-profile-roles-label"
-                                            className="text-xs font-medium text-muted-foreground"
-                                        >
-                                            角色
-                                        </h3>
-                                        <p className="text-xs text-muted-foreground">
-                                            角色决定可以执行哪些操作；可处理哪些数据在“数据范围”中设置。
-                                        </p>
-                                    </div>
-                                    <form.AppField name="roleIds" mode="array">
-                                        {(field) => (
-                                            <div className="grid gap-3 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:items-start">
-                                                <div className="space-y-2">
-                                                    <RoleOptionsPanel
-                                                        id="account-profile-roles"
-                                                        options={roleOptions}
-                                                        selected={
-                                                            field.state.value
-                                                        }
-                                                        disabled={!rolesReady}
-                                                        invalid={
-                                                            field.state.meta
-                                                                .isTouched &&
-                                                            !field.state.value
-                                                                .length
-                                                        }
-                                                        onToggle={(
-                                                            roleId,
-                                                            checked,
-                                                        ) => {
-                                                            field.handleChange(
-                                                                checked
-                                                                    ? [
-                                                                          ...field
-                                                                              .state
-                                                                              .value,
-                                                                          roleId,
-                                                                      ]
-                                                                    : field.state.value.filter(
-                                                                          (
-                                                                              id,
-                                                                          ) =>
-                                                                              id !==
-                                                                              roleId,
-                                                                      ),
-                                                            )
-                                                            field.handleBlur()
-                                                        }}
-                                                    />
-                                                    {roleOptionsError !==
-                                                    undefined ? (
-                                                        <BusinessFailureState
-                                                            id="account-profile-role-options-retry"
-                                                            error={
-                                                                roleOptionsError
-                                                            }
-                                                            onRetry={
-                                                                onRetryRoleOptions
-                                                            }
-                                                        />
-                                                    ) : !rolesReady ? (
-                                                        <p
-                                                            role="status"
-                                                            className="text-xs text-muted-foreground"
-                                                        >
-                                                            角色选项尚未就绪，暂不能调整角色。
-                                                        </p>
-                                                    ) : null}
-                                                    {!field.state.value
-                                                        .length ? (
-                                                        <p
-                                                            role="alert"
-                                                            className="text-xs text-destructive"
-                                                        >
-                                                            至少选择一个角色。
-                                                        </p>
-                                                    ) : null}
-                                                </div>
-                                                <div className="space-y-2 rounded-lg border border-border/70 bg-surface-sunken/70 p-3">
-                                                    <div className="flex items-center justify-between gap-2 text-xs">
-                                                        <span className="font-medium text-muted-foreground">
-                                                            已选角色
-                                                        </span>
-                                                        <span className="num text-muted-foreground">
-                                                            {
-                                                                field.state
-                                                                    .value
-                                                                    .length
-                                                            }{" "}
-                                                            个
-                                                        </span>
-                                                    </div>
-                                                    {field.state.value.length >
-                                                    0 ? (
-                                                        <ul className="space-y-1.5">
-                                                            {field.state.value.map(
-                                                                (roleId) => {
-                                                                    const matched =
-                                                                        roleOptions.find(
-                                                                            (
-                                                                                role,
-                                                                            ) =>
-                                                                                role.id ===
-                                                                                roleId,
-                                                                        )
-                                                                    const label =
-                                                                        matched?.name ??
-                                                                        "角色信息待确认"
-                                                                    return (
-                                                                        <li
-                                                                            key={
-                                                                                roleId
-                                                                            }
-                                                                            className="flex items-start justify-between gap-2 rounded-md bg-card px-2.5 py-1.5 text-xs"
-                                                                        >
-                                                                            <div className="min-w-0 space-y-0.5">
-                                                                                <p className="truncate font-medium text-foreground">
-                                                                                    {
-                                                                                        label
-                                                                                    }
-                                                                                </p>
-                                                                                <p className="truncate text-muted-foreground">
-                                                                                    {roleCapabilitySummary(
-                                                                                        matched?.permissions,
-                                                                                    )}
-                                                                                </p>
-                                                                            </div>
-                                                                            <button
-                                                                                id={`account-profile-role-remove-${toAutomationIdSegment(roleId)}`}
-                                                                                type="button"
-                                                                                disabled={
-                                                                                    !rolesReady
-                                                                                }
-                                                                                aria-label={`移除角色 ${label}`}
-                                                                                onClick={() => {
-                                                                                    field.handleChange(
-                                                                                        field.state.value.filter(
-                                                                                            (
-                                                                                                id,
-                                                                                            ) =>
-                                                                                                id !==
-                                                                                                roleId,
-                                                                                        ),
-                                                                                    )
-                                                                                    field.handleBlur()
-                                                                                }}
-                                                                                className="mt-0.5 shrink-0 cursor-pointer rounded-sm p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-default disabled:opacity-50"
-                                                                            >
-                                                                                <XIcon
-                                                                                    className="size-3.5"
-                                                                                    aria-hidden="true"
-                                                                                />
-                                                                            </button>
-                                                                        </li>
-                                                                    )
-                                                                },
-                                                            )}
-                                                        </ul>
-                                                    ) : (
-                                                        <p className="text-xs text-muted-foreground">
-                                                            尚未选择任何角色。
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </form.AppField>
-                                </div>
-                            )}
-                            {canOrganization ? (
-                                <div className="border-t border-border/70 pt-4">
-                                    <form.AppField name="reason">
-                                        {(field) => (
-                                            <field.TextareaField
-                                                id="account-profile-reason"
-                                                label="变更原因"
-                                                description="组织类变更需要记录原因，保存前会展示影响预览。"
-                                                required
-                                                rows={2}
-                                            />
-                                        )}
-                                    </form.AppField>
+                            {canName || canOrganization ? (
+                                <div className="grid gap-4 sm:grid-cols-2">
+                                    {canName ? (
+                                        <form.AppField name="name">
+                                            {(field) => (
+                                                <field.TextField
+                                                    id="account-profile-name"
+                                                    label="姓名"
+                                                    required
+                                                />
+                                            )}
+                                        </form.AppField>
+                                    ) : null}
+                                    {canOrganization ? (
+                                        <form.AppField name="unitId">
+                                            {(field) => (
+                                                <field.SelectField
+                                                    id="account-profile-department"
+                                                    label="所属部门"
+                                                    className={
+                                                        canName
+                                                            ? undefined
+                                                            : "sm:col-span-2"
+                                                    }
+                                                    options={unitOptions}
+                                                    onRefresh={() =>
+                                                        directory.refetch({
+                                                            throwOnError: true,
+                                                        })
+                                                    }
+                                                    allowClear={false}
+                                                    placeholder={
+                                                        person?.own_org_unit_id
+                                                            ? unitLabel(
+                                                                  view?.units ??
+                                                                      [],
+                                                                  person.own_org_unit_id,
+                                                              )
+                                                            : "未分配部门"
+                                                    }
+                                                />
+                                            )}
+                                        </form.AppField>
+                                    ) : null}
                                 </div>
                             ) : null}
+
+                            {canEditRoles ? (
+                                <form.AppField name="roleIds" mode="array">
+                                    {(field) => {
+                                        const isInvalid =
+                                            field.state.meta.isTouched &&
+                                            !field.state.value.length
+                                        return (
+                                            <Field
+                                                data-invalid={
+                                                    isInvalid || undefined
+                                                }
+                                            >
+                                                <FieldLabel
+                                                    id="account-profile-roles-label"
+                                                    htmlFor="account-profile-roles-trigger"
+                                                >
+                                                    角色
+                                                    <RequiredMark />
+                                                </FieldLabel>
+                                                <RoleOptionsPanel
+                                                    id="account-profile-roles"
+                                                    options={roleOptions}
+                                                    selected={field.state.value}
+                                                    disabled={!rolesReady}
+                                                    invalid={isInvalid}
+                                                    onToggle={(
+                                                        roleId,
+                                                        checked,
+                                                    ) => {
+                                                        field.handleChange(
+                                                            checked
+                                                                ? [
+                                                                      ...field
+                                                                          .state
+                                                                          .value,
+                                                                      roleId,
+                                                                  ]
+                                                                : field.state.value.filter(
+                                                                      (id) =>
+                                                                          id !==
+                                                                          roleId,
+                                                                  ),
+                                                        )
+                                                        field.handleBlur()
+                                                    }}
+                                                />
+                                                {field.state.value.length >
+                                                0 ? (
+                                                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                                        {field.state.value.map(
+                                                            (roleId) => {
+                                                                const matched =
+                                                                    roleOptions.find(
+                                                                        (
+                                                                            role,
+                                                                        ) =>
+                                                                            role.id ===
+                                                                            roleId,
+                                                                    )
+                                                                const label =
+                                                                    matched?.name ??
+                                                                    "角色信息待确认"
+                                                                return (
+                                                                    <span
+                                                                        key={
+                                                                            roleId
+                                                                        }
+                                                                        className="inline-flex max-w-full items-center gap-1 rounded-md bg-muted/75 py-0.5 pr-1 pl-2 text-xs text-foreground"
+                                                                    >
+                                                                        <span className="truncate">
+                                                                            {
+                                                                                label
+                                                                            }
+                                                                        </span>
+                                                                        <button
+                                                                            id={`account-profile-role-remove-${toAutomationIdSegment(roleId)}`}
+                                                                            type="button"
+                                                                            disabled={
+                                                                                !rolesReady
+                                                                            }
+                                                                            aria-label={`移除角色 ${label}`}
+                                                                            onClick={() => {
+                                                                                field.handleChange(
+                                                                                    field.state.value.filter(
+                                                                                        (
+                                                                                            id,
+                                                                                        ) =>
+                                                                                            id !==
+                                                                                            roleId,
+                                                                                    ),
+                                                                                )
+                                                                                field.handleBlur()
+                                                                            }}
+                                                                            className="inline-flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-xs text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-default disabled:opacity-50"
+                                                                        >
+                                                                            <XIcon
+                                                                                className="size-3"
+                                                                                aria-hidden="true"
+                                                                            />
+                                                                        </button>
+                                                                    </span>
+                                                                )
+                                                            },
+                                                        )}
+                                                    </div>
+                                                ) : null}
+                                                <FieldDescription>
+                                                    角色决定可执行的功能操作；数据范围在「数据范围」页签中设置。
+                                                </FieldDescription>
+                                                {roleOptionsError !==
+                                                undefined ? (
+                                                    <BusinessFailureState
+                                                        id="account-profile-role-options-retry"
+                                                        error={roleOptionsError}
+                                                        onRetry={
+                                                            onRetryRoleOptions
+                                                        }
+                                                    />
+                                                ) : !rolesReady ? (
+                                                    <p
+                                                        role="status"
+                                                        className="text-xs text-muted-foreground"
+                                                    >
+                                                        角色选项尚未就绪，暂不能调整角色。
+                                                    </p>
+                                                ) : null}
+                                                {!field.state.value.length ? (
+                                                    <p
+                                                        role="alert"
+                                                        className="text-xs text-destructive"
+                                                    >
+                                                        至少选择一个角色。
+                                                    </p>
+                                                ) : null}
+                                            </Field>
+                                        )
+                                    }}
+                                </form.AppField>
+                            ) : null}
+
+                            {canOrganization ? (
+                                <form.AppField name="reason">
+                                    {(field) => (
+                                        <field.TextareaField
+                                            id="account-profile-reason"
+                                            label="变更原因"
+                                            placeholder="如：岗位调整、职责变更"
+                                            description="组织类变更需记录原因，保存前会先展示影响预览。"
+                                            required
+                                            rows={2}
+                                        />
+                                    )}
+                                </form.AppField>
+                            ) : null}
+
                             {confirmed ? (
                                 <div
                                     ref={confirmRef}
-                                    className="space-y-2 rounded-xl border border-border/70 bg-muted/30 p-4"
+                                    className="space-y-2.5 rounded-lg border border-info-border/80 bg-info-soft/45 p-3.5"
                                 >
-                                    <p className="font-medium">
-                                        请确认本次修改
-                                    </p>
-                                    {!sameRoles(
-                                        values.roleIds,
-                                        account.role_ids,
-                                    ) && (
-                                        <p>
-                                            角色：
-                                            {account.role_ids
-                                                .map(
-                                                    (id) =>
-                                                        roleLabels.find(
-                                                            (role) =>
-                                                                role.id === id,
-                                                        )?.name ??
-                                                        "角色信息待确认",
-                                                )
-                                                .join("、") || "未分配"}{" "}
-                                            →{" "}
-                                            {values.roleIds
-                                                .map(
-                                                    (id) =>
-                                                        [
-                                                            ...assignableRoles,
-                                                            ...roleLabels,
-                                                        ].find(
-                                                            (role) =>
-                                                                role.id === id,
-                                                        )?.name ??
-                                                        "角色信息待确认",
-                                                )
-                                                .join("、")}
-                                        </p>
-                                    )}
-                                    {values.name.trim() !== account.name && (
-                                        <p>
-                                            姓名：{account.name} →{" "}
-                                            {values.name.trim()}
-                                        </p>
-                                    )}
+                                    <div className="flex items-center gap-1.5 font-medium text-foreground">
+                                        <InfoIcon
+                                            className="size-4 shrink-0 text-info"
+                                            aria-hidden="true"
+                                        />
+                                        <p>请确认本次修改</p>
+                                    </div>
+                                    <div className="space-y-1 text-body-compact">
+                                        {values.name.trim() !== account.name ? (
+                                            <p>
+                                                <span className="text-muted-foreground">
+                                                    姓名：
+                                                </span>
+                                                {account.name} →{" "}
+                                                <span className="font-medium">
+                                                    {values.name.trim()}
+                                                </span>
+                                            </p>
+                                        ) : null}
+                                        {!sameRoles(
+                                            values.roleIds,
+                                            account.role_ids,
+                                        ) ? (
+                                            <p>
+                                                <span className="text-muted-foreground">
+                                                    角色：
+                                                </span>
+                                                {account.role_ids
+                                                    .map(
+                                                        (id) =>
+                                                            roleLabels.find(
+                                                                (role) =>
+                                                                    role.id ===
+                                                                    id,
+                                                            )?.name ??
+                                                            "角色信息待确认",
+                                                    )
+                                                    .join("、") ||
+                                                    "未分配"}{" "}
+                                                →{" "}
+                                                <span className="font-medium">
+                                                    {values.roleIds
+                                                        .map(
+                                                            (id) =>
+                                                                [
+                                                                    ...assignableRoles,
+                                                                    ...roleLabels,
+                                                                ].find(
+                                                                    (role) =>
+                                                                        role.id ===
+                                                                        id,
+                                                                )?.name ??
+                                                                "角色信息待确认",
+                                                        )
+                                                        .join("、")}
+                                                </span>
+                                            </p>
+                                        ) : null}
+                                    </div>
                                     {view &&
-                                        values.unitId !==
-                                            (person?.own_org_unit_id ?? "") && (
-                                            <BusinessDiffPanel
-                                                title="所属部门变更"
-                                                changes={impactChanges(
-                                                    receipt,
-                                                    view,
-                                                )}
-                                            />
-                                        )}
+                                    values.unitId !==
+                                        (person?.own_org_unit_id ?? "") ? (
+                                        <BusinessDiffPanel
+                                            title="所属部门变更"
+                                            changes={impactChanges(
+                                                receipt,
+                                                view,
+                                            )}
+                                        />
+                                    ) : null}
                                     <p className="text-xs text-muted-foreground">
-                                        所属部门变更会影响“本人所属部门”范围；不会改派单据。姓名、角色与所属部门将一起保存。
+                                        所属部门变更会影响「本人所属部门」范围，不会改派既有单据；姓名、角色与所属部门将一起保存。
                                     </p>
                                 </div>
                             ) : null}
+
                             {error ? (
-                                <p
-                                    role="alert"
-                                    className="text-body-compact text-destructive"
-                                >
-                                    {error}
-                                </p>
+                                <Alert variant="destructive" role="alert">
+                                    <AlertTitle>无法保存</AlertTitle>
+                                    <AlertDescription>{error}</AlertDescription>
+                                </Alert>
                             ) : null}
                         </fieldset>
-                        <DialogFooter className="shrink-0 border-t border-border pt-4">
-                            <Button
-                                id="account-profile-cancel"
-                                type="button"
-                                variant="outline"
-                                disabled={pending}
-                                onClick={close}
-                            >
-                                取消
-                            </Button>
-                            <LoadingButton
-                                loading={pending}
-                                id="account-profile-save"
-                                type="submit"
-                                disabled={!changed || pending}
-                            >
-                                {pending
-                                    ? "处理中…"
-                                    : confirmed
-                                      ? "确认保存"
-                                      : "保存"}
-                            </LoadingButton>
+
+                        <DialogFooter className="shrink-0 items-center border-t border-border/70 px-5 py-3 sm:justify-between">
+                            <p className="min-w-0 text-xs text-muted-foreground">
+                                {footerHint ?? ""}
+                            </p>
+                            <div className="flex shrink-0 items-center gap-2">
+                                <Button
+                                    id="account-profile-cancel"
+                                    type="button"
+                                    variant="outline"
+                                    disabled={pending}
+                                    onClick={close}
+                                >
+                                    取消
+                                </Button>
+                                <LoadingButton
+                                    loading={pending}
+                                    id="account-profile-save"
+                                    type="submit"
+                                    disabled={!changed || pending}
+                                >
+                                    {pending
+                                        ? "处理中…"
+                                        : confirmed
+                                          ? "确认保存"
+                                          : "保存"}
+                                </LoadingButton>
+                            </div>
                         </DialogFooter>
                     </form>
                 </DialogContent>
