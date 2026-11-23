@@ -58,7 +58,7 @@ export function SalesOrderSubmitPaper({
     return (
         <PaperDocument<SalesOrderSubmitLineSnapshot>
             ref={paperRef}
-            frame="bare"
+            frame="borderless"
             title="销售单"
             subtitle={NATURE_LABEL[snapshot.nature]}
             documentNumber="提交预览"

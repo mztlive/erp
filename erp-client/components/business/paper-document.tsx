@@ -54,7 +54,7 @@ type PaperDocumentTotal = Readonly<{
     emphasized?: boolean
 }>
 
-type PaperDocumentFrame = "framed" | "bare"
+type PaperDocumentFrame = "framed" | "bare" | "borderless"
 
 interface PaperDocumentProps<Row> extends Omit<
     React.ComponentProps<"article">,
@@ -85,6 +85,7 @@ interface PaperDocumentProps<Row> extends Omit<
     /**
      * framed：浅底外框 + 内边距，适合页面内嵌。
      * bare：仅纸张本体，适合透明浮层预览，避免再套一层灰框。
+     * borderless：单据内容直接铺在预览容器中，无纸张描边或阴影。
      */
     frame?: PaperDocumentFrame
     /** 弹窗预览等紧凑容器内使用，收紧页边留白（`px-6 py-6 min-h-0`）。 */
@@ -138,18 +139,20 @@ function PaperDocument<Row>({
                 "w-full overflow-x-auto print:overflow-visible print:border-0 print:bg-transparent print:p-0",
                 frame === "framed" &&
                     "rounded-lg border border-border bg-surface-sunken p-3 sm:p-6",
-                frame === "bare" && "bg-transparent p-0",
+                frame !== "framed" && "bg-transparent p-0",
             )}
         >
             <article
                 data-slot="paper-document"
                 aria-label={ariaLabel ?? "纸质单据预览"}
                 className={cn(
-                    "mx-auto min-w-3xl max-w-5xl border border-border bg-card text-sm text-card-foreground shadow-lg print:min-h-0 print:min-w-0 print:max-w-none print:border-0 print:px-0 print:py-0 print:shadow-none",
-                    compact || frame === "bare"
+                    "mx-auto min-w-3xl max-w-5xl text-sm text-card-foreground print:min-h-0 print:min-w-0 print:max-w-none print:border-0 print:px-0 print:py-0 print:shadow-none",
+                    compact || frame !== "framed"
                         ? "min-h-0 px-6 py-6"
                         : "min-h-screen px-10 py-12",
-                    frame === "bare" && "min-h-0 shadow-2xl",
+                    frame !== "borderless" && "border border-border bg-card",
+                    frame === "framed" && "shadow-lg",
+                    frame === "bare" && "shadow-2xl",
                     className,
                 )}
                 {...props}

@@ -19,7 +19,7 @@ export function SalesOrderPaperDocument({
 
     return (
         <PaperDocument<SalesOrderLineItem>
-            frame="bare"
+            frame="borderless"
             issuer={order.sellerEntity}
             title="销售单"
             subtitle={NATURE_LABEL[order.nature]}
@@ -104,7 +104,6 @@ export function SalesOrderPaperDocument({
                                       <div>{row.name}</div>
                                       <SalesDeliveryPlan
                                           rows={row.deliveryAllocations}
-                                          unit={row.unit}
                                       />
                                       {row.sku ? (
                                           <div className="num mt-1 text-xs text-muted-foreground">
@@ -178,7 +177,6 @@ export function SalesOrderPaperDocument({
                                       <div>{row.name}</div>
                                       <SalesDeliveryPlan
                                           rows={row.deliveryAllocations}
-                                          unit={row.unit}
                                       />
                                       {row.sku ? (
                                           <div className="num mt-1 text-xs text-muted-foreground">

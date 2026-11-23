@@ -23,7 +23,6 @@ import {
     displayUnixDate,
     displayUnixSeconds,
 } from "../display"
-import { fullDeliveryAddress } from "@/lib/delivery-address"
 
 const dateLabel = (value: number | null) => displayUnixDate(value)
 
@@ -44,7 +43,7 @@ export function ApprovalSalesOrderPaper({
     const lines = isSubmission ? submission.lines : submission.commercial_lines
     return (
         <PaperDocument<ApprovalSalesSubmission["lines"][number]>
-            frame="bare"
+            frame="borderless"
             title="销售单"
             documentNumber={documentNo}
             subtitle={isCard ? "卡券" : "实物及服务"}
@@ -185,26 +184,12 @@ export function ApprovalSalesOrderPaper({
                                     {welfareScenarioLabel(row.welfare_scenario)}
                                 </div>
                             )}
-                            {row.delivery_allocations?.map(
-                                (allocation, index) => (
-                                    <div
-                                        key={index}
-                                        className="mt-2 text-xs text-muted-foreground"
-                                    >
-                                        <QuantityValue
-                                            value={allocation.quantity}
-                                            unit={approvalSalesUnit(
-                                                row,
-                                                isCard,
-                                            )}
-                                        />{" "}
-                                        → {allocation.recipient} ·{" "}
-                                        {allocation.phone}
-                                        <br />
-                                        {fullDeliveryAddress(allocation)}
-                                    </div>
-                                ),
-                            )}
+                            {row.delivery_allocations?.length ? (
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                    收货地址分配{" "}
+                                    {row.delivery_allocations.length} 条
+                                </p>
+                            ) : null}
                         </div>
                     ),
                 },

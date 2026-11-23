@@ -91,6 +91,7 @@ export function PurchaseOrderCreateSourcePickerDialog({
 
                     <PaperDocumentViewport
                         fitMode="width"
+                        className="bg-transparent"
                         role="region"
                         aria-label="来源销售单预览"
                         tabIndex={0}
@@ -150,7 +151,7 @@ function SourcingSalesOrderPaper({ order }: { order: SourcingSalesOrder }) {
 
     return (
         <PaperDocument<SourcingProductLine>
-            frame="bare"
+            frame="borderless"
             className="min-w-3xl w-3xl max-w-3xl"
             title="销售单"
             subtitle="供给分配来源"

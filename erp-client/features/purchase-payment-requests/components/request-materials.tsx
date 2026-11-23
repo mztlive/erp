@@ -402,7 +402,7 @@ function PurchasePaper({
 function SalesPaper({ sales, payer }: { sales: SalesSnapshot; payer: string }) {
     return (
         <PaperDocument
-            frame="bare"
+            frame="borderless"
             title="销售单"
             subtitle="客户成交金额"
             documentNumber={sales.sales_order_no}

@@ -1,28 +1,15 @@
-"use client"
-
-import { RegionName } from "@/features/regions"
-
 import type { SalesDeliveryAllocation } from "../types"
 
-/** 保存版本中的交付安排，不表示已发货。 */
+/** 纸质预览中的收货地址分配摘要。 */
 export function SalesDeliveryPlan({
     rows,
-    unit,
 }: {
     rows?: readonly SalesDeliveryAllocation[]
-    unit?: string | null
 }) {
     if (!rows?.length) return null
     return (
-        <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-            {rows.map((row, index) => (
-                <p key={index}>
-                    {row.quantity} {unit} → {row.recipient} · {row.phone}
-                    <br />
-                    {row.region_name || <RegionName code={row.region_code} />}
-                    {row.address}
-                </p>
-            ))}
-        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+            收货地址分配 {rows.length} 条
+        </p>
     )
 }

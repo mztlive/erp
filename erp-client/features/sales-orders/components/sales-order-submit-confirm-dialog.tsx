@@ -102,6 +102,7 @@ export function SalesOrderSubmitConfirmDialog({
                         aria-label="销售单提交预览"
                         tabIndex={0}
                         fitMode="width"
+                        className="bg-transparent"
                         fitKey={`${snapshot.nature}-${snapshot.lineCount}`}
                     >
                         <SalesOrderSubmitPaper snapshot={snapshot} />
