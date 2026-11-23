@@ -60,7 +60,7 @@ function fromPick(pick: SellableSkuPick): InquiryLine {
         sku_code: pick.skuNo,
         product_name: pick.name,
         specification: pick.specificationLabel,
-        unit_code: pick.baseUnit,
+        unit_code: pick.baseUnitCode ?? "",
         quantity_scale: 6,
         quantity: "1",
         fulfillment_kind:

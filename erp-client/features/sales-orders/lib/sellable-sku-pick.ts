@@ -8,6 +8,7 @@ export type SellableSkuPick = Readonly<{
     name: string
     specificationLabel: string
     baseUnit: string
+    baseUnitCode?: string
     salesVisiblePriceGross: string
     bulkPriceGross?: string
     bulkMinQuantity?: string
@@ -25,6 +26,7 @@ export function sellableItemToPick(row: MasterDataListItem): SellableSkuPick {
         name: row.name,
         specificationLabel: item?.specificationLabel ?? "",
         baseUnit: item?.baseUnit ?? "",
+        baseUnitCode: item?.baseUnitCode,
         salesVisiblePriceGross: item?.salesVisiblePriceGross ?? "",
         bulkPriceGross: item?.bulkPriceGross,
         bulkMinQuantity: item?.bulkMinQuantity,
