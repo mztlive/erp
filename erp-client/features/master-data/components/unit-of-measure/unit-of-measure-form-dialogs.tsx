@@ -8,6 +8,7 @@ import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogClose,
     DialogContent,
     DialogDescription,
@@ -16,7 +17,6 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import {
-    DialogScrollBody,
     newIdempotencyKey,
     notifySuccess,
 } from "@/features/master-data/components/shared/action-dialog-shared"
@@ -299,8 +299,9 @@ function UnitFormDialogFrame({
             }}
         >
             <DialogContent
+                size="md"
+                scroll="body"
                 closeButtonId={`${baseId}-close`}
-                className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg"
             >
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
@@ -308,112 +309,116 @@ function UnitFormDialogFrame({
                         <DialogDescription>{description}</DialogDescription>
                     ) : null}
                 </DialogHeader>
-                <DialogScrollBody>
-                    {result?.outcome === "blocked" ? (
-                        <FormalActionResult
-                            status="blocked"
-                            title={masterDataCopy.createBlockedTitle}
-                            description={result.message}
-                        />
-                    ) : null}
-                    {result?.outcome !== "succeeded" ? (
-                        <form
-                            className="grid gap-3"
-                            onSubmit={(event) => {
-                                event.preventDefault()
-                                void form.handleSubmit()
-                            }}
-                        >
-                            <form.AppField
-                                name="name"
-                                children={(field) => (
-                                    <field.TextField
-                                        id={`${baseId}-name`}
-                                        label="名称"
-                                        required
-                                    />
-                                )}
+                <form
+                    className="flex min-h-0 flex-1 flex-col overflow-hidden"
+                    onSubmit={(event) => {
+                        event.preventDefault()
+                        void form.handleSubmit()
+                    }}
+                >
+                    <DialogBody className="space-y-3">
+                        {result?.outcome === "blocked" ? (
+                            <FormalActionResult
+                                status="blocked"
+                                title={masterDataCopy.createBlockedTitle}
+                                description={result.message}
                             />
-                            <form.AppField
-                                name="code"
-                                children={(field) => (
-                                    <field.TextField
-                                        id={`${baseId}-code`}
-                                        label={masterDataCopy.fUnitCode}
-                                        disabled={codeReadOnly}
-                                        required
-                                    />
-                                )}
-                            />
-                            <form.AppField
-                                name="symbol"
-                                children={(field) => (
-                                    <field.TextField
-                                        id={`${baseId}-symbol`}
-                                        label={masterDataCopy.fUnitSymbol}
-                                        required
-                                    />
-                                )}
-                            />
-                            <form.AppField
-                                name="quantityScale"
-                                children={(field) => (
-                                    <field.SelectField
-                                        id={`${baseId}-quantity-scale`}
-                                        label={masterDataCopy.fQuantityScale}
-                                        options={QUANTITY_SCALE_OPTIONS.map(
-                                            (option) => ({
-                                                value: option,
-                                                label: option,
-                                            }),
-                                        )}
-                                        required
-                                    />
-                                )}
-                            />
-                            <form.AppField
-                                name="changeReason"
-                                children={(field) => (
-                                    <field.TextareaField
-                                        id={`${baseId}-change-reason`}
-                                        label={
-                                            description ===
-                                            masterDataCopy.createDesc
-                                                ? "创建说明"
-                                                : masterDataCopy.fieldChangeReason
-                                        }
-                                        required
-                                    />
-                                )}
-                            />
-                            <DialogFooter>
-                                <DialogClose
-                                    id={`${baseId}-cancel`}
-                                    render={
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            disabled={pending || disabled}
+                        ) : null}
+                        {result?.outcome !== "succeeded" ? (
+                            <div className="grid gap-3">
+                                <form.AppField
+                                    name="name"
+                                    children={(field) => (
+                                        <field.TextField
+                                            id={`${baseId}-name`}
+                                            label="名称"
+                                            required
                                         />
-                                    }
-                                >
-                                    取消
-                                </DialogClose>
-                                <form.AppForm>
-                                    <form.SubmitButton
-                                        id={`${baseId}-submit`}
-                                        label={
-                                            pending ? "提交中…" : submitLabel
-                                        }
-                                        pendingLabel="提交中…"
-                                        loading={pending}
+                                    )}
+                                />
+                                <form.AppField
+                                    name="code"
+                                    children={(field) => (
+                                        <field.TextField
+                                            id={`${baseId}-code`}
+                                            label={masterDataCopy.fUnitCode}
+                                            disabled={codeReadOnly}
+                                            required
+                                        />
+                                    )}
+                                />
+                                <form.AppField
+                                    name="symbol"
+                                    children={(field) => (
+                                        <field.TextField
+                                            id={`${baseId}-symbol`}
+                                            label={masterDataCopy.fUnitSymbol}
+                                            required
+                                        />
+                                    )}
+                                />
+                                <form.AppField
+                                    name="quantityScale"
+                                    children={(field) => (
+                                        <field.SelectField
+                                            id={`${baseId}-quantity-scale`}
+                                            label={
+                                                masterDataCopy.fQuantityScale
+                                            }
+                                            options={QUANTITY_SCALE_OPTIONS.map(
+                                                (option) => ({
+                                                    value: option,
+                                                    label: option,
+                                                }),
+                                            )}
+                                            required
+                                        />
+                                    )}
+                                />
+                                <form.AppField
+                                    name="changeReason"
+                                    children={(field) => (
+                                        <field.TextareaField
+                                            id={`${baseId}-change-reason`}
+                                            label={
+                                                description ===
+                                                masterDataCopy.createDesc
+                                                    ? "创建说明"
+                                                    : masterDataCopy.fieldChangeReason
+                                            }
+                                            required
+                                        />
+                                    )}
+                                />
+                            </div>
+                        ) : null}
+                    </DialogBody>
+                    {result?.outcome !== "succeeded" ? (
+                        <DialogFooter>
+                            <DialogClose
+                                id={`${baseId}-cancel`}
+                                render={
+                                    <Button
+                                        type="button"
+                                        variant="outline"
                                         disabled={pending || disabled}
                                     />
-                                </form.AppForm>
-                            </DialogFooter>
-                        </form>
+                                }
+                            >
+                                取消
+                            </DialogClose>
+                            <form.AppForm>
+                                <form.SubmitButton
+                                    id={`${baseId}-submit`}
+                                    label={pending ? "提交中…" : submitLabel}
+                                    pendingLabel="提交中…"
+                                    loading={pending}
+                                    disabled={pending || disabled}
+                                />
+                            </form.AppForm>
+                        </DialogFooter>
                     ) : null}
-                </DialogScrollBody>
+                </form>
             </DialogContent>
         </Dialog>
     )

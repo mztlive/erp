@@ -4,6 +4,7 @@ import * as React from "react"
 
 import { SystemFeedback } from "@/components/business/system-feedback"
 import { toast } from "@/components/ui/toast"
+import { formatTime } from "@/lib/datetime"
 
 export type SalesOrderCreateAlertsProps = {
     /** 提交命令失败或结果待确认时的提示。 */
@@ -33,7 +34,7 @@ export function SalesOrderCreateAlerts({
 
         toast.add({
             title: "草稿已保存",
-            description: `销售单 ${draftSaved.documentNumber} 已于 ${draftSaved.savedAt.toLocaleTimeString("zh-CN")} 保存为草稿；当前内容仍保留在本页。`,
+            description: `销售单 ${draftSaved.documentNumber} 已于 ${formatTime(draftSaved.savedAt.toISOString())} 保存为草稿；当前内容仍保留在本页。`,
             type: "success",
             timeout: 4000,
         })

@@ -31,6 +31,8 @@ export type WorkItemListParams = Readonly<{
     salesOrderIds?: string
     /** 逗号分隔的来源采购单稳定 ID；只收窄授权结果。 */
     purchaseOrderIds?: string
+    /** 逗号分隔的往来单位稳定 ID（客户/供应商/结算主体）；只收窄授权结果。 */
+    counterpartyIds?: string
     sort?: "priority_due" | "due_asc" | "created_desc"
     cursor?: string
     queueContextId?: string
@@ -51,19 +53,28 @@ export type WorkItemStatsParams = Readonly<{
     scope: WorkItemScope
     family?: string
     workItemType?: string
+    status?: "OPEN" | "COMPLETED" | "CLOSED"
     due?: "today" | "overdue"
     blocked?: boolean
+    /** 在授权结果内按任务摘要与往来单位名称检索。 */
+    query?: string
+    /** 结构化筛选 JSON，与列表 `filters` 合同一致。 */
+    filters?: WorkspaceFilters
     /** 逗号分隔的当前处理人稳定 ID；只收窄授权结果。 */
     handlerUserIds?: string
     /** 逗号分隔的来源销售单稳定 ID；只收窄授权结果。 */
     salesOrderIds?: string
     /** 逗号分隔的来源采购单稳定 ID；只收窄授权结果。 */
     purchaseOrderIds?: string
+    /** 逗号分隔的往来单位稳定 ID；只收窄授权结果。 */
+    counterpartyIds?: string
     timezone: string
 }>
 
 export type WorkItemStats = Readonly<{
     assigned: number
+    /** 当前选中责任范围及筛选条件下的匹配任务总数。 */
+    total?: number
     due_today: number
     overdue: number
     exception: number
@@ -78,11 +89,15 @@ export type WorkItemStats = Readonly<{
         finance: number
         exception: number
     }>
-    /** 服务端对本人全部可处理任务统计，禁止用已加载页面推算。 */
+    /** 服务端对当前范围全部可处理任务按类型统计，禁止用已加载页面推算。 */
     work_item_type_counts?: Readonly<Record<string, number>>
     work_item_type_timing?: Readonly<
         Record<string, { due_today: number; overdue: number }>
     >
+    /** 当前责任范围内单据审批任务按 `approval:<document_type>` 键拆分的计数。 */
+    approval_document_type_counts?: Readonly<Record<string, number>>
+    /** 当前责任范围内按工作台 `item_types` 键拆分的计数。 */
+    item_type_counts?: Readonly<Record<string, number>>
     as_of: number
 }>
 
@@ -139,6 +154,7 @@ export function listWorkItems(
         handler_user_ids: params.handlerUserIds,
         sales_order_ids: params.salesOrderIds,
         purchase_order_ids: params.purchaseOrderIds,
+        counterparty_ids: params.counterpartyIds,
         sort: params.sort ?? "created_desc",
         cursor: params.cursor,
         queue_context_id: params.queueContextId,
@@ -154,15 +170,32 @@ export function listWorkItems(
 export function getWorkItemStats(
     params: WorkItemStatsParams,
 ): Promise<WorkItemStats> {
+    const mergedFilters: WorkspaceFilters | undefined =
+        params.filters || params.blocked
+            ? {
+                  ...params.filters,
+                  ...(params.blocked ? { blocked: true } : {}),
+                  include_options: undefined,
+                  option_query: undefined,
+              }
+            : undefined
+    const hasFilterValues =
+        mergedFilters != null &&
+        Object.values(mergedFilters).some((value) =>
+            Array.isArray(value) ? value.length > 0 : Boolean(value),
+        )
     return apiGet<WorkItemStats>("/admin/work-items/stats", {
         scope: params.scope,
         family: params.family,
         work_item_type: params.workItemType,
+        status: params.status,
         due: params.due,
-        blocked: params.blocked ? "1" : undefined,
+        q: params.query,
+        filters: hasFilterValues ? JSON.stringify(mergedFilters) : undefined,
         handler_user_ids: params.handlerUserIds,
         sales_order_ids: params.salesOrderIds,
         purchase_order_ids: params.purchaseOrderIds,
+        counterparty_ids: params.counterpartyIds,
         timezone: params.timezone,
     })
 }

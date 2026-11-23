@@ -107,9 +107,9 @@ export const SupplierImportDialog = ({
             }}
         >
             <DialogContent
+                size="xl"
                 closeButtonId="supplier-import-dismiss"
                 id="supplier-import-dialog"
-                className="max-h-[90dvh] overflow-y-auto sm:max-w-4xl"
             >
                 <DialogHeader>
                     <DialogTitle>导入供应商</DialogTitle>

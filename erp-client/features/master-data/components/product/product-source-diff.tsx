@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -16,6 +17,7 @@ import {
 import { BusinessFailureState } from "@/components/business"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { formatDateTime, unixSecondsToIsoOrEmpty } from "@/lib/datetime"
 import {
     useProductSourceDiffQuery,
     useResolveProductSourceDiffMutation,
@@ -245,7 +247,7 @@ export function ProductSourceDiff({
                 !field.verification_required && canAdoptSource(field.supplier),
         ) ?? false
     const observed = view
-        ? new Date(view.observed_at * 1000).toLocaleString("zh-CN")
+        ? formatDateTime(unixSecondsToIsoOrEmpty(view.observed_at), "full")
         : ""
     return (
         <>
@@ -289,17 +291,18 @@ export function ProductSourceDiff({
                 }}
             >
                 <DialogContent
+                    size="2xl"
+                    scroll="body"
                     closeButtonId="product-source-diff-close"
                     showCloseButton={!mutation.isPending}
-                    className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-5xl"
                 >
-                    <DialogHeader className="shrink-0">
+                    <DialogHeader>
                         <DialogTitle>确认供应商商品资料更新</DialogTitle>
                         <DialogDescription>
                             逐项核对公司内容与供应商最新资料。采用后恢复该字段自动同步；保留或编辑后确认，本次相同更新不再提醒。
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto pr-1">
+                    <DialogBody className="min-w-0 space-y-4">
                         {query.isError ? (
                             <BusinessFailureState
                                 title="资料差异读取失败"
@@ -351,8 +354,8 @@ export function ProductSourceDiff({
                                 onResolve={resolve}
                             />
                         ))}
-                    </div>
-                    <DialogFooter className="shrink-0 flex-wrap">
+                    </DialogBody>
+                    <DialogFooter className="flex-wrap">
                         <Button
                             id="product-source-diff-refresh"
                             type="button"

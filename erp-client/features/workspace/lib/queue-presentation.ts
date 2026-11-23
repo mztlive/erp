@@ -10,7 +10,7 @@ import type { WorkspaceSearchOption } from "@/lib/workspace-search"
 
 /** 候选保留服务端身份，只将显示名称收敛为用户可直接识别的事项类型。 */
 export function queueTypeLabel(option: WorkspaceSearchOption): string {
-    if (option.value === "task:DOCUMENT_APPROVAL") return "全部审批"
+    if (option.value === "task:DOCUMENT_APPROVAL") return "待审批"
     if (option.label.startsWith("审批 · "))
         return `${option.label.slice(5)}审批`
     return option.label.replace(/^执行 · /, "")
@@ -19,6 +19,7 @@ export function queueTypeLabel(option: WorkspaceSearchOption): string {
 /** 常驻入口数量固定；其余类型在同一区域展开显示。 */
 export function queueQuickTypes(options: readonly WorkspaceSearchOption[]) {
     const preferred = [
+        "task:DOCUMENT_APPROVAL",
         "approval:purchase_order",
         "approval:sales_order",
         "approval:purchase_payment_request",
@@ -29,10 +30,9 @@ export function queueQuickTypes(options: readonly WorkspaceSearchOption[]) {
         const index = preferred.indexOf(value)
         return index < 0 ? preferred.length : index
     }
-    return options
-        .filter((option) => option.value !== "task:DOCUMENT_APPROVAL")
+    return [...options]
         .sort((left, right) => rank(left.value) - rank(right.value))
-        .slice(0, 5)
+        .slice(0, 6)
 }
 
 /** 导航按钮与表格行复用同一语义图标，避免同一种事项出现不同视觉标识。 */

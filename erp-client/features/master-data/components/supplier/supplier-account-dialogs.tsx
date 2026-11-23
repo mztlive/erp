@@ -114,9 +114,9 @@ export function SupplierAccountCreateDialog({
             }}
         >
             <DialogContent
+                size="md"
                 closeButtonId="supplier-portal-account-create-close"
                 showCloseButton={!locked}
-                className="max-h-[85svh] overflow-y-auto sm:max-w-lg"
             >
                 <DialogHeader>
                     <DialogTitle>开通供应商账号</DialogTitle>
@@ -292,9 +292,9 @@ export function SupplierAccountEditDialog({
             }}
         >
             <DialogContent
+                size="md"
                 closeButtonId="supplier-portal-account-edit-close"
                 showCloseButton={!locked}
-                className="max-h-[85svh] overflow-y-auto sm:max-w-lg"
             >
                 <DialogHeader>
                     <DialogTitle>配置账号</DialogTitle>

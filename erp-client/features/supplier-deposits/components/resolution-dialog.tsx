@@ -10,6 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -209,6 +210,78 @@ export function DepositResolutionDialog({
             : "核实并结清对账差异"
         : "核实并释放剩余占用"
 
+    const contextBanners = (
+        <>
+            <p className="text-body-compact">
+                {account.supplier_name} · {account.payer_party_name}
+            </p>
+            {resolving ? (
+                <div className="space-y-1 text-body-compact">
+                    <p className="num">
+                        原对账范围：
+                        {format(
+                            new Date(target.reconciliation.covered_from * 1000),
+                            "yyyy-MM-dd HH:mm",
+                        )}
+                        {" 至 "}
+                        {format(
+                            new Date(
+                                target.reconciliation.covered_until * 1000,
+                            ),
+                            "yyyy-MM-dd HH:mm",
+                        )}
+                    </p>
+                    <p className="text-muted-foreground">
+                        原核对依据：
+                        {target.reconciliation.evidence_reference}
+                    </p>
+                </div>
+            ) : (
+                <div className="space-y-1 text-body-compact">
+                    <p>
+                        原占用{" "}
+                        <MoneyValue
+                            value={target.reservation.amount}
+                            display="exact"
+                        />
+                        {" · 已消耗 "}
+                        <MoneyValue
+                            value={target.reservation.consumed_amount}
+                            display="exact"
+                        />
+                    </p>
+                    <p className="flex flex-wrap items-baseline gap-1.5">
+                        <span>当前剩余占用：</span>
+                        <MoneyValue
+                            value={remainder}
+                            display="exact"
+                            className="font-semibold"
+                        />
+                        {remainderReadout ? (
+                            <span className="text-xs text-muted-foreground">
+                                （{remainderReadout}）
+                            </span>
+                        ) : null}
+                    </p>
+                </div>
+            )}
+            {!candidates.length && (
+                <Alert variant="warning">
+                    <AlertDescription>
+                        暂无符合范围的双方余额一致的对账记录。请先关闭窗口，登记覆盖原业务期间且无待核实交易的最新对账，再刷新账户办理。
+                    </AlertDescription>
+                </Alert>
+            )}
+            {unknown && (
+                <Alert variant="warning">
+                    <AlertDescription>
+                        本次办理结果尚未查明，资料已锁定。再次提交将查询或恢复原办理结果；也可关闭窗口后刷新账户核对。
+                    </AlertDescription>
+                </Alert>
+            )}
+        </>
+    )
+
     return (
         <Dialog
             open
@@ -217,8 +290,9 @@ export function DepositResolutionDialog({
             }}
         >
             <DialogContent
+                size="md"
+                scroll="body"
                 closeButtonId={`${prefix}-close`}
-                className="sm:max-w-xl"
             >
                 <DialogHeader>
                     <DialogTitle>
@@ -232,137 +306,71 @@ export function DepositResolutionDialog({
                               : "须先查清原订单、真实扣款、冻结及后续费用。核实后将释放剩余冻结金额，并同步调整对应付款申请额度。"}
                     </DialogDescription>
                 </DialogHeader>
-                <p className="text-body-compact">
-                    {account.supplier_name} · {account.payer_party_name}
-                </p>
-                {resolving ? (
-                    <div className="space-y-1 text-body-compact">
-                        <p className="num">
-                            原对账范围：
-                            {format(
-                                new Date(
-                                    target.reconciliation.covered_from * 1000,
-                                ),
-                                "yyyy-MM-dd HH:mm",
-                            )}
-                            {" 至 "}
-                            {format(
-                                new Date(
-                                    target.reconciliation.covered_until * 1000,
-                                ),
-                                "yyyy-MM-dd HH:mm",
-                            )}
-                        </p>
-                        <p className="text-muted-foreground">
-                            原核对依据：
-                            {target.reconciliation.evidence_reference}
-                        </p>
-                    </div>
-                ) : (
-                    <div className="space-y-1 text-body-compact">
-                        <p>
-                            原占用{" "}
-                            <MoneyValue
-                                value={target.reservation.amount}
-                                display="exact"
-                            />
-                            {" · 已消耗 "}
-                            <MoneyValue
-                                value={target.reservation.consumed_amount}
-                                display="exact"
-                            />
-                        </p>
-                        <p className="flex flex-wrap items-baseline gap-1.5">
-                            <span>当前剩余占用：</span>
-                            <MoneyValue
-                                value={remainder}
-                                display="exact"
-                                className="font-semibold"
-                            />
-                            {remainderReadout ? (
-                                <span className="text-xs text-muted-foreground">
-                                    （{remainderReadout}）
-                                </span>
-                            ) : null}
-                        </p>
-                    </div>
-                )}
-                {!candidates.length && (
-                    <Alert variant="warning">
-                        <AlertDescription>
-                            暂无符合范围的双方余额一致的对账记录。请先关闭窗口，登记覆盖原业务期间且无待核实交易的最新对账，再刷新账户办理。
-                        </AlertDescription>
-                    </Alert>
-                )}
-                {unknown && (
-                    <Alert variant="warning">
-                        <AlertDescription>
-                            本次办理结果尚未查明，资料已锁定。再次提交将查询或恢复原办理结果；也可关闭窗口后刷新账户核对。
-                        </AlertDescription>
-                    </Alert>
-                )}
 
                 {confirmValues ? (
-                    <div className="space-y-4">
-                        <Alert variant="warning">
-                            <AlertTitle>请确认提交核实结论</AlertTitle>
-                            <AlertDescription>
-                                {resolving
-                                    ? "提交后该对账差异将结案并归档核实凭证，无法直接撤销。"
-                                    : "提交后将释放剩余占用金额并释放对应额度，请确认原订单无后续扣款风险。"}
-                            </AlertDescription>
-                        </Alert>
-                        <dl className="grid gap-3 rounded-lg border border-border/70 bg-muted/30 p-4 text-body-compact">
-                            {!resolving && remainder ? (
+                    <>
+                        <DialogBody className="space-y-4">
+                            {contextBanners}
+                            <Alert variant="warning">
+                                <AlertTitle>请确认提交核实结论</AlertTitle>
+                                <AlertDescription>
+                                    {resolving
+                                        ? "提交后该对账差异将结案并归档核实凭证，无法直接撤销。"
+                                        : "提交后将释放剩余占用金额并释放对应额度，请确认原订单无后续扣款风险。"}
+                                </AlertDescription>
+                            </Alert>
+                            <dl className="grid gap-3 rounded-lg border border-border/70 bg-muted/30 p-4 text-body-compact">
+                                {!resolving && remainder ? (
+                                    <div>
+                                        <dt className="text-xs text-muted-foreground">
+                                            预计释放剩余占用
+                                        </dt>
+                                        <dd className="mt-1 flex flex-wrap items-baseline gap-1.5">
+                                            <MoneyValue
+                                                value={remainder}
+                                                display="exact"
+                                                className="font-semibold"
+                                            />
+                                            {remainderReadout ? (
+                                                <span className="text-xs text-muted-foreground">
+                                                    （{remainderReadout}）
+                                                </span>
+                                            ) : null}
+                                        </dd>
+                                    </div>
+                                ) : null}
                                 <div>
                                     <dt className="text-xs text-muted-foreground">
-                                        预计释放剩余占用
-                                    </dt>
-                                    <dd className="mt-1 flex flex-wrap items-baseline gap-1.5">
-                                        <MoneyValue
-                                            value={remainder}
-                                            display="exact"
-                                            className="font-semibold"
-                                        />
-                                        {remainderReadout ? (
-                                            <span className="text-xs text-muted-foreground">
-                                                （{remainderReadout}）
-                                            </span>
-                                        ) : null}
-                                    </dd>
-                                </div>
-                            ) : null}
-                            <div>
-                                <dt className="text-xs text-muted-foreground">
-                                    关联双方一致对账记录
-                                </dt>
-                                <dd className="mt-1">
-                                    {selectedReconciliation
-                                        ? reconciliationLabel(
-                                              selectedReconciliation,
-                                          )
-                                        : "—"}
-                                </dd>
-                            </div>
-                            {!resolving ? (
-                                <div>
-                                    <dt className="text-xs text-muted-foreground">
-                                        已核实的释放原因
+                                        关联双方一致对账记录
                                     </dt>
                                     <dd className="mt-1">
-                                        {selectedReasonLabel || "—"}
+                                        {selectedReconciliation
+                                            ? reconciliationLabel(
+                                                  selectedReconciliation,
+                                              )
+                                            : "—"}
                                     </dd>
                                 </div>
-                            ) : null}
-                            <div>
-                                <dt className="text-xs text-muted-foreground">
-                                    核实依据附件
-                                </dt>
-                                <dd className="mt-1 break-all">
-                                    {confirmValues.evidence?.name || "—"}
-                                </dd>
-                            </div>
-                        </dl>
+                                {!resolving ? (
+                                    <div>
+                                        <dt className="text-xs text-muted-foreground">
+                                            已核实的释放原因
+                                        </dt>
+                                        <dd className="mt-1">
+                                            {selectedReasonLabel || "—"}
+                                        </dd>
+                                    </div>
+                                ) : null}
+                                <div>
+                                    <dt className="text-xs text-muted-foreground">
+                                        核实依据附件
+                                    </dt>
+                                    <dd className="mt-1 break-all">
+                                        {confirmValues.evidence?.name || "—"}
+                                    </dd>
+                                </div>
+                            </dl>
+                        </DialogBody>
                         <DialogFooter>
                             <Button
                                 id={`${prefix}-back`}
@@ -389,64 +397,69 @@ export function DepositResolutionDialog({
                                       : "确认核实并释放"}
                             </LoadingButton>
                         </DialogFooter>
-                    </div>
+                    </>
                 ) : (
                     <form
-                        className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto"
+                        className="flex min-h-0 flex-1 flex-col overflow-hidden"
                         onSubmit={(event) => {
                             event.preventDefault()
                             void form.handleSubmit()
                         }}
                     >
-                        <form.AppField name="reconciliation">
-                            {(field) => (
-                                <field.SelectField
-                                    id={`${prefix}-reconciliation`}
-                                    label="双方余额一致的对账记录"
-                                    required
-                                    disabled={
-                                        busy || unknown || !candidates.length
-                                    }
-                                    options={candidates.map((record) => ({
-                                        value: record.id,
-                                        label: reconciliationLabel(record),
-                                    }))}
-                                    description="仅列出双方余额一致且无未核实交易的记录，服务器仍会复核最新资金及原订单。"
-                                />
-                            )}
-                        </form.AppField>
-                        {!resolving && (
-                            <form.AppField name="reason">
+                        <DialogBody className="flex flex-col gap-4">
+                            {contextBanners}
+                            <form.AppField name="reconciliation">
                                 {(field) => (
                                     <field.SelectField
-                                        id={`${prefix}-reason`}
-                                        label="已核实的释放原因"
+                                        id={`${prefix}-reconciliation`}
+                                        label="双方余额一致的对账记录"
                                         required
-                                        disabled={busy || unknown}
-                                        options={releaseReasons}
+                                        disabled={
+                                            busy ||
+                                            unknown ||
+                                            !candidates.length
+                                        }
+                                        options={candidates.map((record) => ({
+                                            value: record.id,
+                                            label: reconciliationLabel(record),
+                                        }))}
+                                        description="仅列出双方余额一致且无未核实交易的记录，服务器仍会复核最新资金及原订单。"
                                     />
                                 )}
                             </form.AppField>
-                        )}
-                        <form.AppField name="evidence">
-                            {(field) => (
-                                <field.EvidenceUploadField
-                                    id={`${prefix}-evidence`}
-                                    label={
-                                        resolving
-                                            ? "差异查清依据"
-                                            : "无扣款风险核实凭证"
-                                    }
-                                    description={
-                                        resolving
-                                            ? "上传原差异逐项查清的核实材料，支持 PDF 或图片，单个文件不超过 5 MB。"
-                                            : "上传无冻结、无后续扣款风险及所选原因的核实材料。取消受理或某次查不到订单不能单独作为释放依据。"
-                                    }
-                                    required
-                                    disabled={busy || unknown}
-                                />
+                            {!resolving && (
+                                <form.AppField name="reason">
+                                    {(field) => (
+                                        <field.SelectField
+                                            id={`${prefix}-reason`}
+                                            label="已核实的释放原因"
+                                            required
+                                            disabled={busy || unknown}
+                                            options={releaseReasons}
+                                        />
+                                    )}
+                                </form.AppField>
                             )}
-                        </form.AppField>
+                            <form.AppField name="evidence">
+                                {(field) => (
+                                    <field.EvidenceUploadField
+                                        id={`${prefix}-evidence`}
+                                        label={
+                                            resolving
+                                                ? "差异查清依据"
+                                                : "无扣款风险核实凭证"
+                                        }
+                                        description={
+                                            resolving
+                                                ? "上传原差异逐项查清的核实材料，支持 PDF 或图片，单个文件不超过 5 MB。"
+                                                : "上传无冻结、无后续扣款风险及所选原因的核实材料。取消受理或某次查不到订单不能单独作为释放依据。"
+                                        }
+                                        required
+                                        disabled={busy || unknown}
+                                    />
+                                )}
+                            </form.AppField>
+                        </DialogBody>
                         <DialogFooter>
                             <Button
                                 id={`${prefix}-cancel`}

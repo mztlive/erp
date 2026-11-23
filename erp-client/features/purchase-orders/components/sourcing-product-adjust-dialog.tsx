@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -208,7 +209,8 @@ export function SourcingProductAdjustDialog({
             }}
         >
             <DialogContent
-                className="flex h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:h-[calc(100dvh-3rem)] sm:max-h-[calc(100dvh-3rem)] sm:w-[calc(100vw-3rem)] sm:max-w-none"
+                size="full"
+                scroll="body"
                 closeButtonId="sourcing-product-adjust-close"
                 finalFocus={() =>
                     (returnFocusId
@@ -224,7 +226,7 @@ export function SourcingProductAdjustDialog({
             >
                 {row ? (
                     <>
-                        <DialogHeader className="shrink-0 border-b border-border px-5 py-4 pr-14">
+                        <DialogHeader>
                             <div className="flex flex-wrap items-center justify-between gap-3">
                                 <DialogTitle>
                                     供给分配 · {row.product.itemName}
@@ -249,7 +251,7 @@ export function SourcingProductAdjustDialog({
                             </DialogDescription>
                         </DialogHeader>
                         <SourcingAllocationSummary row={row} />
-                        <div className="grid min-h-0 flex-1 grid-rows-[minmax(7rem,0.35fr)_minmax(0,1fr)] lg:grid-cols-[minmax(18rem,0.3fr)_minmax(0,0.7fr)] lg:grid-rows-1">
+                        <DialogBody className="grid grid-rows-[minmax(7rem,0.35fr)_minmax(0,1fr)] overflow-hidden p-0 lg:grid-cols-[minmax(18rem,0.3fr)_minmax(0,0.7fr)] lg:grid-rows-1">
                             <section
                                 className="flex min-h-0 min-w-0 flex-col border-b border-border lg:border-r lg:border-b-0"
                                 aria-label="供给来源列表"
@@ -364,8 +366,8 @@ export function SourcingProductAdjustDialog({
                                     )}
                                 </div>
                             </section>
-                        </div>
-                        <DialogFooter className="shrink-0 items-center border-t border-border px-5 py-3 sm:justify-between">
+                        </DialogBody>
+                        <DialogFooter className="items-center sm:justify-between">
                             <p className="text-xs text-muted-foreground">
                                 {showErrors && row.issues.length ? (
                                     <span className="mr-3 text-destructive">

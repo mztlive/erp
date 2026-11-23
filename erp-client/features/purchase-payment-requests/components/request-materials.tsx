@@ -1,8 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, type ReactNode } from "react"
-import Image from "next/image"
-import { FileIcon, FileTextIcon, ImageIcon, XIcon } from "lucide-react"
+import { useMemo, useState, type ReactNode } from "react"
 import {
     DetailWorkspaceSection,
     MoneyValue,
@@ -10,55 +8,28 @@ import {
     QuantityValue,
     detailWorkspaceStyles,
 } from "@/components/business"
+import {
+    MaterialFileList,
+    UnifiedMaterialViewer,
+    type MaterialFileItem,
+} from "@/components/business/unified-material-viewer"
 import { Button } from "@/components/ui/button"
-import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
-    DialogClose,
+    DialogBody,
     DialogContent,
     DialogDescription,
+    DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { Spinner } from "@/components/ui/spinner"
 import { getErrorMessage } from "@/lib/api"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { fetchMaterialPreview } from "../api"
 import {
     usePaymentMaterialsQuery,
     useRequestDownloadMutation,
-    useRequestMaterialPreviewMutation,
 } from "../hooks/queries"
-import type {
-    PaymentRequest,
-    PurchaseSnapshot,
-    RequestAttachment,
-    SalesSnapshot,
-} from "../types"
-
-const PREVIEWABLE_TYPES = new Set([
-    "application/pdf",
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-])
-
-function isPreviewableFile(file: RequestAttachment): boolean {
-    if (file.content_type) return PREVIEWABLE_TYPES.has(file.content_type)
-    return /\.(?:pdf|png|jpe?g|webp)$/i.test(file.file_name)
-}
-
-function fileKindMeta(file: RequestAttachment) {
-    const type = file.content_type ?? ""
-    if (type === "application/pdf" || /\.pdf$/i.test(file.file_name)) {
-        return { label: "PDF", Icon: FileTextIcon }
-    }
-    if (
-        type.startsWith("image/") ||
-        /\.(?:png|jpe?g|webp)$/i.test(file.file_name)
-    ) {
-        return { label: "图片", Icon: ImageIcon }
-    }
-    return { label: "文件", Icon: FileIcon }
-}
+import type { PaymentRequest, PurchaseSnapshot, SalesSnapshot } from "../types"
 
 type Preview =
     | {
@@ -79,6 +50,8 @@ export function RequestMaterials({
     concise = false,
     action,
     detailWorkspace = false,
+    onSelectFile,
+    activeFileId,
 }: {
     request: PaymentRequest
     workItemId?: string
@@ -88,6 +61,9 @@ export function RequestMaterials({
     concise?: boolean
     action?: ReactNode
     detailWorkspace?: boolean
+    /** 宽屏右轨对接回调：传入时由右栏展示附件，否则打开统一预览灯箱。 */
+    onSelectFile?: (fileId: string) => void
+    activeFileId?: string
 }) {
     const query = usePaymentMaterialsQuery(
         request.id,
@@ -95,58 +71,54 @@ export function RequestMaterials({
         submissionVersion,
     )
     const download = useRequestDownloadMutation()
-    const filePreview = useRequestMaterialPreviewMutation()
     const [preview, setPreview] = useState<Preview | null>(null)
-    const [activeFile, setActiveFile] = useState<{
-        file: RequestAttachment
-        url: string | null
-        contentType: string
-    } | null>(null)
-    const previewRequestRef = useRef(0)
+    const [dialogFileId, setDialogFileId] = useState<string | null>(null)
 
-    useEffect(() => {
-        const url = activeFile?.url
-        return () => {
-            if (url) URL.revokeObjectURL(url)
-        }
-    }, [activeFile?.url])
+    const files = useMemo(
+        () => [
+            ...new Map(
+                [
+                    ...(request.attachments ?? []),
+                    ...(query.data?.sales.flatMap((sales) => sales.materials) ??
+                        []),
+                ].map((file) => [file.file_asset_id, file]),
+            ).values(),
+        ],
+        [request.attachments, query.data?.sales],
+    )
 
-    const openFilePreview = (file: RequestAttachment) => {
-        const requestToken = ++previewRequestRef.current
-        setActiveFile({
-            file,
-            url: null,
-            contentType: file.content_type ?? "",
-        })
-        filePreview.mutate(
-            {
-                requestId: request.id,
-                attachment: file,
-                workItemId,
-                submissionVersion,
-            },
-            {
-                onSuccess: (blob) => {
-                    if (previewRequestRef.current !== requestToken) return
-                    const url = URL.createObjectURL(blob)
-                    setActiveFile({
+    const materialItems = useMemo<readonly MaterialFileItem[]>(
+        () =>
+            files.map((file) => ({
+                id: file.file_asset_id,
+                name: file.file_name,
+                mimeType: file.content_type ?? undefined,
+                loadPreview: () =>
+                    fetchMaterialPreview(
+                        request.id,
                         file,
-                        url,
-                        contentType: blob.type || file.content_type || "",
-                    })
-                },
-            },
-        )
+                        workItemId,
+                        submissionVersion,
+                    ),
+                onDownload: () =>
+                    download.mutateAsync({
+                        requestId: request.id,
+                        attachment: file,
+                        workItemId,
+                        submissionVersion,
+                    }),
+            })),
+        [download, files, request.id, submissionVersion, workItemId],
+    )
+
+    const handlePreviewFile = (file: MaterialFileItem) => {
+        if (onSelectFile) {
+            onSelectFile(file.id)
+        } else {
+            setDialogFileId(file.id)
+        }
     }
-    const files = [
-        ...new Map(
-            [
-                ...(request.attachments ?? []),
-                ...(query.data?.sales.flatMap((sales) => sales.materials) ??
-                    []),
-            ].map((file) => [file.file_asset_id, file]),
-        ).values(),
-    ]
+
     const title = summary || concise ? "审核材料" : "采购、销售与审核材料"
     const ariaLabel = "申请提交时的采购与销售单据"
     const content = (
@@ -248,209 +220,41 @@ export function RequestMaterials({
                     )}
                 </div>
             ) : null}
-            {files.length ? (
-                <ul className="divide-y divide-border/70 rounded-lg border border-border/80">
-                    {files.map((file) => {
-                        const kind = fileKindMeta(file)
-                        const segment = toAutomationIdSegment(
-                            file.file_asset_id,
-                        )
-                        const downloading =
-                            download.isPending &&
-                            download.variables?.attachment.file_asset_id ===
-                                file.file_asset_id
-                        return (
-                            <li
-                                className="flex flex-wrap items-center gap-3 px-4 py-3 text-body-compact"
-                                key={file.file_asset_id}
-                            >
-                                <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                                    <kind.Icon
-                                        aria-hidden="true"
-                                        className="size-4"
-                                    />
-                                </span>
-                                <span className="min-w-0 flex-1">
-                                    <span className="block break-all font-medium">
-                                        {file.file_name}
-                                    </span>
-                                    <span className="block text-xs text-muted-foreground">
-                                        {kind.label}
-                                    </span>
-                                </span>
-                                <div className="flex shrink-0 items-center gap-2">
-                                    {isPreviewableFile(file) ? (
-                                        <Button
-                                            id={`${idPrefix}-attachment-${segment}-preview`}
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() =>
-                                                openFilePreview(file)
-                                            }
-                                        >
-                                            查看
-                                        </Button>
-                                    ) : null}
-                                    <LoadingButton
-                                        loading={downloading}
-                                        id={`${idPrefix}-attachment-${segment}-download`}
-                                        type="button"
-                                        variant={
-                                            detailWorkspace
-                                                ? "ghost"
-                                                : "outline"
-                                        }
-                                        size="sm"
-                                        className={
-                                            detailWorkspace
-                                                ? `${detailWorkspaceStyles.subtleButton} shrink-0`
-                                                : "shrink-0"
-                                        }
-                                        disabled={download.isPending}
-                                        onClick={() =>
-                                            download.mutate({
-                                                requestId: request.id,
-                                                attachment: file,
-                                                workItemId,
-                                                submissionVersion,
-                                            })
-                                        }
-                                    >
-                                        {downloading ? "读取中…" : "下载"}
-                                    </LoadingButton>
-                                </div>
-                            </li>
-                        )
-                    })}
-                </ul>
-            ) : !query.isPending && !query.isError ? (
-                <p className="text-xs text-muted-foreground">
-                    未上传对账材料或其他附件。
-                </p>
-            ) : null}
-            {download.isError && (
-                <p role="alert" className="text-body-compact text-destructive">
-                    {getErrorMessage(download.error, "附件读取失败")}
-                </p>
-            )}
-            <Dialog
-                open={Boolean(activeFile)}
-                onOpenChange={(open) => {
-                    if (!open) {
-                        previewRequestRef.current += 1
-                        setActiveFile(null)
-                        filePreview.reset()
+            {materialItems.length > 0 ||
+            (!query.isPending && !query.isError) ? (
+                <MaterialFileList
+                    files={materialItems}
+                    onPreview={handlePreviewFile}
+                    activeFileId={activeFileId ?? dialogFileId ?? undefined}
+                    downloadingFileId={
+                        download.isPending
+                            ? (download.variables?.attachment.file_asset_id ??
+                              null)
+                            : null
                     }
-                }}
-            >
-                <DialogContent
-                    showCloseButton={false}
-                    className="flex h-[min(88dvh,54rem)] w-full max-w-[calc(100%-1.5rem)] flex-col gap-0 overflow-hidden rounded-xl border border-border/80 bg-card p-0 shadow-xl sm:max-w-5xl"
-                >
-                    <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border/60 bg-card px-6 py-3.5">
-                        <DialogTitle className="min-w-0 truncate text-section-title font-semibold tracking-tight">
-                            {activeFile?.file.file_name ?? "附件预览"}
-                        </DialogTitle>
-                        <div className="flex shrink-0 items-center gap-2">
-                            {activeFile ? (
-                                <Button
-                                    id={`${idPrefix}-file-preview-download`}
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    className={
-                                        detailWorkspaceStyles.subtleButton
-                                    }
-                                    disabled={download.isPending}
-                                    onClick={() =>
-                                        download.mutate({
-                                            requestId: request.id,
-                                            attachment: activeFile.file,
-                                            workItemId,
-                                            submissionVersion,
-                                        })
-                                    }
-                                >
-                                    下载原文件
-                                </Button>
-                            ) : null}
-                            <DialogClose
-                                render={
-                                    <Button
-                                        id={`${idPrefix}-file-preview-close`}
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon-sm"
-                                        className="text-muted-foreground hover:text-foreground"
-                                    />
-                                }
-                            >
-                                <XIcon aria-hidden="true" />
-                                <span className="sr-only">关闭附件预览</span>
-                            </DialogClose>
-                        </div>
-                    </div>
-                    <DialogDescription className="sr-only">
-                        付款申请提交时的冻结附件预览，按 Esc 或点击空白处关闭。
-                    </DialogDescription>
-                    <div className="relative min-h-0 flex-1 bg-muted/20">
-                        {filePreview.isError ? (
-                            <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-                                <p
-                                    role="alert"
-                                    className="text-body-compact text-destructive"
-                                >
-                                    {getErrorMessage(
-                                        filePreview.error,
-                                        "附件预览读取失败",
-                                    )}
-                                </p>
-                                {activeFile ? (
-                                    <Button
-                                        id={`${idPrefix}-file-preview-retry`}
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() =>
-                                            openFilePreview(activeFile.file)
-                                        }
-                                    >
-                                        重试预览
-                                    </Button>
-                                ) : null}
-                            </div>
-                        ) : !activeFile?.url ? (
-                            <div
-                                role="status"
-                                className="flex h-full items-center justify-center gap-2 text-xs text-muted-foreground"
-                            >
-                                <Spinner />
-                                正在读取附件…
-                            </div>
-                        ) : activeFile.contentType === "application/pdf" ||
-                          /\.pdf$/i.test(activeFile.file.file_name) ? (
-                            <iframe
-                                id={`${idPrefix}-file-preview-frame`}
-                                src={activeFile.url}
-                                title={activeFile.file.file_name}
-                                className="h-full w-full border-0"
-                            />
-                        ) : (
-                            <div className="relative h-full w-full p-4">
-                                <Image
-                                    src={activeFile.url}
-                                    alt={activeFile.file.file_name}
-                                    fill
-                                    unoptimized
-                                    sizes="90vw"
-                                    className="object-contain"
-                                />
-                            </div>
-                        )}
-                    </div>
-                </DialogContent>
-            </Dialog>
+                    emptyMessage="未上传对账材料或其他附件。"
+                    idPrefix={`${idPrefix}-attachment`}
+                    downloadVariant={detailWorkspace ? "ghost" : "outline"}
+                    downloadButtonClassName={
+                        detailWorkspace
+                            ? detailWorkspaceStyles.subtleButton
+                            : undefined
+                    }
+                />
+            ) : null}
+            {!onSelectFile ? (
+                <UnifiedMaterialViewer
+                    mode="dialog"
+                    files={materialItems}
+                    activeFileId={dialogFileId ?? undefined}
+                    onActiveFileChange={setDialogFileId}
+                    open={dialogFileId !== null}
+                    onOpenChange={(open) => {
+                        if (!open) setDialogFileId(null)
+                    }}
+                    idPrefix={`${idPrefix}-file-preview`}
+                />
+            ) : null}
             <Dialog
                 open={Boolean(preview)}
                 onOpenChange={(open) => {
@@ -458,34 +262,22 @@ export function RequestMaterials({
                 }}
             >
                 <DialogContent
-                    showCloseButton={false}
-                    className="flex max-h-[min(94dvh,56rem)] w-full max-w-[calc(100%-1.5rem)] flex-col gap-0 overflow-hidden rounded-xl border border-border/80 bg-card p-0 shadow-xl sm:max-w-5xl"
+                    size="2xl"
+                    scroll="body"
+                    closeButtonId={`${idPrefix}-paper-close`}
+                    className="bg-card"
                 >
-                    <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border/60 bg-card px-6 py-3.5">
-                        <DialogTitle className="min-w-0 truncate text-section-title font-semibold tracking-tight">
+                    <DialogHeader>
+                        <DialogTitle className="min-w-0 truncate">
                             {preview?.kind === "purchase"
                                 ? "采购单完整预览"
                                 : "销售单完整预览"}
                         </DialogTitle>
-                        <DialogClose
-                            render={
-                                <Button
-                                    id={`${idPrefix}-paper-close`}
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    className="text-muted-foreground hover:text-foreground"
-                                />
-                            }
-                        >
-                            <XIcon aria-hidden="true" />
-                            <span className="sr-only">关闭预览</span>
-                        </DialogClose>
-                    </div>
-                    <DialogDescription className="sr-only">
-                        付款申请提交时的完整单据，按 Esc 或点击空白处关闭。
-                    </DialogDescription>
-                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-card p-6 sm:p-8">
+                        <DialogDescription className="sr-only">
+                            付款申请提交时的完整单据，按 Esc 或点击空白处关闭。
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogBody className="bg-card p-6 sm:p-8">
                         {preview?.kind === "purchase" ? (
                             <PurchasePaper preview={preview} />
                         ) : preview ? (
@@ -494,7 +286,7 @@ export function RequestMaterials({
                                 payer={request.our_company_name}
                             />
                         ) : null}
-                    </div>
+                    </DialogBody>
                 </DialogContent>
             </Dialog>
         </>
@@ -606,6 +398,7 @@ function PurchasePaper({
         />
     )
 }
+
 function SalesPaper({ sales, payer }: { sales: SalesSnapshot; payer: string }) {
     return (
         <PaperDocument

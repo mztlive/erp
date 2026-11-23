@@ -6,9 +6,12 @@ import {
     DetailWorkspaceChrome,
     DetailWorkspacePage,
     DetailWorkspaceSection,
-    PageHeader,
     PageScaffold,
 } from "@/components/business"
+import {
+    ListWorkspaceHeader,
+    listWorkspaceStyles,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import type { IntegrationView } from "../../types"
 
@@ -68,8 +71,11 @@ export function IntegrationPageFailure({
             {failure}
         </IntegrationDetailState>
     ) : (
-        <PageScaffold>
-            <PageHeader title={title} description={description} />
+        <PageScaffold
+            density="compact"
+            className={`${listWorkspaceStyles.page} gap-4`}
+        >
+            <ListWorkspaceHeader title={title} description={description} />
             {failure}
         </PageScaffold>
     )
@@ -137,8 +143,11 @@ export function IntegrationNotFound({
             {empty}
         </IntegrationDetailState>
     ) : (
-        <PageScaffold>
-            <PageHeader title={title} description={description} />
+        <PageScaffold
+            density="compact"
+            className={`${listWorkspaceStyles.page} gap-4`}
+        >
+            <ListWorkspaceHeader title={title} description={description} />
             {empty}
         </PageScaffold>
     )

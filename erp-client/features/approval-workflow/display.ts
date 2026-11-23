@@ -2,8 +2,15 @@
  * 审批区用户可见文案。枚举必须映射中文，内部 ID 不得上屏。
  */
 
-import { formatDateTime } from "@/lib/datetime"
+import { formatDateTime, unixSecondsToIsoOrEmpty } from "@/lib/datetime"
 import { displayName } from "@/lib/display-name"
+import {
+    APPROVAL_INSTANCE_STATUS_META,
+    APPROVAL_NODE_STATUS_META,
+    DOCUMENT_TYPE_CANONICAL_LABELS,
+    getApprovalInstanceStatusMeta,
+    getApprovalNodeStatusMeta,
+} from "@/lib/task-status-dictionary"
 
 import type { ApprovalSalesSubmission } from "./api/materials"
 import type { RecoveryOption } from "./types"
@@ -18,20 +25,21 @@ export type ApprovalStatusTone =
     | "void"
 
 export const INSTANCE_STATUS_LABEL: Record<string, string> = {
-    RUNNING: "审批中",
-    APPROVED: "已通过",
-    REJECTED: "已驳回",
-    CANCELLED: "已撤回",
-    BLOCKED: "受阻",
+    RUNNING: APPROVAL_INSTANCE_STATUS_META.RUNNING.label,
+    APPROVED: APPROVAL_INSTANCE_STATUS_META.APPROVED.label,
+    REJECTED: APPROVAL_INSTANCE_STATUS_META.REJECTED.label,
+    CANCELLED: APPROVAL_INSTANCE_STATUS_META.CANCELLED.label,
+    BLOCKED: APPROVAL_INSTANCE_STATUS_META.BLOCKED.label,
 }
 
 export const EXECUTION_STATUS_LABEL: Record<string, string> = {
-    ACTIVE: "办理中",
-    APPROVED: "已通过",
-    REJECTED: "已驳回",
-    CANCELLED: "已撤回",
-    BLOCKED: "受阻",
-    SUPERSEDED: "已由后续轮次替代",
+    ACTIVE: APPROVAL_NODE_STATUS_META.ACTIVE.label,
+    APPROVED: APPROVAL_NODE_STATUS_META.APPROVED.label,
+    REJECTED: APPROVAL_NODE_STATUS_META.REJECTED.label,
+    CANCELLED: APPROVAL_NODE_STATUS_META.CANCELLED.label,
+    BLOCKED: APPROVAL_NODE_STATUS_META.BLOCKED.label,
+    PENDING: APPROVAL_NODE_STATUS_META.PENDING.label,
+    SUPERSEDED: APPROVAL_NODE_STATUS_META.SUPERSEDED.label,
 }
 
 export const RECOVERY_ACTION_LABEL: Record<RecoveryOption, string> = {
@@ -40,60 +48,43 @@ export const RECOVERY_ACTION_LABEL: Record<RecoveryOption, string> = {
 }
 
 /**
- * 实例状态中文。未知码回落到「审批中」，不上屏原值。
+ * 实例状态中文。权威口径统一来自 `@/lib/task-status-dictionary`。
  */
 export const displayInstanceStatus = (status?: string | null): string =>
-    INSTANCE_STATUS_LABEL[status ?? ""] ?? "审批中"
+    getApprovalInstanceStatusMeta(status).label
 
 /**
- * 执行结果中文。未知码回落到「办理中」。
+ * 执行结果中文。权威口径统一来自 `@/lib/task-status-dictionary`。
  */
 export const displayExecutionStatus = (status?: string | null): string =>
-    EXECUTION_STATUS_LABEL[status ?? ""] ?? "办理中"
+    getApprovalNodeStatusMeta(status).label
 
 /**
- * 实例状态色调。未知码与「审批中」一致，按进行中处理。
+ * 实例状态色调。权威口径统一来自 `@/lib/task-status-dictionary`（`RUNNING -> info`，`BLOCKED -> destructive`）。
  */
 export const instanceStatusTone = (
     status?: string | null,
-): ApprovalStatusTone => {
-    switch (status) {
-        case "APPROVED":
-            return "success"
-        case "CANCELLED":
-            return "void"
-        case "REJECTED":
-            return "destructive"
-        case "BLOCKED":
-            return "destructive"
-        case "RUNNING":
-            return "warning"
-        default:
-            return "warning"
-    }
-}
+): ApprovalStatusTone => getApprovalInstanceStatusMeta(status).tone
 
 /**
- * 节点执行状态色调。未知码与「办理中」一致。
+ * 节点执行状态色调。权威口径统一来自 `@/lib/task-status-dictionary`（`ACTIVE -> warning`，`BLOCKED -> destructive`）。
  */
 export const executionStatusTone = (
     status?: string | null,
-): ApprovalStatusTone => {
-    switch (status) {
-        case "APPROVED":
-            return "success"
-        case "REJECTED":
-        case "BLOCKED":
-            return "destructive"
-        case "CANCELLED":
-            return "void"
-        case "SUPERSEDED":
-            return "neutral"
-        case "ACTIVE":
-            return "info"
-        default:
-            return "info"
-    }
+): ApprovalStatusTone => getApprovalNodeStatusMeta(status).tone
+
+/**
+ * 审批单据权威中文名（如 `sales_invoice_request -> 销项开票申请`）。
+ */
+export const displayCanonicalDocumentTypeLabel = (
+    documentType?: string | null,
+): string | undefined => {
+    if (!documentType) return undefined
+    const entry =
+        DOCUMENT_TYPE_CANONICAL_LABELS[
+            documentType as keyof typeof DOCUMENT_TYPE_CANONICAL_LABELS
+        ]
+    return entry?.label
 }
 
 /** 名称仅来自展示字段；已知对象标识和不透明 ID 不作为名称。 */
@@ -123,11 +114,41 @@ export function approvalSalesTaxPoint(value: string): string {
 export const displayUnixSeconds = (
     secs?: number | null,
 ): { dateTime: string; label: string } | undefined => {
-    if (secs == null || secs <= 0) return undefined
-    const dateTime = new Date(secs * 1000).toISOString()
+    const dateTime = unixSecondsToIsoOrEmpty(secs)
+    if (!dateTime) return undefined
     const label = formatDateTime(dateTime, "full")
     if (!label || label === "—") return undefined
     return { dateTime, label }
+}
+
+const DATE_ONLY_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+})
+
+/**
+ * Unix 秒时间戳或 ISO 日期转本地日期（YYYY/MM/DD）。无效值返回「—」。
+ */
+export const displayUnixDate = (secs?: number | null): string => {
+    const dateTime = unixSecondsToIsoOrEmpty(secs)
+    if (!dateTime) return "—"
+    const parsed = new Date(dateTime)
+    if (Number.isNaN(parsed.getTime())) return "—"
+    return DATE_ONLY_FORMATTER.format(parsed)
+}
+
+/**
+ * 日期字符串或 Date 转本地日期（YYYY/MM/DD）。无效值返回「—」。
+ */
+export const displayDateString = (
+    value?: string | number | Date | null,
+): string => {
+    if (value == null || value === "") return "—"
+    const parsed = value instanceof Date ? value : new Date(value)
+    if (Number.isNaN(parsed.getTime()))
+        return typeof value === "string" ? value : "—"
+    return DATE_ONLY_FORMATTER.format(parsed)
 }
 
 /**

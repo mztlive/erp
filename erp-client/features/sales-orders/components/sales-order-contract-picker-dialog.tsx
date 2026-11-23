@@ -50,7 +50,7 @@ export function SalesOrderContractPickerDialog({
     return (
         <Dialog open onOpenChange={(open) => !open && onClose()}>
             <DialogContent
-                className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl"
+                size="lg"
                 closeButtonId="sales-contract-picker-close"
             >
                 <DialogHeader>

@@ -15,18 +15,18 @@ import type { ApprovalDefinitionBinding } from "../types"
  */
 export function SubmissionRouteConfirmation({
     definition,
+    fallbackDescription = "当前单据尚未展示审批路线，请刷新后再确认提交。",
 }: {
     definition?: ApprovalDefinitionBinding
     documentType?: string
+    fallbackDescription?: string
 }) {
     const preview = useLeaderPreview(definition?.nodes ?? [])
     if (!definition || definition.nodes.length === 0) {
         return (
             <Alert>
                 <AlertTitle>提交后将启动审批</AlertTitle>
-                <AlertDescription>
-                    当前单据尚未展示审批路线，请刷新后再确认提交。
-                </AlertDescription>
+                <AlertDescription>{fallbackDescription}</AlertDescription>
             </Alert>
         )
     }

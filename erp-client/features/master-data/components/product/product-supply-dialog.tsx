@@ -86,11 +86,11 @@ export function ProductSupplyDialog({
         <Dialog open={product != null} onOpenChange={onOpenChange}>
             <DialogContent
                 id="master-data-product-supply-dialog"
+                size="2xl"
                 closeButtonId="master-data-product-supply-close"
                 finalFocus={() =>
                     addingSupplyRef.current ? false : finalFocus()
                 }
-                className="max-h-[90vh] overflow-y-auto sm:max-w-5xl"
             >
                 <DialogHeader>
                     <DialogTitle>

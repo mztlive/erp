@@ -10,7 +10,13 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import {
     Table,
     TableBody,
@@ -22,12 +28,31 @@ import {
 } from "@/components/ui/table"
 import type { ApprovalPurchaseLine } from "@/features/approval-workflow/api/materials"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 import {
     purchaseComparison,
     type PurchaseSource,
 } from "./workspace-purchase-comparison-model"
 import { PurchaseComparisonRow } from "./workspace-purchase-comparison-row"
+
+function hasNegativeMargin(line: ApprovalPurchaseLine): boolean {
+    const cost = line.unit_cost_gross
+    const salesPrice = line.source?.unit_price_gross
+    if (cost == null || cost === "" || salesPrice == null || salesPrice === "")
+        return false
+    const unitMismatch = Boolean(
+        line.unit?.trim() &&
+        line.source?.unit?.trim() &&
+        line.unit.trim() !== line.source.unit.trim(),
+    )
+    if (unitMismatch) return false
+    try {
+        return compareDecimal(cost, salesPrice, 6) > 0
+    } catch {
+        return false
+    }
+}
 
 /** 搜索、提示计数和分页均基于本次审批返回的全部冻结明细。 */
 export function WorkspacePurchaseComparisonTable({
@@ -61,16 +86,20 @@ export function WorkspacePurchaseComparisonTable({
             lines.map((line) => ({
                 line,
                 comparison: purchaseComparison(line),
+                negativeMargin: hasNegativeMargin(line),
             })),
         [lines],
     )
     const attentionCount = rows.filter(
-        ({ comparison }) => comparison.warnings.length > 0,
+        ({ comparison, negativeMargin }) =>
+            comparison.warnings.length > 0 || negativeMargin,
     ).length
     const needle = search.trim().toLocaleLowerCase()
     const filtered = rows.filter(
-        ({ line, comparison }) =>
-            (!attentionOnly || comparison.warnings.length > 0) &&
+        ({ line, comparison, negativeMargin }) =>
+            (!attentionOnly ||
+                comparison.warnings.length > 0 ||
+                negativeMargin) &&
             (!needle ||
                 [
                     line.title,
@@ -140,7 +169,7 @@ export function WorkspacePurchaseComparisonTable({
                                 setPage(1)
                             }}
                         >
-                            <span>需关注</span>
+                            <span>仅看异常项</span>
                             <Badge
                                 variant={
                                     attentionCount > 0 ? "warning" : "neutral"
@@ -196,9 +225,7 @@ export function WorkspacePurchaseComparisonTable({
                         {showPagination
                             ? ` · 当前显示 ${visible.length ? (currentPage - 1) * pageSize + 1 : 0}–${Math.min(currentPage * pageSize, filtered.length)} 项`
                             : ""}
-                        {rows.some(({ comparison }) =>
-                            Boolean(comparison.warnings.length),
-                        )
+                        {attentionCount > 0
                             ? " · 点击异常行可展开明细对比"
                             : ""}
                     </span>
@@ -207,71 +234,68 @@ export function WorkspacePurchaseComparisonTable({
                     id={`${prefix}-table-scroll`}
                     data-slot="detail-inline-table"
                     role="region"
-                    aria-label="采购与销售明细，可横向滚动查看"
-                    className={detailWorkspaceStyles.dataTableWrapper}
+                    aria-label="采购与销售明细对照"
+                    className={detailWorkspaceStyles.inlineTableWrapper}
                 >
-                    <Table className="min-w-[1080px]">
+                    <Table className="w-full [&_:is(th,td):first-child]:ps-0">
                         <TableCaption className="sr-only">
                             本次提交的采购与来源销售逐行对照；筛选及分页不改变整单审批范围。
                         </TableCaption>
                         <TableHeader>
                             <TableRow>
-                                <TableHead scope="col" className="w-10">
+                                <TableHead scope="col" className="w-9">
                                     <span className="sr-only">行号</span>
                                 </TableHead>
-                                <TableHead scope="col" className="min-w-44">
-                                    商品 / 规格
-                                </TableHead>
+                                <TableHead scope="col">商品 / 规格</TableHead>
                                 <TableHead scope="col" data-align="end">
                                     数量（销 / 采）
                                 </TableHead>
-                                <TableHead scope="col" data-align="end">
-                                    销售含税单价
-                                </TableHead>
-                                <TableHead scope="col">采购供给价</TableHead>
+                                <TableHead scope="col">售价 / 供给价</TableHead>
                                 <TableHead scope="col" data-align="end">
                                     本次采购单价
                                 </TableHead>
                                 <TableHead scope="col">
                                     交期（销 / 采）
                                 </TableHead>
-                                <TableHead scope="col" className="min-w-36">
-                                    核对提示
-                                </TableHead>
-                                <TableHead scope="col" className="w-10">
+                                <TableHead scope="col">核对提示</TableHead>
+                                <TableHead scope="col" className="w-9">
                                     <span className="sr-only">补充信息</span>
                                 </TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {visible.map(({ line, comparison }) => (
-                                <PurchaseComparisonRow
-                                    key={line.id}
-                                    line={line}
-                                    comparison={comparison}
-                                    source={
-                                        sources.length > 1
-                                            ? sources.find(
-                                                  (source) =>
-                                                      source.revision_id ===
-                                                      line.source?.revision_id,
-                                              )
-                                            : undefined
-                                    }
-                                    prefix={`${prefix}-line-${toAutomationIdSegment(line.id)}`}
-                                    expanded={expandedIds.has(line.id)}
-                                    onToggle={() => toggleExpanded(line.id)}
-                                    onPreview={onPreview}
-                                />
-                            ))}
+                            {visible.map(
+                                ({ line, comparison, negativeMargin }) => (
+                                    <PurchaseComparisonRow
+                                        key={line.id}
+                                        line={line}
+                                        comparison={comparison}
+                                        negativeMargin={negativeMargin}
+                                        source={
+                                            sources.length > 1
+                                                ? sources.find(
+                                                      (source) =>
+                                                          source.revision_id ===
+                                                          line.source
+                                                              ?.revision_id,
+                                                  )
+                                                : undefined
+                                        }
+                                        prefix={`${prefix}-line-${toAutomationIdSegment(line.id)}`}
+                                        expanded={expandedIds.has(line.id)}
+                                        onToggle={() => toggleExpanded(line.id)}
+                                        onPreview={onPreview}
+                                    />
+                                ),
+                            )}
                             {!visible.length && (
                                 <TableRow>
                                     <TableCell
-                                        colSpan={9}
+                                        colSpan={8}
                                         className="py-12 text-center text-muted-foreground"
                                     >
                                         {attentionOnly && !search
-                                            ? "当前没有需关注的商品，仍请核对完整采购明细。"
+                                            ? "当前没有异常项，仍请核对完整采购明细。"
                                             : "没有匹配的商品，请调整搜索条件或清除筛选。"}
                                     </TableCell>
                                 </TableRow>
@@ -285,31 +309,41 @@ export function WorkspacePurchaseComparisonTable({
                 {showPagination ? (
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <label htmlFor={`${prefix}-page-size`}>每页</label>
-                            <NativeSelect
-                                id={`${prefix}-page-size`}
-                                size="sm"
-                                value={pageSize}
-                                onChange={(event) => {
-                                    setPageSize(
-                                        event.target.value === "50" ? 50 : 20,
-                                    )
+                            <span id={`${prefix}-page-size-label`}>每页</span>
+                            <Select
+                                value={String(pageSize)}
+                                onValueChange={(next) => {
+                                    if (!next) return
+                                    setPageSize(next === "50" ? 50 : 20)
                                     setPage(1)
                                 }}
                             >
-                                <NativeSelectOption
-                                    id={`${prefix}-page-size-20`}
-                                    value="20"
+                                <SelectTrigger
+                                    id={`${prefix}-page-size`}
+                                    size="sm"
+                                    aria-labelledby={`${prefix}-page-size-label`}
+                                    className="w-24"
                                 >
-                                    20 项
-                                </NativeSelectOption>
-                                <NativeSelectOption
-                                    id={`${prefix}-page-size-50`}
-                                    value="50"
+                                    <SelectValue>{pageSize} 项</SelectValue>
+                                </SelectTrigger>
+                                <SelectContent
+                                    align="start"
+                                    alignItemWithTrigger={false}
                                 >
-                                    50 项
-                                </NativeSelectOption>
-                            </NativeSelect>
+                                    <SelectItem
+                                        id={`${prefix}-page-size-20`}
+                                        value="20"
+                                    >
+                                        20 项
+                                    </SelectItem>
+                                    <SelectItem
+                                        id={`${prefix}-page-size-50`}
+                                        value="50"
+                                    >
+                                        50 项
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
                             <span className="num">
                                 第 {currentPage} / {pageCount} 页
                             </span>

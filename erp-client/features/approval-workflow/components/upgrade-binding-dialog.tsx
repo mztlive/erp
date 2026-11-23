@@ -2,6 +2,7 @@
 
 import * as React from "react"
 
+import { ReasonTextareaField } from "@/components/business/reason-textarea-field"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
@@ -12,6 +13,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { BPM_REASON_MAX_UTF8_BYTES } from "@/lib/validation/reason-length"
 
 import { approvalConflictMessage, isApprovalConflict } from "../api"
 import { displayProcessVersion, displayRoute } from "../display"
@@ -117,9 +119,9 @@ export function UpgradeBindingDialog({
             }}
         >
             <DialogContent
+                size="md"
                 closeButtonId={`${id}-close`}
                 showCloseButton={!upgrade.isPending}
-                className="sm:max-w-lg"
             >
                 <DialogHeader>
                     <DialogTitle>采用最新审批流程</DialogTitle>
@@ -143,11 +145,43 @@ export function UpgradeBindingDialog({
                     <form.AppField
                         name="reason"
                         children={(field) => (
-                            <field.TextareaField
+                            <ReasonTextareaField
                                 id={`${id}-reason`}
+                                name={field.name}
+                                mode="utf8-bytes"
+                                max={BPM_REASON_MAX_UTF8_BYTES}
                                 label="更新原因"
+                                placeholder="请说明采用最新审批流程的原因"
                                 required
+                                value={field.state.value}
+                                onChange={field.handleChange}
+                                onBlur={field.handleBlur}
+                                error={
+                                    field.state.meta.isTouched ||
+                                    field.state.meta.errors.length > 0
+                                        ? (field.state.meta.errors
+                                              .map((item) =>
+                                                  typeof item === "string"
+                                                      ? item
+                                                      : item &&
+                                                          typeof item ===
+                                                              "object" &&
+                                                          "message" in item
+                                                        ? String(item.message)
+                                                        : "",
+                                              )
+                                              .find(Boolean) ?? undefined)
+                                        : undefined
+                                }
+                                invalid={
+                                    (field.state.meta.isTouched ||
+                                        field.state.meta.errors.length > 0) &&
+                                    !field.state.meta.isValid
+                                }
                                 disabled={upgrade.isPending}
+                                onCtrlEnterSubmit={() => {
+                                    void form.handleSubmit()
+                                }}
                             />
                         )}
                     />

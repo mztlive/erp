@@ -4,7 +4,8 @@ import Link from "next/link"
 import { customerDocumentHref, salesOrderHref } from "../lib/source-documents"
 import { ArrowUpRightIcon } from "lucide-react"
 
-import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
+import { BusinessStatusBadge } from "@/components/business"
+import { TaskActionSheet } from "@/components/business/task-action-sheet"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
@@ -15,13 +16,21 @@ import {
     ReceiptReversalDetailBody,
     ReceivableDetailBody,
 } from "@/features/customer-receivables/components/detail-bodies"
-import { isUnsubmittedCustomerRefundStatus } from "@/features/customer-receivables/lib/customer-refund-approval"
-import { isUnsubmittedReceiptReversalStatus } from "@/features/customer-receivables/lib/receipt-reversal-approval"
+import {
+    customerRefundApprovalPhase,
+    isUnsubmittedCustomerRefundStatus,
+} from "@/features/customer-receivables/lib/customer-refund-approval"
+import {
+    isUnsubmittedReceiptReversalStatus,
+    receiptReversalApprovalPhase,
+} from "@/features/customer-receivables/lib/receipt-reversal-approval"
 import type {
     AllocationMode,
     CustomerAccountsDetailView,
 } from "@/features/customer-receivables/types"
 import { CustomerReceiptApprovalArea } from "./customer-receipt-approval-area"
+import { CustomerRefundApprovalArea } from "./customer-refund-approval-area"
+import { ReceiptReversalApprovalArea } from "./receipt-reversal-approval-area"
 import { customerReceiptApprovalPhase } from "../lib/customer-receipt-approval"
 import { getErrorMessage } from "@/lib/api/errors"
 
@@ -115,8 +124,8 @@ export function CustomerAccountDetailPreview({
           ? "打开原回款"
           : "打开原发票"
     return (
-        <QuickPreviewSheet
-            id="customer-receivables-preview-sheet"
+        <TaskActionSheet
+            idPrefix="customer-receivables-preview-sheet"
             open={open}
             onOpenChange={(nextOpen) => {
                 if (!nextOpen) onClose()
@@ -124,7 +133,6 @@ export function CustomerAccountDetailPreview({
             onOpenChangeComplete={(nextOpen) => {
                 if (!nextOpen) onClosed?.()
             }}
-            size="detail"
             title={
                 data?.receivable?.counterpartyPartyName ??
                 data?.receipt?.counterpartyPartyName ??
@@ -135,20 +143,28 @@ export function CustomerAccountDetailPreview({
                       ? "回款冲正"
                       : "往来详情")
             }
-            identity={
-                data?.receivable
-                    ? `销售单：${data.receivable.salesOrderNo}`
-                    : data?.receipt
-                      ? `回款单：${data.receipt.receiptNo}`
-                      : data?.invoice
-                        ? `发票号码：${data.invoice.invoiceNo}`
-                        : data?.refund
-                          ? `退款单：${data.refund.refundNo}`
-                          : data?.reversal
-                            ? `冲正单：${data.reversal.reversalNo}`
-                            : undefined
+            subtitle={
+                data?.receivable ? (
+                    <span className="num">
+                        销售单：{data.receivable.salesOrderNo}
+                    </span>
+                ) : data?.receipt ? (
+                    <span className="num">
+                        回款单：{data.receipt.receiptNo}
+                    </span>
+                ) : data?.invoice ? (
+                    <span className="num">
+                        发票号码：{data.invoice.invoiceNo}
+                    </span>
+                ) : data?.refund ? (
+                    <span className="num">退款单：{data.refund.refundNo}</span>
+                ) : data?.reversal ? (
+                    <span className="num">
+                        冲正单：{data.reversal.reversalNo}
+                    </span>
+                ) : undefined
             }
-            summary={
+            badges={
                 data?.receivable ? (
                     <BusinessStatusBadge
                         context="preview"
@@ -162,7 +178,7 @@ export function CustomerAccountDetailPreview({
                         tone={data.receipt.statusTone}
                     />
                 ) : data?.invoice ? (
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2">
                         <BusinessStatusBadge
                             context="preview"
                             label={data.invoice.statusLabel}
@@ -186,9 +202,17 @@ export function CustomerAccountDetailPreview({
                     />
                 ) : null
             }
-            footer={
+            footerLeading={
                 data ? (
                     <>
+                        <Button
+                            id="customer-receivables-preview-close"
+                            type="button"
+                            variant="outline"
+                            onClick={onClose}
+                        >
+                            关闭
+                        </Button>
                         {originalHref ? (
                             <Button
                                 id="customer-receivables-preview-open-original"
@@ -200,6 +224,12 @@ export function CustomerAccountDetailPreview({
                                 <ArrowUpRightIcon data-icon="inline-end" />
                             </Button>
                         ) : null}
+                    </>
+                ) : null
+            }
+            footerActions={
+                data ? (
+                    <>
                         {data.receivable && canStartSession("receipt") ? (
                             <LoadingButton
                                 id="customer-receivables-preview-receivable-register-receipt"
@@ -348,52 +378,6 @@ export function CustomerAccountDetailPreview({
                             </LoadingButton>
                         ) : null}
                         {showCorrectionActions &&
-                        data.refund &&
-                        isUnsubmittedCustomerRefundStatus(data.refund.status) &&
-                        data.refund.approval?.allowedActions.includes(
-                            "SUBMIT",
-                        ) &&
-                        onRequestRefundSubmit &&
-                        canSubmitRefund ? (
-                            <Button
-                                id="customer-receivables-preview-refund-submit"
-                                type="button"
-                                disabled={!canSubmitRefund}
-                                title={
-                                    canSubmitRefund
-                                        ? undefined
-                                        : permissionReason
-                                }
-                                onClick={onRequestRefundSubmit}
-                            >
-                                提交审批
-                            </Button>
-                        ) : null}
-                        {showCorrectionActions &&
-                        data.reversal &&
-                        isUnsubmittedReceiptReversalStatus(
-                            data.reversal.status,
-                        ) &&
-                        data.reversal.approval?.allowedActions.includes(
-                            "SUBMIT",
-                        ) &&
-                        onRequestReversalSubmit &&
-                        canSubmitReversal ? (
-                            <Button
-                                id="customer-receivables-preview-reversal-submit"
-                                type="button"
-                                disabled={!canSubmitReversal}
-                                title={
-                                    canSubmitReversal
-                                        ? undefined
-                                        : permissionReason
-                                }
-                                onClick={onRequestReversalSubmit}
-                            >
-                                提交审批
-                            </Button>
-                        ) : null}
-                        {showCorrectionActions &&
                         data.invoice?.allowedActions.includes(
                             "ISSUE_RED_INVOICE",
                         ) &&
@@ -438,25 +422,99 @@ export function CustomerAccountDetailPreview({
                                 onDecisionApplied={onDecisionApplied}
                             />
                         ) : null}
-                        <Button
-                            id="customer-receivables-preview-close"
-                            type="button"
-                            variant="outline"
-                            onClick={onClose}
-                        >
-                            关闭
-                        </Button>
+                        {data.refund ? (
+                            <CustomerRefundApprovalArea
+                                presentation="actions"
+                                phase={customerRefundApprovalPhase(
+                                    data.refund.approval,
+                                    data.refund.status === "in_approval"
+                                        ? "IN_APPROVAL"
+                                        : data.refund.status,
+                                )}
+                                approval={data.refund.approval}
+                                documentId={data.refund.refundId}
+                                documentVersion={data.refund.baselineVersion}
+                                workItemId={workItemId}
+                                expectedTaskVersion={expectedTaskVersion}
+                                workItemAllowedActions={workItemAllowedActions}
+                                onDecisionApplied={onDecisionApplied}
+                            />
+                        ) : null}
+                        {showCorrectionActions &&
+                        data.refund &&
+                        isUnsubmittedCustomerRefundStatus(data.refund.status) &&
+                        data.refund.approval?.allowedActions.includes(
+                            "SUBMIT",
+                        ) &&
+                        onRequestRefundSubmit &&
+                        canSubmitRefund ? (
+                            <Button
+                                id="customer-receivables-preview-refund-submit"
+                                type="button"
+                                disabled={!canSubmitRefund}
+                                title={
+                                    canSubmitRefund
+                                        ? undefined
+                                        : permissionReason
+                                }
+                                onClick={onRequestRefundSubmit}
+                            >
+                                提交审批
+                            </Button>
+                        ) : null}
+                        {data.reversal ? (
+                            <ReceiptReversalApprovalArea
+                                presentation="actions"
+                                phase={receiptReversalApprovalPhase(
+                                    data.reversal.approval,
+                                    data.reversal.status === "in_approval"
+                                        ? "IN_APPROVAL"
+                                        : data.reversal.status,
+                                )}
+                                approval={data.reversal.approval}
+                                documentId={data.reversal.reversalId}
+                                documentVersion={data.reversal.baselineVersion}
+                                workItemId={workItemId}
+                                expectedTaskVersion={expectedTaskVersion}
+                                workItemAllowedActions={workItemAllowedActions}
+                                onDecisionApplied={onDecisionApplied}
+                            />
+                        ) : null}
+                        {showCorrectionActions &&
+                        data.reversal &&
+                        isUnsubmittedReceiptReversalStatus(
+                            data.reversal.status,
+                        ) &&
+                        data.reversal.approval?.allowedActions.includes(
+                            "SUBMIT",
+                        ) &&
+                        onRequestReversalSubmit &&
+                        canSubmitReversal ? (
+                            <Button
+                                id="customer-receivables-preview-reversal-submit"
+                                type="button"
+                                disabled={!canSubmitReversal}
+                                title={
+                                    canSubmitReversal
+                                        ? undefined
+                                        : permissionReason
+                                }
+                                onClick={onRequestReversalSubmit}
+                            >
+                                提交审批
+                            </Button>
+                        ) : null}
                     </>
                 ) : null
             }
         >
             {isPending ? (
-                <div className="space-y-4 px-7 py-6">
+                <div className="space-y-4">
                     <div className="h-24 animate-pulse rounded-xl bg-muted" />
                     <div className="h-40 animate-pulse rounded-xl bg-muted" />
                 </div>
             ) : isError ? (
-                <div className="space-y-3 px-7 py-6">
+                <div className="space-y-3">
                     <p className="text-xs text-muted-foreground">
                         {getErrorMessage(error, "详情加载失败，请重试。")}
                     </p>
@@ -471,11 +529,15 @@ export function CustomerAccountDetailPreview({
                     </Button>
                 </div>
             ) : data?.receivable ? (
-                <ReceivableDetailBody row={data.receivable} />
+                <ReceivableDetailBody
+                    row={data.receivable}
+                    className="space-y-6 text-body-compact"
+                />
             ) : data?.receipt ? (
                 <ReceiptDetailBody
                     approvalActionsInFooter
                     row={data.receipt}
+                    className="space-y-6 text-body-compact"
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
                     workItemAllowedActions={workItemAllowedActions}
@@ -483,7 +545,9 @@ export function CustomerAccountDetailPreview({
                 />
             ) : data?.refund ? (
                 <CustomerRefundDetailBody
+                    approvalActionsInFooter
                     row={data.refund}
+                    className="space-y-6 text-body-compact"
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
                     workItemAllowedActions={workItemAllowedActions}
@@ -491,19 +555,24 @@ export function CustomerAccountDetailPreview({
                 />
             ) : data?.reversal ? (
                 <ReceiptReversalDetailBody
+                    approvalActionsInFooter
                     row={data.reversal}
+                    className="space-y-6 text-body-compact"
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
                     workItemAllowedActions={workItemAllowedActions}
                     onDecisionApplied={onDecisionApplied}
                 />
             ) : data?.invoice ? (
-                <InvoiceDetailBody row={data.invoice} />
+                <InvoiceDetailBody
+                    row={data.invoice}
+                    className="space-y-6 text-body-compact"
+                />
             ) : (
-                <div className="px-7 py-6 text-body-compact text-muted-foreground">
+                <div className="text-body-compact text-muted-foreground">
                     未找到该笔记录，可能已超出当前数据范围。
                 </div>
             )}
-        </QuickPreviewSheet>
+        </TaskActionSheet>
     )
 }

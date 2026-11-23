@@ -131,9 +131,9 @@ export function PurchaseDirectReturnDialog({
             }}
         >
             <DialogContent
+                size="lg"
                 closeButtonId="purchase-direct-return-close"
                 showCloseButton={!pending && !unknown}
-                className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl"
             >
                 <DialogHeader>
                     <DialogTitle>登记供应商收到的退货</DialogTitle>

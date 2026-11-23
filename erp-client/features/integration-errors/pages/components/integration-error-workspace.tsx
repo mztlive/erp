@@ -27,6 +27,7 @@ export function IntegrationErrorWorkspace({
     item,
     focusMode,
     detailWorkspace,
+    showEvidenceSection = false,
     urlState,
     currentQueueHref,
     positionIndex,
@@ -43,6 +44,7 @@ export function IntegrationErrorWorkspace({
     item: IntegrationResolutionItemView | undefined
     focusMode: boolean
     detailWorkspace?: boolean
+    showEvidenceSection?: boolean
     urlState: IntegrationUrlState
     currentQueueHref?: string
     positionIndex: number
@@ -130,7 +132,13 @@ export function IntegrationErrorWorkspace({
                 actionZoneRef={actions.actionZoneRef}
                 detailWorkspace={detailWorkspace}
             />
-            {!detailWorkspace ? <IntegrationEvidencePanel item={item} /> : null}
+            {!detailWorkspace ? (
+                <IntegrationEvidencePanel item={item} />
+            ) : showEvidenceSection ? (
+                <DetailWorkspaceSection width="form">
+                    <IntegrationEvidencePanel item={item} flat />
+                </DetailWorkspaceSection>
+            ) : null}
 
             {actions.terminalConfirm ? (
                 <IntegrationTerminalConfirmation

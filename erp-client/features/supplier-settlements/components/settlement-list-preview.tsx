@@ -92,7 +92,7 @@ export function SettlementListPreviewSheet({
                 </>
             }
         >
-            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-7 py-6 text-body-compact">
+            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-sheet-inline py-5 text-body-compact">
                 {row ? (
                     <>
                         <section className="space-y-3 border-b border-border pb-6">

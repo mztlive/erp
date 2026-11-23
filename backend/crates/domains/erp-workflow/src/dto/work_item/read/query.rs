@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use application_core::{normalized_text, page_or_default, page_size_or_default};
 use serde::{Deserialize, Serialize};
@@ -39,6 +39,10 @@ pub struct WorkItemListParams {
     /// 逗号分隔的来源采购单 ID，最多 100 项；只收窄授权结果。
     #[validate(length(max = 8000, message = "来源采购单筛选不能超过8000个字符"))]
     pub purchase_order_ids: Option<String>,
+    /// 逗号分隔的往来单位稳定 ID（客户/供应商/结算主体），最多 100 项；只收窄授权结果。
+    #[serde(default)]
+    #[validate(length(max = 8000, message = "往来单位筛选不能超过8000个字符"))]
+    pub counterparty_ids: Option<String>,
     /// 排序方式，默认按创建时间倒序。
     pub sort: Option<WorkItemSort>,
     /// 服务端返回的队列上下文；当前实现只接受同查询重算值。
@@ -72,6 +76,7 @@ pub(crate) struct WorkItemListQuery {
     pub handler_user_ids: Vec<String>,
     pub sales_order_ids: Vec<String>,
     pub purchase_order_ids: Vec<String>,
+    pub counterparty_ids: Vec<String>,
     pub current_work_item_id: Option<String>,
     pub sort_by: &'static str,
     pub sort_ascending: bool,
@@ -105,6 +110,7 @@ impl WorkItemListParams {
             handler_user_ids: parse_id_list(self.handler_user_ids.as_deref(), "处理人")?,
             sales_order_ids: parse_id_list(self.sales_order_ids.as_deref(), "来源销售单")?,
             purchase_order_ids: parse_id_list(self.purchase_order_ids.as_deref(), "来源采购单")?,
+            counterparty_ids: parse_id_list(self.counterparty_ids.as_deref(), "往来单位")?,
             current_work_item_id: normalized_text(self.current_work_item_id.as_deref()),
             sort_by,
             sort_ascending,
@@ -137,8 +143,8 @@ pub struct WorkItemPageView {
 
 /// 待办统计查询参数。
 ///
-/// 统计与正式列表复用同一责任范围、任务族、类型、时限和工作时区语义；
-/// 处理人与来源订单筛选只收窄授权结果，不接受分页、自由检索。
+/// 统计与正式列表复用同一责任范围、任务族、类型、时限、关键词、结构化条件和工作时区语义；
+/// 所有业务条件只收窄授权结果，不接受分页参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct WorkItemStatsParams {
@@ -148,35 +154,50 @@ pub struct WorkItemStatsParams {
     pub family: Option<WorkItemFamily>,
     /// 可选固定任务类型。
     pub work_item_type: Option<WorkItemType>,
+    /// 可选状态筛选；开放范围只允许 `OPEN`，历史范围允许 `COMPLETED`/`CLOSED`。
+    #[serde(default)]
+    pub status: Option<WorkItemStatus>,
     /// 可选时限筛选。
     pub due: Option<WorkItemDueFilter>,
+    /// 在授权结果内按固定安全摘要字段及往来方名称检索。
+    #[serde(default)]
+    #[validate(length(max = 128, message = "检索词不能超过128个字符"))]
+    pub q: Option<String>,
+    /// 可选结构化筛选 JSON，与列表 `filters` 合同一致。
+    #[serde(default)]
+    pub filters: Option<String>,
     /// 逗号分隔的当前处理人稳定 ID，最多 100 项；只收窄授权结果。
     pub handler_user_ids: Option<String>,
     /// 逗号分隔的来源销售单 ID，最多 100 项；只收窄授权结果。
     pub sales_order_ids: Option<String>,
     /// 逗号分隔的来源采购单 ID，最多 100 项；只收窄授权结果。
     pub purchase_order_ids: Option<String>,
+    /// 逗号分隔的往来单位稳定 ID，最多 100 项；只收窄授权结果。
+    #[serde(default)]
+    #[validate(length(max = 8000, message = "往来单位筛选不能超过8000个字符"))]
+    pub counterparty_ids: Option<String>,
     /// IANA 时区；当前版本固定支持 `Asia/Shanghai`。
     pub timezone: Option<String>,
 }
 
 impl WorkItemStatsParams {
     // 复用正式队列规范化逻辑形成服务端统计查询。
-    // 返回固定第 1 页、每页 100 条、按创建时间倒序，且不含检索词和焦点任务的队列查询。
+    // 返回固定第 1 页、每页 100 条、按创建时间倒序，且合并结构化 `filters` 的队列查询。
     //
-    // 任务类型已退役或不属于所选任务族、时区不是 `Asia/Shanghai`，或处理人与来源订单 ID 为空、过长或超过 100 项时，返回 `Error::ValidationError`。
+    // 任务类型已退役或不属于所选任务族、时区不是 `Asia/Shanghai`、`filters` 非法，或筛选 ID 越界时返回 `Error::ValidationError`。
     pub(crate) fn normalized(&self) -> Result<WorkItemListQuery> {
-        WorkItemListParams {
+        let mut query = WorkItemListParams {
             scope: self.scope,
             family: self.family,
             work_item_type: self.work_item_type,
-            status: None,
+            status: self.status,
             due: self.due,
             priorities: None,
-            q: None,
+            q: self.q.clone(),
             handler_user_ids: self.handler_user_ids.clone(),
             sales_order_ids: self.sales_order_ids.clone(),
             purchase_order_ids: self.purchase_order_ids.clone(),
+            counterparty_ids: self.counterparty_ids.clone(),
             sort: Some(WorkItemSort::CreatedDesc),
             queue_context_id: None,
             scope_version: None,
@@ -185,7 +206,15 @@ impl WorkItemStatsParams {
             page: Some(1),
             page_size: Some(100),
         }
-        .normalized()
+        .normalized()?;
+        query.filters = crate::service::work_item::read::WorkspaceFilters::parse(self.filters.as_deref())?;
+        query.merge_filters()?;
+        query.due = match query.filters.due.as_deref() {
+            Some("today") => Some(WorkItemDueFilter::Today),
+            Some("overdue") => Some(WorkItemDueFilter::Overdue),
+            _ => query.due,
+        };
+        Ok(query)
     }
 }
 
@@ -216,18 +245,24 @@ pub struct WorkItemTypeTiming {
 pub struct WorkItemStatsView {
     /// 已分配给当前用户的开放任务总数。
     pub assigned: u64,
-    /// 当前选中责任范围内、工作时区今天到期的任务数。
+    /// 当前选中责任范围及筛选条件下的匹配任务总数。
+    pub total: u64,
+    /// 当前选中责任范围内、工作时区今天到期的开放任务数。
     pub due_today: u64,
     /// 当前选中责任范围内、截止时间早于统计时点的开放任务数。
     pub overdue: u64,
     /// 当前选中责任范围内的结果未知与业务异常任务数。
     pub exception: u64,
-    /// 当前责任范围内按任务族划分的可处理任务数。
+    /// 当前责任范围内按任务族划分的任务数。
     pub family_counts: WorkItemFamilyCountsView,
-    /// 本人可处理任务按固定任务类型汇总；不受列表分页及当前类型选择影响。
+    /// 当前责任范围内按固定任务类型汇总；不受列表分页及当前类型选择影响。
     pub work_item_type_counts: HashMap<WorkItemType, u64>,
     /// 与类型计数共用授权扫描和统计时点，不受当前分页影响。
     pub work_item_type_timing: HashMap<WorkItemType, WorkItemTypeTiming>,
+    /// 当前责任范围内单据审批任务按 `approval:<document_type>` 键拆分的计数。
+    pub approval_document_type_counts: BTreeMap<String, u64>,
+    /// 当前责任范围内按工作台 `item_types` 键（`approval:<document_type>` / `task:<WORK_ITEM_TYPE>`）拆分的计数。
+    pub item_type_counts: BTreeMap<String, u64>,
     /// 服务端统计时点。
     pub as_of: erp_core::common::time::Instant,
 }

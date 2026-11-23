@@ -10,6 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -509,6 +510,99 @@ export function DepositCommandDialog({
         ? compareDecimal(liveReconcileDiff, "0", 2)
         : 0
 
+    const contextBanners = (
+        <>
+            {account && (
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">
+                        {account.supplier_name}
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <span>{account.payer_party_name}</span>
+                    {request?.request_no ? (
+                        <>
+                            <span aria-hidden="true">·</span>
+                            <span className="num">
+                                充值单号 {request.request_no}
+                            </span>
+                        </>
+                    ) : null}
+                    {request ? (
+                        <>
+                            <span aria-hidden="true">·</span>
+                            <span className="inline-flex items-baseline gap-1">
+                                <span>申请金额</span>
+                                <MoneyValue
+                                    value={request.amount}
+                                    display="exact"
+                                    className="font-semibold text-foreground"
+                                />
+                                {requestReadout ? (
+                                    <span>（{requestReadout}）</span>
+                                ) : null}
+                            </span>
+                        </>
+                    ) : null}
+                    {action === "receive" && request?.bank_reference ? (
+                        <>
+                            <span aria-hidden="true">·</span>
+                            <span className="num">
+                                原银行流水 {request.bank_reference}
+                            </span>
+                        </>
+                    ) : null}
+                </div>
+            )}
+            {action === "reconcile" && account && !confirmValues ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/70 bg-muted/35 px-3 py-2 text-xs">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <span className="text-muted-foreground">
+                            当前系统账面余额参考：
+                        </span>
+                        <MoneyValue
+                            value={account.account.book_balance}
+                            display="exact"
+                            className="font-semibold text-foreground"
+                        />
+                        {describeMoney(account.account.book_balance)
+                            ?.readout ? (
+                            <span className="text-muted-foreground">
+                                （
+                                {
+                                    describeMoney(account.account.book_balance)
+                                        ?.readout
+                                }
+                                ）
+                            </span>
+                        ) : null}
+                    </div>
+                    <Button
+                        id="supplier-deposits-reconcile-fill-book-balance"
+                        type="button"
+                        variant="outline"
+                        size="xs"
+                        disabled={unknown || mutation.isPending}
+                        onClick={() =>
+                            form.setFieldValue(
+                                "local_balance_at_cutoff",
+                                account.account.book_balance,
+                            )
+                        }
+                    >
+                        填入当前账面余额
+                    </Button>
+                </div>
+            ) : null}
+            {unknown && (
+                <Alert variant="warning">
+                    <AlertDescription>
+                        本次保存结果尚未查明。请刷新账户核对原结果；再次提交将查询或恢复原申请，当前资料已锁定。
+                    </AlertDescription>
+                </Alert>
+            )}
+        </>
+    )
+
     return (
         <Dialog
             open={open}
@@ -517,8 +611,9 @@ export function DepositCommandDialog({
             }}
         >
             <DialogContent
+                size={twoColumn ? "lg" : "md"}
+                scroll="body"
                 closeButtonId={`supplier-deposits-${action}-close`}
-                className={twoColumn ? "sm:max-w-2xl" : "sm:max-w-xl"}
             >
                 <DialogHeader>
                     <DialogTitle>
@@ -532,185 +627,99 @@ export function DepositCommandDialog({
                             : spec.description}
                     </DialogDescription>
                 </DialogHeader>
-                {account && (
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-                        <span className="font-medium text-foreground">
-                            {account.supplier_name}
-                        </span>
-                        <span aria-hidden="true">·</span>
-                        <span>{account.payer_party_name}</span>
-                        {request?.request_no ? (
-                            <>
-                                <span aria-hidden="true">·</span>
-                                <span className="num">
-                                    充值单号 {request.request_no}
-                                </span>
-                            </>
-                        ) : null}
-                        {request ? (
-                            <>
-                                <span aria-hidden="true">·</span>
-                                <span className="inline-flex items-baseline gap-1">
-                                    <span>申请金额</span>
-                                    <MoneyValue
-                                        value={request.amount}
-                                        display="exact"
-                                        className="font-semibold text-foreground"
-                                    />
-                                    {requestReadout ? (
-                                        <span>（{requestReadout}）</span>
-                                    ) : null}
-                                </span>
-                            </>
-                        ) : null}
-                        {action === "receive" && request?.bank_reference ? (
-                            <>
-                                <span aria-hidden="true">·</span>
-                                <span className="num">
-                                    原银行流水 {request.bank_reference}
-                                </span>
-                            </>
-                        ) : null}
-                    </div>
-                )}
-                {action === "reconcile" && account && !confirmValues ? (
-                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/70 bg-muted/35 px-3 py-2 text-xs">
-                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                            <span className="text-muted-foreground">
-                                当前系统账面余额参考：
-                            </span>
-                            <MoneyValue
-                                value={account.account.book_balance}
-                                display="exact"
-                                className="font-semibold text-foreground"
-                            />
-                            {describeMoney(account.account.book_balance)
-                                ?.readout ? (
-                                <span className="text-muted-foreground">
-                                    （
-                                    {
-                                        describeMoney(
-                                            account.account.book_balance,
-                                        )?.readout
-                                    }
-                                    ）
-                                </span>
-                            ) : null}
-                        </div>
-                        <Button
-                            id="supplier-deposits-reconcile-fill-book-balance"
-                            type="button"
-                            variant="outline"
-                            size="xs"
-                            disabled={unknown || mutation.isPending}
-                            onClick={() =>
-                                form.setFieldValue(
-                                    "local_balance_at_cutoff",
-                                    account.account.book_balance,
-                                )
-                            }
-                        >
-                            填入当前账面余额
-                        </Button>
-                    </div>
-                ) : null}
-                {unknown && (
-                    <Alert variant="warning">
-                        <AlertDescription>
-                            本次保存结果尚未查明。请刷新账户核对原结果；再次提交将查询或恢复原申请，当前资料已锁定。
-                        </AlertDescription>
-                    </Alert>
-                )}
 
                 {confirmValues ? (
-                    <div className="space-y-4">
-                        <Alert variant="warning">
-                            <AlertTitle>请确认以下资金变更信息</AlertTitle>
-                            <AlertDescription>
-                                {action === "receive"
-                                    ? "确认后将立即增加预存款账户可用余额并写入不可变资金流水。"
-                                    : "确认后将生效自动余额执行授权，系统将在有效期内按限额执行已批准的采购付款。"}
-                            </AlertDescription>
-                        </Alert>
-                        <dl className="grid gap-3 rounded-lg border border-border/70 bg-muted/30 p-4 text-body-compact sm:grid-cols-2">
-                            {action === "receive" && request ? (
-                                <>
-                                    <div>
-                                        <dt className="text-xs text-muted-foreground">
-                                            到账增加金额
-                                        </dt>
-                                        <dd className="mt-1 space-y-0.5">
-                                            <MoneyValue
-                                                value={request.amount}
-                                                display="exact"
-                                                className="font-semibold"
-                                            />
-                                            {requestReadout ? (
-                                                <div className="text-xs text-muted-foreground">
-                                                    {requestReadout}
-                                                </div>
-                                            ) : null}
-                                        </dd>
-                                    </div>
-                                    <div>
-                                        <dt className="text-xs text-muted-foreground">
-                                            原银行流水号
-                                        </dt>
-                                        <dd className="num mt-1">
-                                            {request.bank_reference || "—"}
-                                        </dd>
-                                    </div>
-                                </>
-                            ) : null}
-                            {spec.fields.map((specField) => {
-                                const rawVal = confirmValues[specField.name]
-                                const readout =
-                                    specField.kind === "amount"
-                                        ? describeMoney(rawVal)?.readout
-                                        : null
-                                return (
-                                    <div
-                                        key={specField.name}
-                                        className={
-                                            specField.fullWidth
-                                                ? "sm:col-span-2"
-                                                : undefined
-                                        }
-                                    >
-                                        <dt className="text-xs text-muted-foreground">
-                                            {specField.label}
-                                        </dt>
-                                        <dd className="mt-1">
-                                            {specField.kind === "amount" ? (
-                                                <div className="space-y-0.5">
-                                                    <MoneyValue
-                                                        value={rawVal}
-                                                        display="exact"
-                                                        className="font-semibold"
-                                                    />
-                                                    {readout ? (
-                                                        <div className="text-xs text-muted-foreground">
-                                                            {readout}
-                                                        </div>
-                                                    ) : null}
-                                                </div>
-                                            ) : (
-                                                <span
-                                                    className={
-                                                        specField.kind ===
-                                                        "time"
-                                                            ? "num"
-                                                            : undefined
-                                                    }
-                                                >
-                                                    {rawVal || "—"}
-                                                </span>
-                                            )}
-                                        </dd>
-                                    </div>
-                                )
-                            })}
-                        </dl>
+                    <>
+                        <DialogBody className="space-y-4">
+                            {contextBanners}
+                            <Alert variant="warning">
+                                <AlertTitle>请确认以下资金变更信息</AlertTitle>
+                                <AlertDescription>
+                                    {action === "receive"
+                                        ? "确认后将立即增加预存款账户可用余额并写入不可变资金流水。"
+                                        : "确认后将生效自动余额执行授权，系统将在有效期内按限额执行已批准的采购付款。"}
+                                </AlertDescription>
+                            </Alert>
+                            <dl className="grid gap-3 rounded-lg border border-border/70 bg-muted/30 p-4 text-body-compact sm:grid-cols-2">
+                                {action === "receive" && request ? (
+                                    <>
+                                        <div>
+                                            <dt className="text-xs text-muted-foreground">
+                                                到账增加金额
+                                            </dt>
+                                            <dd className="mt-1 space-y-0.5">
+                                                <MoneyValue
+                                                    value={request.amount}
+                                                    display="exact"
+                                                    className="font-semibold"
+                                                />
+                                                {requestReadout ? (
+                                                    <div className="text-xs text-muted-foreground">
+                                                        {requestReadout}
+                                                    </div>
+                                                ) : null}
+                                            </dd>
+                                        </div>
+                                        <div>
+                                            <dt className="text-xs text-muted-foreground">
+                                                原银行流水号
+                                            </dt>
+                                            <dd className="num mt-1">
+                                                {request.bank_reference || "—"}
+                                            </dd>
+                                        </div>
+                                    </>
+                                ) : null}
+                                {spec.fields.map((specField) => {
+                                    const rawVal = confirmValues[specField.name]
+                                    const readout =
+                                        specField.kind === "amount"
+                                            ? describeMoney(rawVal)?.readout
+                                            : null
+                                    return (
+                                        <div
+                                            key={specField.name}
+                                            className={
+                                                specField.fullWidth
+                                                    ? "sm:col-span-2"
+                                                    : undefined
+                                            }
+                                        >
+                                            <dt className="text-xs text-muted-foreground">
+                                                {specField.label}
+                                            </dt>
+                                            <dd className="mt-1">
+                                                {specField.kind === "amount" ? (
+                                                    <div className="space-y-0.5">
+                                                        <MoneyValue
+                                                            value={rawVal}
+                                                            display="exact"
+                                                            className="font-semibold"
+                                                        />
+                                                        {readout ? (
+                                                            <div className="text-xs text-muted-foreground">
+                                                                {readout}
+                                                            </div>
+                                                        ) : null}
+                                                    </div>
+                                                ) : (
+                                                    <span
+                                                        className={
+                                                            specField.kind ===
+                                                            "time"
+                                                                ? "num"
+                                                                : undefined
+                                                        }
+                                                    >
+                                                        {rawVal || "—"}
+                                                    </span>
+                                                )}
+                                            </dd>
+                                        </div>
+                                    )
+                                })}
+                            </dl>
+                        </DialogBody>
                         <DialogFooter>
                             <Button
                                 id={`supplier-deposits-${action}-back`}
@@ -737,218 +746,236 @@ export function DepositCommandDialog({
                                       : "确认保存财务授权"}
                             </LoadingButton>
                         </DialogFooter>
-                    </div>
+                    </>
                 ) : (
                     <form
-                        className="flex max-h-[65vh] flex-col gap-4 overflow-y-auto"
+                        className="flex min-h-0 flex-1 flex-col overflow-hidden"
                         onSubmit={(event) => {
                             event.preventDefault()
                             void form.handleSubmit()
                         }}
                     >
-                        <div
-                            className={
-                                twoColumn
-                                    ? "grid gap-4 sm:grid-cols-2"
-                                    : "flex flex-col gap-4"
-                            }
-                        >
-                            {spec.fields.map((specField) => (
-                                <div
-                                    key={specField.name}
-                                    className={
-                                        twoColumn && specField.fullWidth
-                                            ? "sm:col-span-2"
-                                            : undefined
-                                    }
-                                >
-                                    <form.AppField name={specField.name}>
-                                        {(field) => {
-                                            const id = `supplier-deposits-${action}-${specField.name.replaceAll("_", "-")}`
-                                            if (
-                                                specField.kind === "party" ||
-                                                specField.kind === "supplier"
-                                            )
-                                                return (
-                                                    <Field>
-                                                        <FieldLabel
-                                                            htmlFor={id}
-                                                        >
-                                                            {specField.label}
-                                                        </FieldLabel>
-                                                        {specField.kind ===
-                                                        "party" ? (
-                                                            <SettlementPartySearchCombobox
-                                                                id={id}
-                                                                value={
-                                                                    field.state
-                                                                        .value ||
-                                                                    undefined
-                                                                }
-                                                                onValueChange={(
-                                                                    value,
-                                                                ) =>
-                                                                    field.handleChange(
-                                                                        value ??
-                                                                            "",
-                                                                    )
-                                                                }
-                                                                disabled={
-                                                                    unknown ||
-                                                                    mutation.isPending
-                                                                }
-                                                            />
-                                                        ) : (
-                                                            <SupplierSearchCombobox
-                                                                id={id}
-                                                                value={
-                                                                    field.state
-                                                                        .value ||
-                                                                    undefined
-                                                                }
-                                                                onValueChange={(
-                                                                    value,
-                                                                ) =>
-                                                                    field.handleChange(
-                                                                        value ??
-                                                                            "",
-                                                                    )
-                                                                }
-                                                                disabled={
-                                                                    unknown ||
-                                                                    mutation.isPending
-                                                                }
-                                                            />
-                                                        )}
-                                                        {field.state.meta.errors
-                                                            .length ? (
-                                                            <FieldError
-                                                                errors={field.state.meta.errors.map(
-                                                                    (
-                                                                        error,
-                                                                    ) => ({
-                                                                        message:
-                                                                            typeof error ===
-                                                                            "string"
-                                                                                ? error
-                                                                                : error?.message,
-                                                                    }),
-                                                                )}
-                                                            />
-                                                        ) : null}
-                                                    </Field>
-                                                )
-                                            if (specField.kind === "multiline")
-                                                return (
-                                                    <field.TextareaField
-                                                        id={id}
-                                                        label={specField.label}
-                                                        description={
-                                                            specField.description
-                                                        }
-                                                        disabled={
-                                                            unknown ||
-                                                            mutation.isPending
-                                                        }
-                                                        required={
-                                                            !specField.optional
-                                                        }
-                                                    />
-                                                )
-                                            if (specField.kind === "time")
-                                                return (
-                                                    <field.DateTimeField
-                                                        id={id}
-                                                        label={specField.label}
-                                                        description={
-                                                            specField.description
-                                                        }
-                                                        disabled={
-                                                            unknown ||
-                                                            mutation.isPending
-                                                        }
-                                                        required={
-                                                            !specField.optional
-                                                        }
-                                                    />
-                                                )
-                                            return (
-                                                <field.TextField
-                                                    id={id}
-                                                    label={specField.label}
-                                                    type="text"
-                                                    money={
-                                                        specField.kind ===
-                                                        "amount"
-                                                    }
-                                                    inputClassName={
-                                                        specField.kind ===
-                                                        "amount"
-                                                            ? "num text-right"
-                                                            : undefined
-                                                    }
-                                                    inputMode={
-                                                        specField.kind ===
-                                                        "amount"
-                                                            ? "decimal"
-                                                            : undefined
-                                                    }
-                                                    description={
-                                                        specField.description
-                                                    }
-                                                    disabled={
-                                                        unknown ||
-                                                        mutation.isPending
-                                                    }
-                                                    required={
-                                                        !specField.optional
-                                                    }
-                                                />
-                                            )
-                                        }}
-                                    </form.AppField>
-                                </div>
-                            ))}
-                        </div>
-                        {action === "reconcile" &&
-                        liveReconcileDiff !== null ? (
-                            <Alert
-                                variant={
-                                    liveReconcileDiffSign === 0
-                                        ? "info"
-                                        : "warning"
+                        <DialogBody className="flex flex-col gap-4">
+                            {contextBanners}
+                            <div
+                                className={
+                                    twoColumn
+                                        ? "grid gap-4 sm:grid-cols-2"
+                                        : "flex flex-col gap-4"
                                 }
                             >
-                                <AlertTitle>
-                                    {liveReconcileDiffSign === 0
-                                        ? "实时差额试算：双方余额一致"
-                                        : "实时差额试算：存在对账差异"}
-                                </AlertTitle>
-                                <AlertDescription className="flex flex-wrap items-baseline gap-2">
-                                    <span>供应商余额 − 本地账面余额 =</span>
-                                    <MoneyValue
-                                        value={liveReconcileDiff}
-                                        display="exact"
+                                {spec.fields.map((specField) => (
+                                    <div
+                                        key={specField.name}
                                         className={
-                                            liveReconcileDiffSign !== 0
-                                                ? "font-semibold text-destructive"
-                                                : "font-semibold"
+                                            twoColumn && specField.fullWidth
+                                                ? "sm:col-span-2"
+                                                : undefined
                                         }
-                                    />
-                                    {describeMoney(liveReconcileDiff)
-                                        ?.readout ? (
-                                        <span className="text-xs text-muted-foreground">
-                                            （
-                                            {
-                                                describeMoney(liveReconcileDiff)
-                                                    ?.readout
+                                    >
+                                        <form.AppField name={specField.name}>
+                                            {(field) => {
+                                                const id = `supplier-deposits-${action}-${specField.name.replaceAll("_", "-")}`
+                                                if (
+                                                    specField.kind ===
+                                                        "party" ||
+                                                    specField.kind ===
+                                                        "supplier"
+                                                )
+                                                    return (
+                                                        <Field>
+                                                            <FieldLabel
+                                                                htmlFor={id}
+                                                            >
+                                                                {
+                                                                    specField.label
+                                                                }
+                                                            </FieldLabel>
+                                                            {specField.kind ===
+                                                            "party" ? (
+                                                                <SettlementPartySearchCombobox
+                                                                    id={id}
+                                                                    value={
+                                                                        field
+                                                                            .state
+                                                                            .value ||
+                                                                        undefined
+                                                                    }
+                                                                    onValueChange={(
+                                                                        value,
+                                                                    ) =>
+                                                                        field.handleChange(
+                                                                            value ??
+                                                                                "",
+                                                                        )
+                                                                    }
+                                                                    disabled={
+                                                                        unknown ||
+                                                                        mutation.isPending
+                                                                    }
+                                                                />
+                                                            ) : (
+                                                                <SupplierSearchCombobox
+                                                                    id={id}
+                                                                    value={
+                                                                        field
+                                                                            .state
+                                                                            .value ||
+                                                                        undefined
+                                                                    }
+                                                                    onValueChange={(
+                                                                        value,
+                                                                    ) =>
+                                                                        field.handleChange(
+                                                                            value ??
+                                                                                "",
+                                                                        )
+                                                                    }
+                                                                    disabled={
+                                                                        unknown ||
+                                                                        mutation.isPending
+                                                                    }
+                                                                />
+                                                            )}
+                                                            {field.state.meta
+                                                                .errors
+                                                                .length ? (
+                                                                <FieldError
+                                                                    errors={field.state.meta.errors.map(
+                                                                        (
+                                                                            error,
+                                                                        ) => ({
+                                                                            message:
+                                                                                typeof error ===
+                                                                                "string"
+                                                                                    ? error
+                                                                                    : error?.message,
+                                                                        }),
+                                                                    )}
+                                                                />
+                                                            ) : null}
+                                                        </Field>
+                                                    )
+                                                if (
+                                                    specField.kind ===
+                                                    "multiline"
+                                                )
+                                                    return (
+                                                        <field.TextareaField
+                                                            id={id}
+                                                            label={
+                                                                specField.label
+                                                            }
+                                                            description={
+                                                                specField.description
+                                                            }
+                                                            disabled={
+                                                                unknown ||
+                                                                mutation.isPending
+                                                            }
+                                                            required={
+                                                                !specField.optional
+                                                            }
+                                                        />
+                                                    )
+                                                if (specField.kind === "time")
+                                                    return (
+                                                        <field.DateTimeField
+                                                            id={id}
+                                                            label={
+                                                                specField.label
+                                                            }
+                                                            description={
+                                                                specField.description
+                                                            }
+                                                            disabled={
+                                                                unknown ||
+                                                                mutation.isPending
+                                                            }
+                                                            required={
+                                                                !specField.optional
+                                                            }
+                                                        />
+                                                    )
+                                                return (
+                                                    <field.TextField
+                                                        id={id}
+                                                        label={specField.label}
+                                                        type="text"
+                                                        money={
+                                                            specField.kind ===
+                                                            "amount"
+                                                        }
+                                                        inputClassName={
+                                                            specField.kind ===
+                                                            "amount"
+                                                                ? "num text-right"
+                                                                : undefined
+                                                        }
+                                                        inputMode={
+                                                            specField.kind ===
+                                                            "amount"
+                                                                ? "decimal"
+                                                                : undefined
+                                                        }
+                                                        description={
+                                                            specField.description
+                                                        }
+                                                        disabled={
+                                                            unknown ||
+                                                            mutation.isPending
+                                                        }
+                                                        required={
+                                                            !specField.optional
+                                                        }
+                                                    />
+                                                )
+                                            }}
+                                        </form.AppField>
+                                    </div>
+                                ))}
+                            </div>
+                            {action === "reconcile" &&
+                            liveReconcileDiff !== null ? (
+                                <Alert
+                                    variant={
+                                        liveReconcileDiffSign === 0
+                                            ? "info"
+                                            : "warning"
+                                    }
+                                >
+                                    <AlertTitle>
+                                        {liveReconcileDiffSign === 0
+                                            ? "实时差额试算：双方余额一致"
+                                            : "实时差额试算：存在对账差异"}
+                                    </AlertTitle>
+                                    <AlertDescription className="flex flex-wrap items-baseline gap-2">
+                                        <span>供应商余额 − 本地账面余额 =</span>
+                                        <MoneyValue
+                                            value={liveReconcileDiff}
+                                            display="exact"
+                                            className={
+                                                liveReconcileDiffSign !== 0
+                                                    ? "font-semibold text-destructive"
+                                                    : "font-semibold"
                                             }
-                                            ）
-                                        </span>
-                                    ) : null}
-                                </AlertDescription>
-                            </Alert>
-                        ) : null}
+                                        />
+                                        {describeMoney(liveReconcileDiff)
+                                            ?.readout ? (
+                                            <span className="text-xs text-muted-foreground">
+                                                （
+                                                {
+                                                    describeMoney(
+                                                        liveReconcileDiff,
+                                                    )?.readout
+                                                }
+                                                ）
+                                            </span>
+                                        ) : null}
+                                    </AlertDescription>
+                                </Alert>
+                            ) : null}
+                        </DialogBody>
                         <DialogFooter>
                             <Button
                                 id={`supplier-deposits-${action}-cancel`}

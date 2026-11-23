@@ -1,127 +1,89 @@
 "use client"
-import { useEffect, useState } from "react"
-import { Button } from "@/components/ui/button"
-import { getErrorMessage } from "@/lib/api"
-import { toAutomationIdSegment } from "@/lib/automation-id"
+
+import { useMemo, useState } from "react"
+
+import {
+    MaterialFileList,
+    UnifiedMaterialViewer,
+    type MaterialFileItem,
+} from "@/components/business/unified-material-viewer"
 import type { ApprovalMaterials } from "@/features/approval-workflow/api/materials"
+import { downloadBlob } from "@/lib/download-blob"
+import { fetchCopyFile } from "./api"
 import { useCopyFile } from "./queries"
+
 export function CopyFiles({
     id,
     files,
+    onSelectFile,
+    activeFileId,
+    idPrefix = "copy-file",
 }: {
     id: string
     files: ApprovalMaterials["attachments"]
+    /** 宽屏右轨对接回调：传入时交由右栏展示，否则弹出统一预览灯箱。 */
+    onSelectFile?: (fileId: string) => void
+    activeFileId?: string
+    idPrefix?: string
 }) {
     const fileQuery = useCopyFile()
-    const [preview, setPreview] = useState<{
-        url: string
-        name: string
-    } | null>(null)
-    useEffect(
-        () => () => {
-            if (preview) URL.revokeObjectURL(preview.url)
-        },
-        [preview],
+    const [dialogFileId, setDialogFileId] = useState<string | null>(null)
+
+    const items = useMemo<readonly MaterialFileItem[]>(
+        () =>
+            files.map((file) => ({
+                id: file.file_asset_id,
+                name: file.file_name,
+                mimeType: file.content_type,
+                sizeBytes: file.byte_size,
+                loadPreview: () => fetchCopyFile(id, file.file_asset_id, true),
+                onDownload: async () => {
+                    const blob = await fileQuery.mutateAsync({
+                        id,
+                        file: file.file_asset_id,
+                        preview: false,
+                    })
+                    downloadBlob(blob, file.file_name)
+                },
+            })),
+        [fileQuery, files, id],
     )
+
+    const handlePreview = (file: MaterialFileItem) => {
+        if (onSelectFile) {
+            onSelectFile(file.id)
+        } else {
+            setDialogFileId(file.id)
+        }
+    }
+
     return (
-        <div className="divide-y divide-border/60">
-            {!files.length && (
-                <p className="text-xs text-muted-foreground">
-                    本次提交没有附件。
-                </p>
-            )}
-            {files.map((file) => (
-                <div
-                    key={file.file_asset_id}
-                    className="flex flex-wrap items-center gap-2 py-2.5"
-                >
-                    <span className="min-w-0 flex-1 break-all text-body-compact">
-                        {file.file_name}
-                    </span>
-                    {([false, true] as const).map((isPreview) => {
-                        if (
-                            isPreview &&
-                            ![
-                                "application/pdf",
-                                "image/jpeg",
-                                "image/png",
-                                "image/webp",
-                            ].includes(file.content_type)
-                        )
-                            return null
-                        return (
-                            <Button
-                                key={String(isPreview)}
-                                id={`copy-file-${toAutomationIdSegment(file.file_asset_id)}-${isPreview ? "preview" : "download"}`}
-                                variant="outline"
-                                size="sm"
-                                disabled={fileQuery.isPending}
-                                onClick={() =>
-                                    fileQuery.mutate(
-                                        {
-                                            id,
-                                            file: file.file_asset_id,
-                                            preview: isPreview,
-                                        },
-                                        {
-                                            onSuccess: (blob) => {
-                                                const url =
-                                                    URL.createObjectURL(blob)
-                                                if (isPreview)
-                                                    setPreview({
-                                                        url,
-                                                        name: file.file_name,
-                                                    })
-                                                else {
-                                                    const link =
-                                                        document.createElement(
-                                                            "a",
-                                                        )
-                                                    link.href = url
-                                                    link.download =
-                                                        file.file_name
-                                                    link.click()
-                                                    window.setTimeout(
-                                                        () =>
-                                                            URL.revokeObjectURL(
-                                                                url,
-                                                            ),
-                                                        1000,
-                                                    )
-                                                }
-                                            },
-                                        },
-                                    )
-                                }
-                            >
-                                {isPreview ? "预览" : "下载"}
-                            </Button>
-                        )
-                    })}
-                </div>
-            ))}
-            {fileQuery.isError && (
-                <p role="alert" className="text-body-compact text-destructive">
-                    {getErrorMessage(fileQuery.error)}
-                </p>
-            )}
-            {preview && (
-                <div className="space-y-2 pt-3">
-                    <Button
-                        id="copy-file-preview-close"
-                        variant="outline"
-                        onClick={() => setPreview(null)}
-                    >
-                        关闭预览
-                    </Button>
-                    <iframe
-                        id="copy-file-preview"
-                        title={preview.name}
-                        src={preview.url}
-                        className="h-[70vh] w-full rounded-md border"
-                    />
-                </div>
-            )}
-        </div>
+        <>
+            <MaterialFileList
+                files={items}
+                onPreview={handlePreview}
+                activeFileId={activeFileId ?? dialogFileId ?? undefined}
+                downloadingFileId={
+                    fileQuery.isPending && !fileQuery.variables?.preview
+                        ? (fileQuery.variables?.file ?? null)
+                        : null
+                }
+                emptyMessage="本次提交没有附件。"
+                idPrefix={idPrefix}
+            />
+            {!onSelectFile ? (
+                <UnifiedMaterialViewer
+                    mode="dialog"
+                    files={items}
+                    activeFileId={dialogFileId ?? undefined}
+                    onActiveFileChange={setDialogFileId}
+                    open={dialogFileId !== null}
+                    onOpenChange={(open) => {
+                        if (!open) setDialogFileId(null)
+                    }}
+                    idPrefix={`${idPrefix}-viewer`}
+                />
+            ) : null}
+        </>
     )
 }

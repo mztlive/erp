@@ -9,6 +9,7 @@ import { VoucherCategoryStatusButton } from "./voucher-category-status-dialog"
 import type { useMasterDataCenterQuery } from "@/features/master-data/hooks/queries"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type { MasterDataListItem } from "@/features/master-data/types"
+import { formatDateTime } from "@/lib/datetime"
 import { restoreListRowFocus } from "@/lib/list-row-focus"
 
 /** 类目摘要来自列表行，详情查询只用于历史版本。 */
@@ -174,11 +175,10 @@ export function VoucherCategoryPreviewSheet({
                                         </div>
                                         <p className="num text-xs text-muted-foreground">
                                             记录时间：
-                                            {new Date(
+                                            {formatDateTime(
                                                 revision.effectiveFrom,
-                                            ).toLocaleString("zh-CN", {
-                                                hour12: false,
-                                            })}
+                                                "full",
+                                            )}
                                         </p>
                                         <p className="whitespace-pre-wrap break-words text-body-compact leading-6">
                                             {revision.descriptionSnapshot ||

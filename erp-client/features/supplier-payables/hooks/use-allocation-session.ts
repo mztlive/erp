@@ -8,6 +8,7 @@ import { useStore } from "@tanstack/react-form"
 
 import { invoiceTaxAllocations } from "@/features/supplier-payables/lib/invoice-tax-allocation"
 import { useAppForm } from "@/components/form"
+import { formatTime } from "@/lib/datetime"
 import {
     useAllocationSessionQuery,
     useSaveAllocationDraftMutation,
@@ -511,9 +512,7 @@ export function useAllocationSession(
                 invoice: invoiceForm.state.values,
             },
         })
-        setDraftHint(
-            `草稿已保存 ${new Date(saved.savedAt).toLocaleTimeString("zh-CN")}`,
-        )
+        setDraftHint(`草稿已保存 ${formatTime(saved.savedAt)}`)
     }
 
     function requestSubmit() {

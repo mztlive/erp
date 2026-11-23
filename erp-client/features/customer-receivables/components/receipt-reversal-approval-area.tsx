@@ -25,6 +25,7 @@ export function ReceiptReversalApprovalArea({
     expectedTaskVersion,
     workItemAllowedActions,
     onDecisionApplied,
+    presentation = "default",
 }: {
     phase: ReceiptReversalApprovalPhase
     approval?: DocumentApprovalView
@@ -34,6 +35,7 @@ export function ReceiptReversalApprovalArea({
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
     onDecisionApplied?: (view: ApprovalCommandView) => void
+    presentation?: "default" | "timeline" | "actions"
 }) {
     return (
         <FinancialApprovalArea
@@ -50,6 +52,7 @@ export function ReceiptReversalApprovalArea({
             surface="receipt-reversal-approval-area"
             historyId="customer-receivables-reversal-approval-history"
             actionBarId="customer-receivables-reversal-approval-action-bar"
+            presentation={presentation}
         />
     )
 }

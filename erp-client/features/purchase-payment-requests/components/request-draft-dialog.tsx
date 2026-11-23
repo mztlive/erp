@@ -8,13 +8,14 @@ import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
 import { getErrorMessage } from "@/lib/api"
-import { cn } from "@/lib/utils"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { usePaymentCandidatesQuery } from "../hooks/queries"
 import { useDraftForm } from "../hooks/use-draft-form"
@@ -35,6 +36,7 @@ export function RequestDraftDialog({
     fixedPurchaseOrderId,
     initialPayableAccountIds,
     request,
+    onSubmitted,
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
@@ -43,6 +45,7 @@ export function RequestDraftDialog({
     fixedPurchaseOrderId?: string
     initialPayableAccountIds?: readonly string[]
     request?: PaymentRequest
+    onSubmitted?: (rows: PaymentRequest[]) => void
 }) {
     const query = usePaymentCandidatesQuery(open)
     const [locked, setLocked] = useState(false)
@@ -55,41 +58,39 @@ export function RequestDraftDialog({
         >
             <DialogContent
                 id="ppr-create-dialog"
+                size="xl"
+                scroll="body"
                 closeButtonId="ppr-create-dialog-close"
                 showCloseButton={!locked}
-                className={cn(
-                    "flex flex-col gap-0 overflow-clip p-0",
-                    fixedPurchaseOrderId
-                        ? "max-h-[min(85dvh,calc(100dvh-2rem))] sm:max-w-[46rem]"
-                        : "max-h-[94dvh] sm:max-w-6xl",
-                )}
             >
                 {query.isPending || (query.isError && !query.data) ? (
-                    <div className="space-y-4 p-6">
+                    <>
                         <DialogHeader>
                             <DialogTitle>申请采购付款</DialogTitle>
                         </DialogHeader>
-                        {query.isPending ? (
-                            <p className="py-8 text-muted-foreground">
-                                正在读取可申请采购单…
-                            </p>
-                        ) : (
-                            <>
-                                <p role="alert">
-                                    {getErrorMessage(
-                                        query.error,
-                                        "采购单读取失败",
-                                    )}
+                        <DialogBody className="space-y-4">
+                            {query.isPending ? (
+                                <p className="py-8 text-muted-foreground">
+                                    正在读取可申请采购单…
                                 </p>
-                                <Button
-                                    id="ppr-create-retry"
-                                    onClick={() => void query.refetch()}
-                                >
-                                    重试
-                                </Button>
-                            </>
-                        )}
-                    </div>
+                            ) : (
+                                <>
+                                    <p role="alert">
+                                        {getErrorMessage(
+                                            query.error,
+                                            "采购单读取失败",
+                                        )}
+                                    </p>
+                                    <Button
+                                        id="ppr-create-retry"
+                                        onClick={() => void query.refetch()}
+                                    >
+                                        重试
+                                    </Button>
+                                </>
+                            )}
+                        </DialogBody>
+                    </>
                 ) : (
                     open && (
                         <RequestDraftForm
@@ -115,6 +116,7 @@ export function RequestDraftDialog({
                                     ? undefined
                                     : initialPayableAccountIds
                             }
+                            onSubmitted={onSubmitted}
                             onClose={() => onOpenChange(false)}
                             onLockChange={setLocked}
                         />
@@ -131,6 +133,7 @@ function RequestDraftForm({
     purchaseOrderId,
     initialPayableAccountIds,
     request,
+    onSubmitted,
     onClose,
     onLockChange,
     onRefreshCandidates,
@@ -140,6 +143,7 @@ function RequestDraftForm({
     purchaseOrderId?: string
     initialPayableAccountIds?: readonly string[]
     request?: PaymentRequest
+    onSubmitted?: (rows: PaymentRequest[]) => void
     onClose: () => void
     onLockChange: (value: boolean) => void
     onRefreshCandidates: () => Promise<unknown>
@@ -161,6 +165,7 @@ function RequestDraftForm({
         request,
         (rows) => {
             onLockChange(false)
+            onSubmitted?.(rows)
             if (request) {
                 toast.add({
                     title: "申请修改已保存",
@@ -223,7 +228,7 @@ function RequestDraftForm({
     if (saved)
         return (
             <>
-                <DialogHeader className="border-b p-6">
+                <DialogHeader>
                     <DialogTitle>
                         {request
                             ? "已保存申请修改"
@@ -237,10 +242,7 @@ function RequestDraftForm({
                               : "付款申请已提交财务审核，并占用相应采购余额。可打开申请查看审核及付款进度。"}
                     </DialogDescription>
                 </DialogHeader>
-                <div
-                    id="ppr-create-results"
-                    className="min-h-0 space-y-3 overflow-y-auto p-6"
-                >
+                <DialogBody id="ppr-create-results" className="space-y-3">
                     {saved.map((row) => (
                         <div
                             key={row.id}
@@ -274,24 +276,19 @@ function RequestDraftForm({
                             ) : null}
                         </div>
                     ))}
-                </div>
-                <div className="flex justify-end border-t p-4">
+                </DialogBody>
+                <DialogFooter>
                     <Button id="ppr-create-done" onClick={onClose}>
                         完成
                     </Button>
-                </div>
+                </DialogFooter>
             </>
         )
     return (
         <form
             id="ppr-create-form"
             noValidate
-            className={cn(
-                "flex min-h-0 flex-col overflow-hidden",
-                fixedOrder
-                    ? "max-h-[min(85dvh,calc(100dvh-2rem))]"
-                    : "h-[94dvh]",
-            )}
+            className="flex min-h-0 flex-1 flex-col overflow-hidden"
             onSubmit={(event) => {
                 event.preventDefault()
                 if (busy || unknown) return
@@ -309,7 +306,7 @@ function RequestDraftForm({
                 void form.handleSubmit().catch(() => undefined)
             }}
         >
-            <DialogHeader className="shrink-0 border-b px-6 py-4 pr-16">
+            <DialogHeader>
                 <DialogTitle
                     className={
                         fixedOrder
@@ -374,15 +371,23 @@ function RequestDraftForm({
                     const issues = draftGroupIssues(values, candidates)
                     return (
                         <>
-                            <fieldset
-                                disabled={busy || unknown}
-                                className="flex min-h-0 min-w-0 flex-1 flex-col disabled:opacity-70"
+                            <DialogBody
+                                className={
+                                    step === 1
+                                        ? undefined
+                                        : "flex flex-col overflow-hidden p-0"
+                                }
                             >
-                                <legend className="sr-only">
-                                    {step === 1 ? "选择采购单" : "填写付款申请"}
-                                </legend>
-                                {step === 1 ? (
-                                    <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                                <fieldset
+                                    disabled={busy || unknown}
+                                    className="flex min-h-0 min-w-0 flex-1 flex-col disabled:opacity-70"
+                                >
+                                    <legend className="sr-only">
+                                        {step === 1
+                                            ? "选择采购单"
+                                            : "填写付款申请"}
+                                    </legend>
+                                    {step === 1 ? (
                                         <RequestOrderPicker
                                             onRefreshCandidates={
                                                 onRefreshCandidates
@@ -391,24 +396,24 @@ function RequestDraftForm({
                                             candidates={candidates}
                                             editing={!!request}
                                         />
-                                    </div>
-                                ) : (
-                                    <RequestDraftWorkspace
-                                        onRefreshCandidates={
-                                            onRefreshCandidates
-                                        }
-                                        form={form}
-                                        values={values}
-                                        candidates={candidates}
-                                        editing={!!request}
-                                        fixedOrder={fixedOrder}
-                                        activeKey={activeKey}
-                                        issues={issues}
-                                        onSelect={selectGroup}
-                                    />
-                                )}
-                            </fieldset>
-                            <div className="shrink-0 space-y-3 border-t bg-background px-6 py-4">
+                                    ) : (
+                                        <RequestDraftWorkspace
+                                            onRefreshCandidates={
+                                                onRefreshCandidates
+                                            }
+                                            form={form}
+                                            values={values}
+                                            candidates={candidates}
+                                            editing={!!request}
+                                            fixedOrder={fixedOrder}
+                                            activeKey={activeKey}
+                                            issues={issues}
+                                            onSelect={selectGroup}
+                                        />
+                                    )}
+                                </fieldset>
+                            </DialogBody>
+                            <DialogFooter className="flex-col items-stretch gap-3 bg-background sm:flex-col">
                                 {step === 2 && !!errors.length && (
                                     <p
                                         role="alert"
@@ -578,7 +583,7 @@ function RequestDraftForm({
                                         )}
                                     </div>
                                 </div>
-                            </div>
+                            </DialogFooter>
                         </>
                     )
                 }}

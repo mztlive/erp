@@ -40,9 +40,9 @@ export function useChangeConfirmation(id: string) {
             }}
         >
             <DialogContent
+                size="md"
                 closeButtonId={`${id}-close`}
                 showCloseButton={!pending}
-                className="max-h-[85dvh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-lg"
             >
                 <DialogHeader>
                     <DialogTitle>{request?.title}</DialogTitle>

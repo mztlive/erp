@@ -116,6 +116,7 @@ fn request_fact(
         fact.subject_versions.register_rework_history(instance_id, *version);
     }
 
+    fact.push_counterparty_id(request.data.supplier_id.clone());
     fact.counterparty_label = supplier_name(request);
     fact.impact_summary = Some(format!(
         "申请 {} · 待付 {}",

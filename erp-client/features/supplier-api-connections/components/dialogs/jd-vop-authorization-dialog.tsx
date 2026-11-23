@@ -184,9 +184,9 @@ export function JdVopAuthorizationDialog({
             >
                 <DialogContent
                     id={`${idPrefix}-dialog`}
+                    size="md"
                     closeButtonId={`${idPrefix}-close`}
                     showCloseButton={!busy}
-                    className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg"
                 >
                     <DialogHeader>
                         <DialogTitle>

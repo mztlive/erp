@@ -16,7 +16,6 @@ import {
     BusinessFailureState,
     MoneyValue,
     PageActions,
-    PageHeader,
     PageScaffold,
     StickyTotalBar,
     WorkspaceTaskFooter,
@@ -24,6 +23,7 @@ import {
     workspaceEmbeddedScaffoldClassName,
     workspaceTaskSurfacePadClassName,
 } from "@/components/business"
+import { ListWorkspaceHeader } from "@/components/business/list-workspace"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -852,7 +852,8 @@ function PurchaseOrderCreateSurface({
                 }
             >
                 {embedded ? null : (
-                    <PageHeader
+                    <ListWorkspaceHeader
+                        className="bg-transparent pb-3"
                         title="货源分配与采购建单"
                         description="正在加载库存与采购供给…"
                     />
@@ -879,7 +880,8 @@ function PurchaseOrderCreateSurface({
                 }
             >
                 {embedded ? null : (
-                    <PageHeader
+                    <ListWorkspaceHeader
+                        className="bg-transparent pb-3"
                         title="货源分配与采购建单"
                         description="待采购商品及报价加载失败"
                     />
@@ -1004,24 +1006,24 @@ function PurchaseOrderCreateSurface({
                 }
             >
                 {embedded ? null : (
-                    <PageHeader
+                    <ListWorkspaceHeader
+                        className="bg-transparent pb-3"
                         title="货源分配与采购建单"
-                        actions={
-                            <PageActions
-                                actions={[
-                                    {
-                                        actionKey: "back",
-                                        label: "返回列表",
-                                        icon: ArrowLeftIcon,
-                                        variant: "outline",
-                                        onClick: () =>
-                                            router.push("/procurement/orders"),
-                                        id: "procurement-orders-create-back-header",
-                                    },
-                                ]}
-                            />
-                        }
-                    />
+                    >
+                        <PageActions
+                            actions={[
+                                {
+                                    actionKey: "back",
+                                    label: "返回列表",
+                                    icon: ArrowLeftIcon,
+                                    variant: "outline",
+                                    onClick: () =>
+                                        router.push("/procurement/orders"),
+                                    id: "procurement-orders-create-back-header",
+                                },
+                            ]}
+                        />
+                    </ListWorkspaceHeader>
                 )}
 
                 <div

@@ -2,31 +2,14 @@
 
 import * as React from "react"
 
-import { getErrorMessage, isApiError } from "@/lib/api/errors"
-import {
-    classifyFormalCommandError,
-    FormalCommandKeyLedger,
-} from "@/lib/formal-command"
-import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
-import {
-    approvalConflictMessage,
-    isApprovalConflict,
-} from "@/features/approval-workflow/api"
-import { reasonFormSchema } from "@/features/approval-workflow/schema"
+import { ApprovalWithdrawDialog } from "@/features/approval-workflow/components/approval-withdraw-dialog"
 import { useCancelStockAdjustmentApprovalMutation } from "@/features/inventory/hooks/queries"
 import type { StockAdjustmentCancelCommand } from "@/features/inventory/types"
 
 /**
  * 库存调整普通撤回入口。命令只使用详情投影下发的完整 CAS 令牌。
+ * 底层统一复用 `ApprovalWithdrawDialog`（强制 destructive + BPM 512B UTF-8 校验 + 幂等恢复）。
  */
 export function CancelAdjustmentApprovalDialog({
     stockAdjustmentId,
@@ -44,67 +27,7 @@ export function CancelAdjustmentApprovalDialog({
     onCancelled?: (stockAdjustmentId: string) => void
 }) {
     const [open, setOpen] = React.useState(false)
-    const ledger = React.useRef(new FormalCommandKeyLedger())
-    const [uncertain, setUncertain] = React.useState(false)
-    const [conflictMessage, setConflictMessage] = React.useState<string | null>(
-        null,
-    )
     const cancelApproval = useCancelStockAdjustmentApprovalMutation()
-
-    const form = useAppForm({
-        defaultValues: { reason: "" },
-        validators: {
-            onChange: reasonFormSchema,
-        },
-        onSubmit: async ({ value }) => {
-            if (cancelApproval.isPending) return
-            const request = ledger.current.acquire(
-                "cancel",
-                `inventory:${stockAdjustmentId}:cancel`,
-                {
-                    stockAdjustmentId,
-                    command,
-                    reason: value.reason.trim(),
-                },
-            )
-            try {
-                await cancelApproval.mutateAsync({
-                    ...request.payload,
-                    idempotencyKey: request.idempotencyKey,
-                })
-                ledger.current.settle("cancel", "succeeded")
-                setUncertain(false)
-                setOpen(false)
-                onCancelled?.(stockAdjustmentId)
-            } catch (error) {
-                const outcome =
-                    isApiError(error) && error.code === "OUTCOME_UNKNOWN"
-                        ? "unknown"
-                        : classifyFormalCommandError(error)
-                ledger.current.settle("cancel", outcome)
-                setUncertain(outcome === "unknown")
-                if (isApprovalConflict(error)) {
-                    setConflictMessage(approvalConflictMessage(error))
-                    return
-                }
-                setConflictMessage(
-                    outcome === "unknown"
-                        ? "撤回结果暂无法确认，原因已保留，请使用本次操作重试。"
-                        : getErrorMessage(
-                              error,
-                              "撤回失败，请核对审批状态后重试",
-                          ),
-                )
-            }
-        },
-    })
-
-    React.useEffect(() => {
-        if (!open || ledger.current.peek("cancel")) return
-        form.reset({ reason: reviseRejected ? "修改驳回后的原单" : "" })
-        setUncertain(false)
-        setConflictMessage(null)
-    }, [form, open, reviseRejected])
 
     return (
         <>
@@ -116,88 +39,46 @@ export function CancelAdjustmentApprovalDialog({
             >
                 {reviseRejected ? "修改原单" : "撤回审批"}
             </Button>
-            <Dialog
+            <ApprovalWithdrawDialog
                 open={open}
-                onOpenChange={(nextOpen) => {
-                    if (!nextOpen && (cancelApproval.isPending || uncertain))
-                        return
-                    setOpen(nextOpen)
+                onOpenChange={setOpen}
+                idPrefix={id}
+                reasonId={`${id}-reason`}
+                title={reviseRejected ? "修改原单" : "撤回审批"}
+                description={
+                    currentNodeName
+                        ? `当前节点：${currentNodeName}。`
+                        : "请确认撤回影响并填写撤回原因。"
+                }
+                actionLabel="撤回审批"
+                confirmLabel={reviseRejected ? "撤回并修改原单" : "确认撤回"}
+                unknownConfirmLabel="使用本次操作重试"
+                cancelLabel="取消"
+                fromStatus={{
+                    label: reviseRejected ? "已驳回" : "审批中",
+                    tone: reviseRejected ? "destructive" : "info",
                 }}
-            >
-                <DialogContent
-                    closeButtonId={`${id}-close`}
-                    showCloseButton={!cancelApproval.isPending && !uncertain}
-                >
-                    <DialogHeader>
-                        <DialogTitle>
-                            {reviseRejected ? "修改原单" : "撤回审批"}
-                        </DialogTitle>
-                        <DialogDescription>
-                            {currentNodeName
-                                ? `当前节点：${currentNodeName}。`
-                                : null}
-                            {reviseRejected
-                                ? "撤回后打开原调整单草稿，修改后可重新提交。"
-                                : "撤回后库存调整单将回到草稿。"}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <form
-                        className="space-y-4"
-                        onSubmit={(event) => {
-                            event.preventDefault()
-                            void form.handleSubmit()
-                        }}
-                    >
-                        <form.AppField
-                            name="reason"
-                            children={(field) => (
-                                <field.TextareaField
-                                    id={`${id}-reason`}
-                                    label="原因"
-                                    required
-                                    disabled={
-                                        cancelApproval.isPending || uncertain
-                                    }
-                                />
-                            )}
-                        />
-                        {conflictMessage ? (
-                            <p
-                                className="text-body-compact text-destructive"
-                                role="alert"
-                                aria-live="assertive"
-                            >
-                                {conflictMessage}
-                            </p>
-                        ) : null}
-                        <DialogFooter>
-                            <Button
-                                id={`${id}-cancel`}
-                                type="button"
-                                variant="outline"
-                                disabled={cancelApproval.isPending || uncertain}
-                                onClick={() => setOpen(false)}
-                            >
-                                取消
-                            </Button>
-                            <form.AppForm>
-                                <form.SubmitButton
-                                    id={`${id}-submit`}
-                                    label={
-                                        uncertain
-                                            ? "使用本次操作重试"
-                                            : reviseRejected
-                                              ? "撤回并修改"
-                                              : "确认撤回"
-                                    }
-                                    disabled={cancelApproval.isPending}
-                                    loading={cancelApproval.isPending}
-                                />
-                            </form.AppForm>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
+                toStatus={{ label: "草稿", tone: "neutral" }}
+                effects={[
+                    reviseRejected
+                        ? "撤回后打开原库存调整单草稿，修改后可重新提交审批。"
+                        : "撤回后库存调整单将回到草稿。",
+                ]}
+                reasonLabel="撤回原因"
+                reasonPlaceholder="请输入撤回原因"
+                reviseRejected={reviseRejected}
+                pending={cancelApproval.isPending}
+                idempotencyScope={`inventory:${stockAdjustmentId}:cancel`}
+                onSubmitWithdraw={async ({ reason, idempotencyKey }) => {
+                    await cancelApproval.mutateAsync({
+                        stockAdjustmentId,
+                        command,
+                        reason,
+                        idempotencyKey,
+                    })
+                    onCancelled?.(stockAdjustmentId)
+                }}
+            />
         </>
     )
 }

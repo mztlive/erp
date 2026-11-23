@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useState } from "react"
 import { InboxIcon } from "lucide-react"
 import { useRouter } from "@/lib/navigation"
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -12,110 +12,26 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { formatDateTime, unixSecondsToIsoOrEmpty } from "@/lib/datetime"
 import { cn } from "@/lib/utils"
 import {
     useInbox,
     useNotificationFeed,
+    useReadAllNotifications,
     useReadNotification,
 } from "../hooks/queries"
 import type { NotificationMessage } from "../api"
 
-/** Collects accessible same-origin iframe documents, including nested frames. */
-function collectIframeDocuments(root: Document, result: Set<Document>): void {
-    for (const frame of root.querySelectorAll("iframe")) {
-        try {
-            const doc = frame.contentDocument
-            if (doc && !result.has(doc)) {
-                result.add(doc)
-                collectIframeDocuments(doc, result)
-            }
-        } catch {
-            // Cross-origin frames are handled via window blur + activeElement fallback.
-        }
-    }
-}
-
 export function InboxPopover() {
     const [open, setOpen] = useState(false)
-    const skipReturnFocusRef = useRef(false)
     const profile = useAccountProfileQuery().data
     const feed = useNotificationFeed(profile, true)
     const inbox = useInbox(profile?.userid, open)
     const read = useReadNotification(profile?.userid)
+    const readAll = useReadAllNotifications(profile)
     const router = useRouter()
     const unread = feed.isError ? undefined : feed.data?.unread_count
-
-    useEffect(() => {
-        if (!open) return
-
-        // Base UI dismiss only observes the host document; workspace pages live in iframes.
-        const docs = new Set<Document>()
-        const cleanups: Array<() => void> = []
-        let blurTimer: number | undefined
-
-        const closeFromOutsideFrame = () => {
-            skipReturnFocusRef.current = true
-            setOpen(false)
-        }
-
-        const bindIframeDocuments = () => {
-            const nextDocs = new Set<Document>()
-            collectIframeDocuments(document, nextDocs)
-            for (const doc of nextDocs) {
-                if (docs.has(doc)) continue
-                docs.add(doc)
-                doc.addEventListener("pointerdown", closeFromOutsideFrame, true)
-                doc.addEventListener("click", closeFromOutsideFrame, true)
-                cleanups.push(() => {
-                    doc.removeEventListener(
-                        "pointerdown",
-                        closeFromOutsideFrame,
-                        true,
-                    )
-                    doc.removeEventListener(
-                        "click",
-                        closeFromOutsideFrame,
-                        true,
-                    )
-                })
-            }
-        }
-
-        const onFrameLoad = (event: Event) => {
-            if (event.target instanceof HTMLIFrameElement) {
-                bindIframeDocuments()
-            }
-        }
-
-        const onWindowBlur = () => {
-            window.clearTimeout(blurTimer)
-            blurTimer = window.setTimeout(() => {
-                if (document.activeElement instanceof HTMLIFrameElement) {
-                    closeFromOutsideFrame()
-                }
-            }, 0)
-        }
-
-        bindIframeDocuments()
-        document.addEventListener("load", onFrameLoad, true)
-        window.addEventListener("blur", onWindowBlur)
-
-        return () => {
-            window.clearTimeout(blurTimer)
-            document.removeEventListener("load", onFrameLoad, true)
-            window.removeEventListener("blur", onWindowBlur)
-            for (const cleanup of cleanups) {
-                cleanup()
-            }
-        }
-    }, [open])
-
-    function handleOpenChange(nextOpen: boolean) {
-        if (nextOpen) {
-            skipReturnFocusRef.current = false
-        }
-        setOpen(nextOpen)
-    }
+    const inboxUnreadCount = inbox.data?.pages[0]?.unread_count ?? unread ?? 0
 
     async function openMessage(message: NotificationMessage) {
         if (message.read_at == null) {
@@ -136,7 +52,7 @@ export function InboxPopover() {
     }
 
     return (
-        <Popover open={open} onOpenChange={handleOpenChange}>
+        <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger
                 render={
                     <Button
@@ -163,23 +79,37 @@ export function InboxPopover() {
             </PopoverTrigger>
             <PopoverContent
                 align="end"
-                finalFocus={() => !skipReturnFocusRef.current}
                 className="w-96 max-w-[calc(100vw-2rem)] gap-3"
             >
-                <div className="flex items-center justify-between gap-3">
-                    <PopoverTitle>收件箱</PopoverTitle>
-                    <span className="text-xs text-muted-foreground">
-                        {inbox.data
-                            ? `${inbox.data.pages[0].unread_count} 条未读`
-                            : ""}
-                    </span>
+                <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-baseline gap-2">
+                        <PopoverTitle>收件箱</PopoverTitle>
+                        <span className="num text-xs text-muted-foreground">
+                            {inbox.data
+                                ? `${inbox.data.pages[0].unread_count} 条未读`
+                                : ""}
+                        </span>
+                    </div>
+                    {inboxUnreadCount > 0 ? (
+                        <Button
+                            id="workspace-inbox-read-all"
+                            type="button"
+                            variant="ghost"
+                            size="xs"
+                            disabled={readAll.isPending || read.isPending}
+                            onClick={() => readAll.mutate()}
+                            className="shrink-0 text-xs text-primary hover:text-primary"
+                        >
+                            {readAll.isPending ? "正在标记…" : "全部标为已读"}
+                        </Button>
+                    ) : null}
                 </div>
                 {feed.isError ? (
                     <p role="status" className="text-xs text-muted-foreground">
                         实时更新暂不可用，正在重新连接。
                     </p>
                 ) : null}
-                {read.isError ? (
+                {read.isError || readAll.isError ? (
                     <p
                         role="alert"
                         className="text-body-compact text-destructive"
@@ -219,7 +149,9 @@ export function InboxPopover() {
                                     key={message.id}
                                     id={`workspace-inbox-message-${toAutomationIdSegment(message.id)}`}
                                     type="button"
-                                    disabled={read.isPending}
+                                    disabled={
+                                        read.isPending || readAll.isPending
+                                    }
                                     onClick={() => void openMessage(message)}
                                     className={cn(
                                         "w-full rounded-xl p-3 text-left transition-colors hover:bg-muted focus-visible:outline-ring disabled:opacity-60",
@@ -241,15 +173,13 @@ export function InboxPopover() {
                                     <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-relaxed text-muted-foreground">
                                         {message.body}
                                     </p>
-                                    <time className="mt-2 block text-xs text-muted-foreground">
-                                        {new Date(
-                                            message.created_at * 1000,
-                                        ).toLocaleString("zh-CN", {
-                                            month: "2-digit",
-                                            day: "2-digit",
-                                            hour: "2-digit",
-                                            minute: "2-digit",
-                                        })}
+                                    <time className="num mt-2 block text-xs text-muted-foreground">
+                                        {formatDateTime(
+                                            unixSecondsToIsoOrEmpty(
+                                                message.created_at,
+                                            ),
+                                            "monthDayIntl",
+                                        )}
                                     </time>
                                 </button>
                             ))}

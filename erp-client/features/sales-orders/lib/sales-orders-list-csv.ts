@@ -1,5 +1,6 @@
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
 import { NATURE_LABEL, ORIGIN_LABEL } from "@/features/sales-orders/lib/labels"
+import { formatDateTime } from "@/lib/datetime"
 
 export type SalesOrdersListExportJob = {
     jobId: string
@@ -40,7 +41,7 @@ export function buildSalesOrdersListCsv(
             .join(","),
     )
     const csv = [
-        `# 导出时间 ${now.toLocaleString("zh-CN")}；仅包含当前筛选结果，金额以列表页最新数据为准。`,
+        `# 导出时间 ${formatDateTime(now.toISOString(), "full")}；仅包含当前筛选结果，金额以列表页最新数据为准。`,
         "销售单号,客户,合同,业务性质,状态,创建来源,成交金额（含税）,负责人,提交时间",
         ...rows,
     ].join("\n")

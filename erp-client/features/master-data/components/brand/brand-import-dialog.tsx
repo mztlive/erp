@@ -78,7 +78,7 @@ export function BrandImportDialog({
             <DialogContent
                 id="brand-import-dialog"
                 closeButtonId="brand-import-dismiss"
-                className="max-h-[90dvh] overflow-y-auto sm:max-w-4xl"
+                size="xl"
             >
                 <DialogHeader>
                     <DialogTitle>批量导入品牌</DialogTitle>

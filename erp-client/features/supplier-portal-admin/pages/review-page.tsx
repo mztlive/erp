@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { ArrowRightLeftIcon } from "lucide-react"
 import { useSearchParams } from "@/lib/navigation"
 import {
     BusinessEmptyState,
@@ -16,6 +17,7 @@ import {
     detailWorkspaceStyles,
     type DetailWorkspaceTabItem,
 } from "@/components/business"
+import { WorkItemResponsibilityDialog } from "@/components/business/work-item-responsibility-dialog"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
@@ -74,6 +76,7 @@ export function PortalAdminReviewPage({
 
     const [activeSection, setActiveSection] =
         React.useState<ReviewSection>("review")
+    const [reassignOpen, setReassignOpen] = React.useState(false)
     const [actionState, setActionState] =
         React.useState<PortalReviewActionState>({
             canProcess: false,
@@ -441,6 +444,12 @@ export function PortalAdminReviewPage({
         application?.status === "pending" &&
         actionState.canProcess &&
         !actionState.conflict
+    const canHeaderReassign = Boolean(
+        application?.status === "pending" &&
+        access.can("work_item:manage") &&
+        task.data?.status === "OPEN" &&
+        task.data.allowed_actions?.includes("REASSIGN"),
+    )
 
     return (
         <DetailWorkspacePage>
@@ -476,23 +485,47 @@ export function PortalAdminReviewPage({
                     ) : undefined
                 }
                 secondaryActions={
-                    showHeaderDecisionActions ? (
-                        <Button
-                            id="supplier-portal-review-header-return"
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className={detailWorkspaceStyles.quietDangerButton}
-                            disabled={actionState.pending}
-                            onClick={() => {
-                                revealReviewTab()
-                                reviewFormRef.current?.requestDecision("return")
-                            }}
-                        >
-                            {actionState.retryDecision === "return"
-                                ? "重试退回"
-                                : "退回修改"}
-                        </Button>
+                    canHeaderReassign || showHeaderDecisionActions ? (
+                        <>
+                            {canHeaderReassign ? (
+                                <Button
+                                    id="supplier-portal-review-header-reassign"
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={actionState.pending}
+                                    onClick={() => setReassignOpen(true)}
+                                >
+                                    <ArrowRightLeftIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
+                                    转交他人
+                                </Button>
+                            ) : null}
+                            {showHeaderDecisionActions ? (
+                                <Button
+                                    id="supplier-portal-review-header-return"
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className={
+                                        detailWorkspaceStyles.quietDangerButton
+                                    }
+                                    disabled={actionState.pending}
+                                    onClick={() => {
+                                        revealReviewTab()
+                                        reviewFormRef.current?.requestDecision(
+                                            "return",
+                                        )
+                                    }}
+                                >
+                                    {actionState.retryDecision === "return"
+                                        ? "重试退回"
+                                        : "退回修改"}
+                                </Button>
+                            ) : null}
+                        </>
                     ) : undefined
                 }
                 primaryAction={
@@ -544,6 +577,32 @@ export function PortalAdminReviewPage({
             >
                 {bodyContent}
             </DetailWorkspaceBody>
+            {canHeaderReassign && task.data ? (
+                <WorkItemResponsibilityDialog
+                    mode="reassign"
+                    idPrefix="supplier-portal-reassign"
+                    targets={[
+                        {
+                            workItemId: task.data.id,
+                            label:
+                                applicationTitle ??
+                                application?.application_no ??
+                                "供应商申请确认",
+                            expectedTaskVersion: task.data.task_version,
+                            currentOwnerLabel:
+                                task.data.owner_user?.display_name ?? undefined,
+                        },
+                    ]}
+                    open={reassignOpen}
+                    onOpenChange={setReassignOpen}
+                    onCompleted={(summary) => {
+                        if (summary.succeededIds.length > 0) {
+                            void query.refetch()
+                            void task.refetch()
+                        }
+                    }}
+                />
+            ) : null}
         </DetailWorkspacePage>
     )
 }

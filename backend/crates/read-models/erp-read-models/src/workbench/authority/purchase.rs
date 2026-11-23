@@ -151,6 +151,7 @@ fn purchase_order_fact(
         order.stable.created_by.clone(),
     );
     fact.order_scope_source = Some(OrderTaskSource::Purchase(order.base.id.clone()));
+    fact.push_counterparty_id(order.supplier_id.to_string());
 
     for (submission_id, display) in displays {
         if display.purchase_order_id != order.base.id {

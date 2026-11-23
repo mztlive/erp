@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -83,17 +84,18 @@ export function CatalogBatchHistory({
             </DialogTrigger>
             <DialogContent
                 forceOverlay
+                size="lg"
+                scroll="body"
                 closeButtonId="supplier-catalog-batch-history-close"
-                className="flex max-h-[80dvh] flex-col overflow-hidden sm:max-w-2xl"
             >
-                <DialogHeader className="shrink-0 pr-8">
+                <DialogHeader>
                     <DialogTitle>入库批次</DialogTitle>
                     <DialogDescription>
                         {supplierName} · 最近 20
                         个批次，执行中、待处理和草稿优先展示。
                     </DialogDescription>
                 </DialogHeader>
-                <div className="min-h-0 flex-1 overflow-y-auto">
+                <DialogBody>
                     {query.isPending ? (
                         <p role="status" className="py-6 text-muted-foreground">
                             正在读取已保存的批次…
@@ -187,8 +189,8 @@ export function CatalogBatchHistory({
                             )
                         })}
                     </ul>
-                </div>
-                <DialogFooter className="shrink-0">
+                </DialogBody>
+                <DialogFooter>
                     <Button
                         id="supplier-catalog-batch-history-refresh"
                         variant="outline"

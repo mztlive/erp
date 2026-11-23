@@ -18,6 +18,7 @@ import { useTransferPreviewQuery } from "@/features/sales-inquiries/hooks/use-tr
 import { isPermissionDeniedError } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { formatDateTime, unixSecondsToIsoOrEmpty } from "@/lib/datetime"
 import type { DataTransferContext, TransferJob } from "@/lib/data-transfer"
 import { useRouter } from "@/lib/navigation"
 
@@ -118,10 +119,12 @@ export function TransferPreviewResult({
             {context.preview_expires_at && (
                 <p className="text-xs text-muted-foreground">
                     业务预览有效期至{" "}
-                    {new Date(context.preview_expires_at * 1000).toLocaleString(
-                        "zh-CN",
-                        { hour12: false },
-                    )}
+                    <span className="num">
+                        {formatDateTime(
+                            unixSecondsToIsoOrEmpty(context.preview_expires_at),
+                            "full",
+                        )}
+                    </span>
                 </p>
             )}
             {result.isError && canRead && (

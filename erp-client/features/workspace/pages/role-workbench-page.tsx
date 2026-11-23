@@ -6,10 +6,10 @@ import { useQueryClient } from "@tanstack/react-query"
 import { useSearchParams } from "next/navigation"
 import {
     BusinessFailureState,
-    PageHeader,
     PageScaffold,
     detailWorkspaceStyles,
 } from "@/components/business"
+import { Button } from "@/components/ui/button"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 import { useRouter } from "@/lib/navigation"
 import { roleWorkbench } from "@/lib/role-workbenches"
@@ -24,14 +24,10 @@ import type { OverviewMetric } from "../lib/overview"
 import { WorkspaceOverviewDetail } from "../components/workspace-overview-detail"
 import {
     RoleWorkbenchHeader,
-    SalesWorkbenchPeriod,
+    RoleWorkbenchPeriod,
 } from "../components/role-workbench-header"
 import { RoleWorkbenchMetrics } from "../components/role-workbench-metrics"
 import { RoleWorkbenchBody } from "../components/role-workbench-body"
-import {
-    RoleWorkbenchShortcuts,
-    SalesWorkbenchShortcuts,
-} from "../components/sales-workbench-shortcuts"
 import {
     WorkbenchDataInfo,
     workbenchUpdatedAt,
@@ -58,16 +54,36 @@ export function RoleWorkbenchPage({ id }: { id: string }) {
             }))
     if (invalid)
         return (
-            <PageScaffold className="bg-card">
-                <PageHeader title="统计期间无效" />
-                <Link id="role-period-reset" href={`/workspace/roles/${id}`}>
-                    清除期间筛选
-                </Link>
+            <PageScaffold
+                density="compact"
+                className={`${detailWorkspaceStyles.page} min-h-0 overflow-auto`}
+            >
+                <header className="flex min-h-12 shrink-0 items-center justify-between gap-3 border-b border-border/60 bg-card py-2">
+                    <h1 className={detailWorkspaceStyles.title}>
+                        统计期间无效
+                    </h1>
+                </header>
+                <div className="space-y-3 py-6">
+                    <p className="text-body-compact text-muted-foreground">
+                        地址中的起止日期格式不正确，或开始日晚于结束日。
+                    </p>
+                    <Button
+                        id="role-period-reset"
+                        variant="outline"
+                        size="sm"
+                        render={<Link href={`/workspace/roles/${id}`} />}
+                    >
+                        清除期间筛选
+                    </Button>
+                </div>
             </PageScaffold>
         )
     if (query.isError)
         return (
-            <PageScaffold className="bg-card">
+            <PageScaffold
+                density="compact"
+                className={`${detailWorkspaceStyles.page} min-h-0 overflow-auto`}
+            >
                 <BusinessFailureState
                     error={query.error}
                     onRetry={() => void query.refetch()}
@@ -76,20 +92,36 @@ export function RoleWorkbenchPage({ id }: { id: string }) {
         )
     if (!query.data)
         return (
-            <PageScaffold className="bg-card">
-                <p role="status" className="text-xs text-muted-foreground">
+            <PageScaffold
+                density="compact"
+                className={`${detailWorkspaceStyles.page} min-h-0 overflow-auto`}
+            >
+                <p role="status" className="py-6 text-xs text-muted-foreground">
                     正在读取岗位配置…
                 </p>
             </PageScaffold>
         )
     if (!roleWorkbench(id) || !query.data.workbenches?.includes(id))
         return (
-            <PageScaffold className="bg-card">
-                <PageHeader title="无权访问此工作台" />
-                <p>岗位未配置或核心权限已变更。</p>
-                <Link id="workbench-denied-return" href="/workspace">
-                    返回可用工作台
-                </Link>
+            <PageScaffold
+                density="compact"
+                className={`${detailWorkspaceStyles.page} min-h-0 overflow-auto`}
+            >
+                <BusinessFailureState
+                    kind="permission"
+                    title="无权访问此工作台"
+                    description="岗位未配置或核心权限已变更。"
+                    action={
+                        <Button
+                            id="workbench-denied-return"
+                            variant="outline"
+                            size="sm"
+                            render={<Link href="/workspace" />}
+                        >
+                            返回可用工作台
+                        </Button>
+                    }
+                />
             </PageScaffold>
         )
     return (
@@ -99,6 +131,16 @@ export function RoleWorkbenchPage({ id }: { id: string }) {
             profile={query.data}
         />
     )
+}
+
+function scopeInfoSummary(id: string): string {
+    if (id === "WB-02") {
+        return "各项履约指标按本人待处理的履约责任及对应业务模块授权范围展示；点击卡片可直接查看待办并办理。"
+    }
+    if (id === "WB-03") {
+        return "采购单统计叠加本人负责人条件；询价按本人待处理的询价责任及实际授权范围展示。"
+    }
+    return "账款与资金余额分别按对应模块的授权范围展示，不代表本人名下金额。"
 }
 
 function RoleWorkbenchContent({
@@ -168,6 +210,8 @@ function RoleWorkbenchContent({
         />
     )
     const presentation = WORKBENCH_PRESENTATION[role.template.id]
+    const hasPeriodSelector = id === "WB-01" || id === "WB-05"
+
     return (
         <PageScaffold
             density="compact"
@@ -186,23 +230,16 @@ function RoleWorkbenchContent({
                     role.tasks.some((query) => query.statsFetching)
                 }
             />
-            {role.template.id === "WB-01" ? (
-                <SalesWorkbenchShortcuts
-                    permissions={profile.permissions}
-                    listOperations={role.template.operations}
-                />
-            ) : (
-                <RoleWorkbenchShortcuts
-                    permissions={profile.permissions}
-                    listOperations={role.template.operations}
-                />
-            )}
             <section
                 aria-label="岗位业务概览"
-                className="space-y-3 border-b border-border/60 py-4"
+                className="space-y-2 border-b border-border/60 py-2.5"
             >
-                {id === "WB-01" ? (
-                    <SalesWorkbenchPeriod overview={overview} custom={custom} />
+                {hasPeriodSelector ? (
+                    <RoleWorkbenchPeriod
+                        workbenchId={id}
+                        overview={overview}
+                        custom={custom}
+                    />
                 ) : (
                     <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5">
@@ -213,11 +250,7 @@ function RoleWorkbenchContent({
                                 id={`${presentation.prefix}-workbench-scope-info`}
                                 title="业务概览"
                             >
-                                <p>
-                                    {id === "WB-03"
-                                        ? "采购单统计叠加本人负责人条件；询价按本人待处理的询价责任及实际授权范围展示。"
-                                        : "账款与资金余额分别按对应模块的授权范围展示，不代表本人名下金额。"}
-                                </p>
+                                <p>{scopeInfoSummary(id)}</p>
                                 <p>
                                     各项指标均为截至当前的数据，包含全部期间的当前存量。具体统计口径与范围见指标详情。
                                 </p>
@@ -252,6 +285,7 @@ function RoleWorkbenchContent({
                 role={role}
                 profile={profile}
                 returnTo={href}
+                period={overview.period}
                 onSelect={select}
             />
             {detail}

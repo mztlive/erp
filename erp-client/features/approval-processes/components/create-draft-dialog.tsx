@@ -187,10 +187,7 @@ export function CreateDraftDialog({
                     if (!pending) onOpenChange(next)
                 }}
             >
-                <DialogContent
-                    closeButtonId={`${id}-close`}
-                    className="max-h-[90dvh] overflow-y-auto sm:max-w-lg"
-                >
+                <DialogContent size="md" closeButtonId={`${id}-close`}>
                     <DialogHeader>
                         <DialogTitle>新建审批草稿</DialogTitle>
                         <DialogDescription>

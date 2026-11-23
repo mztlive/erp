@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -531,8 +532,10 @@ export function InquiryActions({
                 }}
             >
                 <DialogContent
+                    size="lg"
+                    scroll="body"
                     closeButtonId="sales-inquiry-action-dialog-close"
-                    className="max-h-[85svh] overflow-y-auto sm:max-w-2xl"
+                    showCloseButton={!isSubmitting && !command.isPending}
                 >
                     <DialogHeader>
                         <DialogTitle>
@@ -555,115 +558,117 @@ export function InquiryActions({
                         </DialogDescription>
                     </DialogHeader>
                     <form
-                        className="space-y-4"
+                        className="flex min-h-0 flex-1 flex-col overflow-hidden"
                         onSubmit={(event) => {
                             event.preventDefault()
                             if (action) void form.handleSubmit(action)
                         }}
                     >
-                        {error && (
-                            <Alert variant="destructive">
-                                <AlertDescription>{error}</AlertDescription>
-                            </Alert>
-                        )}
-                        {action && requiresReason(action) && (
-                            <form.AppField
-                                name="reason"
-                                children={(field) => (
-                                    <field.TextareaField
-                                        id="sales-inquiry-action-reason"
-                                        label={
-                                            action === "submit"
-                                                ? "需求变更原因"
-                                                : "操作原因"
-                                        }
-                                        required
-                                    />
-                                )}
-                            />
-                        )}
-                        {action === "reassign" && (
-                            <form.Field
-                                name="buyer_user_id"
-                                children={(field) => (
-                                    <PersonDirectoryFilter
-                                        id="sales-inquiry-action-buyer"
-                                        category="procurement"
-                                        value={field.state.value}
-                                        onChange={field.handleChange}
-                                        selectionMode="single"
-                                        label="新的责任采购"
-                                    />
-                                )}
-                            />
-                        )}
-                        {action === "reinquire" && (
-                            <>
-                                <form.Field
-                                    name="line_ids"
-                                    children={(field) => (
-                                        <div className="space-y-2">
-                                            <Label htmlFor="sales-inquiry-reinquire-lines">
-                                                关注商品（不选表示全部）
-                                            </Label>
-                                            <MultiOptionCombobox
-                                                id="sales-inquiry-reinquire-lines"
-                                                aria-label="关注商品"
-                                                value={field.state.value}
-                                                onValueChange={(values) =>
-                                                    field.handleChange([
-                                                        ...values,
-                                                    ])
-                                                }
-                                                options={demandLines.map(
-                                                    (line) => ({
-                                                        value: line.line_id,
-                                                        label: line.product_name,
-                                                    }),
-                                                )}
-                                            />
-                                        </div>
-                                    )}
-                                />
-                                <form.Field
-                                    name="fee_ids"
-                                    children={(field) => (
-                                        <div className="space-y-2">
-                                            <Label htmlFor="sales-inquiry-reinquire-fees">
-                                                关注费用（不选表示全部）
-                                            </Label>
-                                            <MultiOptionCombobox
-                                                id="sales-inquiry-reinquire-fees"
-                                                aria-label="关注费用"
-                                                value={field.state.value}
-                                                onValueChange={(values) =>
-                                                    field.handleChange([
-                                                        ...values,
-                                                    ])
-                                                }
-                                                options={(
-                                                    inquiry.feedbacks.at(-1)
-                                                        ?.data.fees ?? []
-                                                ).map((fee) => ({
-                                                    value: fee.fee_id,
-                                                    label: fee.name,
-                                                }))}
-                                            />
-                                        </div>
-                                    )}
-                                />
+                        <DialogBody className="space-y-4">
+                            {error && (
+                                <Alert variant="destructive">
+                                    <AlertDescription>{error}</AlertDescription>
+                                </Alert>
+                            )}
+                            {action && requiresReason(action) && (
                                 <form.AppField
-                                    name="concerns"
+                                    name="reason"
                                     children={(field) => (
                                         <field.TextareaField
-                                            id="sales-inquiry-reinquire-concerns"
-                                            label="需要调整的事项"
-                                            placeholder="价格、交期、供给数量或费用等"
+                                            id="sales-inquiry-action-reason"
+                                            label={
+                                                action === "submit"
+                                                    ? "需求变更原因"
+                                                    : "操作原因"
+                                            }
+                                            required
                                         />
                                     )}
                                 />
-                            </>
-                        )}
+                            )}
+                            {action === "reassign" && (
+                                <form.Field
+                                    name="buyer_user_id"
+                                    children={(field) => (
+                                        <PersonDirectoryFilter
+                                            id="sales-inquiry-action-buyer"
+                                            category="procurement"
+                                            value={field.state.value}
+                                            onChange={field.handleChange}
+                                            selectionMode="single"
+                                            label="新的责任采购"
+                                        />
+                                    )}
+                                />
+                            )}
+                            {action === "reinquire" && (
+                                <>
+                                    <form.Field
+                                        name="line_ids"
+                                        children={(field) => (
+                                            <div className="space-y-2">
+                                                <Label htmlFor="sales-inquiry-reinquire-lines">
+                                                    关注商品（不选表示全部）
+                                                </Label>
+                                                <MultiOptionCombobox
+                                                    id="sales-inquiry-reinquire-lines"
+                                                    aria-label="关注商品"
+                                                    value={field.state.value}
+                                                    onValueChange={(values) =>
+                                                        field.handleChange([
+                                                            ...values,
+                                                        ])
+                                                    }
+                                                    options={demandLines.map(
+                                                        (line) => ({
+                                                            value: line.line_id,
+                                                            label: line.product_name,
+                                                        }),
+                                                    )}
+                                                />
+                                            </div>
+                                        )}
+                                    />
+                                    <form.Field
+                                        name="fee_ids"
+                                        children={(field) => (
+                                            <div className="space-y-2">
+                                                <Label htmlFor="sales-inquiry-reinquire-fees">
+                                                    关注费用（不选表示全部）
+                                                </Label>
+                                                <MultiOptionCombobox
+                                                    id="sales-inquiry-reinquire-fees"
+                                                    aria-label="关注费用"
+                                                    value={field.state.value}
+                                                    onValueChange={(values) =>
+                                                        field.handleChange([
+                                                            ...values,
+                                                        ])
+                                                    }
+                                                    options={(
+                                                        inquiry.feedbacks.at(-1)
+                                                            ?.data.fees ?? []
+                                                    ).map((fee) => ({
+                                                        value: fee.fee_id,
+                                                        label: fee.name,
+                                                    }))}
+                                                />
+                                            </div>
+                                        )}
+                                    />
+                                    <form.AppField
+                                        name="concerns"
+                                        children={(field) => (
+                                            <field.TextareaField
+                                                id="sales-inquiry-reinquire-concerns"
+                                                label="需要调整的事项"
+                                                placeholder="价格、交期、供给数量或费用等"
+                                            />
+                                        )}
+                                    />
+                                </>
+                            )}
+                        </DialogBody>
                         <DialogFooter>
                             <Button
                                 id="sales-inquiry-action-cancel"

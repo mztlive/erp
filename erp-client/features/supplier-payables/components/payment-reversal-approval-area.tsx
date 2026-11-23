@@ -25,6 +25,7 @@ export function PaymentReversalApprovalArea({
     expectedTaskVersion,
     workItemAllowedActions,
     onDecisionApplied,
+    presentation = "default",
 }: {
     phase: PaymentReversalApprovalPhase
     approval?: DocumentApprovalView
@@ -34,6 +35,7 @@ export function PaymentReversalApprovalArea({
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
     onDecisionApplied?: (view: ApprovalCommandView) => void
+    presentation?: "default" | "timeline" | "actions"
 }) {
     return (
         <FinancialApprovalArea
@@ -48,6 +50,7 @@ export function PaymentReversalApprovalArea({
             workItemAllowedActions={workItemAllowedActions}
             onDecisionApplied={onDecisionApplied}
             surface="payment-reversal-approval-area"
+            presentation={presentation}
         />
     )
 }

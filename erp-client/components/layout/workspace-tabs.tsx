@@ -16,13 +16,18 @@ import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { dispatchNavDelivery } from "@/lib/nav-delivery"
 import {
+    applyWorkspaceViewportDensity,
     handleWorkspaceCloseShortcut,
     interceptWorkspaceLink,
+    resolveWorkspaceViewportDensity,
     tabHref,
+    WORKSPACE_OPEN_TABS_EVENT,
     workspaceTabKey,
     workspaceTabTitle,
     workspaceUrl,
     type WorkspaceFrameState,
+    type WorkspaceOpenTabSnapshot,
+    type WorkspaceViewportDensity,
 } from "@/lib/workspace-tabs"
 import { WorkspaceOpeningMark } from "./workspace-opening-mark"
 import { dispatchWorkspaceQuickSearch } from "./workspace-quick-search"
@@ -35,6 +40,78 @@ export type WorkspaceTab = WorkspaceFrameState & {
     ready: boolean
     instance: string
     openerId?: string
+}
+
+export type WorkspaceOpenTabsState = Readonly<{
+    tabs: readonly WorkspaceOpenTabSnapshot[]
+    activeTabId: string | null
+    selectTab: (tabId: string) => void
+}>
+
+const EMPTY_OPEN_TABS_STATE: WorkspaceOpenTabsState = {
+    tabs: [],
+    activeTabId: null,
+    selectTab: () => {},
+}
+
+const WorkspaceOpenTabsContext = React.createContext<WorkspaceOpenTabsState>(
+    EMPTY_OPEN_TABS_STATE,
+)
+
+/** 供宿主快捷搜索（⌘K）及导航组件读取当前已打开页签并切换激活页。 */
+export function useWorkspaceOpenTabs(): WorkspaceOpenTabsState {
+    return React.useContext(WorkspaceOpenTabsContext)
+}
+
+function computeHostViewportDensity(): WorkspaceViewportDensity {
+    if (typeof window === "undefined") return "comfortable"
+    if (!window.matchMedia("(min-width: 48rem)").matches) return "comfortable"
+    if (window.matchMedia("(max-height: 720px)").matches) return "dense"
+    if (window.matchMedia("(max-height: 960px)").matches) return "compact"
+    return resolveWorkspaceViewportDensity(
+        window.innerHeight,
+        window.innerWidth,
+    )
+}
+
+const HOST_OVERLAY_SELECTOR = [
+    '[role="dialog"]:not([data-closed])',
+    '[role="alertdialog"]:not([data-closed])',
+    '[role="menu"]:not([data-closed])',
+    '[role="listbox"]:not([data-closed])',
+    '[data-slot="popover-content"][data-open]',
+    '[data-slot="dropdown-menu-content"][data-open]',
+    '[data-slot="select-content"][data-open]',
+    '[data-slot="command-dialog"]:not([data-closed])',
+].join(", ")
+
+const EDITABLE_HOST_SELECTOR =
+    'input, textarea, select, [contenteditable="true"]'
+
+function isHostInteractiveElementFocused(): boolean {
+    const activeElement = document.activeElement
+    return (
+        activeElement !== null &&
+        activeElement !== document.body &&
+        activeElement !== document.documentElement &&
+        !(activeElement instanceof HTMLIFrameElement)
+    )
+}
+
+function toOpenTabSnapshot(
+    tab: WorkspaceTab,
+    activeId: string,
+): WorkspaceOpenTabSnapshot {
+    return {
+        id: tab.id,
+        key: tab.key,
+        href: tab.href,
+        title: tab.title,
+        dirty: tab.dirty,
+        busy: tab.busy,
+        ready: tab.ready,
+        active: tab.id === activeId,
+    }
 }
 
 function newTab(url: URL): WorkspaceTab {
@@ -78,7 +155,105 @@ export function WorkspaceTabs({
     const snapshot = React.useRef({ tabs, active, pendingClose })
     snapshot.current = { tabs, active, pendingClose }
     const closeRequest = React.useRef<(ids: string[]) => void>(() => {})
+    const densityRef = React.useRef<WorkspaceViewportDensity>("comfortable")
+    const didMountActiveRef = React.useRef(false)
     const queryClient = useQueryClient()
+
+    const syncFrameDensity = React.useCallback(
+        (
+            iframe: HTMLIFrameElement | undefined,
+            density: WorkspaceViewportDensity,
+        ) => {
+            if (!iframe) return
+            try {
+                applyWorkspaceViewportDensity(iframe.contentDocument, density)
+                iframe.contentWindow?.erpWorkspaceSetDensity?.(density)
+            } catch {
+                // Ignore unloaded or cross-origin frame access errors.
+            }
+        },
+        [],
+    )
+
+    const syncAllDensities = React.useCallback(() => {
+        const density = computeHostViewportDensity()
+        densityRef.current = density
+        applyWorkspaceViewportDensity(document, density)
+        for (const iframe of frames.current.values()) {
+            syncFrameDensity(iframe, density)
+        }
+    }, [syncFrameDensity])
+
+    const focusActiveFrame = React.useCallback(
+        (id: string, options?: { passive?: boolean }) => {
+            if (document.querySelector(HOST_OVERLAY_SELECTOR)) {
+                return
+            }
+            const activeElement = document.activeElement
+            if (
+                activeElement instanceof HTMLElement &&
+                (activeElement.closest(EDITABLE_HOST_SELECTOR) ||
+                    activeElement.matches('[role="tab"]:focus-visible'))
+            ) {
+                return
+            }
+            if (options?.passive && isHostInteractiveElementFocused()) {
+                return
+            }
+            const iframe = frames.current.get(id)
+            const childWindow = iframe?.contentWindow
+            if (!iframe || !childWindow) return
+            try {
+                if (childWindow.erpWorkspaceFocus) {
+                    childWindow.erpWorkspaceFocus()
+                    return
+                }
+                const childDoc = iframe.contentDocument
+                if (
+                    childDoc?.activeElement instanceof HTMLElement &&
+                    childDoc.activeElement !== childDoc.body &&
+                    childDoc.activeElement !== childDoc.documentElement
+                ) {
+                    childWindow.focus()
+                    return
+                }
+                childWindow.focus()
+                const main = childDoc?.getElementById("main-content")
+                if (main instanceof HTMLElement) {
+                    if (!main.hasAttribute("tabindex")) {
+                        main.setAttribute("tabindex", "-1")
+                    }
+                    main.focus({ preventScroll: true })
+                }
+            } catch {
+                // Ignore cross-origin or detached iframe focus errors.
+            }
+        },
+        [],
+    )
+
+    React.useEffect(() => {
+        syncAllDensities()
+        const desktopMedia = window.matchMedia("(min-width: 48rem)")
+        const compactMedia = window.matchMedia("(max-height: 960px)")
+        const denseMedia = window.matchMedia("(max-height: 720px)")
+        const observer =
+            typeof ResizeObserver !== "undefined"
+                ? new ResizeObserver(syncAllDensities)
+                : null
+        observer?.observe(document.documentElement)
+        desktopMedia.addEventListener("change", syncAllDensities)
+        compactMedia.addEventListener("change", syncAllDensities)
+        denseMedia.addEventListener("change", syncAllDensities)
+        window.addEventListener("resize", syncAllDensities)
+        return () => {
+            observer?.disconnect()
+            desktopMedia.removeEventListener("change", syncAllDensities)
+            compactMedia.removeEventListener("change", syncAllDensities)
+            denseMedia.removeEventListener("change", syncAllDensities)
+            window.removeEventListener("resize", syncAllDensities)
+        }
+    }, [syncAllDensities])
 
     // 保留到目标页签确认刷新成功；未加载或暂不能刷新的页签可重复接收同一版本。
     const deliverRefresh = React.useCallback((id: string) => {
@@ -89,20 +264,27 @@ export function WorkspaceTabs({
                 ?.contentWindow?.erpWorkspaceInvalidate?.(revision)
     }, [])
 
-    const select = React.useCallback((tab: WorkspaceTab, replace = false) => {
-        setActive(tab.id)
-        snapshot.current.active = tab.id
-        if (
-            tab.href !==
-            `${window.location.pathname}${window.location.search}${window.location.hash}`
-        ) {
-            window.history[replace ? "replaceState" : "pushState"](
-                null,
-                "",
-                tab.href,
-            )
-        }
-    }, [])
+    const select = React.useCallback(
+        (tab: WorkspaceTab, replace = false) => {
+            const wasActive = snapshot.current.active === tab.id
+            setActive(tab.id)
+            snapshot.current.active = tab.id
+            if (
+                tab.href !==
+                `${window.location.pathname}${window.location.search}${window.location.hash}`
+            ) {
+                window.history[replace ? "replaceState" : "pushState"](
+                    null,
+                    "",
+                    tab.href,
+                )
+            }
+            if (wasActive) {
+                requestAnimationFrame(() => focusActiveFrame(tab.id))
+            }
+        },
+        [focusActiveFrame],
+    )
 
     React.useEffect(() => {
         const sourceTab = (source: Window) =>
@@ -255,6 +437,11 @@ export function WorkspaceTabs({
             openQuickSearch: () => {
                 dispatchWorkspaceQuickSearch()
             },
+            getOpenTabs: () =>
+                snapshot.current.tabs.map((tab) =>
+                    toOpenTabSnapshot(tab, snapshot.current.active),
+                ),
+            getViewportDensity: () => densityRef.current,
         }
         const pop = () => navigate(null, window.location.href, false, true)
         const sessionChanged = (event: StorageEvent) => {
@@ -291,7 +478,37 @@ export function WorkspaceTabs({
             deliverRefresh(id)
             iframe.contentWindow?.erpWorkspaceActivate?.(id === active)
         }
-    }, [active, deliverRefresh])
+        const passive = !didMountActiveRef.current
+        didMountActiveRef.current = true
+        const frame = requestAnimationFrame(() =>
+            focusActiveFrame(active, { passive }),
+        )
+        return () => cancelAnimationFrame(frame)
+    }, [active, deliverRefresh, focusActiveFrame])
+
+    React.useEffect(() => {
+        window.dispatchEvent(new Event(WORKSPACE_OPEN_TABS_EVENT))
+    }, [tabs, active])
+
+    const openTabs = React.useMemo(
+        () => tabs.map((tab) => toOpenTabSnapshot(tab, active)),
+        [tabs, active],
+    )
+    const selectTabById = React.useCallback(
+        (tabId: string) => {
+            const target = snapshot.current.tabs.find((tab) => tab.id === tabId)
+            if (target) select(target)
+        },
+        [select],
+    )
+    const openTabsContextValue = React.useMemo<WorkspaceOpenTabsState>(
+        () => ({
+            tabs: openTabs,
+            activeTabId: active,
+            selectTab: selectTabById,
+        }),
+        [openTabs, active, selectTabById],
+    )
 
     const activeTitle = tabs.find((tab) => tab.id === active)?.title
     React.useEffect(() => {
@@ -328,13 +545,11 @@ export function WorkspaceTabs({
                     ],
                 true,
             )
-            requestAnimationFrame(() => {
-                document
-                    .getElementById(`workspace-tab-${snapshot.current.active}`)
-                    ?.focus({ preventScroll: true })
-            })
         }
         setPendingClose([])
+        requestAnimationFrame(() => {
+            focusActiveFrame(snapshot.current.active)
+        })
     }
 
     const requestClose = (ids: string[]) => {
@@ -362,7 +577,7 @@ export function WorkspaceTabs({
     closeRequest.current = requestClose
 
     return (
-        <>
+        <WorkspaceOpenTabsContext.Provider value={openTabsContextValue}>
             {children(
                 <WorkspaceTabBar
                     tabs={tabs}
@@ -394,8 +609,13 @@ export function WorkspaceTabs({
                             ) : null}
                             <iframe
                                 ref={(node) => {
-                                    if (node) frames.current.set(tab.id, node)
-                                    else frames.current.delete(tab.id)
+                                    if (node) {
+                                        frames.current.set(tab.id, node)
+                                        syncFrameDensity(
+                                            node,
+                                            densityRef.current,
+                                        )
+                                    } else frames.current.delete(tab.id)
                                 }}
                                 id={`workspace-frame-${tab.id}`}
                                 data-workspace-frame=""
@@ -410,12 +630,21 @@ export function WorkspaceTabs({
                                                 : item,
                                         ),
                                     )
+                                    const iframe = frames.current.get(tab.id)
+                                    syncFrameDensity(iframe, densityRef.current)
                                     deliverRefresh(tab.id)
-                                    frames.current
-                                        .get(tab.id)
-                                        ?.contentWindow?.erpWorkspaceActivate?.(
-                                            tab.id === snapshot.current.active,
+                                    const isActive =
+                                        tab.id === snapshot.current.active
+                                    iframe?.contentWindow?.erpWorkspaceActivate?.(
+                                        isActive,
+                                    )
+                                    if (isActive) {
+                                        requestAnimationFrame(() =>
+                                            focusActiveFrame(tab.id, {
+                                                passive: true,
+                                            }),
                                         )
+                                    }
                                 }}
                                 className="h-full min-h-0 w-full flex-1 border-0"
                             />
@@ -470,6 +699,6 @@ export function WorkspaceTabs({
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-        </>
+        </WorkspaceOpenTabsContext.Provider>
     )
 }

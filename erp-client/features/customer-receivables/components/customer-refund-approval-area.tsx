@@ -25,6 +25,7 @@ export function CustomerRefundApprovalArea({
     expectedTaskVersion,
     workItemAllowedActions,
     onDecisionApplied,
+    presentation = "default",
 }: {
     phase: CustomerRefundApprovalPhase
     approval?: DocumentApprovalView
@@ -34,6 +35,7 @@ export function CustomerRefundApprovalArea({
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
     onDecisionApplied?: (view: ApprovalCommandView) => void
+    presentation?: "default" | "timeline" | "actions"
 }) {
     return (
         <FinancialApprovalArea
@@ -50,6 +52,7 @@ export function CustomerRefundApprovalArea({
             surface="customer-refund-approval-area"
             historyId="customer-receivables-refund-approval-history"
             actionBarId="customer-receivables-refund-approval-action-bar"
+            presentation={presentation}
         />
     )
 }

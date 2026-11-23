@@ -209,7 +209,7 @@ export function BusinessAuditPage({
                     </Button>
                 }
             >
-                <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6">
+                <div className="min-h-0 flex-1 overflow-y-auto px-sheet-inline py-5">
                     {selected ? <AuditLogDetails row={selected} /> : null}
                 </div>
             </QuickPreviewSheet>

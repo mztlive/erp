@@ -50,9 +50,9 @@ export function SupplierSaveReasonDialog({
             }}
         >
             <DialogContent
+                size="md"
                 closeButtonId="master-data-supplier-save-reason-close"
                 showCloseButton={!pending}
-                className="max-h-[90dvh] overflow-y-auto sm:max-w-lg"
             >
                 <DialogHeader>
                     <DialogTitle>

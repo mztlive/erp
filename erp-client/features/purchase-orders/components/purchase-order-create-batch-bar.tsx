@@ -121,8 +121,8 @@ export function PurchaseOrderCreateBatchBar({
                     </TooltipContent>
                 </Tooltip>
                 <DialogContent
+                    size="md"
                     closeButtonId="procurement-orders-create-batch-close"
-                    className="sm:max-w-lg"
                 >
                     <DialogHeader>
                         <DialogTitle>批量指定来源</DialogTitle>

@@ -25,6 +25,7 @@ export function SupplierRefundApprovalArea({
     expectedTaskVersion,
     workItemAllowedActions,
     onDecisionApplied,
+    presentation = "default",
 }: {
     phase: SupplierRefundApprovalPhase
     approval?: DocumentApprovalView
@@ -34,6 +35,7 @@ export function SupplierRefundApprovalArea({
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
     onDecisionApplied?: (view: ApprovalCommandView) => void
+    presentation?: "default" | "timeline" | "actions"
 }) {
     return (
         <FinancialApprovalArea
@@ -48,6 +50,7 @@ export function SupplierRefundApprovalArea({
             workItemAllowedActions={workItemAllowedActions}
             onDecisionApplied={onDecisionApplied}
             surface="supplier-refund-approval-area"
+            presentation={presentation}
         />
     )
 }

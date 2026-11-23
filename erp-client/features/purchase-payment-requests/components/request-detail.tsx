@@ -17,6 +17,7 @@ import { toast } from "@/components/ui/toast"
 import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 import { ApprovalReadonly } from "@/features/approval-workflow/components/approval-readonly"
+import { ApprovalWithdrawDialog } from "@/features/approval-workflow/components/approval-withdraw-dialog"
 import { SubmissionRouteConfirmation } from "@/features/approval-workflow/components/submission-route-confirmation"
 import {
     mapDocumentApprovalViewDto,
@@ -24,6 +25,7 @@ import {
 } from "@/features/approval-workflow/types"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { getErrorMessage } from "@/lib/api"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import { classifyFormalCommandError } from "@/lib/formal-command"
 import { hasPermission } from "@/lib/permissions"
 import {
@@ -31,6 +33,7 @@ import {
     useRequestCommandMutation,
 } from "../hooks/queries"
 import { requestStatusLabel, requestStatusTone } from "../lib/display"
+import { paymentReviewBasis } from "../lib/review"
 import type {
     PaymentRequest,
     PaymentTaskContext,
@@ -57,12 +60,18 @@ export function RequestDetail({
     onDecisionApplied,
     onTaskCompleted,
     renderChrome,
+    onSelectFile,
+    activeFileId,
+    hideEmbeddedMaterials = false,
 }: {
     request: PaymentRequest
     task?: PaymentTaskContext
     onDecisionApplied?: (view: ApprovalCommandView) => void
     onTaskCompleted?: () => void
     renderChrome?: RequestDetailChrome
+    onSelectFile?: (fileId: string) => void
+    activeFileId?: string
+    hideEmbeddedMaterials?: boolean
 }) {
     const [editOpen, setEditOpen] = useState(false)
     const [submitOpen, setSubmitOpen] = useState(false)
@@ -276,6 +285,9 @@ export function RequestDetail({
             account={account}
             approval={approvalHistory}
             alerts={unknownAlerts}
+            onSelectFile={onSelectFile}
+            activeFileId={activeFileId}
+            hideEmbeddedMaterials={hideEmbeddedMaterials}
             renderChrome={(tabs) =>
                 renderChrome({ tabs, secondaryActions, primaryAction })
             }
@@ -288,8 +300,29 @@ export function RequestDetail({
             workItemId={scopedWorkItemId}
             account={account}
             approval={approvalHistory}
+            onSelectFile={onSelectFile}
+            activeFileId={activeFileId}
+            hideEmbeddedMaterials={hideEmbeddedMaterials}
         />
     )
+    const basis = paymentReviewBasis(request)
+    const highRiskReasons: string[] = []
+    if (basis.exceeds) {
+        highRiskReasons.push("存在采购单的申请未付金额超过当前可申请余额")
+    }
+    if (request.lines.some((line) => line.source_changed)) {
+        highRiskReasons.push("采购或收款依据已发生变化，请逐项核对")
+    }
+    try {
+        if (compareDecimal(request.total_amount, "100000", 2) >= 0) {
+            highRiskReasons.push(
+                "本次付款申请金额达到大额复核阈值（≥ ¥100,000.00）",
+            )
+        }
+    } catch {
+        // 金额格式异常时不阻断页面渲染
+    }
+    const highRisk = highRiskReasons.length > 0
     const hasManageActions =
         actions.has("EDIT") ||
         actions.has("WITHDRAW") ||
@@ -317,6 +350,8 @@ export function RequestDetail({
                             "OPEN_DOCUMENT",
                             "VIEW",
                         ]}
+                        highRisk={highRisk}
+                        highRiskReasons={highRiskReasons}
                         decisionContext={{
                             documentLabel: `${request.supplier_name} · ${request.request_no}`,
                             amountLabel: `¥${request.total_amount}`,
@@ -417,7 +452,86 @@ export function RequestDetail({
                     }
                 }}
             />
-            {reasonAction && (
+            {reasonAction === "withdraw" && (
+                <ApprovalWithdrawDialog
+                    open
+                    onOpenChange={(open) => {
+                        if (!open && !command.isPending) setReasonAction(null)
+                    }}
+                    idPrefix="ppr-withdraw"
+                    reasonId="ppr-withdraw-reason"
+                    title="撤回申请"
+                    description="撤回后可修改申请并重新提交财务审核，请填写撤回原因。"
+                    actionLabel="撤回申请"
+                    confirmLabel="确认撤回申请"
+                    unknownConfirmLabel="查询本次提交结果"
+                    cancelLabel="返回修改"
+                    unknownCancelLabel="暂时关闭"
+                    fromStatus={{
+                        label: requestStatusLabel[request.status],
+                        tone: requestStatusTone[request.status],
+                    }}
+                    toStatus={{ label: "已撤回", tone: "void" }}
+                    summary={[
+                        <span key="no" className="num">
+                            申请单号：{request.request_no}
+                        </span>,
+                        <span key="supplier">
+                            供应商：{request.supplier_name}
+                        </span>,
+                        <span key="unpaid">
+                            本次释放未付金额：
+                            <MoneyValue value={request.unpaid_amount} />
+                        </span>,
+                    ]}
+                    irreversibleEffects={[
+                        "立即结束本次财务审核并释放未付金额占用。",
+                        "再次提交审核时将重新校验采购单余额与审核流程。",
+                    ]}
+                    reasonLabel="撤回原因"
+                    reasonPlaceholder="请输入撤回原因"
+                    initialReason={
+                        reasonIdentities.current.withdraw?.reason ?? ""
+                    }
+                    pending={command.isPending}
+                    unknown={unknownReasonAction === "withdraw"}
+                    onUnknownChange={(isUnknown) => {
+                        setUnknownReasonAction(isUnknown ? "withdraw" : null)
+                    }}
+                    allowCloseWhenUnknown
+                    unknownHint="操作结果暂无法确认，可点击「查询本次提交结果」核对，或点击「暂时关闭」稍后在页面顶部继续查询。"
+                    createIdempotencyKey={() =>
+                        `ppr-withdraw:${crypto.randomUUID()}`
+                    }
+                    onSubmitWithdraw={async ({ reason, idempotencyKey }) => {
+                        const identity: RequestCommand = reasonIdentities
+                            .current.withdraw ?? {
+                            expected_version: request.version,
+                            reason,
+                            idempotency_key: idempotencyKey,
+                        }
+                        reasonIdentities.current.withdraw = identity
+                        await command.mutateAsync({
+                            id: request.id,
+                            action: "withdraw",
+                            command: identity,
+                        })
+                        delete reasonIdentities.current.withdraw
+                        setUnknownReasonAction(null)
+                        toast.add({
+                            title: "撤回申请已完成",
+                            description: `${request.request_no} 状态已更新。`,
+                            type: "success",
+                        })
+                    }}
+                    onSubmitError={(_error, isUnknown) => {
+                        if (!isUnknown) {
+                            delete reasonIdentities.current.withdraw
+                        }
+                    }}
+                />
+            )}
+            {reasonAction === "close" && (
                 <DestructiveReasonConfirmDialog
                     key={reasonAction}
                     request={request}

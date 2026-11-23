@@ -7,6 +7,7 @@ import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -362,9 +363,10 @@ function DictionaryCreateForm({
             }}
         >
             <DialogContent
+                size="md"
+                scroll="body"
                 closeButtonId={`${prefix}-close`}
                 showCloseButton={!mutation.isPending && !recoveryPending}
-                className="sm:max-w-lg"
             >
                 <DialogHeader>
                     <DialogTitle>补建{dictionaryLabels[kind]}</DialogTitle>
@@ -373,249 +375,256 @@ function DictionaryCreateForm({
                         。创建后仍需在当前申请核对映射。
                     </DialogDescription>
                 </DialogHeader>
-                <PortalError error={error} />
-                {canRead && (
-                    <PortalError
-                        error={dictionary.error}
-                        retry={() => void dictionary.refetch()}
-                        id={`${prefix}-candidates-retry`}
-                    />
-                )}
-                {unknown && (
-                    <p role="status" className="text-xs text-muted-foreground">
-                        本次结果尚未确认，填写内容已保留。请核对已创建记录，再继续审核。
-                    </p>
-                )}
-                {!unknown &&
-                    kind === "brand" &&
-                    canRead &&
-                    candidates.some(
-                        (candidate) => candidate.name.trim() === rawName.trim(),
-                    ) && (
-                        <div className="space-y-2 text-body-compact">
-                            <p>已有相同名称品牌，请确认是否复用。</p>
-                            {candidates
-                                .filter(
-                                    (candidate) =>
-                                        candidate.name.trim() ===
-                                        rawName.trim(),
-                                )
-                                .map((candidate) => (
-                                    <Button
-                                        key={candidate.id}
-                                        id={`${prefix}-reuse-${toAutomationIdSegment(candidate.id)}`}
-                                        type="button"
-                                        variant="outline"
-                                        disabled={
-                                            locked ||
-                                            !access.can(
-                                                "supplier_portal_request:review",
-                                            )
-                                        }
-                                        onClick={() => {
-                                            onCreated(candidate)
-                                            onClose()
-                                        }}
-                                    >
-                                        复用 {candidate.name}
-                                        {candidate.code
-                                            ? `（${candidate.code}）`
-                                            : ""}
-                                    </Button>
-                                ))}
-                        </div>
+                <DialogBody className="space-y-4">
+                    <PortalError error={error} />
+                    {canRead && (
+                        <PortalError
+                            error={dictionary.error}
+                            retry={() => void dictionary.refetch()}
+                            id={`${prefix}-candidates-retry`}
+                        />
                     )}
-                <form
-                    className="space-y-4"
-                    onSubmit={(event) => {
-                        event.preventDefault()
-                        void form.handleSubmit().catch(setError)
-                    }}
-                >
-                    <form.AppField name="name">
-                        {(field) => (
-                            <field.TextField
-                                id={`${prefix}-name`}
-                                label="名称"
-                                required
-                                disabled={locked}
-                            />
-                        )}
-                    </form.AppField>
-                    <form.AppField name="code">
-                        {(field) => (
-                            <field.TextField
-                                id={`${prefix}-code`}
-                                label={`${dictionaryLabels[kind]}编号`}
-                                required
-                                disabled={locked}
-                            />
-                        )}
-                    </form.AppField>
-                    {kind === "category" && (
-                        <>
-                            <p className="text-body-compact">
-                                适用商品类型：
-                                {productKindLabels[productKind] ?? "待确认"}
-                            </p>
-                            <form.AppField name="parentId">
-                                {(field) => (
-                                    <field.SelectField
-                                        onRefresh={() =>
-                                            dictionary.refetch({
-                                                throwOnError: true,
-                                            })
-                                        }
-                                        id={`${prefix}-parent`}
-                                        label="上级分类"
-                                        description="留空创建根分类；选择已有分类时按完整层级路径核对。"
-                                        options={candidates
-                                            .filter(
-                                                (candidate) =>
-                                                    candidate.product_kind ===
-                                                    productKind,
-                                            )
-                                            .map((candidate) => ({
-                                                value: candidate.id,
-                                                label:
-                                                    candidate.path ??
-                                                    candidate.name,
-                                            }))}
-                                        loading={
-                                            canRead && dictionary.isPending
-                                        }
-                                        disabled={locked || !canRead}
-                                    />
-                                )}
-                            </form.AppField>
-                            <form.Subscribe
-                                selector={(state) =>
-                                    [
-                                        state.values.parentId,
-                                        state.values.name,
-                                    ] as const
-                                }
-                            >
-                                {([parentId, name]) => {
-                                    const parent = candidates.find(
-                                        (candidate) =>
-                                            candidate.id === parentId,
-                                    )
-                                    return (
-                                        <p className="text-xs text-muted-foreground">
-                                            创建路径：
-                                            {parent
-                                                ? `${parent.path ?? parent.name} / `
-                                                : ""}
-                                            {name.trim() || "待填写名称"}
-                                        </p>
-                                    )
-                                }}
-                            </form.Subscribe>
-                        </>
-                    )}
-                    {kind === "unit" && (
-                        <>
-                            <form.AppField name="symbol">
-                                {(field) => (
-                                    <field.TextField
-                                        id={`${prefix}-symbol`}
-                                        label="单位符号"
-                                        required
-                                        disabled={locked}
-                                    />
-                                )}
-                            </form.AppField>
-                            <form.AppField name="quantityScale">
-                                {(field) => (
-                                    <field.SelectField
-                                        id={`${prefix}-quantity-scale`}
-                                        label="数量小数位"
-                                        options={[
-                                            "0",
-                                            "1",
-                                            "2",
-                                            "3",
-                                            "4",
-                                            "5",
-                                            "6",
-                                        ].map((value) => ({
-                                            value,
-                                            label: `${value}位小数`,
-                                        }))}
-                                        allowClear={false}
-                                        required
-                                        disabled={locked}
-                                    />
-                                )}
-                            </form.AppField>
-                        </>
-                    )}
-                    <DialogFooter>
-                        <Button
-                            id={`${prefix}-return`}
-                            type="button"
-                            variant="outline"
-                            disabled={mutation.isPending || recoveryPending}
-                            onClick={onClose}
+                    {unknown && (
+                        <p
+                            role="status"
+                            className="text-xs text-muted-foreground"
                         >
-                            返回申请
-                        </Button>
-                        {unknown ? (
-                            <>
-                                <Button
-                                    id={`${prefix}-retry-original`}
-                                    type="button"
-                                    variant="outline"
-                                    disabled={
-                                        mutation.isPending ||
-                                        recoveryPending ||
-                                        !access.can(createPermissions[kind])
-                                    }
-                                    onClick={() => {
-                                        retryRequested.current = true
-                                        void form
-                                            .handleSubmit()
-                                            .catch(setError)
-                                            .finally(() => {
-                                                retryRequested.current = false
-                                            })
-                                    }}
-                                >
-                                    重试本次创建
-                                </Button>
-                                {canRead && (
-                                    <Button
-                                        id={`${prefix}-recover`}
-                                        type="button"
-                                        disabled={
-                                            !canRead ||
-                                            mutation.isPending ||
-                                            recoveryPending
-                                        }
-                                        onClick={() => void recover()}
-                                    >
-                                        {recoveryPending
-                                            ? "核对中…"
-                                            : "核对已创建记录"}
-                                    </Button>
-                                )}
-                            </>
-                        ) : (
-                            <form.AppForm>
-                                <form.SubmitButton
-                                    id={`${prefix}-submit`}
-                                    label="创建并返回核对"
-                                    loading={mutation.isPending}
-                                    disabled={
-                                        locked ||
-                                        (canRead && !dictionary.isSuccess)
-                                    }
-                                />
-                            </form.AppForm>
+                            本次结果尚未确认，填写内容已保留。请核对已创建记录，再继续审核。
+                        </p>
+                    )}
+                    {!unknown &&
+                        kind === "brand" &&
+                        canRead &&
+                        candidates.some(
+                            (candidate) =>
+                                candidate.name.trim() === rawName.trim(),
+                        ) && (
+                            <div className="space-y-2 text-body-compact">
+                                <p>已有相同名称品牌，请确认是否复用。</p>
+                                {candidates
+                                    .filter(
+                                        (candidate) =>
+                                            candidate.name.trim() ===
+                                            rawName.trim(),
+                                    )
+                                    .map((candidate) => (
+                                        <Button
+                                            key={candidate.id}
+                                            id={`${prefix}-reuse-${toAutomationIdSegment(candidate.id)}`}
+                                            type="button"
+                                            variant="outline"
+                                            disabled={
+                                                locked ||
+                                                !access.can(
+                                                    "supplier_portal_request:review",
+                                                )
+                                            }
+                                            onClick={() => {
+                                                onCreated(candidate)
+                                                onClose()
+                                            }}
+                                        >
+                                            复用 {candidate.name}
+                                            {candidate.code
+                                                ? `（${candidate.code}）`
+                                                : ""}
+                                        </Button>
+                                    ))}
+                            </div>
                         )}
-                    </DialogFooter>
-                </form>
+                    <form
+                        id={`${prefix}-form`}
+                        className="space-y-4"
+                        onSubmit={(event) => {
+                            event.preventDefault()
+                            void form.handleSubmit().catch(setError)
+                        }}
+                    >
+                        <form.AppField name="name">
+                            {(field) => (
+                                <field.TextField
+                                    id={`${prefix}-name`}
+                                    label="名称"
+                                    required
+                                    disabled={locked}
+                                />
+                            )}
+                        </form.AppField>
+                        <form.AppField name="code">
+                            {(field) => (
+                                <field.TextField
+                                    id={`${prefix}-code`}
+                                    label={`${dictionaryLabels[kind]}编号`}
+                                    required
+                                    disabled={locked}
+                                />
+                            )}
+                        </form.AppField>
+                        {kind === "category" && (
+                            <>
+                                <p className="text-body-compact">
+                                    适用商品类型：
+                                    {productKindLabels[productKind] ?? "待确认"}
+                                </p>
+                                <form.AppField name="parentId">
+                                    {(field) => (
+                                        <field.SelectField
+                                            onRefresh={() =>
+                                                dictionary.refetch({
+                                                    throwOnError: true,
+                                                })
+                                            }
+                                            id={`${prefix}-parent`}
+                                            label="上级分类"
+                                            description="留空创建根分类；选择已有分类时按完整层级路径核对。"
+                                            options={candidates
+                                                .filter(
+                                                    (candidate) =>
+                                                        candidate.product_kind ===
+                                                        productKind,
+                                                )
+                                                .map((candidate) => ({
+                                                    value: candidate.id,
+                                                    label:
+                                                        candidate.path ??
+                                                        candidate.name,
+                                                }))}
+                                            loading={
+                                                canRead && dictionary.isPending
+                                            }
+                                            disabled={locked || !canRead}
+                                        />
+                                    )}
+                                </form.AppField>
+                                <form.Subscribe
+                                    selector={(state) =>
+                                        [
+                                            state.values.parentId,
+                                            state.values.name,
+                                        ] as const
+                                    }
+                                >
+                                    {([parentId, name]) => {
+                                        const parent = candidates.find(
+                                            (candidate) =>
+                                                candidate.id === parentId,
+                                        )
+                                        return (
+                                            <p className="text-xs text-muted-foreground">
+                                                创建路径：
+                                                {parent
+                                                    ? `${parent.path ?? parent.name} / `
+                                                    : ""}
+                                                {name.trim() || "待填写名称"}
+                                            </p>
+                                        )
+                                    }}
+                                </form.Subscribe>
+                            </>
+                        )}
+                        {kind === "unit" && (
+                            <>
+                                <form.AppField name="symbol">
+                                    {(field) => (
+                                        <field.TextField
+                                            id={`${prefix}-symbol`}
+                                            label="单位符号"
+                                            required
+                                            disabled={locked}
+                                        />
+                                    )}
+                                </form.AppField>
+                                <form.AppField name="quantityScale">
+                                    {(field) => (
+                                        <field.SelectField
+                                            id={`${prefix}-quantity-scale`}
+                                            label="数量小数位"
+                                            options={[
+                                                "0",
+                                                "1",
+                                                "2",
+                                                "3",
+                                                "4",
+                                                "5",
+                                                "6",
+                                            ].map((value) => ({
+                                                value,
+                                                label: `${value}位小数`,
+                                            }))}
+                                            allowClear={false}
+                                            required
+                                            disabled={locked}
+                                        />
+                                    )}
+                                </form.AppField>
+                            </>
+                        )}
+                    </form>
+                </DialogBody>
+                <DialogFooter>
+                    <Button
+                        id={`${prefix}-return`}
+                        type="button"
+                        variant="outline"
+                        disabled={mutation.isPending || recoveryPending}
+                        onClick={onClose}
+                    >
+                        返回申请
+                    </Button>
+                    {unknown ? (
+                        <>
+                            <Button
+                                id={`${prefix}-retry-original`}
+                                type="button"
+                                variant="outline"
+                                disabled={
+                                    mutation.isPending ||
+                                    recoveryPending ||
+                                    !access.can(createPermissions[kind])
+                                }
+                                onClick={() => {
+                                    retryRequested.current = true
+                                    void form
+                                        .handleSubmit()
+                                        .catch(setError)
+                                        .finally(() => {
+                                            retryRequested.current = false
+                                        })
+                                }}
+                            >
+                                重试本次创建
+                            </Button>
+                            {canRead && (
+                                <Button
+                                    id={`${prefix}-recover`}
+                                    type="button"
+                                    disabled={
+                                        !canRead ||
+                                        mutation.isPending ||
+                                        recoveryPending
+                                    }
+                                    onClick={() => void recover()}
+                                >
+                                    {recoveryPending
+                                        ? "核对中…"
+                                        : "核对已创建记录"}
+                                </Button>
+                            )}
+                        </>
+                    ) : (
+                        <form.AppForm>
+                            <form.SubmitButton
+                                id={`${prefix}-submit`}
+                                form={`${prefix}-form`}
+                                label="创建并返回核对"
+                                loading={mutation.isPending}
+                                disabled={
+                                    locked || (canRead && !dictionary.isSuccess)
+                                }
+                            />
+                        </form.AppForm>
+                    )}
+                </DialogFooter>
             </DialogContent>
         </Dialog>
     )

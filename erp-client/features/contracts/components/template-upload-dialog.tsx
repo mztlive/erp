@@ -76,8 +76,8 @@ export function TemplateUploadDialog({ onClose }: { onClose: () => void }) {
         >
             <DialogContent
                 id="template-upload-dialog"
+                size="lg"
                 closeButtonId="template-upload-dismiss"
-                className="sm:max-w-xl"
             >
                 <DialogHeader>
                     <DialogTitle>上传合同模板</DialogTitle>

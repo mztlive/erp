@@ -4,13 +4,11 @@ import {
     BackgroundJobProgress,
     BatchImpactPreview,
     FormalActionResult,
-    surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { getErrorMessage } from "@/lib/api/errors"
 import { formatDateTime } from "@/lib/datetime"
-import { cn } from "@/lib/utils"
 import type { ExportJobResult } from "@/features/supplier-orders/types"
 
 export function SupplierOrdersListExportResult({
@@ -82,7 +80,7 @@ export function SupplierOrdersListExportPreview({
     onCancel,
 }: SupplierOrdersListExportPreviewProps) {
     return (
-        <div className={cn(surfacePanelClassName, "space-y-3 p-4")}>
+        <div className="min-w-0 space-y-3 rounded-lg border border-border/60 bg-background p-4">
             <BatchImpactPreview
                 title="导出当前筛选全部"
                 description="按当前筛选快照导出，不限于当前页；结果 7 天内可下载，下载时将重新校验权限。"

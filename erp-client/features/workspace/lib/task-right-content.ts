@@ -6,6 +6,10 @@ import {
     sumFixed,
 } from "@/lib/fixed-decimal"
 import type { StatusTone } from "@/components/ui/status-badge"
+import {
+    getApprovalInstanceStatusMeta,
+    getWorkItemStatusMeta,
+} from "@/lib/task-status-dictionary"
 import type { WorkspaceWorkItem } from "../types"
 import { workspaceTaskSection } from "./task-presentation"
 import { isBlockedWorkItem } from "./work-item"
@@ -347,10 +351,21 @@ export function workspaceTaskRightContent(
     const tracking = item.workItemType === "APPROVAL_INSTANCE"
     const policy = policyFor(item)
     const blocked = isBlockedWorkItem(item)
+    const approvalMeta = tracking
+        ? getApprovalInstanceStatusMeta(item.approval?.status)
+        : undefined
+    const blockedMeta = blocked
+        ? getWorkItemStatusMeta(
+              "OPEN",
+              item.processingState === "READY"
+                  ? "APPROVAL_BLOCKED"
+                  : item.processingState,
+          )
+        : undefined
     const label = tracking
-        ? item.statusLabel
+        ? approvalMeta!.label
         : blocked
-          ? "受阻"
+          ? blockedMeta!.label
           : item.dueBucket === "overdue"
             ? "已超期"
             : item.dueBucket === "today"
@@ -360,12 +375,14 @@ export function workspaceTaskRightContent(
                     ? "待审批"
                     : policy?.status || "待处理")
     const tone: StatusTone = tracking
-        ? item.statusTone
-        : blocked || item.dueBucket === "today"
-          ? "warning"
+        ? approvalMeta!.tone
+        : blocked
+          ? blockedMeta!.tone
           : item.dueBucket === "overdue"
             ? "destructive"
-            : "neutral"
+            : item.dueBucket === "today"
+              ? "warning"
+              : "neutral"
     return {
         metric: workMetric(item, amount),
         status: { label, tone, detail: approvalProgress },

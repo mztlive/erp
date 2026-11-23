@@ -97,7 +97,7 @@ export function CostDetailSheet({
                 </div>
             }
         >
-            <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-auto px-7 py-6">
+            <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-auto px-sheet-inline py-5">
                 {costDetailRow && costDetailRow.coverageBlockers.length > 0 ? (
                     <Alert variant="warning">
                         <AlertTitle>成本缺口原因</AlertTitle>

@@ -53,10 +53,10 @@ export function AdjustmentDialog({
             }}
         >
             <DialogContent
+                size="md"
                 finalFocus={finalFocus}
                 closeButtonId="inventory-adjustment-dialog-close"
                 showCloseButton={!pending && !unresolved}
-                className="max-h-[90dvh] overflow-y-auto sm:max-w-lg"
             >
                 <DialogHeader>
                     <DialogTitle>发起库存调整</DialogTitle>

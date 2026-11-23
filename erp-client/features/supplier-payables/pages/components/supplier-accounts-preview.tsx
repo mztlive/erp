@@ -9,14 +9,23 @@ import type { UseQueryResult } from "@tanstack/react-query"
 import { ExternalLinkIcon } from "lucide-react"
 
 import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
+import { TaskActionSheet } from "@/components/business/task-action-sheet"
 import { Button } from "@/components/ui/button"
 import { getErrorMessage } from "@/lib/api/errors"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
+import { PaymentReversalApprovalArea } from "@/features/supplier-payables/components/payment-reversal-approval-area"
 import { PaymentReversalDetailBody } from "@/features/supplier-payables/components/payment-reversal-detail-body"
 import { SupplierAccountRecordPreview } from "./supplier-account-record-preview"
+import { SupplierRefundApprovalArea } from "@/features/supplier-payables/components/supplier-refund-approval-area"
 import { SupplierRefundDetailBody } from "@/features/supplier-payables/components/supplier-refund-detail-body"
-import { isUnsubmittedPaymentReversalStatus } from "@/features/supplier-payables/lib/payment-reversal-approval"
-import { isUnsubmittedSupplierRefundStatus } from "@/features/supplier-payables/lib/supplier-refund-approval"
+import {
+    isUnsubmittedPaymentReversalStatus,
+    paymentReversalApprovalPhase,
+} from "@/features/supplier-payables/lib/payment-reversal-approval"
+import {
+    isUnsubmittedSupplierRefundStatus,
+    supplierRefundApprovalPhase,
+} from "@/features/supplier-payables/lib/supplier-refund-approval"
 import { buildPayableActivity } from "@/features/supplier-payables/lib/payable-preview-activity"
 import type {
     PayableDetailView,
@@ -119,7 +128,7 @@ export function SupplierAccountsPreview({
             ) &&
             Boolean(onRequestReversalSubmit)
         return (
-            <QuickPreviewSheet
+            <TaskActionSheet
                 idPrefix="supplier-payables-preview-reversal"
                 open
                 onOpenChange={(open) => {
@@ -128,14 +137,15 @@ export function SupplierAccountsPreview({
                 onOpenChangeComplete={(open) => {
                     if (!open) onClosed?.()
                 }}
-                size="detail"
                 title="付款冲正"
-                identity={
-                    reversalQuery.data
-                        ? `冲正单：${reversalQuery.data.reversalNo}`
-                        : undefined
+                subtitle={
+                    reversalQuery.data ? (
+                        <span className="num">
+                            冲正单：{reversalQuery.data.reversalNo}
+                        </span>
+                    ) : undefined
                 }
-                summary={
+                badges={
                     reversalQuery.data ? (
                         <BusinessStatusBadge
                             context="preview"
@@ -144,16 +154,38 @@ export function SupplierAccountsPreview({
                         />
                     ) : undefined
                 }
-                footer={
+                footerLeading={
+                    <Button
+                        id="supplier-payables-preview-reversal-dismiss"
+                        type="button"
+                        variant="outline"
+                        onClick={onClose}
+                    >
+                        关闭
+                    </Button>
+                }
+                footerActions={
                     <>
-                        <Button
-                            id="supplier-payables-preview-reversal-dismiss"
-                            type="button"
-                            variant="outline"
-                            onClick={onClose}
-                        >
-                            关闭
-                        </Button>
+                        {reversalQuery.data ? (
+                            <PaymentReversalApprovalArea
+                                presentation="actions"
+                                phase={paymentReversalApprovalPhase(
+                                    reversalQuery.data.approval,
+                                    reversalQuery.data.status === "in_approval"
+                                        ? "IN_APPROVAL"
+                                        : reversalQuery.data.status,
+                                )}
+                                approval={reversalQuery.data.approval}
+                                documentId={reversalQuery.data.reversalId}
+                                documentVersion={
+                                    reversalQuery.data.baselineVersion
+                                }
+                                workItemId={workItemId}
+                                expectedTaskVersion={expectedTaskVersion}
+                                workItemAllowedActions={workItemAllowedActions}
+                                onDecisionApplied={onDecisionApplied}
+                            />
+                        ) : null}
                         {canSubmitDraft ? (
                             <Button
                                 id="supplier-payables-preview-reversal-submit"
@@ -167,21 +199,18 @@ export function SupplierAccountsPreview({
                 }
             >
                 {reversalQuery.isPending ? (
-                    <div className="px-7 py-6">
-                        <div className="h-40 animate-pulse rounded-xl bg-muted" />
-                    </div>
+                    <div className="h-40 animate-pulse rounded-xl bg-muted" />
                 ) : reversalQuery.data ? (
-                    <div className="px-7 py-6">
-                        <PaymentReversalDetailBody
-                            row={reversalQuery.data}
-                            workItemId={workItemId}
-                            expectedTaskVersion={expectedTaskVersion}
-                            workItemAllowedActions={workItemAllowedActions}
-                            onDecisionApplied={onDecisionApplied}
-                        />
-                    </div>
+                    <PaymentReversalDetailBody
+                        approvalActionsInFooter
+                        row={reversalQuery.data}
+                        workItemId={workItemId}
+                        expectedTaskVersion={expectedTaskVersion}
+                        workItemAllowedActions={workItemAllowedActions}
+                        onDecisionApplied={onDecisionApplied}
+                    />
                 ) : reversalQuery.isError ? (
-                    <div className="space-y-3 px-7 py-6">
+                    <div className="space-y-3">
                         <p className="text-xs text-muted-foreground">
                             {getErrorMessage(
                                 reversalQuery.error,
@@ -199,11 +228,11 @@ export function SupplierAccountsPreview({
                         </Button>
                     </div>
                 ) : (
-                    <p className="px-7 py-6 text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         未找到冲正详情
                     </p>
                 )}
-            </QuickPreviewSheet>
+            </TaskActionSheet>
         )
     }
 
@@ -216,7 +245,7 @@ export function SupplierAccountsPreview({
             ) &&
             Boolean(onRequestRefundSubmit)
         return (
-            <QuickPreviewSheet
+            <TaskActionSheet
                 idPrefix="supplier-payables-preview-refund"
                 open
                 onOpenChange={(open) => {
@@ -225,14 +254,15 @@ export function SupplierAccountsPreview({
                 onOpenChangeComplete={(open) => {
                     if (!open) onClosed?.()
                 }}
-                size="detail"
                 title="供应商退款"
-                identity={
-                    refundQuery.data
-                        ? `退款单：${refundQuery.data.refundNo}`
-                        : undefined
+                subtitle={
+                    refundQuery.data ? (
+                        <span className="num">
+                            退款单：{refundQuery.data.refundNo}
+                        </span>
+                    ) : undefined
                 }
-                summary={
+                badges={
                     refundQuery.data ? (
                         <BusinessStatusBadge
                             context="preview"
@@ -241,16 +271,38 @@ export function SupplierAccountsPreview({
                         />
                     ) : undefined
                 }
-                footer={
+                footerLeading={
+                    <Button
+                        id="supplier-payables-preview-refund-dismiss"
+                        type="button"
+                        variant="outline"
+                        onClick={onClose}
+                    >
+                        关闭
+                    </Button>
+                }
+                footerActions={
                     <>
-                        <Button
-                            id="supplier-payables-preview-refund-dismiss"
-                            type="button"
-                            variant="outline"
-                            onClick={onClose}
-                        >
-                            关闭
-                        </Button>
+                        {refundQuery.data ? (
+                            <SupplierRefundApprovalArea
+                                presentation="actions"
+                                phase={supplierRefundApprovalPhase(
+                                    refundQuery.data.approval,
+                                    refundQuery.data.status === "in_approval"
+                                        ? "IN_APPROVAL"
+                                        : refundQuery.data.status,
+                                )}
+                                approval={refundQuery.data.approval}
+                                documentId={refundQuery.data.refundId}
+                                documentVersion={
+                                    refundQuery.data.baselineVersion
+                                }
+                                workItemId={workItemId}
+                                expectedTaskVersion={expectedTaskVersion}
+                                workItemAllowedActions={workItemAllowedActions}
+                                onDecisionApplied={onDecisionApplied}
+                            />
+                        ) : null}
                         {canSubmitDraft ? (
                             <Button
                                 id="supplier-payables-preview-refund-submit"
@@ -264,21 +316,18 @@ export function SupplierAccountsPreview({
                 }
             >
                 {refundQuery.isPending ? (
-                    <div className="px-7 py-6">
-                        <div className="h-40 animate-pulse rounded-xl bg-muted" />
-                    </div>
+                    <div className="h-40 animate-pulse rounded-xl bg-muted" />
                 ) : refundQuery.data ? (
-                    <div className="px-7 py-6">
-                        <SupplierRefundDetailBody
-                            row={refundQuery.data}
-                            workItemId={workItemId}
-                            expectedTaskVersion={expectedTaskVersion}
-                            workItemAllowedActions={workItemAllowedActions}
-                            onDecisionApplied={onDecisionApplied}
-                        />
-                    </div>
+                    <SupplierRefundDetailBody
+                        approvalActionsInFooter
+                        row={refundQuery.data}
+                        workItemId={workItemId}
+                        expectedTaskVersion={expectedTaskVersion}
+                        workItemAllowedActions={workItemAllowedActions}
+                        onDecisionApplied={onDecisionApplied}
+                    />
                 ) : refundQuery.isError ? (
-                    <div className="space-y-3 px-7 py-6">
+                    <div className="space-y-3">
                         <p className="text-xs text-muted-foreground">
                             {getErrorMessage(
                                 refundQuery.error,
@@ -296,11 +345,11 @@ export function SupplierAccountsPreview({
                         </Button>
                     </div>
                 ) : (
-                    <p className="px-7 py-6 text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         未找到退款详情
                     </p>
                 )}
-            </QuickPreviewSheet>
+            </TaskActionSheet>
         )
     }
 
@@ -476,11 +525,11 @@ export function SupplierAccountsPreview({
             }
         >
             {detailQuery.isPending ? (
-                <div className="px-7 py-6">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-sheet-inline py-5">
                     <PayablePreviewSkeleton />
                 </div>
             ) : detailQuery.data ? (
-                <div className="px-7 py-6">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-sheet-inline py-5">
                     <PayablePreviewBody
                         payable={detailQuery.data.payable}
                         entries={detailQuery.data.entries}
@@ -493,7 +542,7 @@ export function SupplierAccountsPreview({
                     />
                 </div>
             ) : detailQuery.isError ? (
-                <div className="flex flex-col gap-3 px-7 py-6">
+                <div className="flex flex-col gap-3 px-sheet-inline py-5">
                     <p className="text-xs text-muted-foreground">
                         {getErrorMessage(
                             detailQuery.error,
@@ -511,7 +560,7 @@ export function SupplierAccountsPreview({
                     </Button>
                 </div>
             ) : (
-                <p className="px-7 py-6 text-xs text-muted-foreground">
+                <p className="px-sheet-inline py-5 text-xs text-muted-foreground">
                     未找到应付详情
                 </p>
             )}

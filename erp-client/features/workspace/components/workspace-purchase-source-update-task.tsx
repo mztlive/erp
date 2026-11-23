@@ -7,15 +7,11 @@ import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { FileTextIcon } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
+import { IconActionButton } from "@/components/business"
 import { PurchaseSourceUpdateWorkspace } from "@/features/purchase-orders/components/purchase-source-update-workspace"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { TASK_TYPE_CANONICAL_LABELS } from "@/lib/task-status-dictionary"
 import type { WorkspaceWorkItem } from "../types"
 import { stripDocumentNumberPrefix } from "../lib/stable-number"
 import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
@@ -60,7 +56,10 @@ export function WorkspacePurchaseSourceUpdateTask({
             header={
                 <WorkspaceTaskIdentityHeader
                     item={item}
-                    title="处理销售变更影响"
+                    title={
+                        item.workItemTypeLabel ||
+                        TASK_TYPE_CANONICAL_LABELS.PURCHASE_SOURCE_UPDATE.label
+                    }
                     subtitle={
                         <span className="flex flex-wrap gap-x-3 gap-y-1">
                             <span>{item.counterpartyName}</span>
@@ -76,26 +75,17 @@ export function WorkspacePurchaseSourceUpdateTask({
                         </span>
                     }
                 >
-                    <Tooltip>
-                        <TooltipTrigger
-                            render={
-                                <Button
-                                    id={`workspace-source-update-preview-${toAutomationIdSegment(item.workItemId)}`}
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    aria-label="查看采购单"
-                                    onClick={() => setPreviewOpen(true)}
-                                />
-                            }
-                        >
-                            <FileTextIcon aria-hidden="true" />
-                        </TooltipTrigger>
-                        <TooltipContent>查看采购单</TooltipContent>
-                    </Tooltip>
+                    <IconActionButton
+                        id={`workspace-source-update-preview-${toAutomationIdSegment(item.workItemId)}`}
+                        testId={`workspace-source-update-preview-${toAutomationIdSegment(item.workItemId)}`}
+                        label="查看采购单"
+                        onClick={() => setPreviewOpen(true)}
+                    >
+                        <FileTextIcon aria-hidden="true" />
+                    </IconActionButton>
                 </WorkspaceTaskIdentityHeader>
             }
-            aria-label="当前采购依据更新任务"
+            aria-label="当前采购依据变更任务"
         >
             <PurchaseSourceUpdateWorkspace
                 purchaseOrderId={item.businessObjectId}

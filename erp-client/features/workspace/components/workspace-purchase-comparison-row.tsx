@@ -1,11 +1,12 @@
 import type { MouseEvent } from "react"
-import { SalesLinePriceComparison } from "@/components/business/sales-line-price-comparison"
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 import { MoneyValue, QuantityValue } from "@/components/business"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TableCell, TableRow } from "@/components/ui/table"
 import type { ApprovalPurchaseLine } from "@/features/approval-workflow/api/materials"
 import { displayName } from "@/lib/display-name"
+import { salesLinePriceComparison } from "@/lib/sales-line-prices"
 import { cn } from "@/lib/utils"
 import {
     purchaseAttentionClass,
@@ -29,6 +30,7 @@ function isInteractiveTarget(target: EventTarget | null) {
 export function PurchaseComparisonRow({
     line,
     comparison,
+    negativeMargin = false,
     source,
     prefix,
     expanded,
@@ -37,19 +39,24 @@ export function PurchaseComparisonRow({
 }: {
     line: ApprovalPurchaseLine
     comparison: PurchaseComparison
+    negativeMargin?: boolean
     source?: PurchaseSource
     prefix: string
     expanded: boolean
     onToggle: () => void
     onPreview: (revisionId: string) => void
 }) {
-    const attention = comparison.warnings.length > 0
+    const attention = comparison.warnings.length > 0 || negativeMargin
     const title = displayName(line.title) || "未记录商品名称"
-    const canExpand = hasPurchaseSupplement(line, comparison, source)
+    const canExpand =
+        hasPurchaseSupplement(line, comparison, source) || negativeMargin
     const handleRowClick = (event: MouseEvent<HTMLTableRowElement>) => {
         if (!canExpand || isInteractiveTarget(event.target)) return
         onToggle()
     }
+    const sourcePrices = line.source
+        ? salesLinePriceComparison(line.source.sales_prices ?? line.source)
+        : null
     const toggle = canExpand ? (
         <Button
             id={`${prefix}-toggle`}
@@ -73,10 +80,14 @@ export function PurchaseComparisonRow({
             <TableRow
                 className={cn(
                     "hover:bg-transparent",
-                    attention ? "bg-warning-soft/40" : "bg-muted/35",
+                    negativeMargin
+                        ? "bg-destructive-soft/30"
+                        : attention
+                          ? "bg-warning-soft/40"
+                          : "bg-muted/35",
                 )}
             >
-                <TableCell colSpan={9} className="whitespace-normal px-5 py-4">
+                <TableCell colSpan={8} className="whitespace-normal px-5 py-4">
                     <div
                         id={`${prefix}-detail`}
                         role="region"
@@ -103,13 +114,13 @@ export function PurchaseComparisonRow({
                     <TableCell className="num text-muted-foreground">
                         {line.line_no}
                     </TableCell>
-                    <TableCell className="max-w-64 whitespace-normal wrap-anywhere">
+                    <TableCell className="max-w-56 whitespace-normal wrap-anywhere">
                         <span className="mr-2 text-xs text-muted-foreground">
                             费用
                         </span>
                         {title}
                     </TableCell>
-                    <TableCell colSpan={4} className="text-muted-foreground">
+                    <TableCell colSpan={3} className="text-muted-foreground">
                         不对应销售商品明细 · 按行含税金额核对
                     </TableCell>
                     <TableCell colSpan={2} data-align="end">
@@ -127,17 +138,21 @@ export function PurchaseComparisonRow({
                 onClick={handleRowClick}
                 className={cn(
                     canExpand && "cursor-pointer",
-                    attention && "bg-warning-soft/50 hover:bg-warning-soft/80",
+                    negativeMargin
+                        ? "bg-destructive-soft/35 hover:bg-destructive-soft/55"
+                        : attention &&
+                              "bg-warning-soft/50 hover:bg-warning-soft/80",
                     expanded && "has-aria-expanded:bg-muted/45",
                     expanded &&
                         attention &&
+                        !negativeMargin &&
                         "has-aria-expanded:bg-warning-soft/80",
                 )}
             >
                 <TableCell className="num text-muted-foreground">
                     {line.line_no}
                 </TableCell>
-                <TableCell className="max-w-64 whitespace-normal wrap-anywhere">
+                <TableCell className="min-w-36 max-w-56 whitespace-normal wrap-anywhere">
                     <p className="font-medium">{title}</p>
                     {purchaseSpecification(line.specification) && (
                         <p className="mt-1 text-xs text-muted-foreground">
@@ -170,30 +185,65 @@ export function PurchaseComparisonRow({
                         )}
                     </div>
                 </TableCell>
-                <TableCell data-align="end">
-                    <MoneyValue
-                        value={line.source?.unit_price_gross}
-                        display="exact"
-                    />
-                </TableCell>
                 <TableCell className="whitespace-normal">
                     {line.source ? (
-                        <SalesLinePriceComparison
-                            prices={line.source.sales_prices ?? line.source}
-                            showSalesPrice={false}
-                            compact
-                            unit={line.source.unit}
-                        />
+                        <div className="space-y-1 text-xs">
+                            <div className="flex flex-wrap items-baseline gap-x-1.5">
+                                <span className="text-muted-foreground">
+                                    销
+                                </span>
+                                <MoneyValue
+                                    value={line.source.unit_price_gross}
+                                    display="exact"
+                                    className="text-body-compact"
+                                />
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-1.5 text-muted-foreground">
+                                <span>供</span>
+                                {line.source.procurement_supply_price_gross !=
+                                    null &&
+                                line.source.procurement_supply_price_gross !==
+                                    "" ? (
+                                    <MoneyValue
+                                        value={
+                                            line.source
+                                                .procurement_supply_price_gross
+                                        }
+                                        display="exact"
+                                    />
+                                ) : (
+                                    <span>未填</span>
+                                )}
+                                {sourcePrices?.change != null ? (
+                                    <Badge
+                                        variant="warning"
+                                        className="px-1.5 py-0 text-tiny"
+                                    >
+                                        {sourcePrices.adjustment === "increased"
+                                            ? "调高"
+                                            : "调低"}
+                                    </Badge>
+                                ) : null}
+                            </div>
+                        </div>
                     ) : (
                         <span className="text-muted-foreground">—</span>
                     )}
                 </TableCell>
                 <TableCell data-align="end" className="font-semibold">
-                    <MoneyValue value={line.unit_cost_gross} display="exact" />
+                    <MoneyValue
+                        value={line.unit_cost_gross}
+                        display="exact"
+                        className={
+                            negativeMargin
+                                ? "text-destructive-soft-foreground"
+                                : undefined
+                        }
+                    />
                 </TableCell>
                 <TableCell className="num text-xs">
                     <p>
-                        <span className="mr-2 text-muted-foreground">销</span>
+                        <span className="mr-1.5 text-muted-foreground">销</span>
                         {comparison.salesDate ?? "—"}
                     </p>
                     <p
@@ -203,17 +253,20 @@ export function PurchaseComparisonRow({
                                 "font-medium text-warning-soft-foreground",
                         )}
                     >
-                        <span className="mr-2 text-muted-foreground">采</span>
+                        <span className="mr-1.5 text-muted-foreground">采</span>
                         {line.expected_delivery_date ?? "—"}
                     </p>
                 </TableCell>
-                <TableCell className="max-w-52 whitespace-normal">
-                    <div className="flex flex-wrap gap-1.5">
+                <TableCell className="max-w-48 whitespace-normal">
+                    <div className="flex flex-wrap gap-1">
+                        {negativeMargin ? (
+                            <Badge variant="destructive">高于售价</Badge>
+                        ) : null}
                         {comparison.warnings.map((warning) => (
                             <span
                                 key={warning}
                                 className={cn(
-                                    "rounded-md border px-2 py-0.5 text-xs",
+                                    "rounded-md border px-1.5 py-0.5 text-xs",
                                     purchaseAttentionClass,
                                 )}
                             >
@@ -221,8 +274,8 @@ export function PurchaseComparisonRow({
                             </span>
                         ))}
                         {comparison.partial && (
-                            <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                                部分数量采购
+                            <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                                部分采购
                             </span>
                         )}
                         {!attention && !comparison.partial && (

@@ -1,26 +1,13 @@
 "use client"
 
-import { WorkspaceTaskPane } from "@/components/business/workspace-task-pane"
 import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 
 import * as React from "react"
-import { z } from "zod"
+import { useRouter } from "next/navigation"
 
-import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { StatusBadge } from "@/components/ui/status-badge"
-import {
-    Dialog,
-    DialogClose,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
-import { FieldGroup } from "@/components/ui/field"
 import type { FulfillmentQueueFilters } from "@/features/fulfillment-operations/api"
 import { FULFILLMENT_ROLES } from "@/features/fulfillment-operations/lib/fulfillment-roles"
 import { OPERATION_TYPE_LABEL } from "@/features/fulfillment-operations/types"
@@ -31,15 +18,11 @@ import {
     FulfillmentPaymentLink,
 } from "@/features/fulfillment-operations/pages/components/fulfillment-payment-notice"
 import { useFulfillmentOperationsController } from "@/features/fulfillment-operations/pages/hooks/use-fulfillment-operations-controller"
-import {
-    useWorkItemReassignCandidatesQuery,
-    useWorkItemResponsibilityMutation,
-} from "@/features/work-items/queries"
-import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { displayName } from "@/lib/display-name"
+import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
+import { navigateWorkspace } from "@/lib/workspace-tabs"
 
-import { displayText } from "@/features/fulfillment-operations/lib/readable-label"
 import { fulfillmentTaskTitle } from "../lib/fulfillment-title"
 import { workspaceFulfillmentDescriptor } from "../lib/workspace-fulfillment"
 import type { WorkspaceWorkItem } from "../types"
@@ -50,25 +33,13 @@ type WorkspaceFulfillmentTaskProps = Readonly<{
     item: WorkspaceWorkItem
     grantedPermissions: readonly string[]
     onTaskCompleted: (workItemId: string) => void
-    deliveryDialog?: boolean
-    onClose?: () => void
 }>
-
-const fulfillmentReassignSchema = z.object({
-    targetUserId: z.string().min(1, "请选择新责任人"),
-    reason: z
-        .string()
-        .max(150, "转交原因最多 150 个字符")
-        .refine((value) => value.trim().length > 0, "请填写转交原因"),
-})
 
 /** W01 履约作业面：任务身份锁定一个强类型收货或发货操作。 */
 export function WorkspaceFulfillmentTask({
     item,
     grantedPermissions,
     onTaskCompleted,
-    deliveryDialog = false,
-    onClose,
 }: WorkspaceFulfillmentTaskProps) {
     const descriptor = workspaceFulfillmentDescriptor(item)
     const operationType = descriptor?.operationTypes[0]
@@ -107,86 +78,56 @@ export function WorkspaceFulfillmentTask({
             section.label === "供给影响提示" ||
             section.label === "当前采购负责人",
     )
+    const subtitleParts = [
+        operationType ? OPERATION_TYPE_LABEL[operationType] : null,
+        item.stableNumber,
+    ].filter(Boolean)
 
-    const Pane = deliveryDialog ? WorkspaceTaskPane : WorkspaceProcessingPane
     return (
-        <Pane
-            className={
-                deliveryDialog
-                    ? "h-auto min-h-0 flex-1 overflow-hidden"
-                    : undefined
-            }
+        <WorkspaceProcessingPane
             header={
-                deliveryDialog ? (
-                    <DialogHeader className="min-w-0 pr-10">
-                        <div className="flex flex-wrap items-center gap-3">
-                            <DialogTitle className="text-section-title font-semibold tracking-tight">
-                                登记发货
-                            </DialogTitle>
-                            {operationType ? (
-                                <Badge variant="teal">
-                                    {OPERATION_TYPE_LABEL[operationType]}
-                                </Badge>
-                            ) : null}
-                        </div>
-                        <DialogDescription className="num break-all">
-                            {controller.operation
-                                ? `销售单：${displayText(controller.operation.source.salesOrderNo) || "单号未提供"}`
-                                : fulfillmentTaskTitle(item)}
-                        </DialogDescription>
-                    </DialogHeader>
-                ) : (
-                    <WorkspaceTaskIdentityHeader
-                        item={item}
-                        compact
-                        title={
-                            displayName(
-                                controller.operation?.source.customerLabel,
-                            ) ||
-                            fulfillmentTaskTitle(item, controller.operation)
-                        }
-                        badges={
-                            <>
-                                {operationType && (
-                                    <Badge variant="teal">
-                                        {OPERATION_TYPE_LABEL[operationType]}
-                                    </Badge>
-                                )}
-                                <StatusBadge
-                                    label={item.statusLabel}
-                                    tone={item.statusTone}
-                                />
-                                {controller.operation &&
-                                    controller.operation.gate.state ===
-                                        "BLOCKED" &&
-                                    operationType !== "WAREHOUSE_SHIP" && (
-                                        <>
-                                            <StatusBadge
-                                                label="预付待完成"
-                                                tone="warning"
-                                            />
-                                            <FulfillmentPaymentBadges
-                                                operation={controller.operation}
-                                            />
-                                        </>
-                                    )}
-                            </>
-                        }
-                        subtitle={null}
-                    >
-                        <WorkspaceFulfillmentReassignAction
-                            item={item}
-                            onReassigned={() =>
-                                onTaskCompleted(item.workItemId)
-                            }
-                        />
-                        {controller.operation && (
-                            <FulfillmentPaymentLink
-                                operation={controller.operation}
+                <WorkspaceTaskIdentityHeader
+                    item={item}
+                    title={
+                        displayName(
+                            controller.operation?.source.customerLabel,
+                        ) || fulfillmentTaskTitle(item, controller.operation)
+                    }
+                    badges={
+                        <>
+                            <StatusBadge
+                                label={item.statusLabel}
+                                tone={item.statusTone}
                             />
-                        )}
-                    </WorkspaceTaskIdentityHeader>
-                )
+                            {controller.operation &&
+                                controller.operation.gate.state === "BLOCKED" &&
+                                operationType !== "WAREHOUSE_SHIP" && (
+                                    <>
+                                        <StatusBadge
+                                            label="预付待完成"
+                                            tone="warning"
+                                        />
+                                        <FulfillmentPaymentBadges
+                                            operation={controller.operation}
+                                        />
+                                    </>
+                                )}
+                        </>
+                    }
+                    subtitle={
+                        subtitleParts.length > 0 ? (
+                            <span className="num">
+                                {subtitleParts.join(" · ")}
+                            </span>
+                        ) : null
+                    }
+                >
+                    {controller.operation && (
+                        <FulfillmentPaymentLink
+                            operation={controller.operation}
+                        />
+                    )}
+                </WorkspaceTaskIdentityHeader>
             }
             aria-label="当前履约任务"
         >
@@ -248,273 +189,28 @@ export function WorkspaceFulfillmentTask({
                         }
                         embedded
                         singleOperation
-                        deliveryDialog={
-                            deliveryDialog
-                                ? {
-                                      responsibleLabel: item.ownerUserLabel,
-                                      onClose,
-                                  }
-                                : undefined
-                        }
                         onBack={() => undefined}
                     />
                 </div>
             )}
-        </Pane>
+        </WorkspaceProcessingPane>
     )
 }
 
-/** 责任管理独立于履约执行队列，只有 REASSIGN 授权才提供入口。 */
-export function WorkspaceFulfillmentReassignAction({
-    item,
-    onReassigned,
-}: {
-    item: WorkspaceWorkItem
-    onReassigned: () => void
-}) {
-    const [open, setOpen] = React.useState(false)
-    if (!item.allowedActions.includes("REASSIGN")) return null
-    return (
-        <>
-            <Button
-                id={`workspace-fulfillment-reassign-trigger-${toAutomationIdSegment(item.workItemId)}`}
-                type="button"
-                variant="outline"
-                onClick={() => setOpen(true)}
-            >
-                转交他人
-            </Button>
-            {open ? (
-                <WorkspaceFulfillmentReassignDialog
-                    open={open}
-                    onOpenChange={setOpen}
-                    item={item}
-                    onReassigned={onReassigned}
-                />
-            ) : null}
-        </>
-    )
-}
-
-function WorkspaceFulfillmentReassignDialog({
-    open,
-    onOpenChange,
-    item,
-    onReassigned,
-}: {
-    open: boolean
-    onOpenChange: (open: boolean) => void
-    item: WorkspaceWorkItem
-    onReassigned: () => void
-}) {
-    const [error, setError] = React.useState<string | null>(null)
-    const intentRef = React.useRef<{
-        fingerprint: string
-        idempotencyKey: string
-    } | null>(null)
-    const candidatesQuery = useWorkItemReassignCandidatesQuery(
-        item.workItemId,
-        open,
-    )
-    const mutation = useWorkItemResponsibilityMutation()
-
-    const options = React.useMemo(
-        () =>
-            (candidatesQuery.data ?? []).map((candidate) => ({
-                value: candidate.user_id,
-                label: `${candidate.display_name} · ${candidate.account}`,
-                keywords: candidate.account,
-            })),
-        [candidatesQuery.data],
-    )
-    const form = useAppForm({
-        defaultValues: {
-            targetUserId: "",
-            reason: "",
-        },
-        validators: {
-            onChange: fulfillmentReassignSchema,
-        },
-        onSubmit: async ({ value }) => {
-            const normalizedReason = value.reason.trim()
-            const selectedIsEligible = options.some(
-                (option) => option.value === value.targetUserId,
-            )
-            if (!selectedIsEligible || !normalizedReason) {
-                setError("请选择接收人，并填写转交原因")
-                return
-            }
-            const fingerprint = JSON.stringify({
-                workItemId: item.workItemId,
-                taskVersion: item.taskVersion,
-                targetUserId: value.targetUserId,
-                reason: normalizedReason,
-            })
-            if (intentRef.current?.fingerprint !== fingerprint) {
-                intentRef.current = {
-                    fingerprint,
-                    idempotencyKey: `work-item-reassign:${item.workItemId}:${crypto.randomUUID()}`,
-                }
-            }
-            try {
-                await mutation.mutateAsync({
-                    kind: "REASSIGN",
-                    workItemId: item.workItemId,
-                    expectedTaskVersion: item.taskVersion,
-                    targetUserId: value.targetUserId,
-                    reason: normalizedReason,
-                    idempotencyKey: intentRef.current.idempotencyKey,
-                })
-                intentRef.current = null
-                onOpenChange(false)
-                onReassigned()
-            } catch (cause) {
-                setError(getErrorMessage(cause, "任务责任未转交，请刷新后重试"))
-            }
-        },
-    })
-
-    React.useEffect(() => {
-        if (!open) return
-        form.reset({ targetUserId: "", reason: "" })
-        setError(null)
-        intentRef.current = null
-    }, [form, item.workItemId, open])
-
-    return (
-        <Dialog
-            open={open}
-            onOpenChange={(next) => {
-                if (!next && mutation.isPending) return
-                onOpenChange(next)
-            }}
-        >
-            <DialogContent
-                closeButtonId={`workspace-fulfillment-reassign-close-${toAutomationIdSegment(item.workItemId)}`}
-                showCloseButton={!mutation.isPending}
-                className="sm:max-w-lg"
-            >
-                <DialogHeader>
-                    <DialogTitle>转交履约待办</DialogTitle>
-                    <DialogDescription>
-                        当前责任人：{item.ownerUserLabel}
-                        。采购单责任转交会同步更新该采购单全部待处理的交付任务；历史任务不变。
-                    </DialogDescription>
-                </DialogHeader>
-                <form
-                    className="space-y-4"
-                    onSubmit={(event) => {
-                        event.preventDefault()
-                        void form.handleSubmit()
-                    }}
-                >
-                    {candidatesQuery.isError ? (
-                        <Alert variant="destructive">
-                            <AlertTitle>候选人员加载失败</AlertTitle>
-                            <AlertDescription>
-                                {getErrorMessage(
-                                    candidatesQuery.error,
-                                    "请刷新选项后重试",
-                                )}
-                            </AlertDescription>
-                        </Alert>
-                    ) : null}
-                    {error ? (
-                        <Alert variant="destructive">
-                            <AlertTitle>转交未完成</AlertTitle>
-                            <AlertDescription>{error}</AlertDescription>
-                        </Alert>
-                    ) : null}
-                    <FieldGroup>
-                        <form.AppField name="targetUserId">
-                            {(field) => (
-                                <field.SelectField
-                                    id={`workspace-fulfillment-reassign-target-${toAutomationIdSegment(item.workItemId)}`}
-                                    label="新责任人"
-                                    options={options}
-                                    onRefresh={() =>
-                                        candidatesQuery.refetch({
-                                            throwOnError: true,
-                                        })
-                                    }
-                                    placeholder="选择接收人"
-                                    emptyLabel="暂无符合处理权限的员工"
-                                    loading={candidatesQuery.isFetching}
-                                    disabled={candidatesQuery.isPending}
-                                    allowClear={false}
-                                    required
-                                />
-                            )}
-                        </form.AppField>
-                        <form.AppField name="reason">
-                            {(field) => (
-                                <field.TextareaField
-                                    id={`workspace-fulfillment-reassign-reason-${toAutomationIdSegment(item.workItemId)}`}
-                                    label="转交原因"
-                                    placeholder="说明本次责任调整依据"
-                                    maxLength={150}
-                                    required
-                                />
-                            )}
-                        </form.AppField>
-                    </FieldGroup>
-                    <DialogFooter>
-                        <DialogClose
-                            id={`workspace-fulfillment-reassign-cancel-${toAutomationIdSegment(item.workItemId)}`}
-                            render={
-                                <Button
-                                    id={`workspace-fulfillment-reassign-cancel-${toAutomationIdSegment(item.workItemId)}`}
-                                    type="button"
-                                    variant="outline"
-                                />
-                            }
-                        >
-                            取消
-                        </DialogClose>
-                        <form.Subscribe
-                            selector={(state) => state.values.targetUserId}
-                        >
-                            {(targetUserId) => (
-                                <form.AppForm>
-                                    <form.SubmitButton
-                                        id={`workspace-fulfillment-reassign-submit-${toAutomationIdSegment(item.workItemId)}`}
-                                        label="确认转交"
-                                        pendingLabel="转交中…"
-                                        loading={mutation.isPending}
-                                        disabled={
-                                            mutation.isPending ||
-                                            candidatesQuery.isPending ||
-                                            candidatesQuery.isError ||
-                                            !options.some(
-                                                (option) =>
-                                                    option.value ===
-                                                    targetUserId,
-                                            )
-                                        }
-                                    />
-                                </form.AppForm>
-                            )}
-                        </form.Subscribe>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
-    )
-}
-
-/** 工作台公共详情保持一致，执行者通过独立操作入口打开原有履约表单。 */
+/**
+ * 履约直达入口：取代原有 max-w-5xl 弹窗套娃，直接跳转至履约主作业面。
+ */
 export function WorkspaceFulfillmentProcessAction(
     props: WorkspaceFulfillmentTaskProps,
 ) {
-    const [open, setOpen] = React.useState(false)
-    const completedTaskRef = React.useRef<string | null>(null)
+    const router = useRouter()
     const operationType = workspaceFulfillmentDescriptor(props.item)
         ?.operationTypes[0]
-    const deliveryDialog =
+    const isDelivery =
         operationType === "SUPPLIER_DIRECT" ||
         operationType === "WAREHOUSE_SHIP"
     if (!props.item.allowedActions.includes("PROCESS")) return null
-    const actionLabel = deliveryDialog
+    const actionLabel = isDelivery
         ? "登记发货"
         : operationType === "RECEIPT"
           ? "登记入库"
@@ -523,9 +219,10 @@ export function WorkspaceFulfillmentProcessAction(
             : operationType === "SERVICE"
               ? "登记服务完成"
               : "处理履约"
+    const href = buildWorkspaceDetailHref("tasks", props.item.workItemId)
     return (
         <>
-            {deliveryDialog ? (
+            {isDelivery ? (
                 <WorkspaceDeliveryGate
                     key={props.item.workItemId}
                     item={props.item}
@@ -533,55 +230,14 @@ export function WorkspaceFulfillmentProcessAction(
             ) : null}
             <Button
                 id={`workspace-fulfillment-process-${toAutomationIdSegment(props.item.workItemId)}`}
-                onClick={() => setOpen(true)}
+                onClick={() => {
+                    if (!navigateWorkspace(href)) {
+                        router.push(href)
+                    }
+                }}
             >
                 {actionLabel}
             </Button>
-            <Dialog
-                open={open}
-                onOpenChange={setOpen}
-                onOpenChangeComplete={(isOpen) => {
-                    if (isOpen || !completedTaskRef.current) return
-                    const completedId = completedTaskRef.current
-                    completedTaskRef.current = null
-                    props.onTaskCompleted(completedId)
-                }}
-            >
-                <DialogContent
-                    id={`workspace-fulfillment-process-dialog-${toAutomationIdSegment(props.item.workItemId)}`}
-                    closeButtonId={`workspace-fulfillment-process-close-${toAutomationIdSegment(props.item.workItemId)}`}
-                    className={
-                        deliveryDialog
-                            ? "flex max-h-[90dvh] w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
-                            : "flex max-h-[90vh] flex-col overflow-hidden sm:max-w-5xl"
-                    }
-                >
-                    {!deliveryDialog ? (
-                        <DialogHeader>
-                            <DialogTitle>处理履约</DialogTitle>
-                        </DialogHeader>
-                    ) : null}
-                    {open ? (
-                        <div
-                            className={
-                                deliveryDialog
-                                    ? "flex min-h-0 flex-1 flex-col overflow-hidden"
-                                    : "min-h-0 flex-1 overflow-y-auto"
-                            }
-                        >
-                            <WorkspaceFulfillmentTask
-                                {...props}
-                                deliveryDialog={deliveryDialog}
-                                onClose={() => setOpen(false)}
-                                onTaskCompleted={(id) => {
-                                    completedTaskRef.current = id
-                                    setOpen(false)
-                                }}
-                            />
-                        </div>
-                    ) : null}
-                </DialogContent>
-            </Dialog>
         </>
     )
 }

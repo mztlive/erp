@@ -100,7 +100,13 @@ pub(in crate::workbench) fn offering_request_fact(
             )
         })
         .collect();
-    request_fact(&request.base.id, request.created_by.as_str(), "供应商供给申请", subjects)
+    request_fact(
+        &request.base.id,
+        &request.supplier_id,
+        request.created_by.as_str(),
+        "供应商供给申请",
+        subjects,
+    )
 }
 
 // 装配供应商申请工作项事实时，新品任务所有历史提交分别冻结，重提不使既往任务失去可回看版本。
@@ -131,7 +137,13 @@ pub(in crate::workbench) fn new_product_request_fact(
             )
         })
         .collect();
-    request_fact(&request.base.id, request.created_by.as_str(), "供应商新品申请", subjects)
+    request_fact(
+        &request.base.id,
+        &request.supplier_id,
+        request.created_by.as_str(),
+        "供应商新品申请",
+        subjects,
+    )
 }
 
 // 处理供应商申请工作项事实时，合作条款任务关联冻结商务申请，不能被供给调价任务版本替代。
@@ -158,12 +170,19 @@ pub(in crate::workbench) fn cooperation_request_fact(
             )
         })
         .collect();
-    request_fact(&request.base.id, request.created_by.as_str(), "供应商合作条款申请", subjects)
+    request_fact(
+        &request.base.id,
+        &request.supplier_id,
+        request.created_by.as_str(),
+        "供应商合作条款申请",
+        subjects,
+    )
 }
 
 // 处理供应商申请工作项事实时，创建人保持真实供应商身份，具体内部任务责任由工作项独立校验。
 fn request_fact(
     id: &str,
+    supplier_id: &str,
     created_by: &str,
     label: &str,
     subjects: HashMap<String, SubjectBrief>,
@@ -172,6 +191,7 @@ fn request_fact(
         return Ok(None);
     }
     let mut fact = ObjectFact::new(id, label, created_by);
+    fact.push_counterparty_id(supplier_id);
     fact.subject_versions = WorkItemSubjectVersions::constrained(subjects.keys().cloned().collect())?;
     fact.subject_briefs = subjects;
     Ok(Some(fact))

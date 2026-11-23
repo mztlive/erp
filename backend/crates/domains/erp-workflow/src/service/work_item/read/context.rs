@@ -28,6 +28,7 @@ pub(crate) fn queue_context_id(
             QueueContextField::set("handlers", query.handler_user_ids.iter().cloned()),
             QueueContextField::set("sales_orders", query.sales_order_ids.iter().cloned()),
             QueueContextField::set("purchase_orders", query.purchase_order_ids.iter().cloned()),
+            QueueContextField::set("counterparties", query.counterparty_ids.iter().cloned()),
             QueueContextField::scalar("sort", query.sort_by),
             QueueContextField::scalar("ascending", query.sort_ascending.to_string()),
             QueueContextField::scalar("authorization", authorization_version),

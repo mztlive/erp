@@ -5,7 +5,10 @@ import Link from "next/link"
 import { ArrowLeftIcon } from "lucide-react"
 
 import { detailWorkspaceStyles } from "@/components/business/detail-workspace-styles"
-import type { DocumentHeaderProps } from "@/components/business/document"
+import type {
+    DocumentStatus,
+    DocumentStatusTrack,
+} from "@/components/business/document"
 import { PageScaffold } from "@/components/business/page"
 import { useWorkspaceTaskNavigation } from "@/components/business/workspace-task-pane"
 import { useWorkspaceTab } from "@/components/layout/workspace-tab-context"
@@ -179,8 +182,8 @@ export type DetailWorkspaceChromeProps = {
     documentNumber?: string
     numberLabel?: string
     version?: string | number
-    primaryStatus?: DocumentHeaderProps["primaryStatus"]
-    statuses?: DocumentHeaderProps["statuses"]
+    primaryStatus?: DocumentStatus
+    statuses?: readonly DocumentStatusTrack[]
     titleExtra?: React.ReactNode
     meta?: React.ReactNode
     secondaryActions?: React.ReactNode
@@ -592,7 +595,7 @@ export function DetailWorkspaceBody({
             {sidebar != null ? (
                 <div
                     data-slot="detail-workspace-split"
-                    className="grid items-start gap-x-6 gap-y-0 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_320px] 2xl:grid-cols-[minmax(0,1fr)_360px]"
+                    className="grid items-start gap-x-6 gap-y-0 @[960px]/workspace:grid-cols-[minmax(0,1fr)_280px] @[1120px]/workspace:grid-cols-[minmax(0,1fr)_320px] @[1480px]/workspace:grid-cols-[minmax(0,1fr)_360px]"
                 >
                     <div className="min-w-0">
                         {alerts ? (
@@ -607,7 +610,7 @@ export function DetailWorkspaceBody({
                     </div>
                     <aside
                         aria-label={sidebarLabel}
-                        className="min-w-0 border-t border-border/60 py-5 lg:self-stretch lg:border-t-0 lg:border-l lg:border-border/60 lg:pl-6"
+                        className="min-w-0 border-t border-border/60 py-5 @[960px]/workspace:self-stretch @[960px]/workspace:border-t-0 @[960px]/workspace:border-l @[960px]/workspace:border-border/60 @[960px]/workspace:pl-6"
                     >
                         {sidebar}
                     </aside>

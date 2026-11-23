@@ -18,6 +18,7 @@ import {
 import { StatusBadge } from "@/components/ui/status-badge"
 import { toast } from "@/components/ui/toast"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { formatDate, unixSecondsToIsoOrEmpty } from "@/lib/datetime"
 import { requestStatusLabels } from "../api"
 import type { useInvoiceRequests } from "../hooks/queries"
 
@@ -152,11 +153,10 @@ export function SalesInvoiceRequestRecords({
                                             ·{" "}
                                             <span className="num">
                                                 {request.created_at > 0
-                                                    ? new Date(
-                                                          request.created_at *
-                                                              1000,
-                                                      ).toLocaleDateString(
-                                                          "zh-CN",
+                                                    ? formatDate(
+                                                          unixSecondsToIsoOrEmpty(
+                                                              request.created_at,
+                                                          ),
                                                       )
                                                     : "日期未记录"}
                                             </span>

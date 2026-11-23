@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -183,7 +184,8 @@ export function DeliveryTemplateEditorDialog({
             }}
         >
             <DialogContent
-                className="max-h-[90svh] overflow-y-auto sm:max-w-3xl"
+                size="xl"
+                scroll="body"
                 closeButtonId="delivery-template-editor-close"
                 showCloseButton={!pending}
             >
@@ -196,54 +198,62 @@ export function DeliveryTemplateEditorDialog({
                     </DialogDescription>
                 </DialogHeader>
                 <form
-                    className="flex flex-col gap-5"
+                    className="flex min-h-0 flex-1 flex-col overflow-hidden"
                     onSubmit={(event) => {
                         event.preventDefault()
                         void form.handleSubmit()
                     }}
                 >
-                    <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-                        <form.AppField name="name">
-                            {(field) => (
-                                <field.TextField
-                                    id="delivery-template-editor-name"
-                                    label="模板名称"
-                                    required
-                                    placeholder="例如：常温全国、冷链江浙沪"
-                                />
-                            )}
-                        </form.AppField>
-                        <form.AppField name="isDefault">
-                            {(field) => (
-                                <label
-                                    htmlFor="delivery-template-editor-default"
-                                    className="flex min-h-9 items-center gap-2 text-xs"
-                                >
-                                    <Checkbox
-                                        id="delivery-template-editor-default"
-                                        checked={field.state.value}
-                                        onCheckedChange={(checked) =>
-                                            field.handleChange(checked === true)
-                                        }
+                    <DialogBody className="flex flex-col gap-5">
+                        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                            <form.AppField name="name">
+                                {(field) => (
+                                    <field.TextField
+                                        id="delivery-template-editor-name"
+                                        label="模板名称"
+                                        required
+                                        placeholder="例如：常温全国、冷链江浙沪"
                                     />
-                                    设为供应商默认模板
-                                </label>
-                            )}
-                        </form.AppField>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                        保存后立即生效。修改规则会影响使用该模板的供给；设置或取消默认模板会影响跟随供应商默认的供给。
-                    </p>
-                    <RuleSetEditor form={form} mode="dropship" title="代发" />
-                    <RuleSetEditor form={form} mode="bulk" title="集采" />
-                    {failure ? (
-                        <p
-                            role="alert"
-                            className="text-body-compact text-destructive"
-                        >
-                            {failure}
+                                )}
+                            </form.AppField>
+                            <form.AppField name="isDefault">
+                                {(field) => (
+                                    <label
+                                        htmlFor="delivery-template-editor-default"
+                                        className="flex min-h-9 items-center gap-2 text-xs"
+                                    >
+                                        <Checkbox
+                                            id="delivery-template-editor-default"
+                                            checked={field.state.value}
+                                            onCheckedChange={(checked) =>
+                                                field.handleChange(
+                                                    checked === true,
+                                                )
+                                            }
+                                        />
+                                        设为供应商默认模板
+                                    </label>
+                                )}
+                            </form.AppField>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            保存后立即生效。修改规则会影响使用该模板的供给；设置或取消默认模板会影响跟随供应商默认的供给。
                         </p>
-                    ) : null}
+                        <RuleSetEditor
+                            form={form}
+                            mode="dropship"
+                            title="代发"
+                        />
+                        <RuleSetEditor form={form} mode="bulk" title="集采" />
+                        {failure ? (
+                            <p
+                                role="alert"
+                                className="text-body-compact text-destructive"
+                            >
+                                {failure}
+                            </p>
+                        ) : null}
+                    </DialogBody>
                     <DialogFooter>
                         <Button
                             id="delivery-template-editor-cancel"

@@ -1,11 +1,33 @@
 "use client"
 
-import { useEffect } from "react"
-import { z } from "zod"
+import { useEffect, useMemo } from "react"
 import { useSelector } from "@tanstack/react-form"
-import { useAppForm } from "@/components/form"
 
-/** 重提说明独立于业务内容；不改内容也须说明再次申请的依据。 */
+import { ReasonTextareaField } from "@/components/business/reason-textarea-field"
+import { useAppForm } from "@/components/form"
+import {
+    BPM_REASON_MAX_UTF8_BYTES,
+    bpmReasonSchema,
+    utf8ByteLength,
+} from "@/lib/validation/reason-length"
+
+function firstErrorMessage(errors: readonly unknown[]): string | undefined {
+    for (const item of errors) {
+        if (typeof item === "string" && item.trim()) return item
+        if (
+            item &&
+            typeof item === "object" &&
+            "message" in item &&
+            typeof (item as { message?: unknown }).message === "string" &&
+            (item as { message: string }).message.trim()
+        ) {
+            return (item as { message: string }).message
+        }
+    }
+    return undefined
+}
+
+/** 重提说明独立于业务内容；不改内容也须说明再次申请的依据（严格遵循 BPM 512 UTF-8 字节上限）。 */
 export function useResubmissionReason({
     open,
     required,
@@ -19,6 +41,10 @@ export function useResubmissionReason({
     disabled?: boolean
     initialReason?: string
 }) {
+    const schema = useMemo(
+        () => bpmReasonSchema({ required: true, label: "重新提交说明" }),
+        [],
+    )
     const form = useAppForm({
         defaultValues: { reason: "" },
     })
@@ -28,30 +54,47 @@ export function useResubmissionReason({
     const reason = useSelector(form.store, (state) =>
         state.values.reason.trim(),
     )
+    const valid =
+        !required ||
+        (reason.length > 0 &&
+            utf8ByteLength(reason) <= BPM_REASON_MAX_UTF8_BYTES)
     return {
         reason: required ? reason : undefined,
-        valid: !required || (reason.length > 0 && reason.length <= 1000),
+        valid,
         field: required ? (
             <form.AppField
                 name="reason"
                 validators={{
-                    onBlur: z
-                        .string()
-                        .trim()
-                        .min(1, "请填写重新提交说明")
-                        .max(1000, "重新提交说明最多 1000 字"),
+                    onChange: schema,
+                    onBlur: schema,
                 }}
             >
-                {(field) => (
-                    <field.TextareaField
-                        id={id}
-                        label="重新提交说明"
-                        placeholder="说明本次修改或按原内容重新提交的依据"
-                        required
-                        maxLength={1000}
-                        disabled={disabled}
-                    />
-                )}
+                {(field) => {
+                    const showError =
+                        field.state.meta.isTouched ||
+                        field.state.meta.errors.length > 0
+                    const error = showError
+                        ? firstErrorMessage(field.state.meta.errors)
+                        : undefined
+                    return (
+                        <ReasonTextareaField
+                            id={id}
+                            name={field.name}
+                            mode="utf8-bytes"
+                            max={BPM_REASON_MAX_UTF8_BYTES}
+                            label="重新提交说明"
+                            placeholder="说明本次修改或按原内容重新提交的依据"
+                            rows={3}
+                            required
+                            value={field.state.value}
+                            onChange={field.handleChange}
+                            onBlur={field.handleBlur}
+                            error={error}
+                            invalid={Boolean(error)}
+                            disabled={disabled}
+                        />
+                    )
+                }}
             </form.AppField>
         ) : null,
     }

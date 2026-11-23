@@ -2,7 +2,13 @@
 
 import { MoneyValue } from "@/components/business"
 import { Label } from "@/components/ui/label"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { InquiryFeedbackTable } from "./inquiry-feedback-table"
 import { sumInquiryFeesGross } from "../lib/feedback-summary"
@@ -45,6 +51,8 @@ export function InquiryFeedbackResults({
         inquiry.acceptances.some(
             (item) => item.feedback_round === feedback.round,
         )
+    const formatRoundLabel = (item: InquiryFeedback) =>
+        `第 ${item.round} 轮${item.round === inquiry.feedback_round ? "（最新）" : ""}`
     return (
         <section
             className="space-y-5"
@@ -73,31 +81,36 @@ export function InquiryFeedbackResults({
                         <Label htmlFor={`${idPrefix}-feedback-round`}>
                             反馈轮次
                         </Label>
-                        <NativeSelect
-                            id={`${idPrefix}-feedback-round`}
+                        <Select
                             value={String(feedback.round)}
-                            onChange={(event) => {
+                            onValueChange={(value) => {
+                                if (!value) return
                                 const next = rounds.find(
-                                    (item) =>
-                                        String(item.round) ===
-                                        event.target.value,
+                                    (item) => String(item.round) === value,
                                 )
                                 if (next) onRoundChange(next.round)
                             }}
                         >
-                            {rounds.map((item) => (
-                                <NativeSelectOption
-                                    id={`${idPrefix}-feedback-round-option-${item.round}`}
-                                    key={item.round}
-                                    value={String(item.round)}
-                                >
-                                    第 {item.round} 轮
-                                    {item.round === inquiry.feedback_round
-                                        ? "（最新）"
-                                        : ""}
-                                </NativeSelectOption>
-                            ))}
-                        </NativeSelect>
+                            <SelectTrigger id={`${idPrefix}-feedback-round`}>
+                                <SelectValue>
+                                    {formatRoundLabel(feedback)}
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent
+                                align="end"
+                                alignItemWithTrigger={false}
+                            >
+                                {rounds.map((item) => (
+                                    <SelectItem
+                                        id={`${idPrefix}-feedback-round-option-${item.round}`}
+                                        key={item.round}
+                                        value={String(item.round)}
+                                    >
+                                        {formatRoundLabel(item)}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
                 )}
             </div>

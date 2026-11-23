@@ -58,12 +58,14 @@ export function PurchaseSourceUpdateWorkspace({
         setResult,
         getPaymentTermCode: () => order?.header.paymentTermCode ?? "",
         setDraftPaymentTermCode: () => undefined,
-        onFinished: () => undefined,
+        onFinished: () => {
+            void onRefreshTask()
+        },
     })
     if (query.isPending)
         return (
             <div
-                className="space-y-4 p-5"
+                className="space-y-4 py-5"
                 aria-busy="true"
                 aria-label="正在加载销售变更对比信息"
             >
@@ -113,9 +115,6 @@ export function PurchaseSourceUpdateWorkspace({
     )
     const awaitingApproval = phase === "runtime"
     const needsUpdate = Boolean(update?.affected || update?.awaitingSubmission)
-    const refresh = () => {
-        void Promise.all([query.refetch(), onRefreshTask()])
-    }
     const openChange = () => {
         if (actions.changePending) return
         if (continueChange && activeChange) {
@@ -128,7 +127,7 @@ export function PurchaseSourceUpdateWorkspace({
     }
 
     return (
-        <div className="min-w-0 space-y-5 px-5 py-5 @container/document">
+        <div className="min-w-0 space-y-5 py-5 @container/document">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-body-compact">
                 <StatusBadge
                     label={`采购单${order.identity.statusLabel}`}
@@ -222,6 +221,12 @@ export function PurchaseSourceUpdateWorkspace({
                             purchaseOrderId={purchaseOrderId}
                             update={update}
                             label="无法调整，维持原采购"
+                            onMaintained={() => {
+                                void Promise.all([
+                                    query.refetch(),
+                                    onRefreshTask(),
+                                ])
+                            }}
                         />
                     </div>
                 </details>
@@ -253,18 +258,6 @@ export function PurchaseSourceUpdateWorkspace({
                                   : "请根据影响原因调整采购；无法调整时填写维持原因。"
                             : "按最新采购情况核对待办状态。"}
                 </p>
-                <Button
-                    id="purchase-source-update-refresh"
-                    variant="ghost"
-                    disabled={
-                        query.isFetching ||
-                        actions.changePending ||
-                        actions.voidPending
-                    }
-                    onClick={refresh}
-                >
-                    刷新
-                </Button>
                 {needsUpdate && !query.isError ? (
                     <>
                         {!awaitingApproval ? (
@@ -338,6 +331,9 @@ export function PurchaseSourceUpdateWorkspace({
                 <PurchaseSourceUpdateDraftDialog
                     order={order}
                     onClose={() => setDraftOpen(false)}
+                    onSubmitted={() => {
+                        void onRefreshTask()
+                    }}
                 />
             ) : null}
             {editingChangeId ? (

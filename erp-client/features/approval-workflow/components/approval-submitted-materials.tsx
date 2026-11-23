@@ -11,6 +11,7 @@ import {
 } from "./approval-submitted-summary"
 import { BusinessFailureState } from "@/components/business"
 import { Spinner } from "@/components/ui/spinner"
+import { cn } from "@/lib/utils"
 import { displayBusinessText } from "@/lib/display-name"
 import {
     useApprovalMaterials,
@@ -68,12 +69,15 @@ export function ApprovalSubmittedMaterialsContent({
     view = "all",
     sourceRevisionId,
     attachmentContent,
+    bare = false,
 }: {
     data: ApprovalMaterials
     instanceId: string
     view?: "all" | "source-sales" | "attachments"
     sourceRevisionId?: string
     attachmentContent?: ReactNode
+    /** 无外框卡片背景与内边距模式，供抄送详情与分栏检查器直接复用，免去脆弱后代选择器覆盖。 */
+    bare?: boolean
 }) {
     const {
         display,
@@ -106,7 +110,7 @@ export function ApprovalSubmittedMaterialsContent({
         displayReadableName(source.customer)
     const isSummary = view === "all" && !salesOrder
     return (
-        <article className="space-y-6 bg-card p-6 sm:p-8">
+        <article className={cn("space-y-6", !bare && "bg-card p-6 sm:p-8")}>
             <header className="space-y-1.5 border-b border-border/60 pb-5">
                 {isSummary ? (
                     <>
@@ -174,7 +178,12 @@ export function ApprovalSubmittedMaterialsContent({
                         .map((sales) => (
                             <article
                                 key={sales.revision_id}
-                                className="space-y-3 rounded-lg border p-4 text-body-compact"
+                                className={cn(
+                                    "space-y-3 text-body-compact",
+                                    bare
+                                        ? "border-t border-border/60 pt-4 first:border-t-0 first:pt-0"
+                                        : "rounded-lg border p-4",
+                                )}
                             >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <p className="font-medium">

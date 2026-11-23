@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -170,15 +171,12 @@ export function TransferPreviewResumeDialog({
             }}
         >
             <DialogContent
+                size={inquiryPreview ? "2xl" : "xl"}
+                scroll="body"
                 closeButtonId={`${idPrefix}-close`}
                 showCloseButton={!pending}
-                className={
-                    inquiryPreview
-                        ? "flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-5xl"
-                        : "flex max-h-[85svh] flex-col overflow-hidden sm:max-w-4xl"
-                }
             >
-                <DialogHeader className="shrink-0">
+                <DialogHeader>
                     <div className="flex flex-wrap items-center gap-2.5">
                         <DialogTitle>
                             {quote ? "核对供应商报价" : "核对客户选品导入"}
@@ -212,13 +210,13 @@ export function TransferPreviewResumeDialog({
                 </DialogHeader>
                 <form
                     id={`${idPrefix}-form`}
-                    className="flex min-h-0 flex-1 flex-col gap-5"
+                    className="flex min-h-0 flex-1 flex-col overflow-hidden"
                     onSubmit={(event) => {
                         event.preventDefault()
                         void form.handleSubmit()
                     }}
                 >
-                    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+                    <DialogBody className="space-y-4">
                         {context.resume_state !== "ready" && (
                             <Alert variant="warning">
                                 <AlertDescription>
@@ -285,8 +283,8 @@ export function TransferPreviewResumeDialog({
                                 </AlertDescription>
                             </Alert>
                         )}
-                    </div>
-                    <DialogFooter className="shrink-0">
+                    </DialogBody>
+                    <DialogFooter>
                         <Button
                             id={`${idPrefix}-cancel`}
                             type="button"

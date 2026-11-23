@@ -2,6 +2,7 @@
 
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogFooter,
     DialogHeader,
@@ -28,14 +29,15 @@ export function SalesOrderApprovalDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 id={`${idPrefix}-dialog`}
+                size="2xl"
+                scroll="body"
                 closeButtonId={`${idPrefix}-close`}
                 finalFocus={() => document.getElementById(triggerId)}
-                className="flex max-h-[85dvh] flex-col overflow-hidden sm:max-w-5xl"
             >
-                <DialogHeader className="shrink-0 pr-8">
+                <DialogHeader>
                     <DialogTitle>销售单审批链及进度</DialogTitle>
                 </DialogHeader>
-                <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                <DialogBody>
                     {open ? (
                         <ApprovalPanel
                             order={order}
@@ -43,9 +45,8 @@ export function SalesOrderApprovalDialog({
                             idPrefix={`${idPrefix}-content`}
                         />
                     ) : null}
-                </div>
+                </DialogBody>
                 <DialogFooter
-                    className="shrink-0"
                     showCloseButton
                     closeButtonId={`${idPrefix}-footer-close`}
                 />

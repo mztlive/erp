@@ -13,7 +13,12 @@ import {
 } from "@/components/ui/timeline"
 import { MoneyValue } from "@/components/business"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { formatDateTime } from "@/lib/datetime"
+import {
+    formatDate,
+    formatDateTime,
+    formatTime,
+    unixSecondsToIsoOrEmpty,
+} from "@/lib/datetime"
 import { approvalResultText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
 import type { TimelineEvent } from "../types"
@@ -61,9 +66,7 @@ export function TimelineEvents({
     if (groupByDate) {
         const groups = new Map<string, TimelineEvent[]>()
         for (const event of events) {
-            const date = new Date(event.occurred_at * 1000).toLocaleDateString(
-                "zh-CN",
-            )
+            const date = formatDate(unixSecondsToIsoOrEmpty(event.occurred_at))
             const group = groups.get(date) ?? []
             group.push(event)
             groups.set(date, group)
@@ -169,11 +172,7 @@ function TimelineEventList({
                         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                             <time className="num" dateTime={occurredIso}>
                                 {timeOnly
-                                    ? new Date(
-                                          event.occurred_at * 1000,
-                                      ).toLocaleTimeString("zh-CN", {
-                                          hour12: false,
-                                      })
+                                    ? formatTime(occurredIso)
                                     : formatDateTime(occurredIso, "full")}
                             </time>
                             {showActor && <span>{event.actor_name}</span>}

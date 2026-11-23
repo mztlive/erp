@@ -49,20 +49,25 @@ impl super::WorkItemFactsReader {
         }
 
         let sales_order_ids = changes.iter().map(|item| item.sales_order_id.to_string()).collect::<Vec<_>>();
-        let sales_nos = self
+        let sales_orders = self
             .read_sales_orders(&sales_order_ids, executor)
             .await?
             .into_iter()
-            .map(|order| (order.base.id, order.order_no))
+            .map(|order| (order.base.id.clone(), order))
             .collect::<HashMap<_, _>>();
         let context = self.sales_change_fact_context(&changes, executor).await?;
 
         for change in changes {
-            let sales_no = sales_nos.get(&change.sales_order_id.to_string()).cloned();
+            let order = sales_orders.get(&change.sales_order_id.to_string());
             let base = context.base_revisions.get(&change.base_revision_id.to_string());
             let submission =
                 change.current_submission_id.as_ref().and_then(|id| context.submissions.get(&id.to_string()));
-            let fact = sales_change_fact(&change, sales_no.as_deref(), base, submission);
+            let mut fact =
+                sales_change_fact(&change, order.map(|item| item.order_no.as_str()), base, submission);
+            if let Some(order) = order {
+                fact.push_counterparty_id(order.customer_id.to_string());
+                fact.push_counterparty_id(order.settlement_party_id.to_string());
+            }
             facts.insert((ObjectKind::SalesChangeOrder, change.base.id.clone()), fact);
         }
         Ok(())
@@ -93,20 +98,24 @@ impl super::WorkItemFactsReader {
         }
 
         let purchase_ids = changes.iter().map(|item| item.purchase_order_id.to_string()).collect::<Vec<_>>();
-        let purchase_nos = self
+        let purchase_orders = self
             .read_purchase_orders(&purchase_ids, executor)
             .await?
             .into_iter()
-            .map(|order| (order.base.id, order.purchase_no))
+            .map(|order| (order.base.id.clone(), order))
             .collect::<HashMap<_, _>>();
         let context = self.purchase_change_fact_context(&changes, executor).await?;
 
         for change in changes {
-            let purchase_no = purchase_nos.get(&change.purchase_order_id.to_string()).cloned();
+            let order = purchase_orders.get(&change.purchase_order_id.to_string());
             let base = context.base_revisions.get(&change.base_revision_id.to_string());
             let submission =
                 change.current_submission_id.as_ref().and_then(|id| context.submissions.get(&id.to_string()));
-            let fact = purchase_change_fact(&change, purchase_no.as_deref(), base, submission);
+            let mut fact =
+                purchase_change_fact(&change, order.map(|item| item.purchase_no.as_str()), base, submission);
+            if let Some(order) = order {
+                fact.push_counterparty_id(order.supplier_id.to_string());
+            }
             facts.insert((ObjectKind::PurchaseChangeOrder, change.base.id.clone()), fact);
         }
         Ok(())
@@ -222,6 +231,9 @@ pub(in crate::workbench) fn purchase_change_fact(
         change.stable.created_by.clone(),
     );
     fact.order_scope_source = Some(OrderTaskSource::Purchase(change.purchase_order_id.to_string()));
+    if let Some(submission) = submission {
+        fact.push_counterparty_id(submission.supplier_id.to_string());
+    }
     fact.counterparty_label = submission
         .map(|item| item.supplier_snapshot.supplier_name.clone())
         .or_else(|| base.map(|item| item.supplier_snapshot.supplier_name.clone()));

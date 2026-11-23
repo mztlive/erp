@@ -13,6 +13,7 @@ import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogClose,
     DialogContent,
     DialogDescription,
@@ -23,7 +24,6 @@ import {
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import {
     DateField,
-    DialogScrollBody,
     disableSchema,
     newIdempotencyKey,
     notifySuccess,
@@ -120,9 +120,10 @@ export function DisableActionDialog({
             }}
         >
             <DialogContent
+                size="md"
+                scroll="body"
                 closeButtonId="master-data-shared-disable-close"
                 showCloseButton={!isSubmitting}
-                className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg"
             >
                 <DialogHeader>
                     <DialogTitle>{masterDataCopy.disableTitle}</DialogTitle>
@@ -138,127 +139,140 @@ export function DisableActionDialog({
                     </DialogDescription>
                 </DialogHeader>
 
-                <DialogScrollBody>
-                    {blockedBanner}
-                    {result?.outcome === "blocked" ? (
-                        <FormalActionResult
-                            status="blocked"
-                            title={masterDataCopy.disableBlockedTitle}
-                            description={result.message}
-                            facts={[
-                                ...(result.detail
-                                    ? [{ label: "说明", value: result.detail }]
-                                    : []),
-                                ...(canReadStock && result.drillHref
-                                    ? [
-                                          {
-                                              label: "库存台账",
-                                              value: (
-                                                  <Link
-                                                      id="master-data-disable-open-inventory"
-                                                      className="text-primary underline-offset-4 hover:underline"
-                                                      href={result.drillHref}
-                                                  >
-                                                      打开库存台账
-                                                  </Link>
-                                              ),
-                                          },
-                                      ]
-                                    : []),
-                            ]}
-                        />
-                    ) : null}
-                    {result?.outcome === "conflict" ? (
-                        <FormalActionResult
-                            status="blocked"
-                            title={masterDataCopy.reviseConflictTitle}
-                            description={
-                                result.message ||
-                                masterDataCopy.reviseConflictHint
-                            }
-                            facts={[
-                                {
-                                    label: "当前版本",
-                                    value: `v${result.serverRevisionNo}`,
-                                },
-                            ]}
-                            actions={
-                                <Button
-                                    id="master-data-shared-disable-action-dialog-button-1"
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => {
-                                        void queryClient.invalidateQueries({
-                                            queryKey: masterDataKeys.all,
-                                        })
-                                        setResult(null)
-                                        setIdempotencyKey(
-                                            newIdempotencyKey("disable"),
-                                        )
-                                    }}
-                                >
-                                    {masterDataCopy.reloadAction}
-                                </Button>
-                            }
-                        />
-                    ) : null}
+                <form
+                    className="flex min-h-0 flex-1 flex-col overflow-hidden"
+                    onSubmit={(event) => {
+                        event.preventDefault()
+                        void form.handleSubmit()
+                    }}
+                >
+                    <DialogBody className="space-y-3">
+                        {blockedBanner}
+                        {result?.outcome === "blocked" ? (
+                            <FormalActionResult
+                                status="blocked"
+                                title={masterDataCopy.disableBlockedTitle}
+                                description={result.message}
+                                facts={[
+                                    ...(result.detail
+                                        ? [
+                                              {
+                                                  label: "说明",
+                                                  value: result.detail,
+                                              },
+                                          ]
+                                        : []),
+                                    ...(canReadStock && result.drillHref
+                                        ? [
+                                              {
+                                                  label: "库存台账",
+                                                  value: (
+                                                      <Link
+                                                          id="master-data-disable-open-inventory"
+                                                          className="text-primary underline-offset-4 hover:underline"
+                                                          href={
+                                                              result.drillHref
+                                                          }
+                                                      >
+                                                          打开库存台账
+                                                      </Link>
+                                                  ),
+                                              },
+                                          ]
+                                        : []),
+                                ]}
+                            />
+                        ) : null}
+                        {result?.outcome === "conflict" ? (
+                            <FormalActionResult
+                                status="blocked"
+                                title={masterDataCopy.reviseConflictTitle}
+                                description={
+                                    result.message ||
+                                    masterDataCopy.reviseConflictHint
+                                }
+                                facts={[
+                                    {
+                                        label: "当前版本",
+                                        value: `v${result.serverRevisionNo}`,
+                                    },
+                                ]}
+                                actions={
+                                    <Button
+                                        id="master-data-shared-disable-action-dialog-button-1"
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                            void queryClient.invalidateQueries({
+                                                queryKey: masterDataKeys.all,
+                                            })
+                                            setResult(null)
+                                            setIdempotencyKey(
+                                                newIdempotencyKey("disable"),
+                                            )
+                                        }}
+                                    >
+                                        {masterDataCopy.reloadAction}
+                                    </Button>
+                                }
+                            />
+                        ) : null}
 
-                    {result?.outcome !== "succeeded" ? (
-                        <form
-                            className="grid gap-3"
-                            onSubmit={(event) => {
-                                event.preventDefault()
-                                void form.handleSubmit()
-                            }}
-                        >
-                            <form.AppField
-                                name="effectiveFrom"
-                                children={(field) => (
-                                    <DateField
-                                        id="master-data-shared-disable-effective-from-picker"
-                                        label={masterDataCopy.fieldDisableAt}
-                                        field={field}
-                                        required
-                                    />
-                                )}
-                            />
-                            <form.AppField
-                                name="changeReason"
-                                children={(field) => (
-                                    <field.TextareaField
-                                        id="master-data-shared-disable-reason"
-                                        label={
-                                            masterDataCopy.fieldDisableReason
-                                        }
-                                        required
-                                    />
-                                )}
-                            />
-                            <DialogFooter>
-                                <DialogClose
-                                    render={
-                                        <Button
-                                            id="master-data-shared-disable-action-dialog-button-2"
-                                            type="button"
-                                            variant="outline"
-                                            disabled={isSubmitting}
+                        {result?.outcome !== "succeeded" ? (
+                            <div className="grid gap-3">
+                                <form.AppField
+                                    name="effectiveFrom"
+                                    children={(field) => (
+                                        <DateField
+                                            id="master-data-shared-disable-effective-from-picker"
+                                            label={
+                                                masterDataCopy.fieldDisableAt
+                                            }
+                                            field={field}
+                                            required
                                         />
-                                    }
-                                >
-                                    关闭
-                                </DialogClose>
-                                <form.AppForm>
-                                    <form.SubmitButton
-                                        disabled={submitDisabled || !target}
-                                        label={submitLabel}
-                                        pendingLabel="提交中…"
+                                    )}
+                                />
+                                <form.AppField
+                                    name="changeReason"
+                                    children={(field) => (
+                                        <field.TextareaField
+                                            id="master-data-shared-disable-reason"
+                                            label={
+                                                masterDataCopy.fieldDisableReason
+                                            }
+                                            required
+                                        />
+                                    )}
+                                />
+                            </div>
+                        ) : null}
+                    </DialogBody>
+                    {result?.outcome !== "succeeded" ? (
+                        <DialogFooter>
+                            <DialogClose
+                                render={
+                                    <Button
+                                        id="master-data-shared-disable-action-dialog-button-2"
+                                        type="button"
+                                        variant="outline"
+                                        disabled={isSubmitting}
                                     />
-                                </form.AppForm>
-                            </DialogFooter>
-                        </form>
+                                }
+                            >
+                                关闭
+                            </DialogClose>
+                            <form.AppForm>
+                                <form.SubmitButton
+                                    disabled={submitDisabled || !target}
+                                    label={submitLabel}
+                                    pendingLabel="提交中…"
+                                />
+                            </form.AppForm>
+                        </DialogFooter>
                     ) : null}
-                </DialogScrollBody>
+                </form>
             </DialogContent>
         </Dialog>
     )

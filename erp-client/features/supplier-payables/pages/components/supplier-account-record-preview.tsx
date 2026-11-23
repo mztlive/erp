@@ -242,7 +242,7 @@ export function SupplierAccountRecordPreview({
                     </>
                 }
             >
-                <div className="space-y-6 px-7 py-6">
+                <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-sheet-inline py-5">
                     {row ? (
                         <SupplierAccountRecordBody
                             payment={payment}

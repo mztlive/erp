@@ -2,9 +2,7 @@
 
 import Link from "next/link"
 
-import { surfacePanelClassName } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
 
 export function SupplierOrdersListReturnBanner({
     returnTo,
@@ -12,12 +10,7 @@ export function SupplierOrdersListReturnBanner({
     returnTo: string
 }) {
     return (
-        <div
-            className={cn(
-                surfacePanelClassName,
-                "flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-body-compact",
-            )}
-        >
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-background px-4 py-2.5 text-body-compact">
             <span className="text-muted-foreground">
                 从关联页面进来的。返回时会回到原来的位置。
             </span>

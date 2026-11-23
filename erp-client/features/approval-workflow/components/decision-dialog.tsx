@@ -5,6 +5,7 @@ import { RefreshCwIcon } from "lucide-react"
 
 import { useAppForm } from "@/components/form"
 import { detailWorkspaceStyles } from "@/components/business"
+import { ReasonTextareaField } from "@/components/business/reason-textarea-field"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -16,6 +17,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { toast } from "@/components/ui/toast"
+import { BPM_REASON_MAX_UTF8_BYTES } from "@/lib/validation/reason-length"
 
 import { approvalConflictMessage, isApprovalConflict } from "../api"
 import { displayReadableName } from "../display"
@@ -157,9 +159,9 @@ export function DecisionDialog({
             }}
         >
             <DialogContent
+                size="md"
                 closeButtonId={`${id}-close`}
                 showCloseButton={!submitDecision.isPending}
-                className="sm:max-w-lg"
             >
                 <DialogHeader>
                     <DialogTitle>
@@ -276,8 +278,11 @@ export function DecisionDialog({
                                         ))}
                                     </div>
                                 ) : null}
-                                <field.TextareaField
+                                <ReasonTextareaField
                                     id={`${id}-reason`}
+                                    name={field.name}
+                                    mode="utf8-bytes"
+                                    max={BPM_REASON_MAX_UTF8_BYTES}
                                     label={
                                         isReject
                                             ? "驳回原因"
@@ -288,18 +293,38 @@ export function DecisionDialog({
                                             ? "请说明驳回原因及需修改的内容"
                                             : "可补充审批意见（选填）"
                                     }
-                                    description="按 Ctrl / ⌘ + Enter 快速提交"
                                     required={isReject}
+                                    value={field.state.value}
+                                    onChange={field.handleChange}
+                                    onBlur={field.handleBlur}
+                                    error={
+                                        field.state.meta.isTouched ||
+                                        field.state.meta.errors.length > 0
+                                            ? (field.state.meta.errors
+                                                  .map((item) =>
+                                                      typeof item === "string"
+                                                          ? item
+                                                          : item &&
+                                                              typeof item ===
+                                                                  "object" &&
+                                                              "message" in item
+                                                            ? String(
+                                                                  item.message,
+                                                              )
+                                                            : "",
+                                                  )
+                                                  .find(Boolean) ?? undefined)
+                                            : undefined
+                                    }
+                                    invalid={
+                                        (field.state.meta.isTouched ||
+                                            field.state.meta.errors.length >
+                                                0) &&
+                                        !field.state.meta.isValid
+                                    }
                                     disabled={submitDecision.isPending}
-                                    onKeyDown={(event) => {
-                                        if (
-                                            (event.metaKey || event.ctrlKey) &&
-                                            event.key === "Enter" &&
-                                            !event.nativeEvent.isComposing
-                                        ) {
-                                            event.preventDefault()
-                                            void form.handleSubmit()
-                                        }
+                                    onCtrlEnterSubmit={() => {
+                                        void form.handleSubmit()
                                     }}
                                 />
                             </div>

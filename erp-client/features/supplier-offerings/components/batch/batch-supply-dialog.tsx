@@ -7,6 +7,7 @@ import { LoadingButton } from "@/components/ui/loading-button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -89,11 +90,12 @@ function BatchSupplyEditor({
                 }}
             >
                 <DialogContent
+                    size="2xl"
+                    scroll="body"
                     closeButtonId="batch-supply-close-icon"
                     showCloseButton={!editor.busy}
-                    className="flex max-h-[92dvh] w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1280px]"
                 >
-                    <DialogHeader className="shrink-0 border-b px-6 py-5 pr-14">
+                    <DialogHeader>
                         <DialogTitle>{MODE_LABELS[mode]}</DialogTitle>
                         <DialogDescription>
                             {mode === "revise"
@@ -117,14 +119,14 @@ function BatchSupplyEditor({
                             )
                             return (
                                 <form
-                                    className="flex min-h-0 flex-1 flex-col"
+                                    className="flex min-h-0 flex-1 flex-col overflow-hidden"
                                     onSubmit={(event) => {
                                         event.preventDefault()
                                         event.stopPropagation()
                                         void editor.form.handleSubmit()
                                     }}
                                 >
-                                    <div className="min-h-0 space-y-5 overflow-y-auto px-6 py-5">
+                                    <DialogBody className="space-y-5">
                                         {values.message && (
                                             <p
                                                 role="status"
@@ -264,8 +266,8 @@ function BatchSupplyEditor({
                                             editor={editor}
                                             rows={values.rows}
                                         />
-                                    </div>
-                                    <DialogFooter className="shrink-0 flex-wrap border-t bg-background px-6 py-4">
+                                    </DialogBody>
+                                    <DialogFooter className="flex-wrap">
                                         {values.rows.some(
                                             (row) =>
                                                 row.status === "INVALID" ||

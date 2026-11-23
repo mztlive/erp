@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -327,12 +328,13 @@ export function ExpensePurchaseCreateDialog({
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent
-                className="flex max-h-[min(90svh,50rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
+                size="xl"
+                scroll="body"
                 closeButtonId="sales-orders-expense-purchase-close"
                 showCloseButton={!busy}
             >
-                <DialogHeader className="shrink-0 gap-2 border-b border-grid px-6 py-4 text-left">
-                    <div className="flex flex-wrap items-center gap-2 pr-8">
+                <DialogHeader className="gap-2 border-grid text-left">
+                    <div className="flex flex-wrap items-center gap-2">
                         <DialogTitle>{title}</DialogTitle>
                         {sourceLabel ? (
                             <Badge
@@ -419,13 +421,13 @@ export function ExpensePurchaseCreateDialog({
                     />
                 ) : (
                     <form
-                        className="flex min-h-0 flex-1 flex-col"
+                        className="flex min-h-0 flex-1 flex-col overflow-hidden"
                         onSubmit={(event) => {
                             event.preventDefault()
                             void form.handleSubmit()
                         }}
                     >
-                        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
+                        <DialogBody className="space-y-5">
                             {inquiry.pending || inquiry.availableCount > 0 ? (
                                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-info-border/70 bg-info-soft/45 px-3.5 py-2 text-xs text-info-soft-foreground">
                                     <span>
@@ -773,9 +775,9 @@ export function ExpensePurchaseCreateDialog({
                                     </AlertDescription>
                                 </Alert>
                             ) : null}
-                        </div>
+                        </DialogBody>
 
-                        <DialogFooter className="shrink-0 border-t border-grid bg-card px-6 py-3.5 sm:items-center sm:justify-between">
+                        <DialogFooter className="border-grid bg-card sm:items-center sm:justify-between">
                             <form.Subscribe
                                 selector={(state) => state.values.lines}
                             >

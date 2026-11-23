@@ -101,21 +101,23 @@ export function RoleWorkbenchMetrics({
     return (
         <div
             className={cn(
-                "grid gap-x-5 gap-y-3 sm:grid-cols-2",
+                "grid gap-x-5 gap-y-2.5 sm:grid-cols-2",
                 overview.metrics.length > 4
-                    ? "xl:grid-cols-3 2xl:grid-cols-5"
-                    : "xl:grid-cols-4",
-                "sm:max-xl:[&>*:nth-child(even)]:border-l sm:max-xl:[&>*:nth-child(even)]:border-border/60 sm:max-xl:[&>*:nth-child(even)]:pl-5",
+                    ? "@[960px]/workspace:grid-cols-3 @[1120px]/workspace:grid-cols-5"
+                    : "@[960px]/workspace:grid-cols-4",
+                "sm:@max-[960px]/workspace:[&>*:nth-child(even)]:border-l sm:@max-[960px]/workspace:[&>*:nth-child(even)]:border-border/60 sm:@max-[960px]/workspace:[&>*:nth-child(even)]:pl-5",
                 overview.metrics.length > 4
-                    ? "xl:max-2xl:[&>*:not(:nth-child(3n+1))]:border-l xl:max-2xl:[&>*:not(:nth-child(3n+1))]:border-border/60 xl:max-2xl:[&>*:not(:nth-child(3n+1))]:pl-5 2xl:[&>*:not(:nth-child(5n+1))]:border-l 2xl:[&>*:not(:nth-child(5n+1))]:border-border/60 2xl:[&>*:not(:nth-child(5n+1))]:pl-5"
-                    : "xl:[&>*:not(:nth-child(4n+1))]:border-l xl:[&>*:not(:nth-child(4n+1))]:border-border/60 xl:[&>*:not(:nth-child(4n+1))]:pl-5",
+                    ? "@[960px]/workspace:@max-[1120px]/workspace:[&>*:not(:nth-child(3n+1))]:border-l @[960px]/workspace:@max-[1120px]/workspace:[&>*:not(:nth-child(3n+1))]:border-border/60 @[960px]/workspace:@max-[1120px]/workspace:[&>*:not(:nth-child(3n+1))]:pl-5 @[1120px]/workspace:[&>*:not(:nth-child(5n+1))]:border-l @[1120px]/workspace:[&>*:not(:nth-child(5n+1))]:border-border/60 @[1120px]/workspace:[&>*:not(:nth-child(5n+1))]:pl-5"
+                    : "@[960px]/workspace:[&>*:not(:nth-child(4n+1))]:border-l @[960px]/workspace:[&>*:not(:nth-child(4n+1))]:border-border/60 @[960px]/workspace:[&>*:not(:nth-child(4n+1))]:pl-5",
             )}
         >
             {overview.metrics.map((metric, index) => {
                 const query = overview.queries[index]!
                 const data = query.isError ? undefined : query.data
                 const value = overviewValue(metric, data)
-                const period = metric.key === "sales-created"
+                const period =
+                    metric.key === "sales-created" ||
+                    metric.source.kind === "profit"
                 const warning = Boolean(
                     metric.warning &&
                     value != null &&
@@ -137,7 +139,7 @@ export function RoleWorkbenchMetrics({
                                     : onSelect(metric)
                             }
                             className={cn(
-                                "-mx-2 flex h-full w-[calc(100%+1rem)] flex-col rounded-md px-2 py-2 text-left transition-colors hover:bg-muted/45 focus-visible:outline-2 focus-visible:outline-primary",
+                                "-mx-2 flex h-full w-[calc(100%+1rem)] flex-col rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/45 focus-visible:outline-2 focus-visible:outline-primary",
                                 warning &&
                                     "bg-destructive-soft/35 hover:bg-destructive-soft/60",
                             )}
@@ -145,7 +147,7 @@ export function RoleWorkbenchMetrics({
                             <div className="flex w-full items-center gap-2 pr-6">
                                 <span
                                     className={cn(
-                                        "flex size-6 shrink-0 items-center justify-center rounded-md",
+                                        "flex size-5.5 shrink-0 items-center justify-center rounded-md",
                                         visual.badgeClass,
                                     )}
                                     aria-hidden="true"
@@ -164,7 +166,7 @@ export function RoleWorkbenchMetrics({
                             </div>
                             <div
                                 className={cn(
-                                    "mt-2 flex min-h-8 items-baseline gap-1.5 text-value-section font-semibold num tracking-tight text-foreground",
+                                    "mt-1.5 flex min-h-7 items-baseline gap-1.5 text-value-section font-semibold num tracking-tight text-foreground",
                                     warning &&
                                         "text-destructive-soft-foreground",
                                 )}
@@ -189,7 +191,8 @@ export function RoleWorkbenchMetrics({
                                     <>
                                         {value}
                                         <span className="text-xs font-normal text-muted-foreground">
-                                            {metric.source.kind === "inquiry"
+                                            {metric.source.kind === "inquiry" ||
+                                            metric.source.kind === "fulfillment"
                                                 ? "项"
                                                 : "单"}
                                         </span>
@@ -205,13 +208,17 @@ export function RoleWorkbenchMetrics({
                             </div>
                             <div className="mt-1.5 flex w-full items-center justify-between gap-2 text-xs text-muted-foreground">
                                 <span className="truncate">
-                                    {period
-                                        ? "所选期间 · 含草稿"
-                                        : metric.field === "overdue"
-                                          ? "当前逾期余额 · 含税"
-                                          : metric.field === "balance"
-                                            ? "当前余额 · 含税"
-                                            : "截至当前"}
+                                    {metric.source.kind === "profit"
+                                        ? "非卡券 · 不含税 · 所选期间"
+                                        : period
+                                          ? "所选期间 · 含草稿"
+                                          : metric.source.kind === "fulfillment"
+                                            ? "我的履约责任 · 未完成"
+                                            : metric.field === "overdue"
+                                              ? "当前逾期余额 · 含税"
+                                              : metric.field === "balance"
+                                                ? "当前余额 · 含税"
+                                                : "截至当前"}
                                     {data?.limited ? " · 部分范围" : ""}
                                 </span>
                                 <span className="inline-flex shrink-0 items-center gap-0.5 text-muted-foreground/55 transition-colors group-hover/kpi:text-primary">

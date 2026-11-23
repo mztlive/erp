@@ -28,12 +28,40 @@ import {
     type UpgradeBindingResultViewDto,
 } from "./types"
 
+export type {
+    ApprovalInstanceListItem,
+    ApprovalInstanceListPage,
+    ApprovalInstanceListView,
+} from "./types"
+
+export type ApprovalInstanceStatusFilter =
+    | "RUNNING"
+    | "APPROVED"
+    | "REJECTED"
+    | "CANCELLED"
+    | "BLOCKED"
+
+export const APPROVAL_INSTANCE_LIST_VIEWS = [
+    "started",
+    "mine",
+    "blocked",
+    "managed",
+] as const satisfies readonly ApprovalInstanceListView[]
+
+/**
+ * 全部 4 个审批视图（`started` / `mine` / `blocked` / `managed`）现均支持页码分页与结构化筛选。
+ */
+export const isPagePaginatedApprovalView = (
+    _view: ApprovalInstanceListView,
+): boolean => true
+
 export type ApprovalInstanceListParams = Readonly<{
     filters?: WorkspaceFilters
     page?: number
-    view: ApprovalInstanceListView
+    pageSize?: number
+    view?: ApprovalInstanceListView
     documentType?: string
-    status?: "RUNNING" | "APPROVED" | "CANCELLED" | "BLOCKED"
+    status?: ApprovalInstanceStatusFilter
     query?: string
     cursor?: string
     limit?: number
@@ -92,24 +120,38 @@ export const submitDecision = (
 
 /**
  * 按固定 view 查询审批实例摘要。
+ *
+ * 4 个视图（`started` / `mine` / `blocked` / `managed`）均支持 `page` + `page_size` + `filters` JSON
+ * 页码分页查询；传入 `cursor` 时保持游标分页向后兼容（不同时发送 `page` / `filters`）。
  */
 export const listApprovalInstances = async (
     params: ApprovalInstanceListParams,
 ): Promise<ApprovalInstanceListPage> => {
+    const view: ApprovalInstanceListView = params.view ?? "started"
+    const usePageQuery =
+        !params.cursor && (params.page != null || params.filters != null)
+    const size = params.pageSize ?? params.limit ?? 20
+    const queryParams: Record<string, string | number | undefined> = {
+        view,
+        document_type: params.documentType,
+        status: params.status,
+        q: params.query,
+    }
+    if (usePageQuery) {
+        queryParams.page = params.page ?? 1
+        queryParams.page_size = size
+        if (params.filters) {
+            queryParams.filters = JSON.stringify(params.filters)
+        }
+    } else {
+        queryParams.limit = size
+        if (params.cursor) {
+            queryParams.cursor = params.cursor
+        }
+    }
     const page = await apiGet<ApprovalInstanceListPageDto>(
         "/admin/approval-instances",
-        {
-            view: params.view,
-            page: params.page,
-            filters: params.filters
-                ? JSON.stringify(params.filters)
-                : undefined,
-            document_type: params.documentType,
-            status: params.status,
-            q: params.query,
-            cursor: params.cursor,
-            limit: params.limit ?? 20,
-        },
+        queryParams,
     )
     return {
         items: page.items.map(mapInstanceListItemDto),

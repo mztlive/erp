@@ -71,10 +71,7 @@ export function BookCopyDialog({
                 if (!open && !copy.isPending) onClose()
             }}
         >
-            <DialogContent
-                closeButtonId="sales-selection-copy-close"
-                className="sm:max-w-lg"
-            >
+            <DialogContent size="md" closeButtonId="sales-selection-copy-close">
                 <DialogHeader>
                     <DialogTitle>复制选品册</DialogTitle>
                     <DialogDescription>

@@ -18,7 +18,7 @@ export const DOCUMENT_TYPE_LABEL: Record<DocumentType, string> = {
     purchase_payment_request: "采购付款申请",
     stock_adjustment: "库存调整单",
     customer_receipt: "客户回款单",
-    sales_invoice_request: "开票申请",
+    sales_invoice_request: "销项开票申请",
     supplier_payment: "供应商付款单",
     customer_refund: "客户退款单",
     supplier_refund: "供应商退款单",

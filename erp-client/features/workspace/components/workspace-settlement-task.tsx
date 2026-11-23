@@ -18,7 +18,23 @@ export function WorkspaceSettlementTask({
     item: WorkspaceWorkItem
     onTaskCompleted?: (workItemId: string) => void
 }) {
-    const [urlState, setUrlState] = React.useState<SettlementsUrlState>({
+    return (
+        <WorkspaceSettlementTaskContent
+            key={item.workItemId}
+            item={item}
+            onTaskCompleted={onTaskCompleted}
+        />
+    )
+}
+
+function WorkspaceSettlementTaskContent({
+    item,
+    onTaskCompleted,
+}: {
+    item: WorkspaceWorkItem
+    onTaskCompleted?: (workItemId: string) => void
+}) {
+    const [urlState, setUrlState] = React.useState<SettlementsUrlState>(() => ({
         view: "review_by_me",
         page: 1,
         statementId: item.businessObjectId,
@@ -26,7 +42,7 @@ export function WorkspaceSettlementTask({
         queueContextId: item.queueContextId,
         from: "W01",
         section: "review",
-    })
+    }))
     const patchUrl = React.useCallback(
         (patch: Partial<SettlementsUrlState>) =>
             setUrlState((current) => ({ ...current, ...patch })),

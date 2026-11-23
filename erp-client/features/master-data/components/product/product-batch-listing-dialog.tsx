@@ -15,6 +15,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -23,7 +24,6 @@ import {
 } from "@/components/ui/dialog"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { Spinner } from "@/components/ui/spinner"
-import { DialogScrollBody } from "@/features/master-data/components/shared/action-dialog-shared"
 import {
     classifyProductForBatchListing,
     formatBatchListingSkippedSummary,
@@ -237,7 +237,8 @@ export function ProductBatchListingDialog({
                 id={`${PREFIX}-dialog`}
                 closeButtonId={`${PREFIX}-dismiss`}
                 showCloseButton={!pending}
-                className="flex max-h-[90dvh] w-[calc(100vw-2rem)] flex-col gap-4 overflow-hidden sm:max-w-4xl"
+                size="xl"
+                scroll="body"
             >
                 {result ? (
                     <>
@@ -247,7 +248,7 @@ export function ProductBatchListingDialog({
                                 已成功的商品状态已同步刷新；失败项仍保留在列表勾选状态中，可直接重试或关闭后逐项处理。
                             </DialogDescription>
                         </DialogHeader>
-                        <DialogScrollBody>
+                        <DialogBody>
                             <div className="space-y-4">
                                 {pending && progress ? (
                                     <div
@@ -293,7 +294,7 @@ export function ProductBatchListingDialog({
                                     failureEmptyMessage="没有失败项"
                                 />
                             </div>
-                        </DialogScrollBody>
+                        </DialogBody>
                         <DialogFooter>
                             <Button
                                 id={`${PREFIX}-result-close`}
@@ -332,7 +333,7 @@ export function ProductBatchListingDialog({
                                 SKU 将设为已上架。
                             </DialogDescription>
                         </DialogHeader>
-                        <DialogScrollBody>
+                        <DialogBody>
                             <div className="space-y-4">
                                 <BatchImpactPreview
                                     title="批量上架影响预览"
@@ -438,7 +439,7 @@ export function ProductBatchListingDialog({
                                     emptyDescription="可返回列表重新勾选需要上架的商品。"
                                 />
                             </div>
-                        </DialogScrollBody>
+                        </DialogBody>
                         <DialogFooter>
                             <Button
                                 id={`${PREFIX}-cancel`}

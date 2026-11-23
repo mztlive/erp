@@ -3,6 +3,7 @@ import type {
     BackgroundJobItemStatus,
     JobStatus,
 } from "@/features/background-jobs/api"
+import { formatDateTime, unixSecondsToIsoOrEmpty } from "@/lib/datetime"
 
 export const IMPORT_RESULT_LABELS = {
     failed: "未成功",
@@ -143,6 +144,6 @@ export function isBackgroundJobAdmin(
 }
 
 export function formatJobDateTime(value: number | null): string {
-    if (value === null || !Number.isFinite(value)) return "—"
-    return new Date(value * 1000).toLocaleString("zh-CN", { hour12: false })
+    const iso = unixSecondsToIsoOrEmpty(value)
+    return iso ? formatDateTime(iso, "full") : "—"
 }

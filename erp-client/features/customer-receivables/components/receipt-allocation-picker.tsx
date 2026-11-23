@@ -103,8 +103,8 @@ export function ReceiptAllocationPicker({
         >
             <DialogContent
                 id="customer-receivables-picker-dialog"
+                size="xl"
                 closeButtonId="customer-receivables-picker-close"
-                className="sm:max-w-4xl"
                 initialFocus={() =>
                     document.getElementById(
                         "customer-receivables-session-allocation-search",

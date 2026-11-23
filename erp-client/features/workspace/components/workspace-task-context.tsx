@@ -7,6 +7,10 @@ import {
     useWorkspaceTaskNavigation,
     useWorkspaceTaskPage,
 } from "@/components/business/workspace-task-pane"
+import {
+    UnifiedTaskWorkbenchRailToggle,
+    useUnifiedTaskWorkbenchRail,
+} from "@/components/business/unified-task-workbench"
 import { IconActionButton } from "@/components/business"
 import { cn } from "@/lib/utils"
 import { TaskTimeline } from "@/features/document-timeline/components/task-timeline"
@@ -30,11 +34,11 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { WORK_ITEM_STATUS_META } from "@/lib/task-status-dictionary"
 
 import type { WorkspaceWorkItem } from "../types"
 import { isBlockedWorkItem } from "../lib/work-item"
 import { WorkspaceDocumentBadge } from "./workspace-document-badge"
-import { WorkspacePaneActions } from "./workspace-pane-actions"
 import { WorkspaceDescriptionText } from "./workspace-description-text"
 import { WorkspaceTaskInstructions } from "./workspace-task-instructions"
 
@@ -44,26 +48,6 @@ const PRIORITY_LABEL: Record<number, string> = {
     3: "普通",
     4: "低",
 }
-
-/**
- * 作业面标题栏已内嵌问号入口的任务类型。其余类型在详情右上角补同一个入口。
- */
-const INLINE_CONTEXT_HELP_TYPES = new Set([
-    "DOCUMENT_APPROVAL",
-    "APPROVAL_INSTANCE",
-    "APPROVAL_REWORK",
-    "FULFILLMENT_OPERATION",
-    "SUPPLIER_PAYMENT_EXECUTION",
-    "SALES_INVOICE_EXECUTION",
-    "CUSTOMER_ACCEPTANCE_REGISTRATION",
-    "PROCUREMENT_ORDER_CREATION",
-    "SALES_INQUIRY_PROCESSING",
-    "PURCHASE_SOURCE_UPDATE",
-    "SUPPLIER_SETTLEMENT_REVIEW",
-    "IMPORT_BUSINESS_CONFIRMATION",
-    "BUSINESS_EXCEPTION",
-    "INTEGRATION_RESULT_UNKNOWN",
-])
 
 function responsibilityLabel(item: WorkspaceWorkItem): string {
     return [
@@ -88,18 +72,6 @@ function ContextFact({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * 标题栏已把问号放在打开原单据或页头动作旁边时，不再额外叠一层入口。
- *
- * @param item 当前工作台任务
- * @returns 标题栏已内嵌问号则为 true
- */
-export function workspaceTaskHasInlineContextHelp(
-    item: Pick<WorkspaceWorkItem, "workItemType">,
-): boolean {
-    return INLINE_CONTEXT_HELP_TYPES.has(item.workItemType)
-}
-
-/**
  * 任务说明问号。点开后展示统一任务上下文，不单独占一块说明区。
  *
  * @param item 当前工作台任务，字段来自服务端 WorkItem 投影
@@ -108,22 +80,30 @@ export function WorkspaceTaskContextHelp({
     item,
     label,
     variant = "ghost",
+    triggerId,
 }: {
     item: WorkspaceWorkItem
     label?: string
     variant?: "ghost" | "outline"
+    triggerId?: string
 }) {
     const blocked = isBlockedWorkItem(item)
     const overdue = item.dueBucket === "overdue"
     const priorityLabel = PRIORITY_LABEL[item.priority] ?? `P${item.priority}`
+    const resolvedTriggerId =
+        triggerId ??
+        `workspace-task-context-help-trigger-${toAutomationIdSegment(item.workItemId)}`
+    const blockedMeta =
+        item.processingState === "APPROVAL_BLOCKED"
+            ? WORK_ITEM_STATUS_META.APPROVAL_BLOCKED
+            : WORK_ITEM_STATUS_META.EXECUTION_BLOCKED
 
     return (
         <Popover>
             <PopoverTrigger
-                id={`workspace-task-context-help-trigger-${toAutomationIdSegment(item.workItemId)}`}
+                id={resolvedTriggerId}
                 render={
                     <Button
-                        id={`workspace-task-context-help-trigger-${toAutomationIdSegment(item.workItemId)}`}
                         type="button"
                         variant={variant}
                         className={
@@ -156,19 +136,19 @@ export function WorkspaceTaskContextHelp({
                                 item.status !== "OPEN"
                                     ? item.statusLabel
                                     : blocked
-                                      ? "处理受阻"
+                                      ? blockedMeta.label
                                       : overdue
                                         ? "已超期"
-                                        : "待处理"
+                                        : WORK_ITEM_STATUS_META.OPEN.label
                             }
                             tone={
                                 item.status !== "OPEN"
                                     ? item.statusTone
                                     : blocked
-                                      ? "warning"
+                                      ? blockedMeta.tone
                                       : overdue
                                         ? "destructive"
-                                        : "info"
+                                        : WORK_ITEM_STATUS_META.OPEN.tone
                             }
                         />
                     </div>
@@ -234,23 +214,27 @@ export function WorkspaceTaskHeaderActions({
 }) {
     const fullPage = useWorkspaceTaskPage()
     const navigation = useWorkspaceTaskNavigation()
+    const rail = useUnifiedTaskWorkbenchRail()
+    const hideTimelineSheet = Boolean(rail?.hasRail)
     return (
         <div className="flex max-w-full flex-wrap items-center justify-end gap-1">
             {children}
-            {fullPage && timelineDocumentTypes.has(item.businessObjectType) && (
-                <TaskTimeline
-                    key={item.workItemId}
-                    taskId={item.workItemId}
-                    approval={Boolean(item.approval)}
-                    instance={item.workItemType === "APPROVAL_INSTANCE"}
-                    title={item.counterpartyName || item.objectTitle}
-                    document={{
-                        type: item.businessObjectType,
-                        id: item.businessObjectId,
-                        number: item.stableNumber,
-                    }}
-                />
-            )}
+            {fullPage &&
+                !hideTimelineSheet &&
+                timelineDocumentTypes.has(item.businessObjectType) && (
+                    <TaskTimeline
+                        key={item.workItemId}
+                        taskId={item.workItemId}
+                        approval={Boolean(item.approval)}
+                        instance={item.workItemType === "APPROVAL_INSTANCE"}
+                        title={item.counterpartyName || item.objectTitle}
+                        document={{
+                            type: item.businessObjectType,
+                            id: item.businessObjectId,
+                            number: item.stableNumber,
+                        }}
+                    />
+                )}
             {fullPage && navigation?.onRefresh ? (
                 <IconActionButton
                     id="workspace-processing-refresh"
@@ -270,7 +254,7 @@ export function WorkspaceTaskHeaderActions({
                 label={contextLabel}
                 variant={contextVariant}
             />
-            <WorkspacePaneActions />
+            <UnifiedTaskWorkbenchRailToggle />
         </div>
     )
 }

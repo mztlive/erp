@@ -156,12 +156,10 @@ export const freshnessText = {
  */
 const WORKSPACE_SHORT_LABEL: Partial<Record<WorkspaceId, string>> = {
     W01: "今日工作台",
-    W02: "待办队列",
     W03: "客户中心",
     W04: "合同",
     W05: "销售单",
     W06: "客户验收",
-    W07: "采购二次确认",
     W08: "采购单",
     /** 跨页提示用中性短名；侧栏按岗位分「收货与发货 / 交付与代发」 */
     W09: "收发货办理",

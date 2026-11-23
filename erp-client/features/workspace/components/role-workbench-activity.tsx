@@ -9,7 +9,9 @@ import {
     FileSpreadsheetIcon,
     PlusIcon,
     ReceiptIcon,
+    ScaleIcon,
     ShoppingCartIcon,
+    TruckIcon,
     WalletCardsIcon,
 } from "lucide-react"
 
@@ -26,8 +28,17 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+    fetchPeriodBasisConfig,
+    fetchProfitLossView,
+} from "@/features/actual-profit-loss/api"
 import type { AccountProfile } from "@/features/auth/api"
 import { fetchReceivableScopeList } from "@/features/customer-receivables/api/scoped-view"
+import { decodeFulfillmentQueuePage } from "@/features/fulfillment-operations/api/work-queue"
+import {
+    OPERATION_TYPE_LABEL,
+    type FulfillmentOperationType,
+} from "@/features/fulfillment-operations/types"
 import { fetchPurchaseOrders } from "@/features/purchase-orders/api/purchase-order-queries-api"
 import type { PurchaseOrderStatusFilter } from "@/features/purchase-orders/types"
 import { fetchInquiries } from "@/features/sales-inquiries/api"
@@ -39,12 +50,14 @@ import {
 } from "@/features/sales-inquiries/types"
 import { fetchSalesOrders } from "@/features/sales-orders/api/sales-orders-list"
 import { fetchSupplierScopeList } from "@/features/supplier-payables/api/scoped-view"
+import { apiGet } from "@/lib/api"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import { hasPermission } from "@/lib/permissions"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 import type { RoleWorkbenchId } from "@/lib/role-workbenches"
 import { cn } from "@/lib/utils"
+import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
 import { overviewIdentity } from "../hooks/use-workspace-overview"
 import { workbenchTime } from "./workbench-data-info"
 
@@ -88,15 +101,27 @@ const PURCHASE_STATUS_FILTERS: readonly {
 export function RoleWorkbenchActivity({
     workbenchId,
     profile,
+    returnTo = `/workspace/roles/${workbenchId}`,
+    period,
 }: {
     workbenchId: RoleWorkbenchId
     profile: AccountProfile
+    returnTo?: string
+    period?: { from: string; to: string }
 }) {
     if (workbenchId === "WB-01") {
         return <SalesActivityPanel profile={profile} />
     }
+    if (workbenchId === "WB-02") {
+        return (
+            <FulfillmentActivityPanel profile={profile} returnTo={returnTo} />
+        )
+    }
     if (workbenchId === "WB-03") {
         return <ProcurementActivityPanel profile={profile} />
+    }
+    if (workbenchId === "WB-05") {
+        return <ManagementActivityPanel profile={profile} period={period} />
     }
     return <CashierActivityPanel profile={profile} />
 }
@@ -1422,6 +1447,691 @@ function CashierActivityPanel({ profile }: { profile: AccountProfile }) {
                         {activeTab === "receipts"
                             ? "查看客户资金往来"
                             : "查看供应商资金往来"}
+                        <ArrowUpRightIcon
+                            className="size-3.5"
+                            aria-hidden="true"
+                        />
+                    </Link>
+                </div>
+            </Tabs>
+        </section>
+    )
+}
+
+const FULFILLMENT_LANES: readonly {
+    value: FulfillmentOperationType
+    label: string
+    permission: string
+}[] = [
+    { value: "RECEIPT", label: "入库", permission: "purchase_receipt:list" },
+    { value: "WAREHOUSE_SHIP", label: "仓发", permission: "delivery:list" },
+    { value: "SUPPLIER_DIRECT", label: "直发", permission: "delivery:list" },
+    {
+        value: "ELECTRONIC",
+        label: "电子交付",
+        permission: "electronic_delivery:list",
+    },
+    {
+        value: "SERVICE",
+        label: "线下服务",
+        permission: "service_fulfillment:list",
+    },
+]
+
+function FulfillmentActivityPanel({
+    profile,
+    returnTo,
+}: {
+    profile: AccountProfile
+    returnTo: string
+}) {
+    const allowedLanes = FULFILLMENT_LANES.filter((lane) =>
+        hasPermission(profile.permissions, lane.permission),
+    )
+    const [lane, setLane] = useState<"all" | FulfillmentOperationType>("all")
+    const filterOptions = [
+        { value: "all" as const, label: "全部" },
+        ...allowedLanes.map((item) => ({
+            value: item.value,
+            label: item.label,
+        })),
+    ]
+    const identity = overviewIdentity(profile)
+    const canList = hasPermission(profile.permissions, "work_item:list")
+
+    const queueQuery = useQuery({
+        queryKey: [
+            ...queryKeyRoots.workspaceHome,
+            "fulfillment-activity-queue",
+            identity,
+            lane,
+        ],
+        queryFn: async () =>
+            decodeFulfillmentQueuePage(
+                await apiGet<unknown>("/admin/work-items/fulfillment-queue", {
+                    operation_types: lane === "all" ? undefined : lane,
+                    page: 1,
+                    page_size: PAGE_SIZE,
+                    timezone: "Asia/Shanghai",
+                }),
+            ),
+        enabled: canList && allowedLanes.length > 0,
+        staleTime: 30_000,
+        retry: false,
+        meta: { roleWorkbench: true },
+    })
+
+    if (!canList || allowedLanes.length === 0) return null
+
+    const rows = queueQuery.data?.items ?? []
+
+    return (
+        <section
+            className={PANEL}
+            aria-labelledby="fulfillment-workbench-activity-title"
+        >
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border/60 pb-2.5">
+                <div className="flex items-center gap-2">
+                    <span
+                        className="flex size-6 shrink-0 items-center justify-center rounded-md bg-teal-soft text-teal-soft-foreground"
+                        aria-hidden="true"
+                    >
+                        <TruckIcon className="size-3.5" />
+                    </span>
+                    <h2
+                        id="fulfillment-workbench-activity-title"
+                        className="text-section-title font-semibold tracking-tight text-foreground"
+                    >
+                        待执行履约作业
+                    </h2>
+                    {queueQuery.data ? (
+                        <span className="num rounded-full bg-muted px-1.5 text-tiny font-medium text-muted-foreground">
+                            {queueQuery.data.total}
+                        </span>
+                    ) : null}
+                </div>
+                <FilterPills
+                    idPrefix="fulfillment-activity-lane"
+                    options={filterOptions}
+                    value={lane}
+                    onChange={setLane}
+                />
+            </div>
+
+            {queueQuery.isPending ? (
+                <ActivityTableSkeleton columns={5} />
+            ) : queueQuery.isError ? (
+                <ActivityErrorRow
+                    id="fulfillment-activity-retry"
+                    message="履约作业列表读取失败，请重试。"
+                    onRetry={() => void queueQuery.refetch()}
+                />
+            ) : !rows.length ? (
+                <ActivityEmptyState
+                    title={
+                        lane === "all"
+                            ? "当前没有待执行的履约作业"
+                            : "当前作业类型下暂无待办"
+                    }
+                    description="新的收货、发货或交付任务分配到您名下后会显示在这里。"
+                />
+            ) : (
+                <div className="overflow-x-auto">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="pl-0">
+                                    单号 / 摘要
+                                </TableHead>
+                                <TableHead>作业类型</TableHead>
+                                <TableHead>仓库 / 预付门控</TableHead>
+                                <TableHead>截止时间</TableHead>
+                                <TableHead className="w-16 pr-0 text-right">
+                                    操作
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {rows.map((row) => {
+                                const taskHref = buildWorkspaceDetailHref(
+                                    "tasks",
+                                    row.work_item_id,
+                                    { returnTo },
+                                )
+                                const docNo =
+                                    row.sales_order_no ||
+                                    row.purchase_order_no ||
+                                    OPERATION_TYPE_LABEL[row.operation_type]
+                                return (
+                                    <TableRow key={row.work_item_id}>
+                                        <TableCell className="max-w-64 py-2.5 pl-0">
+                                            <Link
+                                                id={`fulfillment-activity-item-${toAutomationIdSegment(row.work_item_id)}`}
+                                                href={taskHref}
+                                                className="num block truncate font-medium text-foreground hover:text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+                                            >
+                                                {docNo}
+                                            </Link>
+                                            <p className="truncate text-xs text-muted-foreground">
+                                                {row.summary}
+                                            </p>
+                                        </TableCell>
+                                        <TableCell className="py-2.5">
+                                            <StatusBadge
+                                                appearance="quiet"
+                                                tone="info"
+                                                label={
+                                                    OPERATION_TYPE_LABEL[
+                                                        row.operation_type
+                                                    ]
+                                                }
+                                            />
+                                        </TableCell>
+                                        <TableCell className="py-2.5 text-xs text-muted-foreground">
+                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                {row.warehouse_label ? (
+                                                    <span className="truncate text-foreground">
+                                                        {row.warehouse_label}
+                                                    </span>
+                                                ) : null}
+                                                {row.gate_state ===
+                                                "BLOCKED" ? (
+                                                    <StatusBadge
+                                                        appearance="quiet"
+                                                        tone="warning"
+                                                        label="预付待完成"
+                                                    />
+                                                ) : row.gate_state ===
+                                                  "SATISFIED" ? (
+                                                    <StatusBadge
+                                                        appearance="quiet"
+                                                        tone="success"
+                                                        label="预付已满足"
+                                                    />
+                                                ) : !row.warehouse_label ? (
+                                                    <span>—</span>
+                                                ) : null}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="num py-2.5 text-xs text-muted-foreground">
+                                            {workbenchTime(row.due_at, true)}
+                                        </TableCell>
+                                        <TableCell className="py-2.5 pr-0 text-right">
+                                            <Link
+                                                id={`fulfillment-activity-open-${toAutomationIdSegment(row.work_item_id)}`}
+                                                href={taskHref}
+                                                className="inline-flex items-center gap-0.5 rounded-sm text-xs font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+                                            >
+                                                处理
+                                                <ArrowUpRightIcon
+                                                    className="size-3"
+                                                    aria-hidden="true"
+                                                />
+                                            </Link>
+                                        </TableCell>
+                                    </TableRow>
+                                )
+                            })}
+                        </TableBody>
+                    </Table>
+                </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+                <span>
+                    {queueQuery.data
+                        ? `展示最新 ${rows.length} 条，共 ${queueQuery.data.total} 项`
+                        : "本人履约责任队列"}
+                </span>
+                <Link
+                    id="fulfillment-activity-view-all"
+                    href="/workspace/tasks?family=fulfillment&type=FULFILLMENT_OPERATION"
+                    className="inline-flex items-center gap-1 rounded-sm font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+                >
+                    查看全部履约待办
+                    <ArrowUpRightIcon className="size-3.5" aria-hidden="true" />
+                </Link>
+            </div>
+        </section>
+    )
+}
+
+const MANAGEMENT_ORDER_FILTERS = [
+    { value: "all", label: "全部" },
+    { value: "pending_review", label: "审核中" },
+    { value: "effective", label: "已生效" },
+] as const
+
+function ManagementActivityPanel({
+    profile,
+    period,
+}: {
+    profile: AccountProfile
+    period?: { from: string; to: string }
+}) {
+    const canProfit = hasPermission(profile.permissions, "cost_entry:list")
+    const canOrders = hasPermission(profile.permissions, "sales_order:list")
+    const [tab, setTab] = useState<"profit" | "orders">(
+        canProfit ? "profit" : "orders",
+    )
+    const [orderStatus, setOrderStatus] =
+        useState<(typeof MANAGEMENT_ORDER_FILTERS)[number]["value"]>("all")
+
+    const activeTab =
+        tab === "profit" && !canProfit
+            ? "orders"
+            : tab === "orders" && !canOrders
+              ? "profit"
+              : tab
+
+    const identity = overviewIdentity(profile)
+
+    const profitQuery = useQuery({
+        queryKey: [
+            ...queryKeyRoots.workspaceHome,
+            "management-activity-profit",
+            identity,
+            period?.from,
+            period?.to,
+        ],
+        queryFn: async () => {
+            const config = await fetchPeriodBasisConfig()
+            if (!config.configuredPeriodBasis || !period) {
+                return { unconfigured: true as const, view: null }
+            }
+            const view = await fetchProfitLossView({
+                from: period.from,
+                to: period.to,
+                periodBasis: config.configuredPeriodBasis,
+                scopeId: "authorized",
+                coverage: "all",
+                dimension: "sales_order",
+                sort: "actualProfitLossNet:asc",
+                page: 1,
+                pageSize: PAGE_SIZE,
+            })
+            return { unconfigured: false as const, view }
+        },
+        enabled: canProfit && Boolean(period) && activeTab === "profit",
+        staleTime: 60_000,
+        retry: false,
+        meta: { roleWorkbench: true },
+    })
+
+    const ordersQuery = useQuery({
+        queryKey: [
+            ...queryKeyRoots.workspaceHome,
+            "management-activity-orders",
+            identity,
+            orderStatus,
+        ],
+        queryFn: () =>
+            fetchSalesOrders(
+                {
+                    commercialStatus:
+                        orderStatus === "all" ? undefined : orderStatus,
+                    page: 1,
+                    pageSize: PAGE_SIZE,
+                },
+                { includeContractDetails: false },
+            ),
+        enabled: canOrders && activeTab === "orders",
+        staleTime: 60_000,
+        retry: false,
+        meta: { roleWorkbench: true },
+    })
+
+    if (!canProfit && !canOrders) return null
+
+    const profitView = profitQuery.data?.view
+    const profitRows = profitView?.rows.items ?? []
+
+    return (
+        <section
+            className={PANEL}
+            aria-labelledby="management-workbench-activity-title"
+        >
+            <Tabs
+                value={activeTab}
+                onValueChange={(next) => {
+                    if (next === "profit" || next === "orders") setTab(next)
+                }}
+                className="gap-0"
+            >
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border/60">
+                    <h2
+                        id="management-workbench-activity-title"
+                        className="sr-only"
+                    >
+                        经营盈亏与重点订单
+                    </h2>
+                    <TabsList variant="line">
+                        {canProfit && (
+                            <TabsTrigger
+                                id="management-activity-tab-profit"
+                                value="profit"
+                            >
+                                <ScaleIcon
+                                    className="size-3.5"
+                                    aria-hidden="true"
+                                />
+                                经营盈亏关注订单
+                                {profitView &&
+                                profitView.emptyReason !== "no_scope" ? (
+                                    <span className="num rounded-full bg-muted px-1.5 text-tiny font-medium text-muted-foreground">
+                                        {profitView.rows.total}
+                                    </span>
+                                ) : null}
+                            </TabsTrigger>
+                        )}
+                        {canOrders && (
+                            <TabsTrigger
+                                id="management-activity-tab-orders"
+                                value="orders"
+                            >
+                                <ShoppingCartIcon
+                                    className="size-3.5"
+                                    aria-hidden="true"
+                                />
+                                授权范围销售单
+                                {ordersQuery.data &&
+                                ordersQuery.data.emptyReason !== "no_scope" ? (
+                                    <span className="num rounded-full bg-muted px-1.5 text-tiny font-medium text-muted-foreground">
+                                        {ordersQuery.data.total}
+                                    </span>
+                                ) : null}
+                            </TabsTrigger>
+                        )}
+                    </TabsList>
+                    {activeTab === "orders" ? (
+                        <div className="py-1.5">
+                            <FilterPills
+                                idPrefix="management-activity-orders"
+                                options={MANAGEMENT_ORDER_FILTERS}
+                                value={orderStatus}
+                                onChange={setOrderStatus}
+                            />
+                        </div>
+                    ) : null}
+                </div>
+
+                {activeTab === "profit" ? (
+                    profitQuery.isPending ? (
+                        <ActivityTableSkeleton columns={5} />
+                    ) : profitQuery.isError ? (
+                        <ActivityErrorRow
+                            id="management-activity-profit-retry"
+                            message="经营盈亏订单读取失败，请重试。"
+                            onRetry={() => void profitQuery.refetch()}
+                        />
+                    ) : profitQuery.data?.unconfigured ? (
+                        <ActivityEmptyState
+                            title="尚未配置经营分析期间口径"
+                            description="请先在实际经营盈亏页面配置统计期间口径。"
+                        />
+                    ) : profitView?.emptyReason === "no_scope" ? (
+                        <ActivityEmptyState
+                            title="暂无经营盈亏查看范围"
+                            description="当前账号未配置经营分析数据查看范围。"
+                        />
+                    ) : !profitRows.length ? (
+                        <ActivityEmptyState
+                            title="所选期间暂无可分析订单"
+                            description="可调整上方经营统计期间，或进入实际经营盈亏页面查看更多维度。"
+                        />
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="pl-0">
+                                            销售单 / 客户
+                                        </TableHead>
+                                        <TableHead className="text-right">
+                                            不含税收入
+                                        </TableHead>
+                                        <TableHead className="text-right">
+                                            实际盈亏
+                                        </TableHead>
+                                        <TableHead>成本覆盖</TableHead>
+                                        <TableHead className="w-16 pr-0 text-right">
+                                            操作
+                                        </TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {profitRows.map((row) => {
+                                        const canOpenOrder =
+                                            Boolean(row.objectId) &&
+                                            row.allowedDrilldowns.includes(
+                                                "W05",
+                                            )
+                                        const href = canOpenOrder
+                                            ? `/sales/orders/${encodeURIComponent(row.objectId!)}`
+                                            : "/analytics/profit-loss"
+                                        const profit =
+                                            profitView?.fieldPermissions
+                                                .canViewProfit &&
+                                            row.coverageState === "COVERED"
+                                                ? row.actualProfitLossNet
+                                                : null
+                                        const negativeProfit =
+                                            profit != null &&
+                                            compareDecimal(profit, "0", 2) < 0
+                                        return (
+                                            <TableRow key={row.rowId}>
+                                                <TableCell className="max-w-60 py-2.5 pl-0">
+                                                    <Link
+                                                        id={`management-activity-profit-${toAutomationIdSegment(row.rowId)}`}
+                                                        href={href}
+                                                        className="num block truncate font-medium text-foreground hover:text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+                                                    >
+                                                        {row.identityLabel}
+                                                    </Link>
+                                                    <p className="truncate text-xs text-muted-foreground">
+                                                        {row.customerLabel ||
+                                                            "—"}
+                                                    </p>
+                                                </TableCell>
+                                                <TableCell className="num py-2.5 text-right text-foreground">
+                                                    {profitView
+                                                        ?.fieldPermissions
+                                                        .canViewRevenue &&
+                                                    row.netSalesRevenue !=
+                                                        null ? (
+                                                        <MoneyValue
+                                                            value={
+                                                                row.netSalesRevenue
+                                                            }
+                                                            display="exact"
+                                                        />
+                                                    ) : (
+                                                        <span className="text-xs text-muted-foreground">
+                                                            受限
+                                                        </span>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell
+                                                    className={cn(
+                                                        "num py-2.5 text-right font-medium",
+                                                        negativeProfit
+                                                            ? "text-destructive"
+                                                            : "text-foreground",
+                                                    )}
+                                                >
+                                                    {profit == null ? (
+                                                        <span className="text-xs font-normal text-muted-foreground">
+                                                            暂不可用
+                                                        </span>
+                                                    ) : (
+                                                        <MoneyValue
+                                                            value={profit}
+                                                            display="exact"
+                                                        />
+                                                    )}
+                                                </TableCell>
+                                                <TableCell className="py-2.5">
+                                                    <StatusBadge
+                                                        appearance="quiet"
+                                                        tone={
+                                                            row.coverageState ===
+                                                            "COVERED"
+                                                                ? "success"
+                                                                : "warning"
+                                                        }
+                                                        label={
+                                                            row.coverageState ===
+                                                            "COVERED"
+                                                                ? "成本完整"
+                                                                : "部分覆盖"
+                                                        }
+                                                    />
+                                                </TableCell>
+                                                <TableCell className="py-2.5 pr-0 text-right">
+                                                    <Link
+                                                        id={`management-activity-profit-open-${toAutomationIdSegment(row.rowId)}`}
+                                                        href={href}
+                                                        className="inline-flex items-center gap-0.5 rounded-sm text-xs font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+                                                    >
+                                                        查看
+                                                        <ArrowUpRightIcon
+                                                            className="size-3"
+                                                            aria-hidden="true"
+                                                        />
+                                                    </Link>
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )
+                ) : ordersQuery.isPending ? (
+                    <ActivityTableSkeleton columns={5} />
+                ) : ordersQuery.isError ? (
+                    <ActivityErrorRow
+                        id="management-activity-orders-retry"
+                        message="销售单列表读取失败，请重试。"
+                        onRetry={() => void ordersQuery.refetch()}
+                    />
+                ) : ordersQuery.data?.emptyReason === "no_scope" ? (
+                    <ActivityEmptyState
+                        title="暂无销售单查看范围"
+                        description="当前账号未配置销售单数据查看范围。"
+                    />
+                ) : !ordersQuery.data?.items.length ? (
+                    <ActivityEmptyState
+                        title="当前状态下没有销售单"
+                        description="可切换状态筛选或查看全部销售单。"
+                    />
+                ) : (
+                    <div className="overflow-x-auto">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="pl-0">
+                                        销售单 / 客户
+                                    </TableHead>
+                                    <TableHead>状态</TableHead>
+                                    <TableHead>履约 / 回款</TableHead>
+                                    <TableHead className="text-right">
+                                        含税金额
+                                    </TableHead>
+                                    <TableHead className="w-16 pr-0 text-right">
+                                        操作
+                                    </TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {ordersQuery.data.items.map((row) => (
+                                    <TableRow key={row.id}>
+                                        <TableCell className="max-w-64 py-2.5 pl-0">
+                                            <Link
+                                                id={`management-activity-order-${toAutomationIdSegment(row.id)}`}
+                                                href={`/sales/orders/${encodeURIComponent(row.id)}`}
+                                                className="num block truncate font-medium text-foreground hover:text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+                                            >
+                                                {row.documentNumber}
+                                            </Link>
+                                            <p className="truncate text-xs text-muted-foreground">
+                                                {row.customerName}
+                                            </p>
+                                        </TableCell>
+                                        <TableCell className="py-2.5">
+                                            <StatusBadge
+                                                tone={row.primaryStatus.tone}
+                                                label={row.primaryStatus.label}
+                                            />
+                                        </TableCell>
+                                        <TableCell className="py-2.5">
+                                            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                                                <StatusBadge
+                                                    appearance="quiet"
+                                                    tone={row.fulfillment.tone}
+                                                    label={
+                                                        row.fulfillment.label
+                                                    }
+                                                />
+                                                <StatusBadge
+                                                    appearance="quiet"
+                                                    tone={row.collection.tone}
+                                                    label={row.collection.label}
+                                                />
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="num py-2.5 text-right font-medium text-foreground">
+                                            <MoneyValue
+                                                value={row.amountGross}
+                                                display="exact"
+                                            />
+                                        </TableCell>
+                                        <TableCell className="py-2.5 pr-0 text-right">
+                                            <Link
+                                                id={`management-activity-order-open-${toAutomationIdSegment(row.id)}`}
+                                                href={`/sales/orders/${encodeURIComponent(row.id)}`}
+                                                className="inline-flex items-center gap-0.5 rounded-sm text-xs font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+                                            >
+                                                查看
+                                                <ArrowUpRightIcon
+                                                    className="size-3"
+                                                    aria-hidden="true"
+                                                />
+                                            </Link>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                )}
+
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+                    <span>
+                        {activeTab === "profit"
+                            ? profitView
+                                ? `按实际盈亏升序展示 ${profitRows.length} 单，共 ${profitView.rows.total} 单`
+                                : "按所选期间汇总实际经营盈亏"
+                            : ordersQuery.data
+                              ? `展示最新 ${ordersQuery.data.items.length} 条，共 ${ordersQuery.data.total} 单`
+                              : "授权范围内的销售单"}
+                    </span>
+                    <Link
+                        id={
+                            activeTab === "profit"
+                                ? "management-activity-view-all-profit"
+                                : "management-activity-view-all-orders"
+                        }
+                        href={
+                            activeTab === "profit"
+                                ? "/analytics/profit-loss"
+                                : "/sales/orders"
+                        }
+                        className="inline-flex items-center gap-1 rounded-sm font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+                    >
+                        {activeTab === "profit"
+                            ? "查看完整经营盈亏分析"
+                            : "查看全部销售单"}
                         <ArrowUpRightIcon
                             className="size-3.5"
                             aria-hidden="true"

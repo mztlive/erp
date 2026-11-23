@@ -1,6 +1,7 @@
 "use client"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
+import { useQueryClient } from "@tanstack/react-query"
 import { ArrowUpRightIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { usePathname, useSearchParams } from "next/navigation"
@@ -9,18 +10,16 @@ import {
     MoneyValue,
     WorkspaceTaskFooter,
 } from "@/components/business"
-import {
-    Popover,
-    PopoverContent,
-    PopoverTitle,
-    PopoverTrigger,
-} from "@/components/ui/popover"
 import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { RequestDraftDialog } from "@/features/purchase-payment-requests/components/request-draft-dialog"
+import type { PaymentRequest } from "@/features/purchase-payment-requests/types"
 import { getErrorMessage } from "@/lib/api"
+import { formatDate, unixSecondsToIsoOrEmpty } from "@/lib/datetime"
 import { hasPermission } from "@/lib/permissions"
-import { compareDecimal } from "@/lib/fixed-decimal"
+import { compareDecimal, sumFixed } from "@/lib/fixed-decimal"
+import { queryKeyRoots } from "@/lib/query-key-roots"
+import type { PurchasePaymentArrangement as PurchasePaymentArrangementData } from "../api/payment-arrangement"
 import { usePaymentArrangement } from "../hooks/use-payment-arrangement"
 import {
     purchasePaymentRequestStatusLabel,
@@ -49,6 +48,7 @@ export function PurchasePaymentArrangement({
     workItemId?: string
     onTaskCompleted?: (id: string) => void
 }) {
+    const queryClient = useQueryClient()
     const query = usePaymentArrangement(purchaseOrderId)
     const profile = useAccountProfileQuery()
     const pathname = usePathname()
@@ -69,7 +69,74 @@ export function PurchasePaymentArrangement({
     const allRequestsHref = `/procurement/payment-requests?${allRequestsParams.toString()}`
     const notified = useRef(false)
     const arrangement = query.data
-    // 关闭申请结果弹窗后才按服务端余额状态推进队列；部分申请和跟进仍保留责任。
+    const notifyCompleted = useCallback(() => {
+        if (!workItemId || notified.current) return
+        notified.current = true
+        onTaskCompleted?.(workItemId)
+    }, [onTaskCompleted, workItemId])
+    // 提交成功后反应式推进队列，仅在余额已完全覆盖或服务端确认任务结束时触发一次。
+    const handleRequestSubmitted = useCallback(
+        async (rows: PaymentRequest[]) => {
+            void Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: queryKeyRoots.purchaseOrders,
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: queryKeyRoots.workItems,
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: queryKeyRoots.workspaceHome,
+                }),
+            ])
+            if (!workItemId) return
+            const submittedTotal = sumFixed(
+                rows.map((row) => row.total_amount),
+                { maxScale: 2, outputScale: 2 },
+            )
+            if (
+                arrangement &&
+                compareDecimal(
+                    submittedTotal,
+                    arrangement.available_amount,
+                    2,
+                ) >= 0
+            ) {
+                queryClient.setQueryData<PurchasePaymentArrangementData>(
+                    ["purchase-orders", "payment-arrangement", purchaseOrderId],
+                    (current) =>
+                        current
+                            ? {
+                                  ...current,
+                                  available_amount: "0.00",
+                                  state: "pending",
+                                  task_id: null,
+                              }
+                            : current,
+                )
+                notifyCompleted()
+                return
+            }
+            const refetched = await query.refetch()
+            const next = refetched.data
+            if (
+                next &&
+                next.task_id !== workItemId &&
+                (["pending", "settled", "inactive"] as const).some(
+                    (state) => state === next.state,
+                )
+            ) {
+                notifyCompleted()
+            }
+        },
+        [
+            arrangement,
+            notifyCompleted,
+            purchaseOrderId,
+            query,
+            queryClient,
+            workItemId,
+        ],
+    )
     useEffect(() => {
         if (
             !workItemId ||
@@ -77,8 +144,7 @@ export function PurchasePaymentArrangement({
             !arrangement ||
             arrangement.task_id === workItemId ||
             query.isFetching ||
-            query.isError ||
-            notified.current
+            query.isError
         )
             return
         if (
@@ -87,15 +153,14 @@ export function PurchasePaymentArrangement({
             )
         )
             return
-        notified.current = true
-        onTaskCompleted?.(workItemId)
+        notifyCompleted()
     }, [
         arrangement,
         query.isFetching,
         query.isError,
         workItemId,
         requestOpen,
-        onTaskCompleted,
+        notifyCompleted,
     ])
     if (!arrangement && query.isPending)
         return (
@@ -147,10 +212,9 @@ export function PurchasePaymentArrangement({
     const followUp =
         arrangement.follow_up_at == null
             ? null
-            : new Date(arrangement.follow_up_at * 1000).toLocaleDateString(
-                  "zh-CN",
-                  { timeZone: "Asia/Shanghai" },
-              )
+            : formatDate(unixSecondsToIsoOrEmpty(arrangement.follow_up_at), {
+                  timeZone: "Asia/Shanghai",
+              })
     const hasBalance =
         arrangement.state === "available" || arrangement.state === "blocked"
     const hasPrepaymentGap =
@@ -159,10 +223,11 @@ export function PurchasePaymentArrangement({
     return (
         <section
             aria-label="采购付款安排"
-            className={cn(
-                "rounded-lg border bg-card p-5 sm:p-6",
-                workItemId && "rounded-none border-0 bg-transparent",
-            )}
+            className={
+                workItemId
+                    ? "min-w-0 py-5"
+                    : "rounded-lg border bg-card p-5 sm:p-6"
+            }
         >
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-section-title font-semibold tracking-tight">
@@ -340,39 +405,14 @@ export function PurchasePaymentArrangement({
                             )}
                         >
                             {hasBalance && arrangement.can_schedule && (
-                                <Popover
-                                    open={followUpOpen}
-                                    onOpenChange={setFollowUpOpen}
+                                <Button
+                                    id="purchase-payment-arrangement-schedule"
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setFollowUpOpen(true)}
                                 >
-                                    <PopoverTrigger
-                                        id="purchase-payment-arrangement-schedule"
-                                        render={<Button variant="outline" />}
-                                    >
-                                        {followUp ? "调整跟进日期" : "安排跟进"}
-                                    </PopoverTrigger>
-                                    <PopoverContent
-                                        side="top"
-                                        align="end"
-                                        sideOffset={8}
-                                        className="w-96 max-w-[calc(100vw-2rem)]"
-                                    >
-                                        <PopoverTitle>
-                                            安排下次跟进
-                                        </PopoverTitle>
-                                        {followUpOpen && (
-                                            <PurchasePaymentFollowUp
-                                                key={`${arrangement.task_id}:${arrangement.task_version}`}
-                                                purchaseOrderId={
-                                                    purchaseOrderId
-                                                }
-                                                arrangement={arrangement}
-                                                onSaved={() =>
-                                                    setFollowUpOpen(false)
-                                                }
-                                            />
-                                        )}
-                                    </PopoverContent>
-                                </Popover>
+                                    {followUp ? "调整跟进日期" : "安排跟进"}
+                                </Button>
                             )}
                             {arrangement.state === "available" && (
                                 <Button
@@ -385,12 +425,22 @@ export function PurchasePaymentArrangement({
                         </div>
                     </WorkspaceTaskFooter>
                 )}
+            {hasBalance && arrangement.can_schedule ? (
+                <PurchasePaymentFollowUp
+                    open={followUpOpen}
+                    onOpenChange={setFollowUpOpen}
+                    purchaseOrderId={purchaseOrderId}
+                    arrangement={arrangement}
+                    onSaved={() => setFollowUpOpen(false)}
+                />
+            ) : null}
             {requestOpen ? (
                 <RequestDraftDialog
                     key={`payment-request-${purchaseOrderId}`}
                     open
                     onOpenChange={setRequestOpen}
                     fixedPurchaseOrderId={purchaseOrderId}
+                    onSubmitted={(rows) => void handleRequestSubmitted(rows)}
                 />
             ) : null}
         </section>

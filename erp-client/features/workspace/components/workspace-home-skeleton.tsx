@@ -20,9 +20,9 @@ export function WorkspaceHomeSkeleton({
                     <DetailWorkspaceSection>
                         <div className="flex flex-col gap-4" aria-busy="true">
                             <Skeleton className="h-12 max-w-md" />
-                            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
+                            <div className="grid gap-4 @[960px]/workspace:grid-cols-[minmax(0,1fr)_18rem]">
                                 <Skeleton className="min-h-80" />
-                                <Skeleton className="hidden xl:block" />
+                                <Skeleton className="hidden @[960px]/workspace:block" />
                             </div>
                         </div>
                     </DetailWorkspaceSection>

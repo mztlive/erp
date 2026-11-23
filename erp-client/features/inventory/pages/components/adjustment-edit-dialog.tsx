@@ -75,9 +75,9 @@ export function AdjustmentEditDialog({
             }}
         >
             <DialogContent
+                size="lg"
                 closeButtonId={`${prefix}-close`}
                 showCloseButton={!busy}
-                className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
             >
                 <DialogHeader>
                     <DialogTitle>

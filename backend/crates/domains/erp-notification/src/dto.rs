@@ -64,6 +64,12 @@ pub struct InboxPage {
     pub has_more: bool,
 }
 
+/// 批量标记当前账号全部未读消息已读的更新结果。
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+pub struct MarkAllReadResult {
+    pub updated_count: u64,
+}
+
 impl InboxPage {
     pub(crate) fn from_records(mut items: Vec<Notification>, unread_count: u64) -> Self {
         let has_more = items.len() > INBOX_PAGE_SIZE;
@@ -119,5 +125,13 @@ mod tests {
         assert_eq!(page.unread_count, 30);
 
         assert!(!InboxPage::from_records(Vec::new(), 0).has_more);
+    }
+
+    #[test]
+    fn mark_all_read_result_serializes_updated_count() {
+        assert_eq!(
+            mongodb::bson::serialize_to_document(&MarkAllReadResult { updated_count: 3 }).unwrap(),
+            doc! { "updated_count": 3_i64 }
+        );
     }
 }

@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogClose,
     DialogContent,
     DialogDescription,
@@ -18,7 +19,6 @@ import {
 } from "@/components/ui/dialog"
 import { FieldGroup } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
-import { DialogScrollBody } from "@/features/master-data/components/shared/action-dialog-shared"
 import { FixedResourceDisableDialog } from "@/features/master-data/components/shared/disable-action-dialog"
 import {
     useUpdateWarehouseFulfillmentHandlersMutation,
@@ -187,9 +187,10 @@ export function WarehouseReviseDialog({
         <>
             <Dialog open={open} onOpenChange={handleOpenChange}>
                 <DialogContent
+                    size="md"
+                    scroll="body"
                     closeButtonId="master-data-warehouse-handler-close"
                     showCloseButton={!updateMutation.isPending}
-                    className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg"
                 >
                     <DialogHeader>
                         <DialogTitle>配置收发责任</DialogTitle>
@@ -200,13 +201,13 @@ export function WarehouseReviseDialog({
                         </DialogDescription>
                     </DialogHeader>
                     <form
-                        className="flex min-h-0 flex-1 flex-col"
+                        className="flex min-h-0 flex-1 flex-col overflow-hidden"
                         onSubmit={(event) => {
                             event.preventDefault()
                             void form.handleSubmit()
                         }}
                     >
-                        <DialogScrollBody>
+                        <DialogBody className="space-y-4">
                             {optionsQuery.isError ? (
                                 <Alert variant="destructive">
                                     <AlertTitle>经办人选项加载失败</AlertTitle>
@@ -272,57 +273,55 @@ export function WarehouseReviseDialog({
                                     )}
                                 </form.AppField>
                             </FieldGroup>
-                            <DialogFooter>
-                                <DialogClose
-                                    render={
-                                        <Button
-                                            id="master-data-warehouse-handler-cancel"
-                                            type="button"
-                                            variant="outline"
-                                            disabled={updateMutation.isPending}
+                        </DialogBody>
+                        <DialogFooter>
+                            <DialogClose
+                                render={
+                                    <Button
+                                        id="master-data-warehouse-handler-cancel"
+                                        type="button"
+                                        variant="outline"
+                                        disabled={updateMutation.isPending}
+                                    />
+                                }
+                            >
+                                取消
+                            </DialogClose>
+                            <form.Subscribe
+                                selector={(state) =>
+                                    [
+                                        state.values.inboundUserId,
+                                        state.values.outboundUserId,
+                                    ] as const
+                                }
+                            >
+                                {([inboundUserId, outboundUserId]) => (
+                                    <form.AppForm>
+                                        <form.SubmitButton
+                                            loading={updateMutation.isPending}
+                                            id="master-data-warehouse-handler-save"
+                                            label="保存配置"
+                                            pendingLabel="保存中…"
+                                            disabled={
+                                                updateMutation.isPending ||
+                                                optionsQuery.isPending ||
+                                                optionsQuery.isError ||
+                                                !inboundOptions.some(
+                                                    (option) =>
+                                                        option.value ===
+                                                        inboundUserId,
+                                                ) ||
+                                                !outboundOptions.some(
+                                                    (option) =>
+                                                        option.value ===
+                                                        outboundUserId,
+                                                )
+                                            }
                                         />
-                                    }
-                                >
-                                    取消
-                                </DialogClose>
-                                <form.Subscribe
-                                    selector={(state) =>
-                                        [
-                                            state.values.inboundUserId,
-                                            state.values.outboundUserId,
-                                        ] as const
-                                    }
-                                >
-                                    {([inboundUserId, outboundUserId]) => (
-                                        <form.AppForm>
-                                            <form.SubmitButton
-                                                loading={
-                                                    updateMutation.isPending
-                                                }
-                                                id="master-data-warehouse-handler-save"
-                                                label="保存配置"
-                                                pendingLabel="保存中…"
-                                                disabled={
-                                                    updateMutation.isPending ||
-                                                    optionsQuery.isPending ||
-                                                    optionsQuery.isError ||
-                                                    !inboundOptions.some(
-                                                        (option) =>
-                                                            option.value ===
-                                                            inboundUserId,
-                                                    ) ||
-                                                    !outboundOptions.some(
-                                                        (option) =>
-                                                            option.value ===
-                                                            outboundUserId,
-                                                    )
-                                                }
-                                            />
-                                        </form.AppForm>
-                                    )}
-                                </form.Subscribe>
-                            </DialogFooter>
-                        </DialogScrollBody>
+                                    </form.AppForm>
+                                )}
+                            </form.Subscribe>
+                        </DialogFooter>
                     </form>
                 </DialogContent>
             </Dialog>

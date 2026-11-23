@@ -7,6 +7,7 @@ import {
     DetailWorkspaceMetricItem,
     DetailWorkspaceMetrics,
     DetailWorkspaceSection,
+    SensitiveValue,
     detailWorkspaceStyles,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -21,7 +22,9 @@ import {
 import { ApprovalMaterialFiles } from "@/features/approval-workflow/components/approval-material-files"
 import { displayActorName } from "@/features/approval-workflow/display"
 import { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-approval-materials"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { hasPermission } from "@/lib/permissions"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceMoney } from "./workspace-money"
 
@@ -29,19 +32,47 @@ const primaryFields = new Set([
     "回款金额",
     "到账日",
     "银行流水",
+    "收款账号",
+    "付款账号",
+    "银行账号",
     "待核销",
     "往来主体",
     "提交人",
 ])
 
+const BANK_ACCOUNT_LABELS = ["收款账号", "付款账号", "银行账号"]
+
+function maskBankText(raw: string): string {
+    const trimmed = raw.trim()
+    if (!trimmed || trimmed.includes("*")) return trimmed
+    if (trimmed.length > 8) {
+        return `${trimmed.slice(0, 4)}****${trimmed.slice(-4)}`
+    }
+    if (trimmed.length > 4) {
+        return `****${trimmed.slice(-4)}`
+    }
+    return "****"
+}
+
 /** 回款审批只读作业面；仅消费此次审批资料，不以当前回款或销售单替换提交版本。 */
 export function WorkspaceReceiptApproval({
     item,
     instanceId,
+    onSelectFile,
+    activeFileId,
+    hideEmbeddedMaterials = false,
 }: {
     item: WorkspaceWorkItem
     instanceId: string
+    onSelectFile?: (fileId: string) => void
+    activeFileId?: string
+    hideEmbeddedMaterials?: boolean
 }) {
+    const profile = useAccountProfileQuery()
+    const canRevealBankAccount = hasPermission(
+        profile.data?.permissions,
+        "party_bank_account:reveal",
+    )
     const materials = useApprovalMaterials(instanceId, true, item)
     const prefix = `workspace-receipt-approval-${toAutomationIdSegment(item.workItemId)}`
     const source = materials.data?.display.source
@@ -68,10 +99,31 @@ export function WorkspaceReceiptApproval({
     const submitter = displayActorName(
         source?.submitter_name ?? field("提交人"),
     )
-    const bankReference = field("银行流水")
+    const bankAccountEntry = sections.find((entry) =>
+        BANK_ACCOUNT_LABELS.includes(entry.label),
+    )
+    const bankAccountValue = bankAccountEntry?.value.trim() || undefined
+    const bankReference = field("银行流水")?.trim() || undefined
     const additionalFields = sections.filter(
         (entry) => !primaryFields.has(entry.label),
     )
+
+    const renderSensitiveBankField = (
+        id: string,
+        label: string,
+        value: string,
+    ) => {
+        const masked = maskBankText(value)
+        const canToggleReveal = canRevealBankAccount && masked !== value
+        return (
+            <SensitiveValue
+                id={id}
+                label={label}
+                maskedValue={masked}
+                onReveal={canToggleReveal ? async () => value : undefined}
+            />
+        )
+    }
 
     return (
         <div aria-label="回款审批资料">
@@ -116,7 +168,7 @@ export function WorkspaceReceiptApproval({
             </DetailWorkspaceSection>
 
             <DetailWorkspaceSection title="到账依据" ariaLabel="到账依据">
-                <DetailWorkspaceFacts columns={2}>
+                <DetailWorkspaceFacts columns={bankAccountValue ? 3 : 2}>
                     <DetailWorkspaceFact
                         label="付款主体"
                         value={
@@ -126,42 +178,64 @@ export function WorkspaceReceiptApproval({
                             "未记录"
                         }
                     />
+                    {bankAccountEntry && bankAccountValue ? (
+                        <DetailWorkspaceFact
+                            label={bankAccountEntry.label}
+                            value={renderSensitiveBankField(
+                                `${prefix}-bank-account`,
+                                bankAccountEntry.label,
+                                bankAccountValue,
+                            )}
+                        />
+                    ) : null}
                     <DetailWorkspaceFact
                         label="银行流水／凭证引用"
-                        numeric
-                        value={bankReference || "本次提交未记录"}
+                        numeric={!bankReference}
+                        value={
+                            bankReference
+                                ? renderSensitiveBankField(
+                                      `${prefix}-bank-reference`,
+                                      "银行流水／凭证引用",
+                                      bankReference,
+                                  )
+                                : "本次提交未记录"
+                        }
                     />
                 </DetailWorkspaceFacts>
-                <div className="space-y-2 border-t border-grid pt-3">
-                    <p className="text-xs text-muted-foreground">
-                        提交凭证
-                        {materials.data
-                            ? ` · ${materials.data.attachments.length} 份`
-                            : ""}
-                    </p>
-                    {materials.isPending ? (
-                        <p
-                            role="status"
-                            className="text-xs text-muted-foreground"
-                        >
-                            正在读取此次提交的凭证…
+                {!hideEmbeddedMaterials ? (
+                    <div className="space-y-2 border-t border-grid pt-3">
+                        <p className="text-xs text-muted-foreground">
+                            提交凭证
+                            {materials.data
+                                ? ` · ${materials.data.attachments.length} 份`
+                                : ""}
                         </p>
-                    ) : materials.isError ? (
-                        <BusinessFailureState
-                            id={`${prefix}-materials-retry`}
-                            title="提交资料读取失败"
-                            error={materials.error}
-                            onRetry={() => void materials.refetch()}
-                        />
-                    ) : (
-                        <ApprovalMaterialFiles
-                            instanceId={instanceId}
-                            attachments={materials.data.attachments}
-                            idPrefix={`${prefix}-file`}
-                            emptyMessage="暂无可查看的到账凭证，请联系提交人核对。"
-                        />
-                    )}
-                </div>
+                        {materials.isPending ? (
+                            <p
+                                role="status"
+                                className="text-xs text-muted-foreground"
+                            >
+                                正在读取此次提交的凭证…
+                            </p>
+                        ) : materials.isError ? (
+                            <BusinessFailureState
+                                id={`${prefix}-materials-retry`}
+                                title="提交资料读取失败"
+                                error={materials.error}
+                                onRetry={() => void materials.refetch()}
+                            />
+                        ) : (
+                            <ApprovalMaterialFiles
+                                instanceId={instanceId}
+                                attachments={materials.data.attachments}
+                                idPrefix={`${prefix}-file`}
+                                emptyMessage="暂无可查看的到账凭证，请联系提交人核对。"
+                                onSelectFile={onSelectFile}
+                                activeFileId={activeFileId}
+                            />
+                        )}
+                    </div>
+                ) : null}
             </DetailWorkspaceSection>
 
             <DetailWorkspaceSection

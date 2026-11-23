@@ -19,6 +19,10 @@ export interface InboxCursor {
     before_created_at: number
     before_id: string
 }
+export interface ReadAllNotificationsResult {
+    updated_count?: number
+}
+
 export const getInbox = (cursor?: InboxCursor) =>
     apiGet<InboxPage>(
         "/account/notifications",
@@ -26,3 +30,7 @@ export const getInbox = (cursor?: InboxCursor) =>
     )
 export const readNotification = (id: string) =>
     apiPost<void>(`/account/notifications/${encodeURIComponent(id)}/read`)
+export const readAllNotifications = () =>
+    apiPost<ReadAllNotificationsResult | void>(
+        "/account/notifications/read-all",
+    )

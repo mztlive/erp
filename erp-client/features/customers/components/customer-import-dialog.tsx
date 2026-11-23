@@ -70,9 +70,9 @@ export function CustomerImportDialog({
         >
             <DialogContent
                 id="customers-import-dialog"
+                size="xl"
                 closeButtonId="customers-import-dismiss"
                 showCloseButton={!busy}
-                className="max-h-[90dvh] overflow-y-auto sm:max-w-3xl"
             >
                 <DialogHeader>
                     <DialogTitle>批量导入客户</DialogTitle>

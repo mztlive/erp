@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogHeader,
     DialogTitle,
@@ -78,9 +79,10 @@ export function FulfillmentAddressDialog({
             }}
         >
             <DialogContent
+                size="lg"
+                scroll="body"
                 closeButtonId={`${prefix}-close`}
                 showCloseButton={!busy}
-                className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl"
             >
                 <DialogHeader>
                     <DialogTitle>
@@ -112,19 +114,23 @@ export function FulfillmentAddressDialog({
                         onBusyChange={setBusy}
                     />
                 ) : query.isError ? (
-                    <div role="alert" className="space-y-3">
-                        <p>{query.error.message}</p>
-                        <Button
-                            id={`${prefix}-retry`}
-                            onClick={() => void query.refetch()}
-                        >
-                            重新读取
-                        </Button>
-                    </div>
+                    <DialogBody>
+                        <div role="alert" className="space-y-3">
+                            <p>{query.error.message}</p>
+                            <Button
+                                id={`${prefix}-retry`}
+                                onClick={() => void query.refetch()}
+                            >
+                                重新读取
+                            </Button>
+                        </div>
+                    </DialogBody>
                 ) : (
-                    <p className="text-xs text-muted-foreground">
-                        正在读取地址…
-                    </p>
+                    <DialogBody>
+                        <p className="text-xs text-muted-foreground">
+                            正在读取地址…
+                        </p>
+                    </DialogBody>
                 )}
             </DialogContent>
         </Dialog>
@@ -306,119 +312,54 @@ function AddressEditor({
     return (
         <form
             id={`${prefix}-form`}
-            className="space-y-4"
+            className="flex min-h-0 flex-1 flex-col"
             onSubmit={(event) => {
                 event.preventDefault()
                 void form.handleSubmit()
             }}
         >
-            {unavailable && (
-                <p role="alert" className="text-body-compact text-destructive">
-                    {unavailable}
-                </p>
-            )}
-            {data.source_changed && (
-                <p
-                    role="status"
-                    className="text-body-compact text-warning-soft-foreground"
-                >
-                    {action.mode === "edit"
-                        ? "销售内容已变化，请核对最新收件信息。"
-                        : "销售内容已变化，请重新核对分配数量。"}
-                </p>
-            )}
-            {action.mode === "delete" ? (
-                <p className="text-body-compact leading-6">
-                    {action.destination.recipient} · {action.destination.phone}
-                    <br />
-                    {action.destination.address}
-                </p>
-            ) : (
-                <>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        {(["recipient", "phone"] as const).map((name) => (
-                            <form.Field key={name} name={name}>
-                                {(field) => (
-                                    <div className="space-y-2">
-                                        <Label htmlFor={`${prefix}-${name}`}>
-                                            {name === "recipient"
-                                                ? "收货人"
-                                                : "联系电话"}
-                                        </Label>
-                                        <Input
-                                            id={`${prefix}-${name}`}
-                                            value={field.state.value}
-                                            disabled={locked}
-                                            onChange={(event) =>
-                                                field.handleChange(
-                                                    event.target.value,
-                                                )
-                                            }
-                                        />
-                                    </div>
-                                )}
-                            </form.Field>
-                        ))}
-                    </div>
-                    <form.Field name="region_code">
-                        {(field) => (
-                            <div className="space-y-2">
-                                <Label htmlFor={`${prefix}-region-province`}>
-                                    地区
-                                </Label>
-                                <RegionCascadeSelect
-                                    idPrefix={`${prefix}-region`}
-                                    leafOnly
-                                    value={field.state.value}
-                                    disabled={locked}
-                                    onValueChange={field.handleChange}
-                                />
-                            </div>
-                        )}
-                    </form.Field>
-                    <form.Field name="address">
-                        {(field) => (
-                            <div className="space-y-2">
-                                <Label htmlFor={`${prefix}-address`}>
-                                    详细地址
-                                </Label>
-                                <Input
-                                    id={`${prefix}-address`}
-                                    value={field.state.value}
-                                    disabled={locked}
-                                    onChange={(event) =>
-                                        field.handleChange(event.target.value)
-                                    }
-                                />
-                            </div>
-                        )}
-                    </form.Field>
-                    {action.mode === "add" && (
-                        <div className="max-h-64 space-y-3 overflow-y-auto overscroll-contain">
-                            {editable.map((line, index) => (
-                                <form.Field
-                                    key={line.line_id}
-                                    name={`quantities[${index}].quantity`}
-                                >
+            <DialogBody className="space-y-4">
+                {unavailable && (
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
+                        {unavailable}
+                    </p>
+                )}
+                {data.source_changed && (
+                    <p
+                        role="status"
+                        className="text-body-compact text-warning-soft-foreground"
+                    >
+                        {action.mode === "edit"
+                            ? "销售内容已变化，请核对最新收件信息。"
+                            : "销售内容已变化，请重新核对分配数量。"}
+                    </p>
+                )}
+                {action.mode === "delete" ? (
+                    <p className="text-body-compact leading-6">
+                        {action.destination.recipient} ·{" "}
+                        {action.destination.phone}
+                        <br />
+                        {action.destination.address}
+                    </p>
+                ) : (
+                    <>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            {(["recipient", "phone"] as const).map((name) => (
+                                <form.Field key={name} name={name}>
                                     {(field) => (
-                                        <div className="flex items-center gap-3">
+                                        <div className="space-y-2">
                                             <Label
-                                                htmlFor={`${prefix}-${toAutomationIdSegment(line.line_id)}-quantity`}
-                                                className="min-w-0 flex-1"
+                                                htmlFor={`${prefix}-${name}`}
                                             >
-                                                {line.item_name}
+                                                {name === "recipient"
+                                                    ? "收货人"
+                                                    : "联系电话"}
                                             </Label>
-                                            <span className="text-xs text-muted-foreground">
-                                                可分配{" "}
-                                                {compactFixed(
-                                                    maximum(line.line_id),
-                                                )}{" "}
-                                                {line.unit}
-                                            </span>
                                             <Input
-                                                id={`${prefix}-${toAutomationIdSegment(line.line_id)}-quantity`}
-                                                className="w-24"
-                                                inputMode="decimal"
+                                                id={`${prefix}-${name}`}
                                                 value={field.state.value}
                                                 disabled={locked}
                                                 onChange={(event) =>
@@ -432,78 +373,161 @@ function AddressEditor({
                                 </form.Field>
                             ))}
                         </div>
-                    )}
-                    {action.mode === "add" &&
-                        editable.every(
-                            (line) =>
-                                compareDecimal(maximum(line.line_id), "0", 6) <=
-                                0,
-                        ) && (
-                            <p className="text-xs text-muted-foreground">
-                                当前商品已全部分配，暂无可分配到新地址的商品。
-                            </p>
+                        <form.Field name="region_code">
+                            {(field) => (
+                                <div className="space-y-2">
+                                    <Label
+                                        htmlFor={`${prefix}-region-province`}
+                                    >
+                                        地区
+                                    </Label>
+                                    <RegionCascadeSelect
+                                        idPrefix={`${prefix}-region`}
+                                        leafOnly
+                                        value={field.state.value}
+                                        disabled={locked}
+                                        onValueChange={field.handleChange}
+                                    />
+                                </div>
+                            )}
+                        </form.Field>
+                        <form.Field name="address">
+                            {(field) => (
+                                <div className="space-y-2">
+                                    <Label htmlFor={`${prefix}-address`}>
+                                        详细地址
+                                    </Label>
+                                    <Input
+                                        id={`${prefix}-address`}
+                                        value={field.state.value}
+                                        disabled={locked}
+                                        onChange={(event) =>
+                                            field.handleChange(
+                                                event.target.value,
+                                            )
+                                        }
+                                    />
+                                </div>
+                            )}
+                        </form.Field>
+                        {action.mode === "add" && (
+                            <div className="max-h-64 space-y-3 overflow-y-auto overscroll-contain">
+                                {editable.map((line, index) => (
+                                    <form.Field
+                                        key={line.line_id}
+                                        name={`quantities[${index}].quantity`}
+                                    >
+                                        {(field) => (
+                                            <div className="flex items-center gap-3">
+                                                <Label
+                                                    htmlFor={`${prefix}-${toAutomationIdSegment(line.line_id)}-quantity`}
+                                                    className="min-w-0 flex-1"
+                                                >
+                                                    {line.item_name}
+                                                </Label>
+                                                <span className="text-xs text-muted-foreground">
+                                                    可分配{" "}
+                                                    {compactFixed(
+                                                        maximum(line.line_id),
+                                                    )}{" "}
+                                                    {line.unit}
+                                                </span>
+                                                <Input
+                                                    id={`${prefix}-${toAutomationIdSegment(line.line_id)}-quantity`}
+                                                    className="w-24"
+                                                    inputMode="decimal"
+                                                    value={field.state.value}
+                                                    disabled={locked}
+                                                    onChange={(event) =>
+                                                        field.handleChange(
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                />
+                                            </div>
+                                        )}
+                                    </form.Field>
+                                ))}
+                            </div>
                         )}
-                </>
-            )}
-            <form.Field name="reason">
-                {(field) => (
-                    <div className="space-y-2">
-                        <Label htmlFor={`${prefix}-reason`}>
-                            调整原因{hasAddresses ? "" : "（选填）"}
-                        </Label>
-                        <Textarea
-                            id={`${prefix}-reason`}
-                            maxLength={500}
-                            value={field.state.value}
-                            disabled={locked}
-                            onChange={(event) =>
-                                field.handleChange(event.target.value)
-                            }
-                        />
-                    </div>
+                        {action.mode === "add" &&
+                            editable.every(
+                                (line) =>
+                                    compareDecimal(
+                                        maximum(line.line_id),
+                                        "0",
+                                        6,
+                                    ) <= 0,
+                            ) && (
+                                <p className="text-xs text-muted-foreground">
+                                    当前商品已全部分配，暂无可分配到新地址的商品。
+                                </p>
+                            )}
+                    </>
                 )}
-            </form.Field>
-            {requiresReset && (
-                <form.Field name="reset_packages">
+                <form.Field name="reason">
                     {(field) => (
-                        <Label
-                            htmlFor={`${prefix}-reset`}
-                            className="items-start text-xs font-normal leading-5"
-                        >
-                            <Checkbox
-                                id={`${prefix}-reset`}
-                                checked={field.state.value}
+                        <div className="space-y-2">
+                            <Label htmlFor={`${prefix}-reason`}>
+                                调整原因{hasAddresses ? "" : "（选填）"}
+                            </Label>
+                            <Textarea
+                                id={`${prefix}-reason`}
+                                maxLength={500}
+                                value={field.state.value}
                                 disabled={locked}
-                                onCheckedChange={field.handleChange}
+                                onChange={(event) =>
+                                    field.handleChange(event.target.value)
+                                }
                             />
-                            我已确认：受影响的包裹需重新登记。
-                            {hasUnsavedChanges
-                                ? "本页尚未保存的录入需重新填写。"
-                                : ""}
-                        </Label>
+                        </div>
                     )}
                 </form.Field>
-            )}
-            <FormValidationSummary form={form} />
-            {mutation.isError && (
-                <p role="alert" className="text-body-compact text-destructive">
-                    {mutation.error.message}。输入已保留。
-                </p>
-            )}
-            {refreshError && (
-                <div role="alert">
-                    <p className="text-body-compact">
-                        地址已保存，任务刷新失败：{refreshError}
-                    </p>
-                    <Button
-                        id={`${prefix}-refresh`}
-                        type="button"
-                        onClick={() => void refresh()}
+                {requiresReset && (
+                    <form.Field name="reset_packages">
+                        {(field) => (
+                            <Label
+                                htmlFor={`${prefix}-reset`}
+                                className="items-start text-xs font-normal leading-5"
+                            >
+                                <Checkbox
+                                    id={`${prefix}-reset`}
+                                    checked={field.state.value}
+                                    disabled={locked}
+                                    onCheckedChange={field.handleChange}
+                                />
+                                我已确认：受影响的包裹需重新登记。
+                                {hasUnsavedChanges
+                                    ? "本页尚未保存的录入需重新填写。"
+                                    : ""}
+                            </Label>
+                        )}
+                    </form.Field>
+                )}
+                <FormValidationSummary form={form} />
+                {mutation.isError && (
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
                     >
-                        重新载入任务
-                    </Button>
-                </div>
-            )}
+                        {mutation.error.message}。输入已保留。
+                    </p>
+                )}
+                {refreshError && (
+                    <div role="alert">
+                        <p className="text-body-compact">
+                            地址已保存，任务刷新失败：{refreshError}
+                        </p>
+                        <Button
+                            id={`${prefix}-refresh`}
+                            type="button"
+                            onClick={() => void refresh()}
+                        >
+                            重新载入任务
+                        </Button>
+                    </div>
+                )}
+            </DialogBody>
             <DialogFooter>
                 <Button
                     id={`${prefix}-cancel`}

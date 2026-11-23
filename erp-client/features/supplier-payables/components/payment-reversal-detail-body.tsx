@@ -25,12 +25,14 @@ import { formatDateTime } from "@/lib/datetime"
  */
 export function PaymentReversalDetailBody({
     row,
+    approvalActionsInFooter = false,
     workItemId,
     expectedTaskVersion,
     workItemAllowedActions,
     onDecisionApplied,
 }: {
     row: PaymentReversalRow
+    approvalActionsInFooter?: boolean
     workItemId?: string
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
@@ -85,6 +87,9 @@ export function PaymentReversalDetailBody({
             </PreviewSection>
             <PreviewSection title="审批记录">
                 <PaymentReversalApprovalArea
+                    presentation={
+                        approvalActionsInFooter ? "timeline" : "default"
+                    }
                     phase={paymentReversalApprovalPhase(
                         row.approval,
                         row.status === "in_approval"

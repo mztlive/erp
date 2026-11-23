@@ -9,6 +9,7 @@ import {
     CircleAlertIcon,
     CopyIcon,
     ShieldAlertIcon,
+    TriangleAlertIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -105,7 +106,7 @@ export function SystemFeedbackPanel() {
                 size="icon-sm"
                 className={
                     problemCount > 0
-                        ? "relative text-foreground hover:text-foreground"
+                        ? "relative border border-warning-border bg-warning-soft text-warning-soft-foreground hover:bg-warning-soft/80 hover:text-warning-soft-foreground"
                         : "text-muted-foreground hover:text-foreground"
                 }
                 aria-label={`系统提示，${problemCount} 项`}
@@ -119,10 +120,10 @@ export function SystemFeedbackPanel() {
                     feedbackStore().open(true)
                 }}
             >
-                <CircleAlertIcon className="size-4" aria-hidden />
+                <TriangleAlertIcon className="size-4" aria-hidden />
                 <span className="sr-only">系统提示</span>
                 {problemCount > 0 ? (
-                    <span className="num pointer-events-none absolute top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-tiny font-semibold leading-none text-destructive-foreground ring-2 ring-card">
+                    <span className="num pointer-events-none absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border border-warning-border bg-warning-soft px-1 text-tiny leading-none font-semibold text-warning-soft-foreground ring-2 ring-card">
                         {problemCount > 99 ? "99+" : problemCount}
                     </span>
                 ) : null}

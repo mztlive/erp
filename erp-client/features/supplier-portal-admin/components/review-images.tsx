@@ -1,25 +1,27 @@
 "use client"
+
 import Image from "next/image"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { DownloadIcon, ZoomInIcon } from "lucide-react"
+
 import {
     DetailWorkspaceSection,
     detailWorkspaceStyles,
 } from "@/components/business/detail-workspace"
+import {
+    UnifiedMaterialViewer,
+    type MaterialFileItem,
+} from "@/components/business/unified-material-viewer"
+import { Button } from "@/components/ui/button"
 import type {
     NewProductInput,
     PortalApplication,
 } from "@/features/supplier-portal/types"
-import { Button, buttonVariants } from "@/components/ui/button"
-import {
-    Dialog,
-    DialogContent,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { usePortalReviewFile } from "../hooks"
+import { downloadBlob } from "@/lib/download-blob"
+import { portalReviewFile } from "../api"
+import { portalAdminKeys, usePortalReviewFile } from "../hooks"
 
 function ReviewImage({
     applicationId,
@@ -30,7 +32,7 @@ function ReviewImage({
     applicationId: string
     id: string
     label: string
-    onPreview: (preview: { id: string; url: string; label: string }) => void
+    onPreview: (id: string) => void
 }) {
     const query = usePortalReviewFile(applicationId, id)
     const [url, setUrl] = useState<string | null>(null)
@@ -55,7 +57,7 @@ function ReviewImage({
                         id={`supplier-portal-review-image-preview-${seg}`}
                         type="button"
                         aria-label={`放大查看 ${label}`}
-                        onClick={() => onPreview({ id, url, label })}
+                        onClick={() => onPreview(id)}
                         className="group relative flex h-36 w-full items-center justify-center overflow-hidden bg-muted/25 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                         <Image
@@ -109,31 +111,67 @@ export function PortalReviewImages({
 }: {
     application: PortalApplication
 }) {
-    const [preview, setPreview] = useState<{
-        id: string
-        url: string
-        label: string
-    } | null>(null)
+    const queryClient = useQueryClient()
+    const [activeFileId, setActiveFileId] = useState<string | null>(null)
     const product = (application.submitted_snapshot ??
         application.input) as unknown as NewProductInput
-    const rows = [
-        ...(product.image_asset_ids ?? []).map((id) => ({
-            id,
-            label: "商品图片",
-        })),
-        ...(product.file_asset_ids ?? []).map((id) => ({
-            id,
-            label: "商品资料图片",
-        })),
-        ...(product.skus ?? []).flatMap((row) =>
-            row.image_asset_id
-                ? [{ id: row.image_asset_id, label: `${row.name} · 规格图片` }]
-                : [],
-        ),
-    ]
-    const unique = rows.filter(
-        (row, index) => rows.findIndex((item) => item.id === row.id) === index,
+
+    const unique = useMemo(() => {
+        const rows: { id: string; label: string; mimeType?: string }[] = [
+            ...(product.image_asset_ids ?? []).map((id) => ({
+                id,
+                label: "商品图片",
+                mimeType: "image/*",
+            })),
+            ...(product.file_asset_ids ?? []).map((id) => ({
+                id,
+                label: "商品资料图片",
+            })),
+            ...(product.skus ?? []).flatMap((row) =>
+                row.image_asset_id
+                    ? [
+                          {
+                              id: row.image_asset_id,
+                              label: `${row.name} · 规格图片`,
+                              mimeType: "image/*",
+                          },
+                      ]
+                    : [],
+            ),
+        ]
+        return rows.filter(
+            (row, index) =>
+                rows.findIndex((item) => item.id === row.id) === index,
+        )
+    }, [product.file_asset_ids, product.image_asset_ids, product.skus])
+
+    const materialItems = useMemo<readonly MaterialFileItem[]>(
+        () =>
+            unique.map((row) => {
+                const fetchBlob = () =>
+                    queryClient.fetchQuery({
+                        queryKey: [
+                            ...portalAdminKeys.all,
+                            "image",
+                            application.id,
+                            row.id,
+                        ],
+                        queryFn: () => portalReviewFile(application.id, row.id),
+                    })
+                return {
+                    id: row.id,
+                    name: row.label,
+                    mimeType: row.mimeType,
+                    loadPreview: () => fetchBlob(),
+                    onDownload: async () => {
+                        const blob = await fetchBlob()
+                        downloadBlob(blob, row.label)
+                    },
+                }
+            }),
+        [application.id, queryClient, unique],
     )
+
     if (!unique.length) return null
     return (
         <DetailWorkspaceSection title="供应商提报图片及资料">
@@ -144,66 +182,21 @@ export function PortalReviewImages({
                         applicationId={application.id}
                         id={row.id}
                         label={row.label}
-                        onPreview={setPreview}
+                        onPreview={setActiveFileId}
                     />
                 ))}
             </div>
-            <Dialog
-                open={preview !== null}
+            <UnifiedMaterialViewer
+                mode="dialog"
+                files={materialItems}
+                activeFileId={activeFileId ?? undefined}
+                onActiveFileChange={setActiveFileId}
+                open={activeFileId !== null}
                 onOpenChange={(open) => {
-                    if (!open) setPreview(null)
+                    if (!open) setActiveFileId(null)
                 }}
-            >
-                <DialogContent
-                    closeButtonId="supplier-portal-review-image-dialog-close"
-                    className="sm:max-w-3xl"
-                >
-                    <DialogHeader>
-                        <DialogTitle>
-                            {preview?.label ?? "图片预览"}
-                        </DialogTitle>
-                    </DialogHeader>
-                    {preview ? (
-                        <div className="flex max-h-[70vh] items-center justify-center overflow-auto bg-muted/20 p-4">
-                            <Image
-                                src={preview.url}
-                                alt={preview.label}
-                                width={960}
-                                height={720}
-                                unoptimized
-                                className="max-h-[65vh] w-auto object-contain"
-                            />
-                        </div>
-                    ) : null}
-                    <DialogFooter>
-                        {preview ? (
-                            <a
-                                id="supplier-portal-review-image-dialog-download"
-                                href={preview.url}
-                                download={preview.label}
-                                className={buttonVariants({
-                                    variant: "outline",
-                                    size: "sm",
-                                })}
-                            >
-                                <DownloadIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                />
-                                下载原图
-                            </a>
-                        ) : null}
-                        <Button
-                            id="supplier-portal-review-image-dialog-dismiss"
-                            type="button"
-                            size="sm"
-                            onClick={() => setPreview(null)}
-                        >
-                            关闭
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                idPrefix="supplier-portal-review-image-dialog"
+            />
         </DetailWorkspaceSection>
     )
 }

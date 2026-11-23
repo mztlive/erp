@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogClose,
     DialogContent,
     DialogDescription,
@@ -21,7 +22,6 @@ import { Input } from "@/components/ui/input"
 import { getErrorMessage } from "@/lib/api/errors"
 import { Label } from "@/components/ui/label"
 import type { CategoryFormValues } from "@/features/master-data/components/category/category-form-schema"
-import { DialogScrollBody } from "@/features/master-data/components/shared/action-dialog-shared"
 import { useMasterDataListQuery } from "@/features/master-data/hooks/queries"
 import {
     buildCategoryForest,
@@ -164,7 +164,8 @@ export function CategoryFormDialogFrame({
                 }}
             >
                 <DialogContent
-                    className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg"
+                    size="md"
+                    scroll="body"
                     closeButtonId={`${prefix}-close`}
                 >
                     <DialogHeader>
@@ -173,37 +174,37 @@ export function CategoryFormDialogFrame({
                             <DialogDescription>{description}</DialogDescription>
                         ) : null}
                     </DialogHeader>
-                    <DialogScrollBody>
-                        {result?.outcome === "blocked" ||
-                        result?.outcome === "conflict" ? (
-                            <FormalActionResult
-                                status="blocked"
-                                title={
-                                    result.outcome === "conflict"
-                                        ? "分类已更新，请重新打开后修改"
-                                        : blockedTitle
-                                }
-                                description={result.message}
-                            />
-                        ) : null}
-                        {error ? (
-                            <FormalActionResult
-                                status="unknown"
-                                title="暂未确认保存结果"
-                                description={getErrorMessage(
-                                    error,
-                                    "请保留当前输入，核对分类资料后再重试。",
-                                )}
-                            />
-                        ) : null}
-                        {result?.outcome !== "succeeded" ? (
-                            <form
-                                className="grid gap-3"
-                                onSubmit={(event) => {
-                                    event.preventDefault()
-                                    void form.handleSubmit()
-                                }}
-                            >
+                    {result?.outcome !== "succeeded" ? (
+                        <form
+                            className="flex min-h-0 flex-1 flex-col overflow-hidden"
+                            onSubmit={(event) => {
+                                event.preventDefault()
+                                void form.handleSubmit()
+                            }}
+                        >
+                            <DialogBody className="space-y-4">
+                                {result?.outcome === "blocked" ||
+                                result?.outcome === "conflict" ? (
+                                    <FormalActionResult
+                                        status="blocked"
+                                        title={
+                                            result.outcome === "conflict"
+                                                ? "分类已更新，请重新打开后修改"
+                                                : blockedTitle
+                                        }
+                                        description={result.message}
+                                    />
+                                ) : null}
+                                {error ? (
+                                    <FormalActionResult
+                                        status="unknown"
+                                        title="暂未确认保存结果"
+                                        description={getErrorMessage(
+                                            error,
+                                            "请保留当前输入，核对分类资料后再重试。",
+                                        )}
+                                    />
+                                ) : null}
                                 <fieldset
                                     disabled={pending || disabled}
                                     className="grid min-w-0 gap-4"
@@ -365,36 +366,34 @@ export function CategoryFormDialogFrame({
                                         )}
                                     />
                                 </fieldset>
-                                <DialogFooter>
-                                    <DialogClose
-                                        render={
-                                            <Button
-                                                id={`${prefix}-cancel`}
-                                                type="button"
-                                                variant="outline"
-                                                disabled={pending || disabled}
-                                            />
-                                        }
-                                    >
-                                        取消
-                                    </DialogClose>
-                                    <form.AppForm>
-                                        <form.SubmitButton
-                                            id={`${prefix}-submit`}
-                                            label={
-                                                pending
-                                                    ? "提交中…"
-                                                    : submitLabel
-                                            }
-                                            pendingLabel="提交中…"
-                                            loading={pending}
+                            </DialogBody>
+                            <DialogFooter>
+                                <DialogClose
+                                    render={
+                                        <Button
+                                            id={`${prefix}-cancel`}
+                                            type="button"
+                                            variant="outline"
                                             disabled={pending || disabled}
                                         />
-                                    </form.AppForm>
-                                </DialogFooter>
-                            </form>
-                        ) : null}
-                    </DialogScrollBody>
+                                    }
+                                >
+                                    取消
+                                </DialogClose>
+                                <form.AppForm>
+                                    <form.SubmitButton
+                                        id={`${prefix}-submit`}
+                                        label={
+                                            pending ? "提交中…" : submitLabel
+                                        }
+                                        pendingLabel="提交中…"
+                                        loading={pending}
+                                        disabled={pending || disabled}
+                                    />
+                                </form.AppForm>
+                            </DialogFooter>
+                        </form>
+                    ) : null}
                 </DialogContent>
             </Dialog>
             <DiscardConfirmDialog

@@ -1,16 +1,14 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useRef, useState } from "react"
+import { useState } from "react"
 import { format } from "date-fns"
 import { ArrowLeftIcon, ExternalLinkIcon } from "lucide-react"
-import { z } from "zod"
 
-import { useAppForm } from "@/components/form"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogHeader,
     DialogTitle,
@@ -28,26 +26,25 @@ import {
     DetailWorkspacePage,
     DetailWorkspaceSection,
     DetailWorkspaceSkeleton,
-    FormalActionConfirmDialog,
     MoneyValue,
     detailWorkspaceStyles,
     type DetailWorkspaceBackLink,
 } from "@/components/business"
 import type { StatusTone } from "@/components/ui/status-badge"
 import { ApprovalReadonly } from "@/features/approval-workflow/components/approval-readonly"
+import { ApprovalWithdrawDialog } from "@/features/approval-workflow/components/approval-withdraw-dialog"
 import {
     mapDocumentApprovalViewDto,
     type DocumentApprovalView,
 } from "@/features/approval-workflow/types"
 import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
-import { getErrorMessage, isNotFoundError } from "@/lib/api/errors"
+import { isNotFoundError } from "@/lib/api/errors"
 import { subtractFixed } from "@/lib/fixed-decimal"
-import { classifyFormalCommandError } from "@/lib/formal-command"
 import { hasPermission } from "@/lib/permissions"
 import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
 import { WORKSPACE_QUEUE_ROUTES } from "@/lib/workspace-queue-routes"
 
-import { cancelRequest, requestStatusLabels, type InvoiceRequest } from "../api"
+import { requestStatusLabels, type InvoiceRequest } from "../api"
 import {
     useInvoiceRequest,
     useInvoiceRequestCommands,
@@ -176,12 +173,13 @@ export function InvoiceRequestDetail({
                 id="invoice-request-detail-dialog"
                 closeButtonId="invoice-request-detail-dialog-close"
                 showCloseButton={!closeBlocked}
-                className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-4xl"
+                size="xl"
+                scroll="body"
             >
-                <DialogHeader className="shrink-0">
+                <DialogHeader>
                     <DialogTitle>开票申请详情</DialogTitle>
                 </DialogHeader>
-                <div className="min-h-0 flex-1 overflow-y-auto">{content}</div>
+                <DialogBody>{content}</DialogBody>
             </DialogContent>
         </Dialog>
     )
@@ -710,7 +708,7 @@ function InvoiceRequestDetailBody({
     )
 }
 
-/** 撤回申请确认弹窗：保留详情页上下文与原因校验，未知结果期间锁定输入仅允许同载荷重试。 */
+/** 撤回申请确认弹窗：统一复用 ApprovalWithdrawDialog（BPM 512 UTF-8 字节校验与未知结果核对）。 */
 function CancelRequestDialog({
     open,
     onOpenChange,
@@ -729,52 +727,16 @@ function CancelRequestDialog({
     onCloseBlockedChange: (blocked: boolean) => void
 }) {
     const { cancel } = useInvoiceRequestCommands()
-    const pending = useRef<Parameters<typeof cancelRequest>[0] | null>(null)
-    const [uncertain, setUncertain] = useState(false)
-    const [submitError, setSubmitError] = useState<string | null>(null)
-    const reasonSchema = z
-        .string()
-        .trim()
-        .min(1, "请输入撤回原因")
-        .max(1000, "撤回原因最多 1000 字")
-
-    const form = useAppForm({
-        defaultValues: {
-            reason: reviseRejected ? "按驳回意见修改原单后重新提交" : "",
-        },
-        validators: {
-            onSubmit: z.object({
-                reason: reasonSchema,
-            }),
-        },
-    })
-
-    useEffect(() => {
-        if (!open) return
-        pending.current = null
-        setUncertain(false)
-        setSubmitError(null)
-        form.reset({
-            reason: reviseRejected ? "按驳回意见修改原单后重新提交" : "",
-        })
-    }, [form, open, reviseRejected])
-
-    useEffect(() => {
-        onCloseBlockedChange(open && (cancel.isPending || uncertain))
-        return () => onCloseBlockedChange(false)
-    }, [cancel.isPending, onCloseBlockedChange, open, uncertain])
-
     const amount = request.data?.amount || "0.00"
 
     return (
-        <FormalActionConfirmDialog
+        <ApprovalWithdrawDialog
             idPrefix="invoice-request-cancel-dialog"
+            reasonId="invoice-request-cancel-reason"
             open={open}
-            onOpenChange={(next) => {
-                if (!next && (cancel.isPending || uncertain)) return
-                onOpenChange(next)
-            }}
+            onOpenChange={onOpenChange}
             pending={cancel.isPending}
+            onCloseBlockedChange={onCloseBlockedChange}
             title={
                 reviseRejected
                     ? `撤回并修改 ${request.request_no || "开票申请"}`
@@ -783,14 +745,10 @@ function CancelRequestDialog({
             description="请确认撤回影响并填写撤回原因，详情信息将继续保留在当前页面。"
             actionLabel={reviseRejected ? "撤回并修改原单" : "撤回申请"}
             confirmLabel={
-                uncertain
-                    ? "核对撤回结果"
-                    : reviseRejected
-                      ? "确认撤回并修改原单"
-                      : "确认撤回申请"
+                reviseRejected ? "确认撤回并修改原单" : "确认撤回申请"
             }
+            unknownConfirmLabel="核对撤回结果"
             cancelLabel="返回详情"
-            actionVariant="destructive"
             fromStatus={status}
             toStatus={{ label: "草稿", tone: "neutral" }}
             summary={[
@@ -811,66 +769,18 @@ function CancelRequestDialog({
                     ? ["原申请编号和审批记录保留，修改后可重新提交审批。"]
                     : []),
             ]}
-            formContent={
-                <div className="space-y-3">
-                    <form.AppField name="reason">
-                        {(field) => (
-                            <field.TextareaField
-                                id="invoice-request-cancel-reason"
-                                label="撤回原因"
-                                placeholder="请说明撤回本次开票申请的原因"
-                                rows={3}
-                                maxLength={1000}
-                                required
-                                disabled={cancel.isPending || uncertain}
-                            />
-                        )}
-                    </form.AppField>
-                    {submitError ? (
-                        <Alert variant="destructive">
-                            <AlertDescription>{submitError}</AlertDescription>
-                        </Alert>
-                    ) : null}
-                </div>
-            }
-            onConfirmError={() => {
-                // 校验错误与请求错误均在弹窗表单区内展示
-            }}
-            onConfirm={async () => {
-                setSubmitError(null)
-                if (!pending.current) {
-                    const parsed = reasonSchema.safeParse(
-                        form.state.values.reason,
-                    )
-                    if (!parsed.success) {
-                        await form.validateAllFields("submit")
-                        throw new Error("请输入撤回原因")
-                    }
-                    pending.current = {
-                        id: request.id,
-                        expected_version: request.version,
-                        reason: parsed.data,
-                        idempotency_key: crypto.randomUUID(),
-                    }
-                }
-                try {
-                    await cancel.mutateAsync(pending.current)
-                    pending.current = null
-                    setUncertain(false)
-                    setSubmitError(null)
-                    await onDone()
-                } catch (error) {
-                    const isUnknown =
-                        classifyFormalCommandError(error) === "unknown"
-                    setUncertain(isUnknown)
-                    if (!isUnknown) pending.current = null
-                    setSubmitError(
-                        isUnknown
-                            ? "结果尚未确认，请点击「核对撤回结果」核对原请求，切勿重复操作。"
-                            : getErrorMessage(error, "撤回失败，请稍后重试。"),
-                    )
-                    throw error
-                }
+            reasonLabel="撤回原因"
+            reasonPlaceholder="请说明撤回本次开票申请的原因"
+            reviseRejected={reviseRejected}
+            createIdempotencyKey={() => crypto.randomUUID()}
+            onSubmitWithdraw={async ({ reason, idempotencyKey }) => {
+                await cancel.mutateAsync({
+                    id: request.id,
+                    expected_version: request.version,
+                    reason,
+                    idempotency_key: idempotencyKey,
+                })
+                await onDone()
             }}
         />
     )

@@ -3,6 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import {
+    ArrowLeftIcon,
     ArrowRightIcon,
     CircleCheckIcon,
     EyeIcon,
@@ -16,11 +17,9 @@ import {
 import {
     BusinessStatusBadge,
     BusinessFailureState,
-    SequentialProcessBar,
     ValidationSummary,
     WorkspaceTaskFooter,
     WorkspaceTaskPageSlot,
-    surfacePanelClassName,
     type ValidationIssue,
 } from "@/components/business"
 import {
@@ -61,7 +60,6 @@ import {
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { FulfillmentPaymentNotice } from "./fulfillment-payment-notice"
 import { FulfillmentGateStatus } from "./fulfillment-gate-status"
-import { FulfillmentDeliveryDialogSurface } from "./fulfillment-delivery-dialog-surface"
 
 export type FulfillmentWorkSurfaceProps = {
     operation: FulfillmentOperation
@@ -87,10 +85,6 @@ export type FulfillmentWorkSurfaceProps = {
     resultUnknown: boolean
     /** W01 内联作业面只处理任务绑定的单个对象。 */
     singleOperation?: boolean
-    deliveryDialog?: {
-        responsibleLabel: string
-        onClose?: () => void
-    }
     showBack?: boolean
     showSalesOrderLinks?: boolean
     onDraftChange: (next: FulfillmentDraft) => void
@@ -126,7 +120,6 @@ export function FulfillmentWorkSurface({
     headingRef,
     resultUnknown,
     singleOperation = false,
-    deliveryDialog,
     showBack = true,
     showSalesOrderLinks = true,
     onDraftChange,
@@ -175,71 +168,12 @@ export function FulfillmentWorkSurface({
     ]
         .filter(Boolean)
         .join(" · ")
-
-    if (
-        deliveryDialog &&
-        (draft.type === "SUPPLIER_DIRECT" || draft.type === "WAREHOUSE_SHIP")
-    ) {
-        return (
-            <>
-                {operation.loadWarnings?.map((message) => (
-                    <BusinessFailureState
-                        key={message}
-                        kind="business"
-                        title="部分关联资料读取失败"
-                        description={message}
-                    />
-                ))}
-                <FulfillmentDeliveryDialogSurface
-                    operation={operation}
-                    draft={draft}
-                    responsibleLabel={deliveryDialog.responsibleLabel}
-                    currentUrl={currentUrl}
-                    snapshotUpdatedAt={snapshotUpdatedAt}
-                    validationIssues={validationIssues}
-                    showValidation={canExecute && dirty}
-                    saveMessage={saveMessage}
-                    canExecute={canExecute}
-                    disabled={formalPending || resultUnknown}
-                    readOnlyNote={!canExecute ? readOnlyNote : undefined}
-                    headingRef={headingRef}
-                    onDraftChange={onDraftChange}
-                    actions={(locateDialogIssue) => (
-                        <>
-                            <Button
-                                id="fulfillment-operations-dialog-cancel"
-                                type="button"
-                                variant="outline"
-                                disabled={formalPending}
-                                onClick={deliveryDialog.onClose}
-                            >
-                                取消
-                            </Button>
-                            {canExecute ? (
-                                <FulfillmentExecuteActions
-                                    operation={operation}
-                                    singleOperation
-                                    compact
-                                    dirty={dirty}
-                                    supportsSave={supportsSave}
-                                    formalPending={formalPending}
-                                    savePending={savePending}
-                                    canPost={canPost}
-                                    validationIssues={validationIssues}
-                                    onLocate={locateDialogIssue}
-                                    autoNext={autoNext}
-                                    onSkip={onSkip}
-                                    onDiscard={onDiscard}
-                                    onSave={onSave}
-                                    onConfirm={onConfirm}
-                                />
-                            ) : null}
-                        </>
-                    )}
-                />
-            </>
-        )
-    }
+    const responsibilityTone =
+        responsibilityStatus === "blocked"
+            ? "destructive"
+            : responsibilityStatus === "assigned_to_me"
+              ? "info"
+              : "neutral"
 
     return (
         <div
@@ -260,39 +194,44 @@ export function FulfillmentWorkSurface({
                 />
             ))}
             {!singleOperation ? (
-                <SequentialProcessBar
+                <div
                     id="fulfillment-operations-work-surface-process-bar"
-                    current={position}
-                    total={total}
-                    showPosition={!singleOperation}
-                    responsibilityStatus={responsibilityStatus}
-                    responsibilityStatusLabel={responsibilityStatusLabel}
-                    showProcess={false}
-                    processLabel={
-                        OPERATION_ACTION_LABEL[operation.operationType]
-                    }
-                    // 正式确认只留卡片底栏一颗主按钮，避免与连续处理条文案打架
-                    showProcessNext={false}
-                    processDisabled={formalPending || !canPost}
-                    statusExtras={
-                        !paymentPending ? (
+                    className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2.5"
+                >
+                    <div className="flex flex-wrap items-center gap-2">
+                        {showBack ? (
+                            <Button
+                                id="fulfillment-operations-work-surface-back"
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={onBack}
+                            >
+                                <ArrowLeftIcon data-icon="inline-start" />
+                                返回
+                            </Button>
+                        ) : null}
+                        <span className="num text-xs text-muted-foreground">
+                            第 {position} / {total} 项
+                        </span>
+                        <BusinessStatusBadge
+                            context="list"
+                            label={responsibilityStatusLabel}
+                            tone={responsibilityTone}
+                        />
+                        {!paymentPending ? (
                             <FulfillmentGateStatus
                                 operation={operation}
                                 currentUrl={currentUrl}
                                 snapshotUpdatedAt={snapshotUpdatedAt}
                                 showPaymentAction={showSalesOrderLinks}
                             />
-                        ) : undefined
-                    }
-                    onBack={onBack}
-                    backLabel="返回"
-                    showBack={showBack}
-                    onProcess={onConfirm}
-                    onProcessNext={onConfirm}
-                />
+                        ) : null}
+                    </div>
+                </div>
             ) : null}
 
-            {!singleOperation ? (
+            <div className="flex items-center justify-between gap-2 pt-1">
                 <button
                     id="fulfillment-operations-work-surface-toggle-shortcuts"
                     type="button"
@@ -308,16 +247,16 @@ export function FulfillmentWorkSurface({
                           } · 再按 ? 收起`
                         : "按 ? 看快捷键"}
                 </button>
-            ) : null}
+            </div>
 
             <Card
                 size="sm"
                 className={
-                    singleOperation && addressPacking
-                        ? "min-h-0 flex-1 border-0 bg-transparent py-0 shadow-none"
-                        : singleOperation
-                          ? undefined
-                          : surfacePanelClassName
+                    singleOperation
+                        ? addressPacking
+                            ? "min-h-0 flex-1 border-0 bg-transparent py-0 shadow-none"
+                            : "border-0 bg-transparent py-0 shadow-none"
+                        : "border border-border/80 bg-card shadow-none"
                 }
             >
                 {singleOperation ? null : (
@@ -355,7 +294,9 @@ export function FulfillmentWorkSurface({
                     className={
                         singleOperation && addressPacking
                             ? "flex min-h-0 flex-1 flex-col gap-3 px-0"
-                            : "space-y-5"
+                            : singleOperation
+                              ? "space-y-5 px-0 py-4"
+                              : "space-y-5"
                     }
                 >
                     {singleOperation && addressPacking && (
@@ -790,14 +731,9 @@ function FulfillmentSourceContext({
                                     <Link
                                         id={`fulfillment-operations-work-surface-source-${toAutomationIdSegment(field.label)}`}
                                         href={href}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
                                         className="text-primary underline underline-offset-4"
                                     >
                                         {field.value}
-                                        <span className="sr-only">
-                                            （在新标签页打开{field.label}）
-                                        </span>
                                     </Link>
                                 ) : (
                                     field.value

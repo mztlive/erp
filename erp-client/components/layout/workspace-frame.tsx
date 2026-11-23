@@ -4,10 +4,13 @@ import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useQueryClient } from "@tanstack/react-query"
 import {
+    applyWorkspaceViewportDensity,
     handleWorkspaceCloseShortcut,
     interceptWorkspaceLink,
+    resolveWorkspaceViewportDensity,
     tabHref,
     workspaceHost,
+    type WorkspaceViewportDensity,
 } from "@/lib/workspace-tabs"
 import { workspaceFormState } from "@/lib/workspace-form-guard"
 import { subscribeNavDelivery } from "@/lib/nav-delivery"
@@ -119,12 +122,64 @@ export function WorkspaceFrame({ children }: { children: React.ReactNode }) {
         }
     }, [queryClient, report, router])
 
+    React.useEffect(() => {
+        const readInitialDensity = (): WorkspaceViewportDensity => {
+            const hostDensity = workspaceHost()?.getViewportDensity?.()
+            if (hostDensity) return hostDensity
+            try {
+                const inherited =
+                    window.parent?.document?.documentElement?.getAttribute(
+                        "data-viewport-density",
+                    )
+                if (
+                    inherited === "comfortable" ||
+                    inherited === "compact" ||
+                    inherited === "dense"
+                ) {
+                    return inherited
+                }
+            } catch {
+                // Ignore cross-origin parent inspection errors.
+            }
+            return resolveWorkspaceViewportDensity(
+                window.innerHeight,
+                window.innerWidth,
+            )
+        }
+        applyWorkspaceViewportDensity(document, readInitialDensity())
+
+        window.erpWorkspaceSetDensity = (density) => {
+            applyWorkspaceViewportDensity(document, density)
+        }
+        window.erpWorkspaceFocus = () => {
+            const current = document.activeElement
+            if (
+                current instanceof HTMLElement &&
+                current !== document.body &&
+                current !== document.documentElement
+            ) {
+                window.focus()
+                return
+            }
+            window.focus()
+            const main = document.getElementById("main-content")
+            if (main instanceof HTMLElement) {
+                main.focus({ preventScroll: true })
+            }
+        }
+        return () => {
+            delete window.erpWorkspaceSetDensity
+            delete window.erpWorkspaceFocus
+        }
+    }, [])
+
     return (
         <WorkspaceTabContext.Provider value={true}>
             <main
                 id="main-content"
+                tabIndex={-1}
                 aria-label="主工作区"
-                className="flex h-svh min-w-0 flex-col overflow-auto"
+                className="@container/workspace flex h-svh min-w-0 flex-col overflow-auto outline-none"
             >
                 <WorkspaceRefreshNotice />
                 {children}

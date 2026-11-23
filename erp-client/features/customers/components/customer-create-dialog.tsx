@@ -26,8 +26,8 @@ export function CustomerCreateDialog({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
+                size="xl"
                 closeButtonId="customers-create-dialog-close"
-                className="max-h-[88vh] overflow-y-auto sm:max-w-3xl"
             >
                 <DialogHeader>
                     <DialogTitle>新建客户</DialogTitle>

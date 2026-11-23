@@ -132,13 +132,10 @@ export function FulfillmentPaymentLink({
             render={
                 <Link
                     href={`/procurement/orders/${encodeURIComponent(purchaseOrderId)}?section=payable`}
-                    target="_blank"
-                    rel="noopener noreferrer"
                 />
             }
         >
             查看采购付款 <ArrowUpRightIcon data-icon="inline-end" />
-            <span className="sr-only">（在新标签页打开）</span>
         </Button>
     )
 }

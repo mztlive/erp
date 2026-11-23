@@ -236,7 +236,8 @@ export function OrganizationChangeDialog({
             }}
         >
             <DialogContent
-                className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-2xl overflow-x-hidden overflow-y-auto sm:max-w-2xl"
+                size="lg"
+                className="overflow-x-hidden"
                 closeButtonId="organization-change-dialog-close"
                 showCloseButton={!submitting}
                 onKeyDownCapture={(event) => {

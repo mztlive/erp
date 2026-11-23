@@ -41,6 +41,7 @@ export function WorkspaceIntegrationTask({
             aria-label="当前集成异常任务"
         >
             <IntegrationErrorsPage
+                key={item.workItemId}
                 forcedTaskId={
                     item.businessObjectType === "integration_error_task"
                         ? item.businessObjectId

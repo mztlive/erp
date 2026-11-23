@@ -1,8 +1,6 @@
 "use client"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { ApprovalSectionHeading } from "./section-heading"
 import {
     DescriptionDetails,
     DescriptionItem,
@@ -55,32 +53,30 @@ export function RuntimeSummary({
 }: {
     instance?: ApprovalRuntimeInstance
     className?: string
-    /** 对象中心 tab 内使用：标题与概览 text-sm 对齐，避免 CardTitle 偏大。 */
+    /** 对象中心 tab 或侧边抽屉内使用：标题与正文紧凑字号对齐。 */
     compact?: boolean
-    /** `flat` 用于详情工作面零边框通栏；位于 `.erp-detail-workspace-page` 内时也会自动扁平化。 */
+    /** 兼容旧调用参数；当前统一渲染无阴影扁平表面。 */
     variant?: "card" | "flat"
 }) {
+    void variant
+
+    const headingClassName = cn(
+        "font-semibold tracking-tight text-foreground",
+        compact ? "text-body-compact" : "text-section-title",
+    )
+
     if (!instance) {
         return (
-            <Card
-                size="sm"
+            <section
                 data-slot="approval-surface"
-                className={cn(
-                    variant === "flat"
-                        ? "border-0 bg-transparent shadow-none ring-0"
-                        : "border border-border shadow-sm",
-                    className,
-                )}
+                data-blocked="false"
+                className={cn("space-y-2", className)}
             >
-                <CardHeader className={cn(variant !== "flat" && "border-b")}>
-                    <ApprovalSectionHeading compact={compact}>
-                        审批摘要
-                    </ApprovalSectionHeading>
-                </CardHeader>
-                <CardContent className="text-body-compact text-muted-foreground">
+                <h2 className={headingClassName}>审批摘要</h2>
+                <p className="text-body-compact text-muted-foreground">
                     当前没有可展示的审批进度
-                </CardContent>
-            </Card>
+                </p>
+            </section>
         )
     }
 
@@ -103,64 +99,54 @@ export function RuntimeSummary({
     )
 
     return (
-        <Card
-            size="sm"
+        <section
             data-slot="approval-surface"
+            data-blocked={blocked ? "true" : "false"}
             className={cn(
-                variant === "flat" && !blocked
-                    ? "border-0 bg-transparent shadow-none ring-0"
-                    : "border border-border shadow-sm",
-                blocked && "border-destructive-border bg-destructive/5",
+                "space-y-4",
+                blocked &&
+                    "rounded-lg border border-destructive-border bg-destructive-soft/40 p-4",
                 className,
             )}
-            data-blocked={blocked ? "true" : "false"}
         >
-            <CardHeader
-                className={cn((variant !== "flat" || blocked) && "border-b")}
-            >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <ApprovalSectionHeading compact={compact}>
-                        {processLabel}
-                    </ApprovalSectionHeading>
-                    <StatusBadge
-                        tone={instanceStatusTone(instance.status)}
-                        label={displayInstanceStatus(instance.status)}
-                    />
-                </div>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-                <DescriptionList columns="three">
-                    <SummaryFact
-                        label="当前审批人"
-                        value={currentAssignee}
-                        emphasized
-                    />
-                    <SummaryFact label="当前节点" value={currentNode} />
-                    <SummaryFact
-                        label="当前轮次"
-                        value={displayRound(instance.currentRoundNo)}
-                    />
-                </DescriptionList>
-                {instance.latestRejection ? (
-                    <Alert variant="destructive">
-                        <AlertTitle>
-                            最近驳回{rejectionBy ? ` · ${rejectionBy}` : ""}
-                        </AlertTitle>
-                        <AlertDescription>
-                            {instance.latestRejection}
-                        </AlertDescription>
-                    </Alert>
-                ) : null}
-                {blocked ? (
-                    <Alert variant="destructive">
-                        <AlertTitle>审批受阻</AlertTitle>
-                        <AlertDescription>
-                            {instance.blockerMessage ??
-                                "当前审批无法继续，请按系统给出的恢复方式处理。"}
-                        </AlertDescription>
-                    </Alert>
-                ) : null}
-            </CardContent>
-        </Card>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className={headingClassName}>{processLabel}</h2>
+                <StatusBadge
+                    tone={instanceStatusTone(instance.status)}
+                    label={displayInstanceStatus(instance.status)}
+                />
+            </div>
+            <DescriptionList columns="three">
+                <SummaryFact
+                    label="当前审批人"
+                    value={currentAssignee}
+                    emphasized
+                />
+                <SummaryFact label="当前节点" value={currentNode} />
+                <SummaryFact
+                    label="当前轮次"
+                    value={displayRound(instance.currentRoundNo)}
+                />
+            </DescriptionList>
+            {instance.latestRejection ? (
+                <Alert variant="destructive">
+                    <AlertTitle>
+                        最近驳回{rejectionBy ? ` · ${rejectionBy}` : ""}
+                    </AlertTitle>
+                    <AlertDescription>
+                        {instance.latestRejection}
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+            {blocked ? (
+                <Alert variant="destructive">
+                    <AlertTitle>审批受阻</AlertTitle>
+                    <AlertDescription>
+                        {instance.blockerMessage ??
+                            "当前审批无法继续，请按系统给出的恢复方式处理。"}
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+        </section>
     )
 }

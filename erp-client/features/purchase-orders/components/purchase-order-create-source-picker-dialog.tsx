@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogFooter,
     DialogHeader,
@@ -65,14 +66,16 @@ export function PurchaseOrderCreateSourcePickerDialog({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
-                className="flex h-[90vh] max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-6xl"
+                size="xl"
+                scroll="body"
+                className="h-[88dvh]"
                 closeButtonId="procurement-orders-create-source-picker-close"
             >
-                <DialogHeader className="shrink-0 border-b border-border px-6 py-4 pr-14 text-left">
+                <DialogHeader className="text-left">
                     <DialogTitle>选择来源销售单</DialogTitle>
                 </DialogHeader>
 
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+                <DialogBody className="flex flex-col overflow-hidden p-0 md:flex-row">
                     {workspace.length > 1 ? (
                         <PurchaseOrderCreateSwitchList
                             label="待分配供给销售单"
@@ -101,9 +104,9 @@ export function PurchaseOrderCreateSourcePickerDialog({
                             </p>
                         )}
                     </PaperDocumentViewport>
-                </div>
+                </DialogBody>
 
-                <DialogFooter className="shrink-0 border-t border-border px-6 py-4">
+                <DialogFooter>
                     <Button
                         id="procurement-orders-create-source-picker-cancel"
                         type="button"

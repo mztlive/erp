@@ -2,7 +2,6 @@
 
 import { CalendarRangeIcon } from "lucide-react"
 
-import { surfacePanelClassName } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -36,7 +35,10 @@ export function PeriodBlockerCard({
                 <AlertTitle>请选择统计期间</AlertTitle>
                 <AlertDescription>{description}</AlertDescription>
             </Alert>
-            <Card size="sm" className={surfacePanelClassName}>
+            <Card
+                size="sm"
+                className="min-w-0 border-border/60 bg-background shadow-none"
+            >
                 <CardHeader className="border-b border-grid">
                     <CardTitle>选择统计期间</CardTitle>
                 </CardHeader>

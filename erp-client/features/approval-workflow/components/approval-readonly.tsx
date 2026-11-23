@@ -31,11 +31,13 @@ export function ApprovalReadonly({
     )
     if (!approval)
         return <p className="text-xs text-muted-foreground">暂无审批记录。</p>
+    const showHeaderSummary = approval.instance
+        ? presentation === "detail" || isBlockedStatus(approval.instance.status)
+        : true
     return (
         <div className={cn("space-y-4", className)}>
             {approval.instance ? (
-                presentation === "detail" ||
-                isBlockedStatus(approval.instance.status) ? (
+                showHeaderSummary ? (
                     <RuntimeSummary instance={approval.instance} compact />
                 ) : null
             ) : (
@@ -52,30 +54,40 @@ export function ApprovalReadonly({
                     onRetry={() => void history.refetch()}
                 />
             ) : null}
-            <ExecutionHistory
-                id={`${id}-history`}
-                items={
-                    history.data?.pages.flatMap((page) => page.items) ??
-                    approval.recentHistory ??
-                    []
-                }
-                hasMore={history.hasNextPage}
-                loadingMore={history.isFetchingNextPage}
-                onLoadMore={
-                    history.hasNextPage
-                        ? () => {
-                              void history.fetchNextPage()
-                          }
-                        : undefined
-                }
-                compact
-                presentation={presentation === "history" ? "timeline" : "card"}
-            />
-            {instanceId && (
-                <ApprovalCopyHistory
-                    instanceId={instanceId}
-                    idPrefix={`${id}-copies`}
+            <div
+                className={cn(
+                    showHeaderSummary && "border-t border-border/60 pt-4",
+                )}
+            >
+                <ExecutionHistory
+                    id={`${id}-history`}
+                    items={
+                        history.data?.pages.flatMap((page) => page.items) ??
+                        approval.recentHistory ??
+                        []
+                    }
+                    hasMore={history.hasNextPage}
+                    loadingMore={history.isFetchingNextPage}
+                    onLoadMore={
+                        history.hasNextPage
+                            ? () => {
+                                  void history.fetchNextPage()
+                              }
+                            : undefined
+                    }
+                    compact
+                    presentation={
+                        presentation === "history" ? "timeline" : "card"
+                    }
                 />
+            </div>
+            {instanceId && (
+                <div className="border-t border-border/60 pt-4 empty:hidden">
+                    <ApprovalCopyHistory
+                        instanceId={instanceId}
+                        idPrefix={`${id}-copies`}
+                    />
+                </div>
             )}
         </div>
     )

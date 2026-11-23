@@ -1,16 +1,11 @@
 "use client"
 import { useState } from "react"
-import {
-    OptionCombobox,
-    QuickPreviewSheet,
-    detailWorkspaceStyles,
-} from "@/components/business"
+import { OptionCombobox, detailWorkspaceStyles } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { useTimelineQuery } from "../hooks/queries"
-import type { TimelineCategory, TimelineSource } from "../types"
+import type { TimelineCategory } from "../types"
 import { TimelineEvents } from "./timeline-events"
 import { GroupedTimelineEvents } from "./grouped-timeline-events"
 
@@ -196,60 +191,5 @@ export function SalesTimeline({
                 </p>
             )}
         </section>
-    )
-}
-
-export function SalesTimelineSheet({
-    source,
-    onClose,
-    idPrefix,
-}: {
-    source: TimelineSource | null
-    onClose: () => void
-    idPrefix: string
-}) {
-    return (
-        <QuickPreviewSheet
-            idPrefix={`${idPrefix}-sheet`}
-            size="detail"
-            open={Boolean(source)}
-            onOpenChange={(open) => {
-                if (!open) onClose()
-            }}
-            title="销售单全流程"
-            identity={source?.number ? `销售单号：${source.number}` : undefined}
-            footer={
-                <>
-                    <Button
-                        id={`${idPrefix}-sheet-footer-close`}
-                        variant="outline"
-                        onClick={onClose}
-                    >
-                        关闭
-                    </Button>
-                    {source && (
-                        <a
-                            id={`${idPrefix}-sheet-open-order-${toAutomationIdSegment(source.id)}`}
-                            href={`/sales/orders/${encodeURIComponent(source.id)}?section=timeline`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-body-compact text-primary"
-                        >
-                            打开销售单
-                        </a>
-                    )}
-                </>
-            }
-        >
-            <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6">
-                {source && (
-                    <SalesTimeline
-                        key={source.id}
-                        salesOrderId={source.id}
-                        idPrefix={`${idPrefix}-sheet-timeline`}
-                    />
-                )}
-            </div>
-        </QuickPreviewSheet>
     )
 }

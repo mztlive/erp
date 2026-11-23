@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -130,8 +131,9 @@ export function InquiryAddressImportDialog({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
+                size="2xl"
+                scroll="body"
                 closeButtonId={`${id}-close`}
-                className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-6xl"
                 finalFocus={() =>
                     document.getElementById(`${prefix}-import-addresses`)
                 }
@@ -146,14 +148,14 @@ export function InquiryAddressImportDialog({
                     </DialogDescription>
                 </DialogHeader>
                 <form
-                    className="flex min-h-0 flex-col gap-4"
+                    className="flex min-h-0 flex-1 flex-col overflow-hidden"
                     onSubmit={(event) => {
                         event.preventDefault()
                         event.stopPropagation()
                         void form.handleSubmit()
                     }}
                 >
-                    <div className="min-h-0 space-y-3 overflow-y-auto">
+                    <DialogBody className="space-y-3">
                         {failure && (
                             <Alert variant="destructive">
                                 <AlertDescription>{failure}</AlertDescription>
@@ -321,7 +323,7 @@ export function InquiryAddressImportDialog({
                                 </p>
                             </>
                         )}
-                    </div>
+                    </DialogBody>
                     <DialogFooter>
                         <Button
                             id={`${id}-cancel`}

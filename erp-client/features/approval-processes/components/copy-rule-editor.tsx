@@ -154,7 +154,7 @@ function CopyRuleList({
     }, [targetNodeId])
 
     return (
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-7 pb-6">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-sheet-inline pb-5">
             {rules.length ? (
                 <>
                     <p className="text-xs text-muted-foreground">

@@ -12,6 +12,7 @@ pub fn routes(state: HttpState) -> Router<HttpState> {
     Router::new()
         // 本人收件箱沿用 account 路由认证；所有读写强制绑定会话账号。
         .route("/notifications", get(notification::inbox))
+        .route("/notifications/read-all", post(notification::mark_all_read))
         .route("/notifications/{id}/read", post(notification::mark_read))
         .route("/notifications/events", get(notification::events))
         .route("/profile", get(auth::profile::account_profile))

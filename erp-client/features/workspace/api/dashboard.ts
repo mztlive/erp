@@ -4,7 +4,11 @@
  */
 
 import type { AccountProfile } from "@/features/auth/api"
-import { listApprovalInstances } from "@/features/approval-workflow/api"
+import {
+    listApprovalInstances,
+    type ApprovalInstanceListPage,
+    type ApprovalInstanceListView,
+} from "@/features/approval-workflow/api"
 import type { ApprovalInstanceListItem } from "@/features/approval-workflow/types"
 import {
     getWorkItemStats,
@@ -16,6 +20,10 @@ import { formatCurrencyFixed } from "@/lib/fixed-decimal"
 import { displayBusinessText, displayName } from "@/lib/display-name"
 import { isApiError } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
+import {
+    getApprovalInstanceStatusMeta,
+    getWorkItemStatusMeta,
+} from "@/lib/task-status-dictionary"
 import { WORKSPACE_ROUTES, type WorkspaceId } from "@/lib/workspace-registry"
 
 import type {
@@ -30,12 +38,7 @@ import {
     fulfillmentListNumber,
     fulfillmentObjectTitle,
 } from "../lib/fulfillment-title"
-import {
-    PRIORITY_RANK,
-    STATUS_LABEL,
-    TYPE_META,
-    workspaceTypeLabel,
-} from "./work-item-meta"
+import { PRIORITY_RANK, TYPE_META, workspaceTypeLabel } from "./work-item-meta"
 
 const WORKSPACE_IDS = new Set<string>(
     WORKSPACE_ROUTES.map((workspace) => workspace.id),
@@ -46,6 +49,7 @@ const WORKSPACE_ACTIONS = new Set<WorkspaceActionCode>([
     "VIEW",
     "PROCESS",
     "REASSIGN",
+    "CLOSE",
     "OPEN_DOCUMENT",
     "APPROVE",
     "REJECT",
@@ -160,7 +164,7 @@ export function mapWorkspaceWorkItem(
         label: workspaceTypeLabel(dto.work_item_type, dto.business_object_type),
         family: "exception" as WorkspaceFamilyFilter,
     }
-    const statusMeta = STATUS_LABEL[task.status]
+    const statusMeta = getWorkItemStatusMeta(task.status)
     const createdAt = unixToIso(task.createdAt)
     const dueAt = unixToIso(task.dueAt)
     const bucket = dueBucket(dueAt, timezone)
@@ -287,7 +291,7 @@ function buildMetrics(
             label: "受阻",
             count: stats.blocked ?? 0,
             visible: stats.blocked != null,
-            tone: "warning",
+            tone: "destructive",
         },
         {
             key: "started",
@@ -301,6 +305,28 @@ function buildMetrics(
 
 function isForbiddenError(error: unknown): boolean {
     return isApiError(error) && error.status === 403
+}
+
+/** 探测指定审批视图的总数与可用性；无范围权限返回 403 时优雅降级为不可用。 */
+async function probeApprovalView(
+    view: ApprovalInstanceListView,
+): Promise<{ total: number; available: boolean }> {
+    try {
+        const page = await listApprovalInstances({ view, limit: 1 })
+        return { total: page.total ?? 0, available: true }
+    } catch (error) {
+        if (isForbiddenError(error)) {
+            return { total: 0, available: false }
+        }
+        throw error
+    }
+}
+
+const APPROVAL_VIEW_REASON_LABEL: Record<ApprovalInstanceListView, string> = {
+    started: "我发起的审批",
+    mine: "待我审批",
+    blocked: "审批受阻治理",
+    managed: "管理范围审批",
 }
 
 /**
@@ -402,16 +428,46 @@ export async function fetchWorkspaceDashboard(
         tone: "neutral",
     })
     const started = query.view === "started"
-    const approvalPage = started
-        ? await listApprovalInstances({
-              view: "started",
-              query: query.query,
-              page: query.page ?? 1,
-              limit: 50,
-              documentType: query.workItemType,
-              filters,
-          })
-        : undefined
+    const activeApprovalView: ApprovalInstanceListView =
+        query.approvalView ?? "started"
+    const [mineProbe, blockedProbe, managedProbe] =
+        started && canReadStarted
+            ? await Promise.all([
+                  probeApprovalView("mine"),
+                  probeApprovalView("blocked"),
+                  probeApprovalView("managed"),
+              ])
+            : [undefined, undefined, undefined]
+
+    let approvalPage: ApprovalInstanceListPage | undefined
+    let approvalAccess: TodayWorkspaceView["access"] = "allowed"
+    if (started) {
+        const hasApprovalDate = Boolean(
+            filters.date_from || filters.date_to || filters.undated,
+        )
+        const approvalFilters = {
+            ...filters,
+            due: undefined,
+            date_field: hasApprovalDate ? ("created" as const) : undefined,
+        }
+        try {
+            approvalPage = await listApprovalInstances({
+                view: activeApprovalView,
+                query: query.query,
+                page: query.page ?? 1,
+                pageSize: 50,
+                documentType: query.workItemType,
+                filters: approvalFilters,
+            })
+        } catch (error) {
+            if (isForbiddenError(error)) {
+                approvalAccess = "no_data_scope"
+                approvalPage = { items: [], total: 0 }
+            } else {
+                throw error
+            }
+        }
+    }
     const taskPage = !started
         ? await listWorkItems({
               scope:
@@ -431,6 +487,7 @@ export async function fetchWorkspaceDashboard(
               handlerUserIds: query.handlerUserIds,
               salesOrderIds: query.salesOrderIds,
               purchaseOrderIds: query.purchaseOrderIds,
+              counterpartyIds: query.counterpartyIds,
               sort: query.sort,
               timezone: query.timezone,
               page: query.page ?? 1,
@@ -440,7 +497,11 @@ export async function fetchWorkspaceDashboard(
         : undefined
     const items = approvalPage
         ? approvalPage.items.map((item) => ({
-              ...startedInstanceToWorkItem(item, query.timezone),
+              ...approvalInstanceToWorkItem(
+                  item,
+                  query.timezone,
+                  activeApprovalView,
+              ),
               searchMatches: item.searchMatches,
           }))
         : (taskPage?.items ?? []).map((item) =>
@@ -450,7 +511,7 @@ export async function fetchWorkspaceDashboard(
         ? unixToIso(stats.as_of)
         : new Date().toISOString()
     return {
-        access: "allowed",
+        access: started ? approvalAccess : "allowed",
         metrics,
         items,
         viewer: {
@@ -467,7 +528,25 @@ export async function fetchWorkspaceDashboard(
             projectionState: updatedAt ? "fresh" : "stale",
         },
         filterOptions: approvalPage?.filterOptions ?? taskPage?.filter_options,
+        documentTypeCounts: approvalPage?.documentTypeCounts,
         scopeVersion: taskPage?.scope_version,
+        approvalViewCounts: started
+            ? {
+                  started: startedMetric.total ?? 0,
+                  mine: mineProbe?.total ?? 0,
+                  blocked: blockedProbe?.total ?? 0,
+                  managed: managedProbe?.total ?? 0,
+              }
+            : undefined,
+        approvalViewAvailability: started
+            ? {
+                  started: canReadStarted,
+                  mine: mineProbe?.available ?? canReadStarted,
+                  blocked: blockedProbe?.available ?? false,
+                  managed: managedProbe?.available ?? false,
+              }
+            : undefined,
+        nextCursor: approvalPage?.nextCursor,
         total: approvalPage?.total ?? taskPage?.total ?? 0,
         dueTodayCount: stats.due_today,
         warnings: [],
@@ -475,9 +554,10 @@ export async function fetchWorkspaceDashboard(
     }
 }
 
-export function startedInstanceToWorkItem(
+export function approvalInstanceToWorkItem(
     item: ApprovalInstanceListItem,
     timezone: string,
+    approvalView: ApprovalInstanceListView = "started",
 ): WorkspaceWorkItem {
     const businessObjectType = item.documentType ?? ""
     const typeLabel = workspaceTypeLabel(
@@ -547,7 +627,7 @@ export function startedInstanceToWorkItem(
         ownerRoleLabel: "审批",
         ownerOrganizationLabel: "",
         ownerUserLabel: currentAssigneeLabel ?? "处理人待确认",
-        reasonLabel: "我发起的审批",
+        reasonLabel: APPROVAL_VIEW_REASON_LABEL[approvalView],
         listSummary: summary?.listSummary || listSummary || undefined,
         impactSummary:
             summary?.impactSummary ??
@@ -577,6 +657,13 @@ export function startedInstanceToWorkItem(
             status: item.status,
         },
     }
+}
+
+export function startedInstanceToWorkItem(
+    item: ApprovalInstanceListItem,
+    timezone: string,
+): WorkspaceWorkItem {
+    return approvalInstanceToWorkItem(item, timezone, "started")
 }
 
 /** 按单据类型解析“我发起的”记录应回到的正式工作面。 */
@@ -612,43 +699,33 @@ function approvalDestination(documentType: string): WorkspaceId {
     return "W01"
 }
 
-/** 把审批实例状态映射为只读跟踪行的展示状态。 */
+/** 把审批实例状态映射为只读跟踪行的展示状态（严格对齐唯一状态字典）。 */
 function startedStatus(status: string): Pick<
     WorkspaceWorkItem,
     "statusLabel" | "statusTone"
 > & {
     workItemStatus: WorkspaceWorkItem["status"]
 } {
+    const meta = getApprovalInstanceStatusMeta(status)
     switch (status) {
         case "APPROVED":
             return {
                 workItemStatus: "COMPLETED",
-                statusLabel: "已通过",
-                statusTone: "success",
+                statusLabel: meta.label,
+                statusTone: meta.tone,
             }
         case "CANCELLED":
-            return {
-                workItemStatus: "CLOSED",
-                statusLabel: "已取消",
-                statusTone: "neutral",
-            }
         case "REJECTED":
             return {
                 workItemStatus: "CLOSED",
-                statusLabel: "已驳回",
-                statusTone: "destructive",
-            }
-        case "BLOCKED":
-            return {
-                workItemStatus: "OPEN",
-                statusLabel: "受阻",
-                statusTone: "destructive",
+                statusLabel: meta.label,
+                statusTone: meta.tone,
             }
         default:
             return {
                 workItemStatus: "OPEN",
-                statusLabel: "审批中",
-                statusTone: "info",
+                statusLabel: meta.label,
+                statusTone: meta.tone,
             }
     }
 }

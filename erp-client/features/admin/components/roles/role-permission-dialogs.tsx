@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -227,15 +228,16 @@ export function RolePermissionReview({
             }}
         >
             <DialogContent
+                size="lg"
+                scroll="body"
                 closeButtonId="governance-admin-role-form-review-close"
-                className="max-h-[85dvh] sm:max-w-2xl"
             >
                 <DialogHeader>
                     <DialogTitle>
                         {mode ? titles[mode] : "权限明细"}
                     </DialogTitle>
                 </DialogHeader>
-                <div className="max-h-[56dvh] space-y-5 overflow-y-auto pr-1">
+                <DialogBody className="space-y-5">
                     {mode === "changes" ? (
                         hasAnyChange ? (
                             <>
@@ -372,7 +374,7 @@ export function RolePermissionReview({
                             </div>
                         </section>
                     )}
-                </div>
+                </DialogBody>
                 <DialogFooter>
                     <Button
                         id="governance-admin-role-form-review-done"

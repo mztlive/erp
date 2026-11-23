@@ -646,11 +646,11 @@ export function SupplierScopePage() {
                 }
             >
                 {detailQuery.isPending ? (
-                    <div className="px-7 py-6">
+                    <div className="px-sheet-inline py-5">
                         <Skeleton className="h-24" aria-busy />
                     </div>
                 ) : detailQuery.isError ? (
-                    <div className="flex flex-col items-start gap-3 px-7 py-6">
+                    <div className="flex flex-col items-start gap-3 px-sheet-inline py-5">
                         <p className="text-xs text-muted-foreground">
                             {getErrorMessage(
                                 detailQuery.error,
@@ -668,7 +668,7 @@ export function SupplierScopePage() {
                         </Button>
                     </div>
                 ) : detail?.kind === "payable" ? (
-                    <div className="flex flex-col gap-6 px-7 py-6 text-body-compact">
+                    <div className="flex flex-col gap-6 px-sheet-inline py-5 text-body-compact">
                         <PreviewAmount
                             label="权限内已核销"
                             value={detail.payable.visible_settled_share}
@@ -703,7 +703,7 @@ export function SupplierScopePage() {
                         ) : null}
                     </div>
                 ) : detail?.kind === "payment" ? (
-                    <div className="flex flex-col gap-6 px-7 py-6 text-body-compact">
+                    <div className="flex flex-col gap-6 px-sheet-inline py-5 text-body-compact">
                         <PreviewAmount
                             label="权限内已分配"
                             value={detail.payment.visible_allocated_share}
@@ -738,7 +738,7 @@ export function SupplierScopePage() {
                         ) : null}
                     </div>
                 ) : (
-                    <div className="px-7 py-6 text-body-compact text-muted-foreground">
+                    <div className="px-sheet-inline py-5 text-body-compact text-muted-foreground">
                         未找到该笔记录，可能已超出当前数据范围。
                     </div>
                 )}

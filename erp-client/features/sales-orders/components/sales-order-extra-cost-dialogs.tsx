@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -190,12 +191,13 @@ export function RegisterExtraCostDialog({
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent
-                className="flex max-h-[min(90svh,48rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
+                size="lg"
+                scroll="body"
                 closeButtonId="sales-orders-extra-cost-register-close"
                 showCloseButton={!busy}
             >
-                <DialogHeader className="shrink-0 gap-2 border-b border-grid px-6 py-4 text-left">
-                    <div className="flex flex-wrap items-center gap-2 pr-8">
+                <DialogHeader className="gap-2 border-grid text-left">
+                    <div className="flex flex-wrap items-center gap-2">
                         <DialogTitle>登记附加费用</DialogTitle>
                         <Badge variant="secondary" className="num font-normal">
                             {order.documentNumber}
@@ -271,13 +273,13 @@ export function RegisterExtraCostDialog({
                     />
                 ) : (
                     <form
-                        className="flex min-h-0 flex-1 flex-col"
+                        className="flex min-h-0 flex-1 flex-col overflow-hidden"
                         onSubmit={(event) => {
                             event.preventDefault()
                             void form.handleSubmit()
                         }}
                     >
-                        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
+                        <DialogBody className="space-y-4">
                             {inquiry.pending || inquiry.availableCount > 0 ? (
                                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-info-border/70 bg-info-soft/45 px-3.5 py-2 text-xs text-info-soft-foreground">
                                     <span>
@@ -517,9 +519,9 @@ export function RegisterExtraCostDialog({
                                     </AlertDescription>
                                 </Alert>
                             ) : null}
-                        </div>
+                        </DialogBody>
 
-                        <DialogFooter className="shrink-0 border-t border-grid bg-card px-6 py-3.5 sm:items-center sm:justify-between">
+                        <DialogFooter className="border-grid bg-card sm:items-center sm:justify-between">
                             <p className="text-xs text-muted-foreground">
                                 登记后直接计入本单实际经营盈亏，不生成应付。
                             </p>
@@ -621,12 +623,13 @@ export function ReduceExtraCostDialog({
     return (
         <Dialog open={Boolean(cost)} onOpenChange={handleOpenChange}>
             <DialogContent
-                className="flex max-h-[min(90svh,44rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl"
+                size="lg"
+                scroll="body"
                 closeButtonId="sales-orders-extra-cost-reduce-close"
                 showCloseButton={!mutation.isPending}
             >
-                <DialogHeader className="shrink-0 gap-2 border-b border-grid px-6 py-4 text-left">
-                    <div className="flex flex-wrap items-center gap-2 pr-8">
+                <DialogHeader className="gap-2 border-grid text-left">
+                    <div className="flex flex-wrap items-center gap-2">
                         <DialogTitle>冲减附加费用</DialogTitle>
                         <Badge variant="secondary" className="num font-normal">
                             {order.documentNumber}
@@ -638,13 +641,13 @@ export function ReduceExtraCostDialog({
                 </DialogHeader>
 
                 <form
-                    className="flex min-h-0 flex-1 flex-col"
+                    className="flex min-h-0 flex-1 flex-col overflow-hidden"
                     onSubmit={(event) => {
                         event.preventDefault()
                         void form.handleSubmit()
                     }}
                 >
-                    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
+                    <DialogBody className="space-y-4">
                         {cost ? (
                             <div className="space-y-2.5 rounded-lg border border-border/75 bg-muted/30 px-4 py-3">
                                 <div className="flex flex-wrap items-center gap-2">
@@ -789,9 +792,9 @@ export function ReduceExtraCostDialog({
                                 <AlertDescription>{failure}</AlertDescription>
                             </Alert>
                         ) : null}
-                    </div>
+                    </DialogBody>
 
-                    <DialogFooter className="shrink-0 border-t border-grid bg-card px-6 py-3.5 sm:items-center sm:justify-between">
+                    <DialogFooter className="border-grid bg-card sm:items-center sm:justify-between">
                         <p className="text-xs text-muted-foreground">
                             冲减后同步调减本单实际经营成本。
                         </p>

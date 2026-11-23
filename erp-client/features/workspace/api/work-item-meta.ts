@@ -4,6 +4,11 @@
  * 单独存放便于按「一张表一个关注点」维护，避免撑大请求模块。
  */
 
+import {
+    DOCUMENT_TYPE_CANONICAL_LABELS,
+    TASK_TYPE_CANONICAL_LABELS,
+    WORK_ITEM_STATUS_META,
+} from "@/lib/task-status-dictionary"
 import type { WorkspaceFamilyFilter, WorkspaceWorkItem } from "../types"
 import { normalizeObjectType } from "../lib/object-type"
 
@@ -40,9 +45,10 @@ export const TYPE_META: Record<string, TypeMeta> = {
         openActionLabel: "修改原单",
     },
     SALES_INQUIRY_PROCESSING: {
-        label: "询价处理",
+        label: TASK_TYPE_CANONICAL_LABELS.SALES_INQUIRY_PROCESSING.label,
         family: "procurement",
-        badgeLabel: "销售询价",
+        badgeLabel:
+            TASK_TYPE_CANONICAL_LABELS.SALES_INQUIRY_PROCESSING.shortLabel,
         badgeVariant: "lime",
         openActionLabel: "处理询价",
     },
@@ -60,9 +66,10 @@ export const TYPE_META: Record<string, TypeMeta> = {
         badgeVariant: "indigo",
     },
     PROCUREMENT_ORDER_CREATION: {
-        label: "待安排采购",
+        label: TASK_TYPE_CANONICAL_LABELS.PROCUREMENT_ORDER_CREATION.label,
         family: "procurement",
-        badgeLabel: "采购分单",
+        badgeLabel:
+            TASK_TYPE_CANONICAL_LABELS.PROCUREMENT_ORDER_CREATION.shortLabel,
         badgeVariant: "lime",
         openActionLabel: "去安排采购",
     },
@@ -74,9 +81,10 @@ export const TYPE_META: Record<string, TypeMeta> = {
         openActionLabel: "安排采购付款",
     },
     PURCHASE_SOURCE_UPDATE: {
-        label: "处理销售变更影响",
+        label: TASK_TYPE_CANONICAL_LABELS.PURCHASE_SOURCE_UPDATE.label,
         family: "procurement",
-        badgeLabel: "采购待处理",
+        badgeLabel:
+            TASK_TYPE_CANONICAL_LABELS.PURCHASE_SOURCE_UPDATE.shortLabel,
         badgeVariant: "orange",
         openActionLabel: "去处理采购单",
     },
@@ -136,9 +144,10 @@ export const TYPE_META: Record<string, TypeMeta> = {
         openActionLabel: "去确认导入范围",
     },
     INTEGRATION_RESULT_UNKNOWN: {
-        label: "外部同步结果待确认",
+        label: TASK_TYPE_CANONICAL_LABELS.INTEGRATION_RESULT_UNKNOWN.label,
         family: "exception",
-        badgeLabel: "同步待确认",
+        badgeLabel:
+            TASK_TYPE_CANONICAL_LABELS.INTEGRATION_RESULT_UNKNOWN.shortLabel,
         badgeVariant: "violet",
         openActionLabel: "去核对同步状态",
     },
@@ -217,9 +226,11 @@ const DOCUMENT_META: Record<string, DocumentMeta> = {
         badgeVariant: "violet",
     },
     sales_invoice_request: {
-        approvalLabel: "开票申请审批",
-        badgeLabel: "开票申请",
-        documentName: "开票申请",
+        approvalLabel: `${DOCUMENT_TYPE_CANONICAL_LABELS.sales_invoice_request.label}审批`,
+        badgeLabel:
+            DOCUMENT_TYPE_CANONICAL_LABELS.sales_invoice_request.shortLabel,
+        documentName:
+            DOCUMENT_TYPE_CANONICAL_LABELS.sales_invoice_request.label,
         badgeVariant: "violet",
     },
     customer_refund: {
@@ -264,27 +275,6 @@ const DOCUMENT_META: Record<string, DocumentMeta> = {
         badgeLabel: "服务履约",
         documentName: "服务履约单",
         badgeVariant: "teal",
-    },
-    customer_acceptance: {
-        approvalLabel: "客户验收单审批",
-        badgeLabel: "客户验收",
-        documentName: "客户验收单",
-        badgeVariant: "teal",
-    },
-    invoice: {
-        approvalLabel: "发票审批",
-        badgeLabel: "发票",
-        badgeVariant: "violet",
-    },
-    sales_return_case: {
-        approvalLabel: "销售退货单审批",
-        badgeLabel: "销售退货",
-        badgeVariant: "violet",
-    },
-    purchase_return_order: {
-        approvalLabel: "采购退货单审批",
-        badgeLabel: "采购退货",
-        badgeVariant: "orange",
     },
 }
 
@@ -412,7 +402,7 @@ export const STATUS_LABEL: Record<
     WorkspaceWorkItem["status"],
     { label: string; tone: WorkspaceWorkItem["statusTone"] }
 > = {
-    OPEN: { label: "待处理", tone: "info" },
-    COMPLETED: { label: "已完成", tone: "success" },
-    CLOSED: { label: "已关闭", tone: "neutral" },
+    OPEN: WORK_ITEM_STATUS_META.OPEN,
+    COMPLETED: WORK_ITEM_STATUS_META.COMPLETED,
+    CLOSED: WORK_ITEM_STATUS_META.CLOSED,
 }

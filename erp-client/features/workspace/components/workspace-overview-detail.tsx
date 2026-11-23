@@ -3,20 +3,18 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useRouter } from "@/lib/navigation"
-import { MoneyValue, BusinessFailureState } from "@/components/business"
-import { Button } from "@/components/ui/button"
 import {
-    Sheet,
-    SheetContent,
-    SheetHeader,
-    SheetTitle,
-    SheetDescription,
-} from "@/components/ui/sheet"
+    BusinessFailureState,
+    MoneyValue,
+    QuickPreviewSheet,
+} from "@/components/business"
+import { Button } from "@/components/ui/button"
 import { fetchOverviewData } from "../api/overview"
 import { overviewIdentity } from "../hooks/use-workspace-overview"
 import type { OverviewMetric } from "../lib/overview"
 import type { AccountProfile } from "@/features/auth/api"
 import { queryKeyRoots } from "@/lib/query-key-roots"
+import { formatDateTimeInZone } from "@/lib/datetime"
 import { overviewValue } from "./workspace-overview"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
@@ -35,72 +33,95 @@ export function WorkspaceOverviewDetail({
     onClosed: () => void
     onTask: (id: string) => void
 }) {
+    const router = useRouter()
+    const metricKey = metric
+        ? `${metric.key}:${JSON.stringify(metric.source)}`
+        : ""
+    const [paging, setPaging] = useState<{
+        key: string
+        page: number
+        scopeVersion?: string
+    }>({ key: "", page: 1 })
+    const page = paging.key === metricKey ? paging.page : 1
+    const scopeVersion =
+        paging.key === metricKey ? paging.scopeVersion : undefined
+
+    const query = useQuery({
+        queryKey: [
+            ...queryKeyRoots.workspaceHome,
+            "overview-detail",
+            profile ? overviewIdentity(profile) : "",
+            metric?.source ?? null,
+            page,
+            scopeVersion,
+        ],
+        queryFn: () => fetchOverviewData(metric!.source, page, scopeVersion),
+        enabled: Boolean(metric && profile),
+        retry: false,
+    })
+
+    const data = query.isError ? undefined : query.data
+    const nextPage = (value: number) => {
+        setPaging({
+            key: metricKey,
+            page: value,
+            scopeVersion: value === 1 ? undefined : data?.scopeVersion,
+        })
+    }
+
     return (
-        <Sheet
+        <QuickPreviewSheet
+            idPrefix="workspace-business-detail"
             open={open}
+            size="preview"
+            finalFocus={false}
             onOpenChange={(nextOpen) => {
                 if (!nextOpen) onClose()
             }}
             onOpenChangeComplete={(nextOpen) => {
                 if (!nextOpen) onClosed()
             }}
+            title={metric?.label || "业务明细"}
+            description={metric?.detail}
+            footer={
+                metric && profile ? (
+                    <div className="flex w-full items-center justify-between gap-3 text-xs text-muted-foreground">
+                        <span className="num">
+                            {data ? `共 ${data.count} 项` : "业务明细"}
+                        </span>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                id="workspace-business-previous"
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={page <= 1 || query.isFetching}
+                                onClick={() => nextPage(page - 1)}
+                            >
+                                上一页
+                            </Button>
+                            <span className="num">第 {page} 页</span>
+                            <Button
+                                id="workspace-business-next"
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={
+                                    !data ||
+                                    page * 20 >= data.count ||
+                                    query.isFetching
+                                }
+                                onClick={() => nextPage(page + 1)}
+                            >
+                                下一页
+                            </Button>
+                        </div>
+                    </div>
+                ) : null
+            }
         >
-            <SheetContent
-                size="preview"
-                closeButtonId="workspace-business-detail-close"
-                finalFocus={false}
-                className="min-h-0"
-            >
-                <SheetHeader>
-                    <SheetTitle>{metric?.label || "业务明细"}</SheetTitle>
-                    <SheetDescription>{metric?.detail}</SheetDescription>
-                </SheetHeader>
-                {metric && profile && (
-                    <BusinessDetailContent
-                        key={`${metric.key}:${JSON.stringify(metric.source)}`}
-                        metric={metric}
-                        profile={profile}
-                        onTask={onTask}
-                    />
-                )}
-            </SheetContent>
-        </Sheet>
-    )
-}
-
-function BusinessDetailContent({
-    metric,
-    profile,
-    onTask,
-}: {
-    metric: OverviewMetric
-    profile: AccountProfile
-    onTask: (id: string) => void
-}) {
-    const router = useRouter()
-    const [page, setPage] = useState(1)
-    const [scopeVersion, setScopeVersion] = useState<string>()
-    const query = useQuery({
-        queryKey: [
-            ...queryKeyRoots.workspaceHome,
-            "overview-detail",
-            overviewIdentity(profile),
-            metric.source,
-            page,
-            scopeVersion,
-        ],
-        queryFn: () => fetchOverviewData(metric.source, page, scopeVersion),
-        retry: false,
-    })
-    const data = query.isError ? undefined : query.data
-    const nextPage = (value: number) => {
-        setScopeVersion(value === 1 ? undefined : data?.scopeVersion)
-        setPage(value)
-    }
-    return (
-        <>
-            <div className="min-h-0 flex-1 overflow-auto px-7 pb-5">
-                {query.isPending ? (
+            {metric && profile ? (
+                query.isPending ? (
                     <p
                         role="status"
                         className="py-8 text-xs text-muted-foreground"
@@ -112,20 +133,24 @@ function BusinessDetailContent({
                         title="业务明细读取失败"
                         error={query.error}
                         onRetry={() => {
-                            setPage(1)
-                            setScopeVersion(undefined)
-                            if (page === 1 && scopeVersion == null)
+                            setPaging({
+                                key: metricKey,
+                                page: 1,
+                                scopeVersion: undefined,
+                            })
+                            if (page === 1 && scopeVersion == null) {
                                 void query.refetch()
+                            }
                         }}
                     />
                 ) : (
-                    <>
+                    <div>
                         <p className="mb-2 text-body-compact font-medium">
                             {metric.label}：
                             {overviewValue(metric, data) == null ? (
                                 "暂不可用"
                             ) : metric.field === "count" ? (
-                                `${data?.count} 项`
+                                <span className="num">{data?.count} 项</span>
                             ) : (
                                 <MoneyValue
                                     value={String(overviewValue(metric, data))}
@@ -134,20 +159,27 @@ function BusinessDetailContent({
                         </p>
                         <p className="mb-4 text-xs text-muted-foreground">
                             {data?.scopeSummary || "当前授权范围"}
-                            {data?.asOf
-                                ? ` · 数据时间 ${new Date(data.asOf).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}`
-                                : ""}
+                            {data?.asOf ? (
+                                <span className="num">
+                                    {" "}
+                                    · 数据时间{" "}
+                                    {formatDateTimeInZone(
+                                        data.asOf,
+                                        "Asia/Shanghai",
+                                    )}
+                                </span>
+                            ) : null}
                         </p>
-                        {data?.note && (
+                        {data?.note ? (
                             <p className="mb-4 rounded-lg bg-muted/40 p-3 text-body-compact leading-6">
                                 {data.note}
                             </p>
-                        )}
-                        {metric.field === "overdue" && (
+                        ) : null}
+                        {metric.field === "overdue" ? (
                             <p className="mb-4 text-xs text-muted-foreground">
                                 逾期金额按每笔应收款的到期日计算。下方展示当前权限范围内的全部客户应收款余额（含未逾期），可点击进入客户往来查看逾期明细。
                             </p>
-                        )}
+                        ) : null}
                         {!data?.rows.length ? (
                             <p className="py-10 text-center text-xs text-muted-foreground">
                                 {data?.noScope
@@ -176,7 +208,7 @@ function BusinessDetailContent({
                                                         : ""}
                                                 </p>
                                             </div>
-                                            {amount !== undefined && (
+                                            {amount !== undefined ? (
                                                 <span className="text-body-compact tabular-nums">
                                                     {amount == null ? (
                                                         "金额受限或暂不可用"
@@ -186,10 +218,11 @@ function BusinessDetailContent({
                                                         />
                                                     )}
                                                 </span>
-                                            )}
-                                            {(row.taskId || row.href) && (
+                                            ) : null}
+                                            {row.taskId || row.href ? (
                                                 <Button
                                                     id={`workspace-business-row-${toAutomationIdSegment(row.id)}`}
+                                                    type="button"
                                                     size="sm"
                                                     variant="outline"
                                                     onClick={() =>
@@ -201,46 +234,19 @@ function BusinessDetailContent({
                                                               )
                                                     }
                                                 >
-                                                    {" "}
                                                     {row.taskId
                                                         ? "处理"
-                                                        : "查看"}{" "}
+                                                        : "查看"}
                                                 </Button>
-                                            )}
+                                            ) : null}
                                         </li>
                                     )
                                 })}
                             </ul>
                         )}
-                    </>
-                )}
-            </div>
-            <footer className="flex shrink-0 items-center justify-between gap-3 border-t px-7 py-4 text-xs text-muted-foreground">
-                <span>{data ? `共 ${data.count} 项` : "业务明细"}</span>
-                <div className="flex items-center gap-2">
-                    <Button
-                        id="workspace-business-previous"
-                        variant="outline"
-                        size="sm"
-                        disabled={page <= 1 || query.isFetching}
-                        onClick={() => nextPage(page - 1)}
-                    >
-                        上一页
-                    </Button>
-                    <span>第 {page} 页</span>
-                    <Button
-                        id="workspace-business-next"
-                        variant="outline"
-                        size="sm"
-                        disabled={
-                            !data || page * 20 >= data.count || query.isFetching
-                        }
-                        onClick={() => nextPage(page + 1)}
-                    >
-                        下一页
-                    </Button>
-                </div>
-            </footer>
-        </>
+                    </div>
+                )
+            ) : null}
+        </QuickPreviewSheet>
     )
 }

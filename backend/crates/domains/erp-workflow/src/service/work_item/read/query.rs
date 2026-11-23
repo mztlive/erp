@@ -25,6 +25,7 @@ use crate::dto::work_item::ViewAccess;
 use crate::entity::approval_qualification::ApprovalQualification;
 use crate::entity::work_item::{AssignmentSource, WorkItemStatus, WorkItemType};
 use crate::error::{Error, Result};
+use crate::ports::{WorkItemCounterpartyLookup, WorkItemCounterpartyPort};
 use crate::repository::prelude::*;
 use crate::repository::work_item::WorkItemScan;
 use crate::service::approval::approver_qualification;
@@ -47,13 +48,73 @@ pub struct WorkItemReadService {
     pub db: mongodb::Database,
     /// Identity 共享权限服务。
     pub authorization: WorkItemAuthorization,
+    /// 可选往来方读模型端口；仅在检索/往来方筛选时按已授权批次解析。
+    counterparty_port: Option<Arc<dyn WorkItemCounterpartyPort>>,
 }
 
 impl WorkItemReadService {
     /// 在应用装配时将任务库与共享 `AuthorizationService` 接到固定的工作项读取授权，用于队列、详情和统计。
     pub fn new(db: mongodb::Database, service: Arc<AuthorizationService>) -> Self {
         let authorization = WorkItemAuthorization::new(db.clone(), service);
-        Self { db, authorization }
+        Self { db, authorization, counterparty_port: None }
+    }
+
+    /// 绑定跨域往来方查询端口，供任务列表与统计执行往来方名称检索和 `counterparty_ids` 筛选。
+    pub fn with_counterparty_port(mut self, port: Arc<dyn WorkItemCounterpartyPort>) -> Self {
+        self.counterparty_port = Some(port);
+        self
+    }
+
+    // 统一为已授权任务批次补齐往来方事实、检索文档与受阻标记。
+    pub(super) async fn prepare_search_fields(
+        &self,
+        fields: &mut [dto::WorkItemFields],
+        query: &dto::WorkItemListQuery,
+        access: &QueueAccess,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.enrich_counterparties(fields, query, executor).await?;
+        for field in fields.iter_mut() {
+            field.search = super::search::task_document(field);
+        }
+        if query.filters.blocked {
+            self.search_blockers(fields, query.scope, access, executor).await?;
+        }
+        Ok(())
+    }
+
+    // 仅在启用关键词、往来方筛选或候选项收集时，对已授权批次补齐往来方名称与稳定 ID。
+    async fn enrich_counterparties(
+        &self,
+        fields: &mut [dto::WorkItemFields],
+        query: &dto::WorkItemListQuery,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let Some(port) = self.counterparty_port.as_ref() else {
+            return Ok(());
+        };
+        if fields.is_empty() || !needs_counterparty_enrichment(query) {
+            return Ok(());
+        }
+        let lookups = fields
+            .iter()
+            .map(|field| WorkItemCounterpartyLookup {
+                work_item_id: field.id.clone(),
+                work_item_type: field.work_item_type,
+                business_object_type: field.business_object_type.clone(),
+                business_object_id: field.business_object_id.clone(),
+                subject_version: field.subject_version.clone(),
+                links: field.links.clone(),
+            })
+            .collect::<Vec<_>>();
+        let loaded = port.load_counterparties(&lookups, executor).await?;
+        for field in fields.iter_mut() {
+            if let Some(fact) = loaded.get(&field.id) {
+                field.counterparty_label = fact.counterparty_label.clone();
+                field.counterparty_ids = fact.counterparty_ids.clone();
+            }
+        }
+        Ok(())
     }
 }
 
@@ -189,16 +250,12 @@ impl WorkItemReadService {
             .ok_or_else(|| Error::NotFound("当前焦点任务不在授权队列中".to_string()))?;
 
         let mut current = vec![dto::WorkItemFields::from(current)];
-        for field in &mut current {
-            field.search = super::search::task_document(field);
-        }
-        if query.filters.blocked {
-            self.search_blockers(&mut current, query.scope, context.access, executor).await?;
-        }
+        self.prepare_search_fields(&mut current, query, context.access, executor).await?;
         let Some(current) = current.into_iter().find(|fields| {
             fields.search.matches(filter.query.as_deref()).is_some()
                 && query.filters.matches(&fields.search)
                 && matches_handler(fields, &query.handler_user_ids)
+                && matches_counterparty(fields, &query.counterparty_ids)
         }) else {
             return Err(Error::NotFound("当前焦点任务不在授权队列中".to_string()));
         };
@@ -528,6 +585,21 @@ pub(super) fn matches_handler(fields: &dto::WorkItemFields, handler_ids: &[Strin
     fields.owner_user_id.as_deref().is_some_and(|owner| handler_ids.iter().any(|id| id == owner))
 }
 
+// 往来单位稳定 ID 筛选只收窄授权结果；空集表示不过滤。
+pub(super) fn matches_counterparty(fields: &dto::WorkItemFields, counterparty_ids: &[String]) -> bool {
+    if counterparty_ids.is_empty() {
+        return true;
+    }
+    fields.counterparty_ids.iter().any(|id| counterparty_ids.iter().any(|target| target == id))
+}
+
+fn needs_counterparty_enrichment(query: &dto::WorkItemListQuery) -> bool {
+    query.query.is_some()
+        || !query.counterparty_ids.is_empty()
+        || !query.filters.counterparties.is_empty()
+        || query.filters.include_options
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -565,11 +637,25 @@ mod tests {
         .into();
         fields.business_object_label = "销售单 SO.[1]".into();
         fields.counterparty_label = Some("Acme 客户".into());
-        assert!(!super::matches_keyword(&fields, Some(" acME ")));
+        fields.counterparty_ids = vec!["cust-1".into()];
+        assert!(super::matches_keyword(&fields, Some(" acME ")));
+        assert!(super::matches_keyword(&fields, Some("客户")));
         assert!(!super::matches_keyword(&fields, Some("SO.[1]")));
         assert!(super::matches_keyword(&fields, Some(" object ")));
         assert!(!super::matches_keyword(&fields, Some(".*")));
         assert!(super::matches_keyword(&fields, Some("  ")));
+        assert!(super::matches_counterparty(&fields, &[]));
+        assert!(super::matches_counterparty(&fields, &["cust-1".into(), "cust-2".into()]));
+        assert!(!super::matches_counterparty(&fields, &["cust-2".into()]));
+        let doc = super::super::search::task_document(&fields);
+        assert!(
+            super::WorkspaceFilters { counterparties: vec!["cust-1".into()], ..Default::default() }
+                .matches(&doc)
+        );
+        assert!(
+            super::WorkspaceFilters { counterparties: vec!["Acme 客户".into()], ..Default::default() }
+                .matches(&doc)
+        );
 
         let mut other = fields.clone();
         other.business_object_id = "other-object-id".into();
@@ -736,6 +822,7 @@ mod tests {
             handler: &[&str],
             sales: &[&str],
             purchase: &[&str],
+            counterparty: &[&str],
         ) -> crate::dto::work_item::read::WorkItemListQuery {
             crate::dto::work_item::read::WorkItemListQuery {
                 filters: Default::default(),
@@ -748,6 +835,7 @@ mod tests {
                 handler_user_ids: handler.iter().map(|value| value.to_string()).collect(),
                 sales_order_ids: sales.iter().map(|value| value.to_string()).collect(),
                 purchase_order_ids: purchase.iter().map(|value| value.to_string()).collect(),
+                counterparty_ids: counterparty.iter().map(|value| value.to_string()).collect(),
                 current_work_item_id: None,
                 sort_by: "created_at",
                 sort_ascending: false,
@@ -759,13 +847,14 @@ mod tests {
         }
 
         let access = "authorization-version";
-        let base = query_with(&[], &[], &[]);
+        let base = query_with(&[], &[], &[], &[]);
         let base_context = super::queue_context_id("actor", &base, access);
-        assert_eq!(base_context, super::queue_context_id("actor", &query_with(&[], &[], &[]), access));
+        assert_eq!(base_context, super::queue_context_id("actor", &query_with(&[], &[], &[], &[]), access));
         for varied in [
-            query_with(&["handler-1"], &[], &[]),
-            query_with(&[], &["so-1"], &[]),
-            query_with(&[], &[], &["po-1"]),
+            query_with(&["handler-1"], &[], &[], &[]),
+            query_with(&[], &["so-1"], &[], &[]),
+            query_with(&[], &[], &["po-1"], &[]),
+            query_with(&[], &[], &[], &["cust-1"]),
         ] {
             let varied_context = super::queue_context_id("actor", &varied, access);
             assert_ne!(base_context, varied_context);
@@ -791,6 +880,7 @@ mod tests {
             handler_user_ids: handler_user_ids.map(str::to_string),
             sales_order_ids: None,
             purchase_order_ids: None,
+            counterparty_ids: None,
             sort: None,
             queue_context_id: None,
             scope_version: None,

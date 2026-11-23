@@ -2,35 +2,57 @@
 
 import { PurchaseSourceReturnPanel } from "./purchase-source-return-panel"
 import { sourceReturnProgress } from "../lib/source-return-progress"
-import { RequiredMark } from "@/components/ui/required-mark"
 
 import * as React from "react"
+import { useStore } from "@tanstack/react-form"
+import { z } from "zod"
 
+import { FormalActionConfirmDialog } from "@/components/business"
+import { ReasonTextareaField } from "@/components/business/reason-textarea-field"
+import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useMaintainPurchaseSourceMutation } from "@/features/purchase-orders/hooks/queries"
 import type {
     PurchaseOrderCenterView,
     PurchaseSourceUpdateView,
 } from "@/features/purchase-orders/types"
-import { getErrorPresentation } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
 import { purchaseSourceUpdateText } from "@/lib/ui-text"
 
 /** 最长维持原因字数，与服务端一致。 */
 const MAINTAIN_NOTE_MAX_LENGTH = 500
+
+const maintainReasonSchema = z.string().superRefine((raw, ctx) => {
+    const trimmed = raw.trim()
+    if (!trimmed) {
+        ctx.addIssue({ code: "custom", message: "请填写维持原采购的原因" })
+        return
+    }
+    if (Array.from(trimmed).length > MAINTAIN_NOTE_MAX_LENGTH) {
+        ctx.addIssue({
+            code: "custom",
+            message: `原因不能超过 ${MAINTAIN_NOTE_MAX_LENGTH} 个字符`,
+        })
+    }
+})
+
+function firstFieldError(errors: readonly unknown[]): string | undefined {
+    for (const item of errors) {
+        if (typeof item === "string" && item.trim()) return item
+        if (
+            item &&
+            typeof item === "object" &&
+            "message" in item &&
+            typeof (item as { message?: unknown }).message === "string" &&
+            (item as { message: string }).message.trim()
+        ) {
+            return (item as { message: string }).message
+        }
+    }
+    return undefined
+}
 
 /**
  * 来源销售变更对本采购的影响提示（第一期 §6.3 第 10 条）。
@@ -207,16 +229,24 @@ export function MaintainSourceButton({
     purchaseOrderId,
     update,
     label = purchaseSourceUpdateText.maintain,
+    onMaintained,
 }: {
     purchaseOrderId: string
     update: PurchaseSourceUpdateView
     label?: string
+    onMaintained?: () => void
 }) {
     const [open, setOpen] = React.useState(false)
-    const [reason, setReason] = React.useState("")
-    const [error, setError] = React.useState<string | null>(null)
     const profileQuery = useAccountProfileQuery()
     const mutation = useMaintainPurchaseSourceMutation()
+    const form = useAppForm({
+        defaultValues: { reason: "" },
+    })
+    const reason = useStore(form.store, (state) => state.values.reason)
+    const trimmedReason = reason.trim()
+    const reasonValid =
+        trimmedReason.length > 0 &&
+        Array.from(trimmedReason).length <= MAINTAIN_NOTE_MAX_LENGTH
     const allowed = hasPermission(
         profileQuery.data?.permissions,
         "purchase_order:maintain_source",
@@ -230,27 +260,16 @@ export function MaintainSourceButton({
             : undefined
     const reasonId = `procurement-orders-detail-maintain-reason-${purchaseOrderId}`
 
-    const submit = async () => {
-        const trimmed = reason.trim()
-        if (!trimmed) {
-            setError("请填写维持原采购的原因")
-            return
+    const handleConfirm = async () => {
+        if (!reasonValid || update.recordVersion == null) {
+            throw new Error("请填写维持原采购的原因")
         }
-        if (update.recordVersion == null) return
-        setError(null)
-        try {
-            await mutation.mutateAsync({
-                purchaseOrderId,
-                expectedVersion: update.recordVersion,
-                reason: trimmed,
-            })
-            setOpen(false)
-        } catch (cause) {
-            setError(
-                getErrorPresentation(cause, "登记失败，请刷新后重试。")
-                    .description,
-            )
-        }
+        await mutation.mutateAsync({
+            purchaseOrderId,
+            expectedVersion: update.recordVersion,
+            reason: trimmedReason,
+        })
+        onMaintained?.()
     }
 
     return (
@@ -264,77 +283,84 @@ export function MaintainSourceButton({
                     disabled={disabledReason != null}
                     title={disabledReason}
                     onClick={() => {
-                        setReason("")
-                        setError(null)
+                        form.reset({ reason: "" })
                         setOpen(true)
                     }}
                 >
                     {label}
                 </Button>
             )}
-            <AlertDialog
+            <FormalActionConfirmDialog
+                layout="compact"
+                idPrefix="procurement-orders-detail-maintain"
                 open={open}
                 onOpenChange={(next) => {
                     if (!mutation.isPending) setOpen(next)
                 }}
-            >
-                <AlertDialogContent className="sm:max-w-md">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>{label}</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            仅在已与供应商核实无法按最新销售要求调整采购时使用。登记后本次影响待办结束，原采购数量和金额不变。超出销售数量的商品仍需按实际情况另行办理入库、退货或库存调整。
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <div className="space-y-2">
-                        <label
-                            htmlFor={reasonId}
-                            className="text-xs font-medium"
-                        >
-                            无法调整的原因
-                            <RequiredMark />
-                        </label>
-                        <Textarea
-                            id={reasonId}
-                            value={reason}
-                            onChange={(event) => setReason(event.target.value)}
-                            placeholder="例如：供应商不接受减量，已备货"
-                            maxLength={MAINTAIN_NOTE_MAX_LENGTH}
-                            rows={3}
-                            disabled={mutation.isPending}
-                            aria-describedby={
-                                error ? `${reasonId}-error` : undefined
-                            }
-                        />
-                        {error ? (
-                            <p
-                                id={`${reasonId}-error`}
-                                className="text-body-compact text-destructive"
-                                role="alert"
-                            >
-                                {error}
-                            </p>
-                        ) : null}
-                    </div>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel
-                            id="procurement-orders-detail-maintain-cancel"
-                            disabled={mutation.isPending}
-                        >
-                            取消
-                        </AlertDialogCancel>
-                        <AlertDialogAction
-                            id="procurement-orders-detail-maintain-confirm"
-                            loading={mutation.isPending}
-                            onClick={(event) => {
-                                event.preventDefault()
-                                void submit()
-                            }}
-                        >
-                            确认登记
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+                title={label}
+                actionLabel="登记维持原采购"
+                confirmLabel="确认登记"
+                cancelLabel="取消"
+                fromStatus={{ label: "待核对变更", tone: "warning" }}
+                toStatus={{ label: "维持原采购", tone: "neutral" }}
+                description="仅在已与供应商核实无法按最新销售要求调整采购时使用。"
+                effects={[
+                    "登记后本次采购依据变更待办结束，原采购数量和金额不变",
+                    "超出销售数量的商品仍需按实际情况另行办理入库、退货或库存调整",
+                ]}
+                pending={mutation.isPending}
+                confirmDisabled={!reasonValid || update.recordVersion == null}
+                onConfirm={handleConfirm}
+                formContent={
+                    <form.AppField
+                        name="reason"
+                        validators={{
+                            onChange: maintainReasonSchema,
+                            onBlur: maintainReasonSchema,
+                        }}
+                    >
+                        {(field) => {
+                            const showError =
+                                field.state.meta.isTouched ||
+                                field.state.meta.errors.length > 0
+                            const error = showError
+                                ? firstFieldError(field.state.meta.errors)
+                                : undefined
+                            return (
+                                <ReasonTextareaField
+                                    id={reasonId}
+                                    name={field.name}
+                                    mode="chars"
+                                    max={MAINTAIN_NOTE_MAX_LENGTH}
+                                    label="无法调整的原因"
+                                    required
+                                    value={field.state.value}
+                                    onChange={field.handleChange}
+                                    onBlur={field.handleBlur}
+                                    placeholder="例如：供应商不接受减量，已备货"
+                                    rows={3}
+                                    disabled={mutation.isPending}
+                                    error={error}
+                                    invalid={Boolean(error)}
+                                    onCtrlEnterSubmit={() => {
+                                        if (
+                                            !mutation.isPending &&
+                                            reasonValid &&
+                                            update.recordVersion != null
+                                        ) {
+                                            document
+                                                .getElementById(
+                                                    "procurement-orders-detail-maintain-confirm",
+                                                )
+                                                ?.click()
+                                        }
+                                    }}
+                                />
+                            )
+                        }}
+                    </form.AppField>
+                }
+            />
         </>
     )
 }

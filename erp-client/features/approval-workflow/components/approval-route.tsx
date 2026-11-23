@@ -48,13 +48,9 @@ export function ApprovalRoute({
                         ? Clock3Icon
                         : MinusIcon
                 const status =
-                    node.result === "PENDING"
-                        ? "待审批"
-                        : node.result === "NOT_REACHED"
-                          ? "未执行"
-                          : node.result === "ACTIVE"
-                            ? "当前审批"
-                            : displayExecutionStatus(node.result)
+                    node.result === "NOT_REACHED"
+                        ? "未执行"
+                        : displayExecutionStatus(node.result)
                 return (
                     <li
                         key={node.key}
@@ -120,9 +116,12 @@ export function ApprovalRoute({
                                 "审批人未标注"}{" "}
                             · {status}
                         </span>
-                        {horizontal && node.execution?.decidedAt ? (
+                        {node.execution?.decidedAt ? (
                             <time
-                                className="text-xs text-muted-foreground"
+                                className={cn(
+                                    "num text-xs text-muted-foreground",
+                                    !horizontal && "col-start-2",
+                                )}
                                 dateTime={
                                     displayUnixSeconds(node.execution.decidedAt)
                                         ?.dateTime

@@ -1,4 +1,5 @@
 import { salesLinePriceComparison } from "@/lib/sales-line-prices"
+import { formatIsoDate, unixSecondsToIsoOrEmpty } from "@/lib/datetime"
 import type {
     ApprovalMaterials,
     ApprovalPurchaseLine,
@@ -26,15 +27,8 @@ export function purchaseSpecification(value: string | null) {
 export function purchaseSalesDate(line: ApprovalPurchaseLine) {
     if (!line.source || !Number.isFinite(line.source.fulfillment_due_at))
         return null
-    const date = new Date(line.source.fulfillment_due_at * 1000)
-    return Number.isNaN(date.getTime())
-        ? null
-        : date.toLocaleDateString("sv-SE", {
-              timeZone: "Asia/Shanghai",
-              year: "numeric",
-              month: "2-digit",
-              day: "2-digit",
-          })
+    const iso = unixSecondsToIsoOrEmpty(line.source.fulfillment_due_at)
+    return formatIsoDate(iso, { timeZone: "Asia/Shanghai" })
 }
 
 function calendarDay(value: string | null) {

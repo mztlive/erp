@@ -11,6 +11,10 @@ import type {
 
 import type { StatusTone } from "@/components/ui/status-badge"
 import type {
+    ApprovalInstanceListView,
+    ApprovalInstanceStatusFilter,
+} from "@/features/approval-workflow/api"
+import type {
     WorkItemStatus,
     DeliveryTaskLine,
     WorkItemFulfillmentStatus,
@@ -40,6 +44,7 @@ export type WorkspaceActionCode =
     | "PROCESS"
     | "ABANDON_REWORK"
     | "REASSIGN"
+    | "CLOSE"
     | "OPEN_DOCUMENT"
     | "APPROVE"
     | "REJECT"
@@ -161,6 +166,12 @@ export type TodayWorkspaceQuery = Readonly<{
     filters?: WorkspaceFilters
     scopeVersion?: string
     view: WorkspaceViewFilter
+    /** `/workspace/approvals` 子视图：started 走页码分页，其余走游标分页。 */
+    approvalView?: ApprovalInstanceListView
+    /** 游标审批视图的基础单据类型筛选（不传 filters JSON）。 */
+    approvalDocumentType?: string
+    /** 游标审批视图的状态筛选（仅 managed 视图发送，避免 422）。 */
+    approvalStatus?: ApprovalInstanceStatusFilter
     due?: WorkspaceDueFilter
     blocked?: boolean
     family?: WorkspaceFamilyFilter
@@ -172,6 +183,8 @@ export type TodayWorkspaceQuery = Readonly<{
     salesOrderIds?: string
     /** 逗号分隔的来源采购单稳定 ID；只收窄授权结果。 */
     purchaseOrderIds?: string
+    /** 逗号分隔的往来单位稳定 ID；只收窄授权结果。 */
+    counterpartyIds?: string
     sort: WorkspaceSort
     cursor?: string
     page?: number
@@ -180,6 +193,8 @@ export type TodayWorkspaceQuery = Readonly<{
 
 export type TodayWorkspaceView = Readonly<{
     filterOptions?: WorkspaceSearchOptions
+    /** 审批列表响应附带的按单据类型拆解计数（零额外计数请求）。 */
+    documentTypeCounts?: Readonly<Record<string, number>>
     scopeVersion?: string
     access: "allowed" | "forbidden" | "no_data_scope"
     viewer: {
@@ -199,6 +214,11 @@ export type TodayWorkspaceView = Readonly<{
     /** 服务端授权统计快照；旧服务缺省时不展示，禁止从当前页推算。 */
     familyCounts?: WorkspaceFamilyCounts
     workItemTypeCounts?: Readonly<Record<string, number>>
+    /** `/workspace/approvals` 四个审批视图的总数与可用性（403 按不可用处理）。 */
+    approvalViewCounts?: Partial<Record<ApprovalInstanceListView, number>>
+    approvalViewAvailability?: Partial<
+        Record<ApprovalInstanceListView, boolean>
+    >
     dueTodayCount: number
     items: readonly WorkspaceWorkItem[]
     nextCursor?: string

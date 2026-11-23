@@ -12,8 +12,6 @@ import {
 } from "lucide-react"
 
 import { LoadingButton } from "@/components/ui/loading-button"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { ApprovalSectionHeading } from "./section-heading"
 import {
     StatusBadge,
     statusToneMarkerClass,
@@ -176,18 +174,17 @@ export function ExecutionHistory({
     )
     if (presentation === "timeline") return content
     return (
-        <Card
-            size="sm"
-            data-slot="approval-surface"
-            className="border border-border shadow-sm"
-        >
-            <CardHeader className="border-b">
-                <ApprovalSectionHeading compact={compact}>
-                    审批历史
-                </ApprovalSectionHeading>
-            </CardHeader>
-            <CardContent>{content}</CardContent>
-        </Card>
+        <section data-slot="approval-surface" className="space-y-3">
+            <h2
+                className={cn(
+                    "font-semibold tracking-tight text-foreground",
+                    compact ? "text-body-compact" : "text-section-title",
+                )}
+            >
+                审批历史
+            </h2>
+            {content}
+        </section>
     )
 }
 

@@ -398,9 +398,7 @@ export { BatchImpactPreview, ConflictResolutionDialog }
 
 export {
     FormalActionConfirmDialog,
-    SequentialProcessBar,
     type FormalActionConfirmDialogProps,
     type ResponsibilityStatus,
-    type SequentialProcessBarProps,
     type WorkflowStatus,
 } from "@/components/business/workflow-actions"

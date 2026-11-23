@@ -120,8 +120,8 @@ export function SalesOrderContractSupplement({
                 }}
             >
                 <DialogContent
+                    size="lg"
                     closeButtonId="sales-order-contract-supplement-close"
-                    className="sm:max-w-xl"
                 >
                     <DialogHeader>
                         <DialogTitle>补录销售合同</DialogTitle>

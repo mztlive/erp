@@ -87,9 +87,9 @@ export function ProductImportDialog({
             }}
         >
             <DialogContent
+                size="lg"
                 closeButtonId="product-import-dismiss"
                 id="product-import-dialog"
-                className="sm:max-w-xl"
             >
                 <DialogHeader>
                     <DialogTitle>导入商品</DialogTitle>

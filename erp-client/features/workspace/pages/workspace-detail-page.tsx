@@ -2,7 +2,7 @@
 
 import { workspaceQueueParams } from "@/lib/workspace-queue-routes"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
 import { useRouter, useSearchParams } from "@/lib/navigation"
@@ -10,6 +10,10 @@ import {
     buildWorkspaceDetailHref,
     workspaceQueueHref,
 } from "@/lib/workspace-detail-href"
+import {
+    readWorkspaceQueueSequence,
+    removeFromWorkspaceQueueSequence,
+} from "@/lib/workspace-queue-sequence"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import {
@@ -31,6 +35,11 @@ import {
     workspaceHomeKeys,
 } from "../hooks/queries"
 import { useWorkspaceDetailDocumentTitle } from "../hooks/use-workspace-detail-title"
+import {
+    WorkspaceHotkeyCheatSheetButton,
+    dispatchWorkspaceHotkeyAction,
+    useWorkspaceHotkeys,
+} from "../hooks/use-workspace-hotkeys"
 import {
     parseWorkspaceSearchParams,
     restrictWorkspaceFilters,
@@ -112,6 +121,15 @@ function WorkspaceDetailContent({
         item?.workItemType === "APPROVAL_REWORK" ? undefined : item,
     )
     const reworkTask = detail.data?.reworkTask
+    const queueKind = approval ? "approvals" : "tasks"
+    const userId = profile.data?.userid
+    const cachedQueueIds = useMemo(
+        () => readWorkspaceQueueSequence(userId, queueKind, returnTo),
+        [queueKind, returnTo, userId],
+    )
+    const hasCachedSequence = Boolean(
+        cachedQueueIds && cachedQueueIds.includes(id),
+    )
     const [queuePath, queueSearch] = returnTo.split("?")
     const queueState = restrictWorkspaceFilters(
         parseWorkspaceSearchParams(
@@ -131,7 +149,7 @@ function WorkspaceDetailContent({
     const queue = useWorkspaceDashboardQuery(
         toTodayWorkspaceQuery(queueState, "Asia/Shanghai"),
         profile.data,
-        canReadQueue,
+        canReadQueue && !hasCachedSequence,
     )
     const backLabel = approval ? "返回审批队列" : "返回任务队列"
     const back = useCallback(
@@ -151,102 +169,143 @@ function WorkspaceDetailContent({
         ])
     }, [detail, queryClient])
 
-    // 队列上下项切换（复用列表缓存，无额外请求）
-    const queueItems = queue.data?.items ?? []
-    const currentIndex = queueItems.findIndex(
-        (entry) => entry.workItemId === id,
+    // 队列上下项切换（优先使用列表页暂存的轻量 ID 序列即时渲染，无缓存时回退队列查询）
+    const queueIds = useMemo(
+        () =>
+            hasCachedSequence && cachedQueueIds
+                ? cachedQueueIds
+                : (queue.data?.items.map((entry) => entry.workItemId) ?? []),
+        [cachedQueueIds, hasCachedSequence, queue.data?.items],
     )
-    const prevItem = currentIndex > 0 ? queueItems[currentIndex - 1] : undefined
-    const nextItem =
-        currentIndex >= 0 && currentIndex + 1 < queueItems.length
-            ? queueItems[currentIndex + 1]
+    const currentIndex = queueIds.indexOf(id)
+    const prevId = currentIndex > 0 ? queueIds[currentIndex - 1] : undefined
+    const nextId =
+        currentIndex >= 0 && currentIndex + 1 < queueIds.length
+            ? queueIds[currentIndex + 1]
             : undefined
     const openSibling = useCallback(
         (targetId: string) => {
             router.replace(
-                buildWorkspaceDetailHref(
-                    approval ? "approvals" : "tasks",
-                    targetId,
-                    { returnTo, autoNext: !approval && autoNext },
-                ),
+                buildWorkspaceDetailHref(queueKind, targetId, {
+                    returnTo,
+                    autoNext,
+                }),
             )
         },
-        [approval, autoNext, returnTo, router],
+        [autoNext, queueKind, returnTo, router],
     )
-    const queueNavigation =
-        currentIndex >= 0 && queueItems.length > 1 ? (
-            <div className="flex items-center gap-1">
-                <span className="num mr-1 text-xs text-muted-foreground">
-                    第 {currentIndex + 1} / {queueItems.length} 项
-                </span>
-                <Button
-                    id="workspace-processing-prev"
-                    type="button"
-                    variant="ghost"
-                    size="xs"
-                    className={detailWorkspaceStyles.quietButton}
-                    disabled={!prevItem}
-                    aria-label="上一项"
-                    onClick={() => prevItem && openSibling(prevItem.workItemId)}
-                >
-                    <ChevronLeftIcon aria-hidden="true" />
-                    上一项
-                </Button>
-                <Button
-                    id="workspace-processing-next"
-                    type="button"
-                    variant="ghost"
-                    size="xs"
-                    className={detailWorkspaceStyles.quietButton}
-                    disabled={!nextItem}
-                    aria-label="下一项"
-                    onClick={() => nextItem && openSibling(nextItem.workItemId)}
-                >
-                    下一项
-                    <ChevronRightIcon aria-hidden="true" />
-                </Button>
-            </div>
-        ) : null
 
-    // 完成通知可能早于队列请求结束；只有成功取得队列才能判断是否还有下一项。
+    useWorkspaceHotkeys({
+        enabled: !completion && Boolean(detail.data),
+        onNext: nextId ? () => openSibling(nextId) : undefined,
+        onPrev: prevId ? () => openSibling(prevId) : undefined,
+        onApprove: () => dispatchWorkspaceHotkeyAction("approve"),
+        onReject: () => dispatchWorkspaceHotkeyAction("reject"),
+        onMaterials: () => dispatchWorkspaceHotkeyAction("materials"),
+        onHistory: () => dispatchWorkspaceHotkeyAction("history"),
+        onToggleRail: () => dispatchWorkspaceHotkeyAction("toggle-rail"),
+    })
+
+    const queueNavigation = (
+        <div className="flex items-center gap-1">
+            {currentIndex >= 0 && queueIds.length > 1 ? (
+                <>
+                    <span className="num mr-1 text-xs text-muted-foreground">
+                        第 {currentIndex + 1} / {queueIds.length} 项
+                    </span>
+                    <Button
+                        id="workspace-processing-prev"
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        className={detailWorkspaceStyles.quietButton}
+                        disabled={!prevId}
+                        aria-label="上一项 (K)"
+                        title="上一项 (K)"
+                        onClick={() => prevId && openSibling(prevId)}
+                    >
+                        <ChevronLeftIcon aria-hidden="true" />
+                        上一项
+                    </Button>
+                    <Button
+                        id="workspace-processing-next"
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        className={detailWorkspaceStyles.quietButton}
+                        disabled={!nextId}
+                        aria-label="下一项 (J)"
+                        title="下一项 (J)"
+                        onClick={() => nextId && openSibling(nextId)}
+                    >
+                        下一项
+                        <ChevronRightIcon aria-hidden="true" />
+                    </Button>
+                </>
+            ) : null}
+            <WorkspaceHotkeyCheatSheetButton
+                id="workspace-detail-hotkeys"
+                scope="detail"
+            />
+        </div>
+    )
+
+    // 完成通知可能早于队列请求结束；有轻量序列时立即推进，否则待队列查询成功后流转。
     useEffect(() => {
         if (!completion) return
-        if (!autoNext || approval) {
+        if (!autoNext) {
             router.replace(returnTo, { scroll: false })
             return
         }
-        if (!queue.isSuccess) return
+        if (!hasCachedSequence && !queue.isSuccess) return
         const { completedId, preferredId } = completion
-        const items = queue.data.items
-        const index = items.findIndex(
-            (entry) => entry.workItemId === completedId,
-        )
-        const next =
-            items.find(
-                (entry) =>
-                    entry.workItemId === preferredId &&
-                    entry.workItemId !== completedId,
-            ) ??
-            items
+        const ids = hasCachedSequence
+            ? (cachedQueueIds ?? [])
+            : (queue.data?.items.map((entry) => entry.workItemId) ?? [])
+        const currentEntryId = ids.includes(completedId) ? completedId : id
+        const index = ids.indexOf(currentEntryId)
+        const nextTargetId =
+            (!approval &&
+            preferredId &&
+            preferredId !== completedId &&
+            preferredId !== currentEntryId
+                ? preferredId
+                : undefined) ??
+            ids
                 .slice(index + 1)
-                .find((entry) => entry.workItemId !== completedId) ??
-            items.find((entry) => entry.workItemId !== completedId)
-        if (next)
+                .find((entryId) => entryId !== currentEntryId) ??
+            ids.find((entryId) => entryId !== currentEntryId)
+        if (hasCachedSequence) {
+            removeFromWorkspaceQueueSequence(
+                userId,
+                queueKind,
+                returnTo,
+                currentEntryId,
+            )
+        }
+        if (nextTargetId) {
             router.replace(
-                buildWorkspaceDetailHref("tasks", next.workItemId, {
+                buildWorkspaceDetailHref(queueKind, nextTargetId, {
                     returnTo,
                     autoNext: true,
                 }),
             )
-        else router.replace(returnTo, { scroll: false })
+        } else {
+            router.replace(returnTo, { scroll: false })
+        }
     }, [
+        approval,
         completion,
         autoNext,
-        approval,
+        cachedQueueIds,
+        hasCachedSequence,
+        id,
         queue.isSuccess,
         queue.data,
+        queueKind,
         router,
         returnTo,
+        userId,
     ])
     const complete = (completedId: string, preferredId?: string) => {
         setCompletion({ completedId, preferredId })
@@ -283,7 +342,7 @@ function WorkspaceDetailContent({
                                 <div className="flex items-center gap-2 text-body-compact text-muted-foreground">
                                     <Spinner />
                                     <span>
-                                        {autoNext && !approval
+                                        {autoNext
                                             ? "当前任务已处理，正在打开下一项…"
                                             : "当前任务已处理，正在返回队列…"}
                                     </span>
@@ -353,7 +412,7 @@ function WorkspaceDetailContent({
             <WorkspaceProcessingLayout
                 item={detail.data.item}
                 reworkTask={reworkTask}
-                allowAutoNext={!approval}
+                allowAutoNext
                 autoNext={autoNext}
                 onAutoNextChange={setAutoNext}
                 onBack={back}
@@ -368,7 +427,12 @@ function WorkspaceDetailContent({
                     reworkTask={reworkTask}
                     grantedPermissions={profile.data?.permissions ?? []}
                     onDecisionApplied={(result, completedId) =>
-                        complete(completedId, result.nextOpenTask?.workItemId)
+                        complete(
+                            completedId,
+                            approval
+                                ? undefined
+                                : result.nextOpenTask?.workItemId,
+                        )
                     }
                     onTaskCompleted={complete}
                 />

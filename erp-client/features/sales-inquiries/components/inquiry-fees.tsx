@@ -4,7 +4,13 @@ import { ReceiptTextIcon } from "lucide-react"
 import { MoneyValue, RateValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Table,
@@ -107,6 +113,8 @@ export function InquiryFees({
                     : historical
                       ? "本轮费用为历史反馈，仅供核对。"
                       : "本轮结果已接受。"
+    const formatRoundLabel = (item: InquiryFeedback) =>
+        `第 ${item.round} 轮 · 需求第 ${item.requirement_version} 版${isCurrent(item) ? "（当前）" : "（历史）"}`
     return (
         <section className="space-y-4" aria-label="询价费用">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -163,33 +171,39 @@ export function InquiryFees({
                             >
                                 轮次
                             </Label>
-                            <NativeSelect
-                                id="sales-inquiry-fees-round"
-                                className="h-control-sm"
+                            <Select
                                 value={String(feedback.round)}
-                                onChange={(event) => {
+                                onValueChange={(value) => {
+                                    if (!value) return
                                     const next = rounds.find(
-                                        (item) =>
-                                            String(item.round) ===
-                                            event.target.value,
+                                        (item) => String(item.round) === value,
                                     )
                                     if (next) onRoundChange(next.round)
                                 }}
                             >
-                                {rounds.map((item) => (
-                                    <NativeSelectOption
-                                        key={item.round}
-                                        id={`sales-inquiry-fees-round-${item.round}`}
-                                        value={String(item.round)}
-                                    >
-                                        第 {item.round} 轮 · 需求第{" "}
-                                        {item.requirement_version} 版
-                                        {isCurrent(item)
-                                            ? "（当前）"
-                                            : "（历史）"}
-                                    </NativeSelectOption>
-                                ))}
-                            </NativeSelect>
+                                <SelectTrigger
+                                    id="sales-inquiry-fees-round"
+                                    size="sm"
+                                >
+                                    <SelectValue>
+                                        {formatRoundLabel(feedback)}
+                                    </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent
+                                    align="end"
+                                    alignItemWithTrigger={false}
+                                >
+                                    {rounds.map((item) => (
+                                        <SelectItem
+                                            key={item.round}
+                                            id={`sales-inquiry-fees-round-${item.round}`}
+                                            value={String(item.round)}
+                                        >
+                                            {formatRoundLabel(item)}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                     )}
                 </div>

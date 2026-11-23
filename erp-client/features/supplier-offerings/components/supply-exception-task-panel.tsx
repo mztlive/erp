@@ -3,44 +3,33 @@
 import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
 import * as React from "react"
 import Link from "next/link"
-import { ClipboardCheckIcon, ShieldAlertIcon } from "lucide-react"
+import { ShieldAlertIcon } from "lucide-react"
 import { z } from "zod"
 
 import {
     BusinessFailureState,
+    DetailWorkspaceFact,
+    DetailWorkspaceFacts,
+    DetailWorkspaceSection,
     FormalActionConfirmDialog,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
+import { StatusBadge } from "@/components/ui/status-badge"
 import type {
     SupplierOfferingView,
     SupplierSupplyExceptionWorkItem,
 } from "@/features/supplier-offerings/types"
 import { useCompleteSupplierSupplyExceptionTaskMutation } from "@/features/supplier-offerings/hooks/queries"
 import { supplyExceptionCompletionIntent } from "@/features/supplier-offerings/lib/supply-exception-command"
-import type { WorkItemAllowedAction } from "@/features/work-items/types"
 import { getErrorMessage } from "@/lib/api/errors"
 import {
     classifyFormalCommandError,
     FormalCommandKeyLedger,
 } from "@/lib/formal-command"
-
-const ACTION_LABELS: Readonly<Partial<Record<WorkItemAllowedAction, string>>> =
-    {
-        VIEW: "可查看",
-        PROCESS: "可核对",
-        REASSIGN: "可转交",
-    }
+import { cn } from "@/lib/utils"
 
 function responsibility(task: SupplierSupplyExceptionWorkItem): string {
     if (task.ownerUser) return task.ownerUser.displayName
@@ -149,65 +138,77 @@ export function SupplyExceptionTaskPanel({
 
     if (isPending) {
         return (
-            <div
-                className="h-44 animate-pulse rounded-xl border bg-muted/50"
-                aria-label="正在核对供应停止任务"
-            />
+            <DetailWorkspaceSection width="form">
+                <div
+                    className="h-44 animate-pulse rounded-lg bg-muted/60"
+                    aria-busy="true"
+                    aria-label="正在核对供应停止任务"
+                />
+            </DetailWorkspaceSection>
         )
     }
 
     if (error || !task) {
         return (
-            <BusinessFailureState
-                title="暂时无法办理停供核对"
-                description="请刷新待办重试；仍无法办理时，联系管理员核对当前负责人和关联供应商品。"
-                error={error}
-                onRetry={onRetry}
-                action={
-                    <div className="flex flex-wrap gap-2">
-                        <Button
-                            id="supplier-offerings-exception-retry"
-                            type="button"
-                            variant="outline"
-                            onClick={onRetry}
-                        >
-                            刷新重试
-                        </Button>
-                        {!embedded ? (
+            <DetailWorkspaceSection width="form">
+                <BusinessFailureState
+                    title="暂时无法办理停供核对"
+                    description="请刷新待办重试；仍无法办理时，联系管理员核对当前负责人和关联供应商品。"
+                    error={error}
+                    onRetry={onRetry}
+                    action={
+                        <div className="flex flex-wrap gap-2">
                             <Button
-                                id="supplier-offerings-exception-error-back-workspace"
+                                id="supplier-offerings-exception-retry"
                                 type="button"
                                 variant="outline"
-                                render={<Link href={returnHref} />}
+                                onClick={onRetry}
                             >
-                                返回待办队列
+                                刷新重试
                             </Button>
-                        ) : null}
-                    </div>
-                }
-            />
+                            {!embedded ? (
+                                <Button
+                                    id="supplier-offerings-exception-error-back-workspace"
+                                    type="button"
+                                    variant="outline"
+                                    render={<Link href={returnHref} />}
+                                >
+                                    返回待办队列
+                                </Button>
+                            ) : null}
+                        </div>
+                    }
+                />
+            </DetailWorkspaceSection>
         )
     }
 
+    const hasBlockers = Boolean(
+        task.processingBlocker || task.actionBlockers.length > 0,
+    )
+
     return (
         <>
-            <Card className="border-destructive/40">
-                <CardHeader>
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                            <CardTitle className="flex items-center gap-2">
-                                <ShieldAlertIcon
-                                    className="size-4 text-destructive"
-                                    aria-hidden="true"
-                                />
-                                供应停止核对
-                                <Badge variant="destructive">待核对</Badge>
-                            </CardTitle>
-                            <CardDescription className="mt-1">
-                                请核实哪项供应已停止、影响哪些商品，并填写核对凭据和处理结论。
-                            </CardDescription>
-                        </div>
-                        {!embedded ? (
+            <div
+                className={cn(
+                    "min-w-0 [&>[data-slot=detail-workspace-section]+[data-slot=detail-workspace-section]]:border-t [&>[data-slot=detail-workspace-section]+[data-slot=detail-workspace-section]]:border-border/60",
+                    !embedded && "border-b border-border/60",
+                )}
+            >
+                <DetailWorkspaceSection
+                    title={!embedded ? "供应停止核对" : undefined}
+                    badge={
+                        !embedded ? (
+                            <StatusBadge tone="destructive" label="待核对" />
+                        ) : undefined
+                    }
+                    subtitle={
+                        !embedded
+                            ? "请核实哪项供应已停止、影响哪些商品，并填写核对凭据和处理结论。"
+                            : undefined
+                    }
+                    actions={
+                        !embedded ? (
                             <Button
                                 id="supplier-offerings-exception-header-back-workspace"
                                 type="button"
@@ -217,10 +218,11 @@ export function SupplyExceptionTaskPanel({
                             >
                                 返回待办队列
                             </Button>
-                        ) : null}
-                    </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
+                        ) : undefined
+                    }
+                    ariaLabel={embedded ? "供应停止影响与诊断" : undefined}
+                    width="form"
+                >
                     <Alert variant="destructive">
                         <ShieldAlertIcon aria-hidden="true" />
                         <AlertTitle>
@@ -231,89 +233,63 @@ export function SupplyExceptionTaskPanel({
                         </AlertDescription>
                     </Alert>
 
-                    <dl className="grid gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2">
-                        <div className="bg-card p-3">
-                            <dt className="text-xs text-muted-foreground">
-                                受影响的供应商品
-                            </dt>
-                            <dd className="mt-1 text-body-compact font-medium">
-                                {sourceLabel(task, offering)}
-                            </dd>
-                        </div>
-                        <div className="bg-card p-3">
-                            <dt className="text-xs text-muted-foreground">
-                                当前负责人
-                            </dt>
-                            <dd className="mt-1 text-body-compact font-medium">
-                                {responsibility(task)}
-                            </dd>
-                            <div className="mt-1 text-xs text-muted-foreground">
-                                {task.ownerRoleLabel} ·{" "}
-                                {task.ownerOrganization.displayName}
-                            </div>
-                        </div>
-                    </dl>
-
-                    <div className="grid gap-3 lg:grid-cols-2">
-                        <div className="rounded-lg border p-3">
-                            <div className="text-xs font-medium text-muted-foreground">
-                                本次停供影响
-                            </div>
-                            <p className="mt-1 text-body-compact">
-                                {task.impactSummary}
-                            </p>
-                            <p className="mt-2 text-xs text-muted-foreground">
-                                原因：{task.reasonLabel}。
-                            </p>
-                        </div>
-                        <div className="rounded-lg border p-3">
-                            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                                <ClipboardCheckIcon
-                                    className="size-4"
-                                    aria-hidden="true"
-                                />
-                                当前需要你核对
-                            </div>
-                            <ul className="mt-2 list-disc space-y-1 pl-4 text-body-compact">
-                                <li>核实供应商和停止供应的商品。</li>
-                                <li>核对本次记录的停供原因和影响范围。</li>
-                                <li>填写核对凭据和结论，再提交完成待办。</li>
-                            </ul>
-                        </div>
-                    </div>
-
-                    <div>
-                        <div className="text-xs font-medium text-muted-foreground">
-                            你可以进行的操作
-                        </div>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                            {task.allowedActions.length > 0 ? (
-                                task.allowedActions.map((action) => (
-                                    <Badge key={action} variant="outline">
-                                        {ACTION_LABELS[action] ?? "其他操作"}
-                                    </Badge>
-                                ))
-                            ) : (
-                                <Badge variant="secondary">当前只读</Badge>
-                            )}
-                        </div>
-                        {task.processingBlocker ? (
-                            <p className="mt-2 text-xs text-destructive">
-                                {task.processingBlocker.message}
-                            </p>
+                    <DetailWorkspaceFacts
+                        columns={2}
+                        ariaLabel="停供异常诊断信息"
+                    >
+                        <DetailWorkspaceFact
+                            label="受影响的供应商品"
+                            value={sourceLabel(task, offering)}
+                            span={embedded ? 2 : 1}
+                        />
+                        {!embedded ? (
+                            <DetailWorkspaceFact
+                                label="当前负责人"
+                                value={
+                                    <span>
+                                        {responsibility(task)}
+                                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                                            {task.ownerRoleLabel} ·{" "}
+                                            {task.ownerOrganization.displayName}
+                                        </span>
+                                    </span>
+                                }
+                            />
                         ) : null}
-                        {task.actionBlockers.length > 0 ? (
-                            <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
-                                {task.actionBlockers.map((blocker) => (
-                                    <li key={blocker}>{blocker}</li>
-                                ))}
-                            </ul>
-                        ) : null}
-                        <p className="mt-2 text-xs text-muted-foreground">
-                            转交只改变当前负责人人；“确认已核对”完成任务，但不恢复发布。
-                        </p>
-                    </div>
+                        <DetailWorkspaceFact
+                            label="停供原因"
+                            value={task.reasonLabel}
+                        />
+                        <DetailWorkspaceFact
+                            label="本次停供影响"
+                            value={task.impactSummary}
+                        />
+                    </DetailWorkspaceFacts>
 
+                    {hasBlockers ? (
+                        <Alert variant="warning">
+                            <AlertTitle>当前办理限制</AlertTitle>
+                            <AlertDescription className="space-y-1">
+                                {task.processingBlocker ? (
+                                    <p>{task.processingBlocker.message}</p>
+                                ) : null}
+                                {task.actionBlockers.length > 0 ? (
+                                    <ul className="list-disc space-y-1 pl-4">
+                                        {task.actionBlockers.map((blocker) => (
+                                            <li key={blocker}>{blocker}</li>
+                                        ))}
+                                    </ul>
+                                ) : null}
+                            </AlertDescription>
+                        </Alert>
+                    ) : null}
+                </DetailWorkspaceSection>
+
+                <DetailWorkspaceSection
+                    title="完成核对"
+                    subtitle="填写可查验的凭据编号或链接及核对结论。提交后本条待办结束，供应和商品发布继续暂停。"
+                    width="form"
+                >
                     {actionError ? (
                         <Alert variant="destructive">
                             <AlertTitle>核对结论未提交</AlertTitle>
@@ -323,18 +299,12 @@ export function SupplyExceptionTaskPanel({
 
                     <form
                         id="supplier-offerings-exception-form"
-                        className="grid gap-4 rounded-lg border p-4"
+                        className="grid gap-4"
                         onSubmit={(event) => {
                             event.preventDefault()
                             void form.handleSubmit()
                         }}
                     >
-                        <div>
-                            <h3 className="font-semibold">完成核对</h3>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                                填写可查验的凭据编号或链接及核对结论。提交后本条待办结束，供应和商品发布继续暂停。
-                            </p>
-                        </div>
                         <form.AppField
                             name="evidenceReference"
                             children={(field) => (
@@ -379,8 +349,8 @@ export function SupplyExceptionTaskPanel({
                             </p>
                         ) : null}
                     </form>
-                </CardContent>
-            </Card>
+                </DetailWorkspaceSection>
+            </div>
 
             <FormalActionConfirmDialog
                 actionVariant="default"

@@ -93,6 +93,8 @@ pub(in crate::workbench) fn sales_order_fact(
         order.stable.created_by.clone(),
     );
     fact.order_scope_source = Some(OrderTaskSource::Sales(order.base.id.clone()));
+    fact.push_counterparty_id(order.customer_id.to_string());
+    fact.push_counterparty_id(order.settlement_party_id.to_string());
 
     let Some(submission) = preferred_submission(&order.base.id, submissions) else {
         return fact;

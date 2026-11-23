@@ -45,7 +45,7 @@ export function ProductSaveDialog({
             }}
         >
             <DialogContent
-                className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
+                size="lg"
                 closeButtonId="master-data-product-save-close"
                 showCloseButton={!pending}
             >

@@ -227,7 +227,7 @@ function SourceSalesBody({
         useState<PurchaseSourceSalesMaterialView | null>(null)
     const download = useDownloadPurchaseSalesMaterial(purchaseOrderId)
     return (
-        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-7 py-6">
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-sheet-inline py-5">
             <dl className="grid gap-4 text-body-compact sm:grid-cols-2">
                 <div>
                     <dt className="text-xs text-muted-foreground">

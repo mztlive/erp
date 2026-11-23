@@ -6,6 +6,7 @@ pub use approval_subject_facts::ApprovalSubjectFactsPort;
 mod audit;
 mod authorization;
 mod binding_facts;
+mod counterparties;
 mod finance_responsibility;
 pub use finance_responsibility::FinanceResponsibilityPort;
 mod object_facts;
@@ -21,6 +22,7 @@ pub use audit::{
 pub(crate) use authorization::FailClosedWorkflowAuthorizationPort;
 pub use authorization::{TaskReadAction, WorkflowAuthorizationPort};
 pub use binding_facts::ApprovalBindingFacts;
+pub use counterparties::{WorkItemCounterpartyFact, WorkItemCounterpartyLookup, WorkItemCounterpartyPort};
 pub use object_facts::{
     FailClosedObjectFactPort, ObjectFact, ObjectFactKey, ObjectFactMap, ObjectFactPort, ObjectKind,
     OrderTaskSource, SubjectBrief, W29CloseFact,

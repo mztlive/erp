@@ -27,6 +27,7 @@ import type {
 } from "@/features/customers/types"
 import { isDataScopeChanged } from "@/features/data-scope/cache"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { formatClock } from "@/lib/datetime"
 import { hasPermission } from "@/lib/permissions"
 import { useRouter } from "@/lib/navigation"
 import { useSearchHotkey } from "@/lib/use-search-hotkey"
@@ -322,9 +323,5 @@ export function CustomerCenterPage() {
 function formatAuthorizationTime(asOf: string): string {
     const date = new Date(asOf)
     if (Number.isNaN(date.getTime())) return asOf
-    return date.toLocaleTimeString("zh-CN", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-    })
+    return formatClock(date.toISOString())
 }

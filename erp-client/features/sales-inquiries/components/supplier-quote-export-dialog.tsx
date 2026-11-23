@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogHeader,
     DialogTitle,
@@ -66,8 +67,10 @@ export function SupplierQuoteExportButton({
             >
                 <DialogContent
                     id="supplier-quote-export-dialog"
+                    size="xl"
+                    scroll="body"
                     closeButtonId="supplier-quote-export-close"
-                    className="max-h-[90vh] gap-4 overflow-y-auto sm:max-w-4xl"
+                    showCloseButton={!busy}
                 >
                     <DialogHeader>
                         <DialogTitle>生成供应商报价表</DialogTitle>
@@ -148,84 +151,92 @@ function SupplierQuoteExportContent({
     }
     return (
         <>
-            {query.isPending && (
-                <p role="status" className="py-8 text-xs text-muted-foreground">
-                    正在读取当前商品和供给关系…
-                </p>
-            )}
-            {query.isError && (
-                <BusinessFailureState
-                    id="supplier-quote-source-retry"
-                    title="报价表资料读取失败"
-                    error={query.error}
-                    onRetry={refresh}
-                />
-            )}
-            {source && (
-                <>
-                    <SupplierQuoteSelection
-                        source={source}
-                        lineIds={lineIds}
-                        supplierIds={supplierIds}
-                        disabled={download.isPending || query.isFetching}
-                        onLinesChange={(ids) => {
-                            download.reset()
-                            setExcludedLines(
-                                source.lines
-                                    .filter(
-                                        (line) => !ids.includes(line.lineId),
-                                    )
-                                    .map((line) => line.lineId),
-                            )
-                        }}
-                        onSuppliersChange={(ids) => {
-                            download.reset()
-                            setExcludedSuppliers(
-                                source.groups
-                                    .filter(
-                                        (group) =>
-                                            !ids.includes(group.supplierId),
-                                    )
-                                    .map((group) => group.supplierId),
-                            )
-                        }}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                        将生成{" "}
-                        <span className="font-medium text-foreground">
-                            {groups.length} 张报价表
-                        </span>
-                        ，每家均按完整需求数量询价，黄色区域供供应商填写。
+            <DialogBody className="space-y-4">
+                {query.isPending && (
+                    <p
+                        role="status"
+                        className="py-8 text-xs text-muted-foreground"
+                    >
+                        正在读取当前商品和供给关系…
                     </p>
-                    {(missing > 0 || invalid > 0 || groups.length > 200) && (
-                        <Alert variant="warning">
-                            <AlertDescription>
-                                {missing > 0 &&
-                                    `${missing} 条所选商品没有匹配到已选供应商，请补齐供给关系、勾选供应商或取消相应商品。`}
-                                {invalid > 0 &&
-                                    `${invalid} 条所选商品资料不完整，请处理商品提示或取消勾选。`}
-                                {groups.length > 200 &&
-                                    "一次最多生成 200 家供应商的报价表，请减少所选供应商。"}
-                            </AlertDescription>
-                        </Alert>
-                    )}
-                </>
-            )}
-            {download.isError && (
-                <BusinessFailureState
-                    id="supplier-quote-download-retry"
-                    title="报价表生成失败，本次未下载"
-                    error={download.error}
-                    onRetry={refresh}
-                    retryLabel="刷新预览"
-                />
-            )}
-            {download.isSuccess && (
-                <p role="status" className="text-body-compact">
-                    已生成 {download.data} 张供应商报价表并开始下载 ZIP。
-                </p>
-            )}
-            <DialogFooter className="border-t pt-4 sm:items-center">
+                )}
+                {query.isError && (
+                    <BusinessFailureState
+                        id="supplier-quote-source-retry"
+                        title="报价表资料读取失败"
+                        error={query.error}
+                        onRetry={refresh}
+                    />
+                )}
+                {source && (
+                    <>
+                        <SupplierQuoteSelection
+                            source={source}
+                            lineIds={lineIds}
+                            supplierIds={supplierIds}
+                            disabled={download.isPending || query.isFetching}
+                            onLinesChange={(ids) => {
+                                download.reset()
+                                setExcludedLines(
+                                    source.lines
+                                        .filter(
+                                            (line) =>
+                                                !ids.includes(line.lineId),
+                                        )
+                                        .map((line) => line.lineId),
+                                )
+                            }}
+                            onSuppliersChange={(ids) => {
+                                download.reset()
+                                setExcludedSuppliers(
+                                    source.groups
+                                        .filter(
+                                            (group) =>
+                                                !ids.includes(group.supplierId),
+                                        )
+                                        .map((group) => group.supplierId),
+                                )
+                            }}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            将生成{" "}
+                            <span className="font-medium text-foreground">
+                                {groups.length} 张报价表
+                            </span>
+                            ，每家均按完整需求数量询价，黄色区域供供应商填写。
+                        </p>
+                        {(missing > 0 ||
+                            invalid > 0 ||
+                            groups.length > 200) && (
+                            <Alert variant="warning">
+                                <AlertDescription>
+                                    {missing > 0 &&
+                                        `${missing} 条所选商品没有匹配到已选供应商，请补齐供给关系、勾选供应商或取消相应商品。`}
+                                    {invalid > 0 &&
+                                        `${invalid} 条所选商品资料不完整，请处理商品提示或取消勾选。`}
+                                    {groups.length > 200 &&
+                                        "一次最多生成 200 家供应商的报价表，请减少所选供应商。"}
+                                </AlertDescription>
+                            </Alert>
+                        )}
+                    </>
+                )}
+                {download.isError && (
+                    <BusinessFailureState
+                        id="supplier-quote-download-retry"
+                        title="报价表生成失败，本次未下载"
+                        error={download.error}
+                        onRetry={refresh}
+                        retryLabel="刷新预览"
+                    />
+                )}
+                {download.isSuccess && (
+                    <p role="status" className="text-body-compact">
+                        已生成 {download.data} 张供应商报价表并开始下载 ZIP。
+                    </p>
+                )}
+            </DialogBody>
+            <DialogFooter className="sm:items-center">
                 <Button
                     id="supplier-quote-preview-refresh"
                     type="button"

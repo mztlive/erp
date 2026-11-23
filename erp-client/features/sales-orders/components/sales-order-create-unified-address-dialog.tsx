@@ -9,6 +9,7 @@ import { toFieldErrors, useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -158,10 +159,11 @@ export function SalesOrderCreateUnifiedAddressDialog({
             ) : null}
             <Dialog open={open} onOpenChange={setOpen}>
                 <DialogContent
-                    className="flex max-h-[88dvh] flex-col overflow-hidden sm:max-w-xl"
+                    size="lg"
+                    scroll="body"
                     closeButtonId={`${idPrefix}-close`}
                 >
-                    <DialogHeader className="shrink-0">
+                    <DialogHeader>
                         <DialogTitle>{title}</DialogTitle>
                         <DialogDescription>
                             {mode === "selected" ? "已选 " : "全部 "}
@@ -184,7 +186,7 @@ export function SalesOrderCreateUnifiedAddressDialog({
                         </DialogDescription>
                     </DialogHeader>
                     <form
-                        className="flex min-h-0 flex-1 flex-col gap-4"
+                        className="flex min-h-0 flex-1 flex-col overflow-hidden"
                         noValidate
                         onSubmit={(event) => {
                             // 弹窗渲染在开单表单之外的节点，但 React 事件仍会冒泡到开单表单。
@@ -193,7 +195,7 @@ export function SalesOrderCreateUnifiedAddressDialog({
                             void form.handleSubmit()
                         }}
                     >
-                        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+                        <DialogBody className="space-y-4">
                             {existingAddresses.length > 0 ? (
                                 <div className="space-y-1.5">
                                     <p className="text-xs font-medium text-foreground/75">
@@ -315,8 +317,8 @@ export function SalesOrderCreateUnifiedAddressDialog({
                                     />
                                 )}
                             </form.AppField>
-                        </div>
-                        <DialogFooter className="shrink-0">
+                        </DialogBody>
+                        <DialogFooter>
                             <Button
                                 id={`${idPrefix}-cancel`}
                                 type="button"

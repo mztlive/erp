@@ -39,8 +39,8 @@ export function ContractFilePreviewDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 id="sales-contract-original-dialog"
+                size="xl"
                 closeButtonId="sales-contract-original-close"
-                className="sm:max-w-4xl"
             >
                 <DialogHeader>
                     <DialogTitle>合同原文</DialogTitle>
@@ -67,7 +67,7 @@ export function ContractFilePreviewDialog({
                         </Button>
                     </div>
                 ) : query.data ? (
-                    <div className="flex h-[65vh] min-h-0 flex-col gap-3">
+                    <div className="flex h-[65dvh] min-h-0 flex-col gap-3">
                         {source?.blob === query.data ? (
                             <div className="flex flex-wrap items-center justify-end gap-2">
                                 <Button

@@ -52,6 +52,7 @@ fn inquiry_fact(inquiry: &SalesInquiry) -> Result<Option<ObjectFact>> {
         WorkItemSubjectVersions::constrained(vec![inquiry_subject_version(requirement.version)])?;
     fact.responsibility_scope_ids =
         Some(requirement.data.lines.iter().map(|line| line.line_id.clone()).collect());
+    fact.push_counterparty_id(inquiry.customer_id.clone());
     fact.counterparty_label = Some(inquiry.customer_name.clone());
     fact.impact_summary = Some("当前责任商品需要采购供给结论".into());
     Ok(Some(fact))

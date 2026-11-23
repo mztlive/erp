@@ -158,6 +158,7 @@ impl super::WorkItemFactsReader {
                     subject_versions: WorkItemSubjectVersions::constrained(vec![
                         order.base.version.to_string(),
                     ])?,
+                    counterparty_ids: vec![order.supplier_id.to_string()],
                     counterparty_label: None,
                     impact_summary: None,
                     subject_briefs: HashMap::new(),
@@ -225,6 +226,7 @@ impl super::WorkItemFactsReader {
                     label: format!("供应商供给 {}", offering.supplier_sku_code),
                     created_by: offering.stable.created_by,
                     subject_versions: WorkItemSubjectVersions::constrained(subject_versions)?,
+                    counterparty_ids: vec![offering.supplier_id.to_string()],
                     counterparty_label: None,
                     impact_summary: None,
                     subject_briefs: HashMap::new(),

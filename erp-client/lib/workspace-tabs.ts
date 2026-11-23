@@ -2,11 +2,45 @@ import { WORKSPACE_NAV_GROUPS } from "@/lib/workspace-registry"
 import { normalizeWorkspaceNavPathname } from "@/lib/nav-active"
 import type { NavDeliveryRequest } from "@/lib/nav-delivery"
 
+export type WorkspaceViewportDensity = "comfortable" | "compact" | "dense"
+
 export type WorkspaceFrameState = {
     href: string
     title: string
     dirty: boolean
     busy: boolean
+}
+
+export type WorkspaceOpenTabSnapshot = Readonly<
+    WorkspaceFrameState & {
+        id: string
+        key: string
+        ready: boolean
+        active: boolean
+    }
+>
+
+export const WORKSPACE_OPEN_TABS_EVENT = "erp-workspace-open-tabs-change"
+
+export function resolveWorkspaceViewportDensity(
+    height: number,
+    width?: number,
+): WorkspaceViewportDensity {
+    if (width !== undefined && width < 768) return "comfortable"
+    if (height <= 720) return "dense"
+    if (height <= 960) return "compact"
+    return "comfortable"
+}
+
+export function applyWorkspaceViewportDensity(
+    doc: Document | null | undefined,
+    density: WorkspaceViewportDensity,
+): void {
+    const root = doc?.documentElement
+    if (!root) return
+    if (root.getAttribute("data-viewport-density") !== density) {
+        root.setAttribute("data-viewport-density", density)
+    }
 }
 
 export type WorkspaceHost = {
@@ -17,6 +51,22 @@ export type WorkspaceHost = {
     refreshed: (source: Window, revision: number) => void
     deliver: (source: Window, request: NavDeliveryRequest) => void
     openQuickSearch?: () => void
+    getOpenTabs?: () => readonly WorkspaceOpenTabSnapshot[]
+    getViewportDensity?: () => WorkspaceViewportDensity
+}
+
+export function subscribeWorkspaceOpenTabs(listener: () => void): () => void {
+    if (typeof window === "undefined") return () => {}
+    let target: Window = window
+    try {
+        if (window.frameElement?.hasAttribute("data-workspace-frame")) {
+            target = window.parent
+        }
+    } catch {
+        target = window
+    }
+    target.addEventListener(WORKSPACE_OPEN_TABS_EVENT, listener)
+    return () => target.removeEventListener(WORKSPACE_OPEN_TABS_EVENT, listener)
 }
 
 export const WORKSPACE_CLOSE_SHORTCUT = "Alt+Shift+W"
@@ -63,6 +113,8 @@ declare global {
         erpWorkspaceActivate?: (active: boolean) => void
         erpWorkspaceInvalidate?: (revision: number) => void
         erpWorkspaceGo?: (href: string) => void
+        erpWorkspaceSetDensity?: (density: WorkspaceViewportDensity) => void
+        erpWorkspaceFocus?: () => void
     }
 }
 
@@ -98,6 +150,7 @@ export function workspaceUrl(href: string, base: string): URL | null {
     const root = url.pathname.split("/")[1]
     return [
         "workspace",
+        "account",
         "sales",
         "procurement",
         "master-data",
@@ -200,6 +253,8 @@ export function workspaceTabKey(url: URL): string {
 }
 
 export function workspaceTabTitle(url: URL): string {
+    if (url.pathname === "/account/workbench") return "个人首页设置"
+    if (url.pathname === "/account/data-transfers") return "我的文件任务"
     if (/^\/master-data\/products\/(?!new$)[^/]+$/.test(url.pathname))
         return "商品详情"
     if (

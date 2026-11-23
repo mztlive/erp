@@ -347,9 +347,9 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                     }}
                 >
                     <DialogContent
+                        size="md"
                         closeButtonId="supplier-portal-grant-create-close"
                         showCloseButton={!locked}
-                        className="max-h-[85svh] overflow-y-auto sm:max-w-lg"
                     >
                         <DialogHeader>
                             <DialogTitle>开放 SKU 报价</DialogTitle>

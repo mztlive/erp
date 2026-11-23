@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -198,19 +199,17 @@ export function InquiryImportDialog({
         >
             <DialogContent
                 id="sales-inquiry-import-dialog"
+                size={preview ? "2xl" : "lg"}
+                scroll="body"
                 closeButtonId="sales-inquiry-import-dismiss"
                 showCloseButton={!busy && !submitting}
-                className={cn(
-                    "flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0",
-                    preview ? "sm:max-w-5xl" : "sm:max-w-2xl",
-                )}
                 finalFocus={
                     creation
                         ? () => document.getElementById(finalFocusId)
                         : undefined
                 }
             >
-                <DialogHeader className="shrink-0 border-b border-border/60 px-5 pt-4.5 pb-3.5 pr-12">
+                <DialogHeader>
                     <div className="flex flex-wrap items-center gap-2.5">
                         <DialogTitle>导入客户选品</DialogTitle>
                         {preview ? (
@@ -253,7 +252,7 @@ export function InquiryImportDialog({
                     }}
                 >
                     {preview && values.file ? (
-                        <div className="shrink-0 space-y-2.5 border-b border-border/60 bg-surface-sunken/45 px-5 py-2.5">
+                        <div className="shrink-0 space-y-2.5 border-b border-border/60 bg-surface-sunken/45 px-overlay-padding py-2.5">
                             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                                 <div className="flex min-w-0 flex-1 items-center gap-2.5">
                                     <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border/70 bg-card text-primary">
@@ -399,7 +398,7 @@ export function InquiryImportDialog({
                         </div>
                     ) : null}
 
-                    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
+                    <DialogBody className="flex flex-col gap-4">
                         {!preview ? (
                             <>
                                 {creation ? (
@@ -501,12 +500,12 @@ export function InquiryImportDialog({
                             </Alert>
                         ) : null}
                         {recovery}
-                    </div>
+                    </DialogBody>
 
                     {preview?.merges.length ? (
                         <div
                             className={cn(
-                                "shrink-0 border-t border-border/60 px-5 py-2.5 transition-colors",
+                                "shrink-0 border-t border-border/60 px-overlay-padding py-2.5 transition-colors",
                                 hasErrors
                                     ? "bg-muted/35"
                                     : values.confirm_merge_duplicates
@@ -548,7 +547,7 @@ export function InquiryImportDialog({
                         </div>
                     ) : null}
 
-                    <DialogFooter className="shrink-0 border-t border-border/60 bg-surface-sunken/30 px-5 py-3 sm:items-center sm:justify-between">
+                    <DialogFooter className="bg-surface-sunken/30 sm:items-center sm:justify-between">
                         <div className="flex items-center gap-2">
                             {onDownloadTemplate ? (
                                 <Button

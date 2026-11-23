@@ -5,6 +5,7 @@ import { MoneyValue, detailWorkspaceStyles } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogHeader,
@@ -61,16 +62,17 @@ export function RequestSubmissionHistory({
             >
                 <DialogContent
                     id="ppr-submission-dialog"
+                    size="xl"
+                    scroll="body"
                     closeButtonId="ppr-submission-dialog-close"
-                    className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-4xl"
                 >
-                    <DialogHeader className="shrink-0">
+                    <DialogHeader>
                         <DialogTitle>第 {selected} 次提交材料</DialogTitle>
                         <DialogDescription>
                             {request.request_no} · 本次提交时的原申请与审核依据
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="min-h-0 flex-1 space-y-5 overflow-y-auto pr-1">
+                    <DialogBody className="space-y-5">
                         {query.isPending ? (
                             <p className="text-xs text-muted-foreground">
                                 正在读取历史材料…
@@ -183,7 +185,7 @@ export function RequestSubmissionHistory({
                                 />
                             </>
                         ) : null}
-                    </div>
+                    </DialogBody>
                 </DialogContent>
             </Dialog>
         </section>

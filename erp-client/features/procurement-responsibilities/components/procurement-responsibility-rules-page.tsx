@@ -216,7 +216,7 @@ function RuleDialog({
             }}
         >
             <DialogContent
-                className="sm:max-w-2xl"
+                size="lg"
                 closeButtonId="procurement-responsibility-rules-dialog-close"
                 showCloseButton={!mutation.isPending}
                 finalFocus={finalFocus}

@@ -20,6 +20,7 @@ import {
     DetailWorkspaceMeta,
     DetailWorkspaceSection,
     DiscardConfirmDialog,
+    FormalActionConfirmDialog,
     MoneyValue,
     detailWorkspaceStyles,
     type DetailWorkspaceBackLink,
@@ -31,8 +32,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
@@ -53,7 +56,13 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import { SubmissionRouteConfirmation } from "@/features/approval-workflow/components/submission-route-confirmation"
 import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
+import {
+    mapDocumentApprovalViewDto,
+    type DocumentApprovalView,
+} from "@/features/approval-workflow/types"
+import { APPROVAL_INSTANCE_STATUS_META } from "@/lib/task-status-dictionary"
 import { loadReceivables } from "@/features/customer-receivables/api/loaders"
 import { SalesOrderSearchCombobox } from "@/features/entity-selectors/components/sales-order-search-combobox"
 import { getErrorCode, getErrorMessage } from "@/lib/api/errors"
@@ -241,6 +250,8 @@ export function InvoiceRequestForm({
     const [pendingDiscardAction, setPendingDiscardAction] = useState<
         (() => void) | null
     >(null)
+    const [confirmSubmitInput, setConfirmSubmitInput] =
+        useState<SubmitRequest | null>(null)
 
     const rework = useResubmissionReason({
         open: true,
@@ -327,8 +338,7 @@ export function InvoiceRequestForm({
                 },
                 idempotency_key: crypto.randomUUID(),
             }
-            pending.current = input
-            await send(input)
+            setConfirmSubmitInput(input)
         },
     })
 
@@ -865,6 +875,123 @@ export function InvoiceRequestForm({
         />
     ) : null
 
+    const existingApproval: DocumentApprovalView | undefined = (() => {
+        const source = existing?.approval
+        if (
+            !source ||
+            (source.definition && !Array.isArray(source.definition.nodes)) ||
+            (source.recent_history != null &&
+                !Array.isArray(source.recent_history))
+        ) {
+            return undefined
+        }
+        return mapDocumentApprovalViewDto({
+            ...source,
+            recent_history: source.recent_history ?? [],
+            allowed_actions: source.allowed_actions ?? [],
+        })
+    })()
+
+    const confirmOrderNo =
+        existing?.sales_order_no ||
+        (pickedOrder?.id === selectedOrder
+            ? pickedOrder.documentNumber
+            : undefined)
+
+    const submitConfirmDialog = (
+        <FormalActionConfirmDialog
+            idPrefix="invoice-request-submit-confirm"
+            layout="compact"
+            open={confirmSubmitInput !== null}
+            onOpenChange={(open) => {
+                if (!open && !commands.submit.isPending) {
+                    setConfirmSubmitInput(null)
+                }
+            }}
+            pending={commands.submit.isPending}
+            title={
+                existing?.status === "rejected"
+                    ? "重新提交销项开票申请"
+                    : "提交销项开票申请"
+            }
+            description="请核对本次开票金额与审批路线，确认后进入审批流程。"
+            actionLabel="提交审批"
+            confirmLabel={uncertain ? "核对提交结果" : "确认提交审批"}
+            cancelLabel="返回修改"
+            actionVariant="default"
+            fromStatus={{
+                label: existing ? requestStatusLabels[existing.status] : "新建",
+                tone:
+                    existing?.status === "rejected" ? "destructive" : "neutral",
+            }}
+            toStatus={{
+                label: APPROVAL_INSTANCE_STATUS_META.RUNNING.label,
+                tone: APPROVAL_INSTANCE_STATUS_META.RUNNING.tone,
+            }}
+            summary={
+                confirmSubmitInput
+                    ? [
+                          ...(confirmOrderNo
+                              ? [
+                                    <span key="order">
+                                        来源销售单：
+                                        <span className="num font-medium text-foreground">
+                                            {confirmOrderNo}
+                                        </span>
+                                    </span>,
+                                ]
+                              : []),
+                          ...(confirmSubmitInput.data.invoice_title
+                              ? [
+                                    <span key="title">
+                                        开票抬头：
+                                        {confirmSubmitInput.data.invoice_title}
+                                    </span>,
+                                ]
+                              : []),
+                          <span
+                              key="amount"
+                              className="inline-flex items-baseline gap-1"
+                          >
+                              申请金额：
+                              <MoneyValue
+                                  value={confirmSubmitInput.data.amount}
+                                  display="exact"
+                              />
+                          </span>,
+                          <span key="lines" className="num">
+                              开票明细：
+                              {confirmSubmitInput.data.lines?.length ?? 0} 行
+                          </span>,
+                      ]
+                    : []
+            }
+            effects={[
+                "提交后占用本笔应收可申请开票额度，审批期间不可修改。",
+                "审批通过后由财务按本申请登记开具销项发票。",
+            ]}
+            formContent={
+                <SubmissionRouteConfirmation
+                    documentType="sales_invoice_request"
+                    definition={existingApproval?.definition}
+                    fallbackDescription={
+                        existingApproval
+                            ? undefined
+                            : "提交后将按当前已发布的销项开票申请审批流程自动绑定审批人并启动审批；任一节点驳回将退回提交人修改重提。"
+                    }
+                />
+            }
+            onConfirm={async () => {
+                if (!confirmSubmitInput) return
+                const payload = pending.current ?? confirmSubmitInput
+                pending.current = payload
+                await send(payload)
+                setConfirmSubmitInput(null)
+            }}
+            onConfirmError={() => undefined}
+        />
+    )
+
     const discardDialog = (
         <DiscardConfirmDialog
             idPrefix="invoice-request-form-discard"
@@ -1017,153 +1144,169 @@ export function InvoiceRequestForm({
                     />
                 </form>
                 {importDialog}
+                {submitConfirmDialog}
                 {discardDialog}
             </>
         )
     }
 
+    const compactBodyContent = (
+        <>
+            {showSourceSection ? sourceFields : null}
+
+            <InvoiceRequestDialogContext
+                isLoading={accounts.isFetching || amounts.isFetching}
+                isError={accounts.isError || amounts.isError}
+                onRetry={retryContextQueries}
+                amounts={amounts.data}
+                archive={archive}
+            />
+
+            <div className="space-y-2.5 empty:hidden">{alertsNode}</div>
+
+            <InvoiceLinesSection
+                form={form}
+                locked={locked}
+                presentation={presentation}
+                canImportSalesLines={canImportSalesLines}
+                onOpenImport={() => setImportOpen(true)}
+                createRowKey={createRowKey}
+                availableAmount={amounts.data?.available_amount}
+                legacyAmountHint={
+                    showLegacyAmountHint ? existing?.data.amount : undefined
+                }
+            />
+
+            {reasonFields}
+        </>
+    )
+
+    const compactFooterContent = (
+        <>
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1">
+                <div className="flex items-baseline gap-1.5">
+                    <span className="text-xs text-muted-foreground">
+                        本次申请
+                    </span>
+                    <span id="invoice-request-amount">
+                        {linesTotal ? (
+                            exceedsAvailable ? (
+                                <span className="num font-semibold text-destructive">
+                                    {formatCurrencyFixed(linesTotal, {
+                                        maxScale: 2,
+                                        minimumFractionDigits: 2,
+                                    })}
+                                </span>
+                            ) : (
+                                <MoneyValue
+                                    value={linesTotal}
+                                    display="exact"
+                                    className="font-semibold"
+                                />
+                            )
+                        ) : (
+                            <span className="num text-muted-foreground">—</span>
+                        )}
+                    </span>
+                </div>
+                {statusMessage ? (
+                    <span
+                        role="status"
+                        className={
+                            isErrorStatus || exceedsAvailable
+                                ? "text-xs text-destructive"
+                                : "text-xs text-muted-foreground"
+                        }
+                    >
+                        {statusMessage}
+                    </span>
+                ) : null}
+            </div>
+
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                <Button
+                    id="invoice-request-form-cancel"
+                    type="button"
+                    variant="outline"
+                    disabled={locked}
+                    onClick={() => requestLeave(onCancel)}
+                >
+                    取消
+                </Button>
+                {existing && !uncertain ? (
+                    <LoadingButton
+                        id="invoice-request-save"
+                        type="button"
+                        variant="outline"
+                        loading={commands.update.isPending}
+                        disabled={
+                            commands.update.isPending ||
+                            commands.submit.isPending ||
+                            saveState.isFetching ||
+                            (saveUncertain && versionAdvanced)
+                        }
+                        onClick={handleSaveAction}
+                    >
+                        {saveUncertain ? "重新保存" : "保存修改"}
+                    </LoadingButton>
+                ) : null}
+                {uncertain ? (
+                    <LoadingButton
+                        id="invoice-request-resolve"
+                        type="button"
+                        loading={commands.submit.isPending}
+                        disabled={commands.submit.isPending}
+                        onClick={() =>
+                            pending.current && void send(pending.current)
+                        }
+                    >
+                        核对提交结果
+                    </LoadingButton>
+                ) : (
+                    <LoadingButton
+                        id="invoice-request-submit"
+                        type="submit"
+                        loading={commands.submit.isPending}
+                        disabled={!canSubmit}
+                    >
+                        提交审批
+                    </LoadingButton>
+                )}
+            </div>
+        </>
+    )
+
     const compactForm = (
         <form
             id="invoice-request-form"
-            className={cn(
-                "flex min-h-0 flex-col gap-5",
-                presentation === "dialog" && "flex-1",
-            )}
+            className={
+                presentation === "dialog"
+                    ? "flex min-h-0 flex-1 flex-col overflow-hidden"
+                    : "flex min-h-0 flex-col gap-5"
+            }
             onSubmit={(event) => {
                 event.preventDefault()
                 intent.current = "submit"
                 void form.handleSubmit()
             }}
         >
-            <div
-                className={cn(
-                    "space-y-5",
-                    presentation === "dialog" &&
-                        "min-h-0 flex-1 overflow-y-auto pr-1",
-                )}
-            >
-                {showSourceSection ? sourceFields : null}
+            {presentation === "dialog" ? (
+                <DialogBody className="space-y-5">
+                    {compactBodyContent}
+                </DialogBody>
+            ) : (
+                <div className="space-y-5">{compactBodyContent}</div>
+            )}
 
-                <InvoiceRequestDialogContext
-                    isLoading={accounts.isFetching || amounts.isFetching}
-                    isError={accounts.isError || amounts.isError}
-                    onRetry={retryContextQueries}
-                    amounts={amounts.data}
-                    archive={archive}
-                />
-
-                <div className="space-y-2.5 empty:hidden">{alertsNode}</div>
-
-                <InvoiceLinesSection
-                    form={form}
-                    locked={locked}
-                    presentation={presentation}
-                    canImportSalesLines={canImportSalesLines}
-                    onOpenImport={() => setImportOpen(true)}
-                    createRowKey={createRowKey}
-                    availableAmount={amounts.data?.available_amount}
-                    legacyAmountHint={
-                        showLegacyAmountHint ? existing?.data.amount : undefined
-                    }
-                />
-
-                {reasonFields}
-            </div>
-
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3">
-                <div className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1">
-                    <div className="flex items-baseline gap-1.5">
-                        <span className="text-xs text-muted-foreground">
-                            本次申请
-                        </span>
-                        <span id="invoice-request-amount">
-                            {linesTotal ? (
-                                exceedsAvailable ? (
-                                    <span className="num font-semibold text-destructive">
-                                        {formatCurrencyFixed(linesTotal, {
-                                            maxScale: 2,
-                                            minimumFractionDigits: 2,
-                                        })}
-                                    </span>
-                                ) : (
-                                    <MoneyValue
-                                        value={linesTotal}
-                                        display="exact"
-                                        className="font-semibold"
-                                    />
-                                )
-                            ) : (
-                                <span className="num text-muted-foreground">
-                                    —
-                                </span>
-                            )}
-                        </span>
-                    </div>
-                    {statusMessage ? (
-                        <span
-                            role="status"
-                            className={
-                                isErrorStatus || exceedsAvailable
-                                    ? "text-xs text-destructive"
-                                    : "text-xs text-muted-foreground"
-                            }
-                        >
-                            {statusMessage}
-                        </span>
-                    ) : null}
+            {presentation === "dialog" ? (
+                <DialogFooter className="flex-row flex-wrap items-center justify-between gap-3 sm:justify-between">
+                    {compactFooterContent}
+                </DialogFooter>
+            ) : (
+                <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3">
+                    {compactFooterContent}
                 </div>
-
-                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                    <Button
-                        id="invoice-request-form-cancel"
-                        type="button"
-                        variant="outline"
-                        disabled={locked}
-                        onClick={() => requestLeave(onCancel)}
-                    >
-                        取消
-                    </Button>
-                    {existing && !uncertain ? (
-                        <LoadingButton
-                            id="invoice-request-save"
-                            type="button"
-                            variant="outline"
-                            loading={commands.update.isPending}
-                            disabled={
-                                commands.update.isPending ||
-                                commands.submit.isPending ||
-                                saveState.isFetching ||
-                                (saveUncertain && versionAdvanced)
-                            }
-                            onClick={handleSaveAction}
-                        >
-                            {saveUncertain ? "重新保存" : "保存修改"}
-                        </LoadingButton>
-                    ) : null}
-                    {uncertain ? (
-                        <LoadingButton
-                            id="invoice-request-resolve"
-                            type="button"
-                            loading={commands.submit.isPending}
-                            disabled={commands.submit.isPending}
-                            onClick={() =>
-                                pending.current && void send(pending.current)
-                            }
-                        >
-                            核对提交结果
-                        </LoadingButton>
-                    ) : (
-                        <LoadingButton
-                            id="invoice-request-submit"
-                            type="submit"
-                            loading={commands.submit.isPending}
-                            disabled={!canSubmit}
-                        >
-                            提交审批
-                        </LoadingButton>
-                    )}
-                </div>
-            </div>
+            )}
         </form>
     )
 
@@ -1172,6 +1315,7 @@ export function InvoiceRequestForm({
             <>
                 {compactForm}
                 {importDialog}
+                {submitConfirmDialog}
                 {discardDialog}
             </>
         )
@@ -1189,9 +1333,10 @@ export function InvoiceRequestForm({
                     id="invoice-request-dialog"
                     closeButtonId="invoice-request-dialog-close"
                     showCloseButton={!locked}
-                    className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-4xl"
+                    size="xl"
+                    scroll="body"
                 >
-                    <DialogHeader className="shrink-0">
+                    <DialogHeader>
                         <DialogTitle>
                             {existing ? "修改开票申请" : "申请开票"}
                         </DialogTitle>
@@ -1205,6 +1350,7 @@ export function InvoiceRequestForm({
                 </DialogContent>
             </Dialog>
             {importDialog}
+            {submitConfirmDialog}
             {discardDialog}
         </>
     )

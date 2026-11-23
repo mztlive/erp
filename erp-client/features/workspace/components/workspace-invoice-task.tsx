@@ -13,17 +13,12 @@ import { subtractFixed } from "@/lib/fixed-decimal"
 import type { InvoiceRequest } from "@/features/invoice-requests/api"
 import { InvoiceRequestDetails } from "@/features/invoice-requests/components/request-details"
 
-import {
-    BusinessFailureState,
-    MoneyValue,
-    workspaceTaskSurfacePadClassName,
-} from "@/components/business"
+import { BusinessFailureState, MoneyValue } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { WorkspaceInvoiceUpload } from "./workspace-invoice-upload"
 import { useCustomerAccountsDetailQuery } from "@/features/customer-receivables/hooks/queries"
 import type { ReceivableAccountRow } from "@/features/customer-receivables/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { cn } from "@/lib/utils"
 
 import type { WorkspaceWorkItem } from "../types"
 import { workspaceInvoiceDescriptor } from "../lib/workspace-invoice"
@@ -104,18 +99,22 @@ export function WorkspaceInvoiceTask({
     const salesOrderNo =
         (identityOk && receivable?.salesOrderNo) || taskRequest?.sales_order_no
 
+    const customerTitle =
+        receivable?.counterpartyPartyName ||
+        item.counterpartyName ||
+        item.objectTitle
+
     return (
         <WorkspaceProcessingPane
             header={
                 <WorkspaceTaskIdentityHeader
                     item={item}
-                    title={readOnly ? "销项开票任务" : "登记销项发票"}
+                    title={customerTitle}
                     subtitle={
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                            <span>
-                                {receivable?.counterpartyPartyName ||
-                                    item.counterpartyName}
-                            </span>
+                            {item.stableNumber ? (
+                                <span className="num">{item.stableNumber}</span>
+                            ) : null}
                             {identityOk &&
                             receivable?.salesOrderId &&
                             canReadSalesOrder ? (
@@ -124,7 +123,7 @@ export function WorkspaceInvoiceTask({
                                     href={sourceSalesOrderHref(
                                         receivable.salesOrderId,
                                     )}
-                                    className="underline-offset-4 hover:underline"
+                                    className="underline decoration-border underline-offset-4 hover:decoration-foreground"
                                 >
                                     销售单 {receivable.salesOrderNo}
                                 </Link>
@@ -180,12 +179,7 @@ export function WorkspaceInvoiceTask({
                     </AlertDescription>
                 </Alert>
             ) : readOnly ? (
-                <div
-                    className={cn(
-                        workspaceTaskSurfacePadClassName,
-                        "flex flex-col gap-4 py-5",
-                    )}
-                >
+                <div className="flex flex-col gap-4 py-5">
                     <Alert>
                         <AlertTitle>
                             {taskRequest.status === "completed"
@@ -268,9 +262,7 @@ export function WorkspaceInvoiceTask({
 /** 开票作业面加载占位。 */
 function InvoiceSessionSkeleton() {
     return (
-        <div
-            className={cn(workspaceTaskSurfacePadClassName, "grid gap-4 py-5")}
-        >
+        <div className="grid gap-4 py-5">
             <div className="h-40 animate-pulse rounded-lg bg-muted" />
             <div className="h-40 animate-pulse rounded-lg bg-muted" />
         </div>
@@ -292,12 +284,7 @@ function WorkspaceInvoiceSession({
     onTaskCompleted?: (workItemId: string) => void
 }) {
     return (
-        <div
-            className={cn(
-                workspaceTaskSurfacePadClassName,
-                "@container/invoice space-y-6 py-5",
-            )}
-        >
+        <div className="@container/invoice space-y-6 py-5">
             <Alert variant="info">
                 <AlertTitle>当前需要你处理：登记已开出的销项发票</AlertTitle>
                 <AlertDescription>

@@ -169,8 +169,8 @@ function SourceImage({
             </Button>
             <Dialog open={expanded} onOpenChange={setExpanded}>
                 <DialogContent
+                    size="xl"
                     closeButtonId={`${idPrefix}-preview-close`}
-                    className="max-h-[90dvh] sm:max-w-4xl"
                 >
                     <DialogHeader>
                         <DialogTitle>第 {position} 张商品图片</DialogTitle>

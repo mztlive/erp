@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -131,7 +132,8 @@ function PackageImportDialog({
             }}
         >
             <DialogContent
-                className="sm:max-w-3xl"
+                size="xl"
+                scroll="body"
                 closeButtonId={`${prefix}-close`}
             >
                 <DialogHeader>
@@ -141,146 +143,172 @@ function PackageImportDialog({
                         中出现的地址的全部包裹，其他地址保留。收货地址和本次发货数量不变。
                     </DialogDescription>
                 </DialogHeader>
-                <div className="space-y-3">
-                    <Button
-                        id={`${prefix}-template`}
-                        type="button"
-                        variant="outline"
-                        disabled={busy || props.disabled}
-                        onClick={() => void download()}
-                    >
-                        <DownloadIcon />
-                        下载当前任务模板
-                    </Button>
-                    <p className="text-xs text-muted-foreground">
-                        修改包裹数量、物流公司和单号。不需要覆盖的地址请整行删除；拆包请复制完整商品行，同一包裹的不同商品填写相同单号。每个地址须包含本次发货的全部商品，数量合计须与页面一致。
-                    </p>
-                    <div className="space-y-2">
-                        <Label htmlFor={`${prefix}-file`}>
-                            上传填写后的 Excel
-                        </Label>
-                        <Input
-                            id={`${prefix}-file`}
-                            type="file"
-                            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                <DialogBody className="space-y-4">
+                    <div className="space-y-3">
+                        <Button
+                            id={`${prefix}-template`}
+                            type="button"
+                            variant="outline"
                             disabled={busy || props.disabled}
-                            aria-describedby={`${prefix}-help`}
-                            onChange={(event) => {
-                                const file = event.target.files?.[0]
-                                event.target.value = ""
-                                if (file) void read(file)
-                            }}
-                        />
+                            onClick={() => void download()}
+                        >
+                            <DownloadIcon />
+                            下载当前任务模板
+                        </Button>
+                        <p className="text-xs text-muted-foreground">
+                            修改包裹数量、物流公司和单号。不需要覆盖的地址请整行删除；拆包请复制完整商品行，同一包裹的不同商品填写相同单号。每个地址须包含本次发货的全部商品，数量合计须与页面一致。
+                        </p>
+                        <div className="space-y-2">
+                            <Label htmlFor={`${prefix}-file`}>
+                                上传填写后的 Excel
+                            </Label>
+                            <Input
+                                id={`${prefix}-file`}
+                                type="file"
+                                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                disabled={busy || props.disabled}
+                                aria-describedby={`${prefix}-help`}
+                                onChange={(event) => {
+                                    const file = event.target.files?.[0]
+                                    event.target.value = ""
+                                    if (file) void read(file)
+                                }}
+                            />
+                            <p
+                                id={`${prefix}-help`}
+                                className="text-xs text-muted-foreground"
+                            >
+                                仅支持 .xlsx，最多5
+                                MB、100行包裹商品。物流单号须为文本格式。
+                            </p>
+                        </div>
+                    </div>
+                    {busy && (
                         <p
-                            id={`${prefix}-help`}
+                            role="status"
                             className="text-xs text-muted-foreground"
                         >
-                            仅支持 .xlsx，最多5
-                            MB、100行包裹商品。物流单号须为文本格式。
+                            正在处理 Excel…
                         </p>
-                    </div>
-                </div>
-                {busy && (
-                    <p role="status" className="text-xs text-muted-foreground">
-                        正在处理 Excel…
-                    </p>
-                )}
-                {error && (
-                    <p
-                        role="alert"
-                        className="text-body-compact text-destructive"
-                    >
-                        {error}
-                    </p>
-                )}
-                {stale && (
-                    <p
-                        role="alert"
-                        className="text-body-compact text-destructive"
-                    >
-                        页面上的包裹或收货安排已变化，请重新上传并核对预览。
-                    </p>
-                )}
-                {preview && !stale && (
-                    <div className="min-w-0 space-y-3">
-                        <p role="status" className="text-body-compact">
-                            {preview.filename}：将覆盖{" "}
-                            {preview.result.addresses.length} 个地址，共{" "}
-                            {preview.result.rows} 行包裹商品；其余{" "}
-                            {props.source.destinations.length -
-                                preview.result.addresses.length}{" "}
-                            个地址保留。
+                    )}
+                    {error && (
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
+                            {error}
                         </p>
-                        <div className="max-h-[40vh] overflow-auto rounded-md border">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>收货地址</TableHead>
-                                        <TableHead>包裹变化</TableHead>
-                                        <TableHead>导入包裹</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {preview.result.addresses.map((entry) => {
-                                        const destination =
-                                            props.source.destinations.find(
-                                                (row) => row.key === entry.key,
-                                            )!
-                                        const parcels =
-                                            preview.result.packing.packages.filter(
-                                                (row) =>
-                                                    row.destination_key ===
-                                                    entry.key,
-                                            )
-                                        return (
-                                            <TableRow key={entry.key}>
-                                                <TableCell className="min-w-44 whitespace-normal align-top">
-                                                    <p>
-                                                        {destination.recipient}{" "}
-                                                        · {destination.phone}
-                                                    </p>
-                                                    <p className="mt-1 text-xs text-muted-foreground">
-                                                        {destination.address}
-                                                    </p>
-                                                </TableCell>
-                                                <TableCell className="whitespace-nowrap align-top">
-                                                    {entry.before} →{" "}
-                                                    {entry.after}
-                                                </TableCell>
-                                                <TableCell className="min-w-52 space-y-2 whitespace-normal align-top">
-                                                    {parcels.map((parcel) => (
-                                                        <div key={parcel.id}>
-                                                            <p className="break-all">
-                                                                {parcel.carrier}{" "}
+                    )}
+                    {stale && (
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
+                            页面上的包裹或收货安排已变化，请重新上传并核对预览。
+                        </p>
+                    )}
+                    {preview && !stale && (
+                        <div className="min-w-0 space-y-3">
+                            <p role="status" className="text-body-compact">
+                                {preview.filename}：将覆盖{" "}
+                                {preview.result.addresses.length} 个地址，共{" "}
+                                {preview.result.rows} 行包裹商品；其余{" "}
+                                {props.source.destinations.length -
+                                    preview.result.addresses.length}{" "}
+                                个地址保留。
+                            </p>
+                            <div className="max-h-[40dvh] overflow-auto rounded-md border">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>收货地址</TableHead>
+                                            <TableHead>包裹变化</TableHead>
+                                            <TableHead>导入包裹</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {preview.result.addresses.map(
+                                            (entry) => {
+                                                const destination =
+                                                    props.source.destinations.find(
+                                                        (row) =>
+                                                            row.key ===
+                                                            entry.key,
+                                                    )!
+                                                const parcels =
+                                                    preview.result.packing.packages.filter(
+                                                        (row) =>
+                                                            row.destination_key ===
+                                                            entry.key,
+                                                    )
+                                                return (
+                                                    <TableRow key={entry.key}>
+                                                        <TableCell className="min-w-44 whitespace-normal align-top">
+                                                            <p>
+                                                                {
+                                                                    destination.recipient
+                                                                }{" "}
                                                                 ·{" "}
                                                                 {
-                                                                    parcel.tracking_no
+                                                                    destination.phone
                                                                 }
                                                             </p>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                {parcel.items
-                                                                    .map(
-                                                                        (
-                                                                            item,
-                                                                        ) =>
-                                                                            `${props.itemName(item.delivery_line_id)} × ${item.quantity} ${props.unit(item.delivery_line_id)}`,
-                                                                    )
-                                                                    .join("；")}
+                                                            <p className="mt-1 text-xs text-muted-foreground">
+                                                                {
+                                                                    destination.address
+                                                                }
                                                             </p>
-                                                        </div>
-                                                    ))}
-                                                </TableCell>
-                                            </TableRow>
-                                        )
-                                    })}
-                                </TableBody>
-                            </Table>
+                                                        </TableCell>
+                                                        <TableCell className="whitespace-nowrap align-top">
+                                                            {entry.before} →{" "}
+                                                            {entry.after}
+                                                        </TableCell>
+                                                        <TableCell className="min-w-52 space-y-2 whitespace-normal align-top">
+                                                            {parcels.map(
+                                                                (parcel) => (
+                                                                    <div
+                                                                        key={
+                                                                            parcel.id
+                                                                        }
+                                                                    >
+                                                                        <p className="break-all">
+                                                                            {
+                                                                                parcel.carrier
+                                                                            }{" "}
+                                                                            ·{" "}
+                                                                            {
+                                                                                parcel.tracking_no
+                                                                            }
+                                                                        </p>
+                                                                        <p className="text-xs text-muted-foreground">
+                                                                            {parcel.items
+                                                                                .map(
+                                                                                    (
+                                                                                        item,
+                                                                                    ) =>
+                                                                                        `${props.itemName(item.delivery_line_id)} × ${item.quantity} ${props.unit(item.delivery_line_id)}`,
+                                                                                )
+                                                                                .join(
+                                                                                    "；",
+                                                                                )}
+                                                                        </p>
+                                                                    </div>
+                                                                ),
+                                                            )}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )
+                                            },
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                确认覆盖后更新页面录入；请再保存草稿或确认发货。
+                            </p>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                            确认覆盖后更新页面录入；请再保存草稿或确认发货。
-                        </p>
-                    </div>
-                )}
+                    )}
+                </DialogBody>
                 <DialogFooter>
                     <Button
                         id={`${prefix}-cancel`}

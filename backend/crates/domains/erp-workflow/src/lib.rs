@@ -28,7 +28,10 @@ pub use entity::work_item::{
     WorkItemType,
 };
 pub use error::{Error, ErrorCode, Result, known_duplicate_index_message};
-pub use ports::{ApprovalUpgradeSubjectFacts, ObjectFactPort, UpgradeSubjectPort, WorkflowAuthorizationPort};
+pub use ports::{
+    ApprovalUpgradeSubjectFacts, ObjectFactPort, UpgradeSubjectPort, WorkItemCounterpartyFact,
+    WorkItemCounterpartyLookup, WorkItemCounterpartyPort, WorkflowAuthorizationPort,
+};
 pub use repository::{
     ApprovalBindingLookup, ApprovalIntegrationExt, BpmExt, BpmWorkflowRepository, DocumentRegistryExt,
     WorkItemExt, WorkItemFilter, WorkItemRepository, WorkItemRow,

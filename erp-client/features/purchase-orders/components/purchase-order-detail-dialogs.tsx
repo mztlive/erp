@@ -93,7 +93,7 @@ export function PurchaseOrderDetailDialogs({
                 }}
             >
                 <DialogContent
-                    className="sm:max-w-md"
+                    size="sm"
                     closeButtonId="procurement-orders-detail-leave-guard-close"
                     showCloseButton={!savePending}
                 >

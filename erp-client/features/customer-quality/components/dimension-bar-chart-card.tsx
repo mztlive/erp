@@ -4,7 +4,6 @@ import * as React from "react"
 import type { PaginationState } from "@tanstack/react-table"
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts"
 
-import { surfacePanelClassName } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Card,
@@ -83,7 +82,10 @@ export function DimensionBarChartCard({
     }
 
     return (
-        <Card size="sm" className={surfacePanelClassName}>
+        <Card
+            size="sm"
+            className="min-w-0 border-border/60 bg-background shadow-none"
+        >
             <CardHeader className="border-b border-grid">
                 <CardTitle>{dimension?.title ?? titleFallback}</CardTitle>
                 {descriptionContent ? (

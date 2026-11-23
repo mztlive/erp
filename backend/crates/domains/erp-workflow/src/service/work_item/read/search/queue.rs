@@ -3,7 +3,7 @@ use persistence_core::Executor;
 
 use super::super::access::QueueAccess;
 use super::super::context::{AuthorizedPage, AuthorizedPageCollector, queue_scope_version};
-use super::super::query::{AUTHORIZED_SCAN_BATCH_SIZE, matches_handler};
+use super::super::query::{AUTHORIZED_SCAN_BATCH_SIZE, matches_counterparty, matches_handler};
 use super::super::{WorkItemFilter, WorkItemReadService, dto};
 use super::{SearchOptions, collect_options};
 use crate::Result;
@@ -37,12 +37,7 @@ impl WorkItemReadService {
             }
 
             let mut fields = rows.into_iter().map(dto::WorkItemFields::from).collect::<Vec<_>>();
-            for field in &mut fields {
-                field.search = super::task_document(field);
-            }
-            if query.filters.blocked {
-                self.search_blockers(&mut fields, query.scope, access, executor).await?;
-            }
+            self.prepare_search_fields(&mut fields, query, access, executor).await?;
             result.extend(fields, query, filter.query.as_deref());
             if candidate_count < AUTHORIZED_SCAN_BATCH_SIZE.get() as usize {
                 break;
@@ -75,7 +70,10 @@ impl SearchPage {
             let Some(hits) = field.search.matches(keyword) else {
                 continue;
             };
-            if !(query.filters.matches(&field.search) && matches_handler(&field, &query.handler_user_ids)) {
+            if !(query.filters.matches(&field.search)
+                && matches_handler(&field, &query.handler_user_ids)
+                && matches_counterparty(&field, &query.counterparty_ids))
+            {
                 continue;
             }
             field.search_matches = hits;

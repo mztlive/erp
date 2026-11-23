@@ -89,10 +89,7 @@ export function SalesOrderInquiryPickerDialog({
 
     return (
         <Dialog open onOpenChange={(open) => !open && onClose()}>
-            <DialogContent
-                className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl"
-                closeButtonId="sales-inquiry-picker-close"
-            >
+            <DialogContent size="lg" closeButtonId="sales-inquiry-picker-close">
                 <DialogHeader>
                     <DialogTitle>从询价单带入</DialogTitle>
                     <DialogDescription>

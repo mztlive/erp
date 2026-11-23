@@ -7,6 +7,7 @@ import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -275,7 +276,8 @@ function SalesDeliveryWorkbookDialog({
             }}
         >
             <DialogContent
-                className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-3xl"
+                size="xl"
+                scroll="body"
                 closeButtonId={`${prefix}-close`}
                 finalFocus={() => document.getElementById(`${prefix}-import`)}
             >
@@ -285,7 +287,7 @@ function SalesDeliveryWorkbookDialog({
                         上传本单导出的收货安排，或选择一个商品后导入客户地址名单。
                     </DialogDescription>
                 </DialogHeader>
-                <div className="min-h-0 space-y-4 overflow-y-auto px-1">
+                <DialogBody className="space-y-4">
                     {regionsError && (
                         <div
                             className="flex flex-wrap items-center gap-2 text-destructive"
@@ -427,7 +429,7 @@ function SalesDeliveryWorkbookDialog({
                             />
                         </>
                     )}
-                </div>
+                </DialogBody>
                 <DialogFooter>
                     {preview && (
                         <Button

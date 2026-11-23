@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
     Dialog,
+    DialogBody,
     DialogClose,
     DialogContent,
     DialogDescription,
@@ -92,13 +93,12 @@ export function BrandFormDialogFrame({
             }}
         >
             <DialogContent
-                className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl"
+                size="lg"
+                scroll="body"
                 closeButtonId={`${prefix}-close`}
             >
-                <DialogHeader className="shrink-0 gap-2 border-b px-6 py-5 pr-14">
-                    <DialogTitle className="text-section-title font-semibold tracking-tight">
-                        {title}
-                    </DialogTitle>
+                <DialogHeader>
+                    <DialogTitle>{title}</DialogTitle>
                     {identity ? (
                         <p className="num text-xs text-muted-foreground">
                             资料编号：{identity}
@@ -110,13 +110,13 @@ export function BrandFormDialogFrame({
                 </DialogHeader>
                 {result?.outcome !== "succeeded" ? (
                     <form
-                        className="flex min-h-0 flex-1 flex-col"
+                        className="flex min-h-0 flex-1 flex-col overflow-hidden"
                         onSubmit={(event) => {
                             event.preventDefault()
                             void form.handleSubmit()
                         }}
                     >
-                        <div className="grid min-h-0 gap-5 overflow-y-auto px-6 py-5">
+                        <DialogBody className="space-y-5">
                             {result?.outcome === "blocked" ? (
                                 <FormalActionResult
                                     status="blocked"
@@ -199,8 +199,8 @@ export function BrandFormDialogFrame({
                                     />
                                 )}
                             />
-                        </div>
-                        <DialogFooter className="shrink-0 flex-row items-center justify-end border-t bg-surface-sunken/40 px-6 py-4">
+                        </DialogBody>
+                        <DialogFooter className="bg-surface-sunken/40">
                             <DialogClose
                                 render={
                                     <Button

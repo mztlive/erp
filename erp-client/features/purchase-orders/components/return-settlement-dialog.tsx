@@ -5,6 +5,7 @@ import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogHeader,
     DialogTitle,
@@ -104,94 +105,102 @@ export function ReturnSettlementDialog({
                 if (!open && !mutation.isPending && !unknown) onClose()
             }}
         >
-            <DialogContent closeButtonId="return-settlement-close">
+            <DialogContent
+                size="md"
+                scroll="body"
+                closeButtonId="return-settlement-close"
+                showCloseButton={!mutation.isPending && !unknown}
+            >
                 <DialogHeader>
                     <DialogTitle>确认退货款处理方式</DialogTitle>
                     <DialogDescription>
                         填写与供应商确认的结果，提交后交给财务办理。此操作不登记资金到账。
                     </DialogDescription>
                 </DialogHeader>
-                <p className="text-body-compact">
-                    本次待处理款项 <MoneyValue value={total} />
-                    {compareDecimal(total, "0", 2) === 0 &&
-                        "，仅需交接进项红票处理。"}
-                </p>
                 <form
                     onSubmit={(event) => {
                         event.preventDefault()
                         void form.handleSubmit()
                     }}
-                    className="space-y-4"
+                    className="flex min-h-0 flex-1 flex-col overflow-hidden"
                 >
-                    {compareDecimal(total, "0", 2) > 0 && (
+                    <DialogBody className="space-y-4">
+                        <p className="text-body-compact">
+                            本次待处理款项 <MoneyValue value={total} />
+                            {compareDecimal(total, "0", 2) === 0 &&
+                                "，仅需交接进项红票处理。"}
+                        </p>
+                        {compareDecimal(total, "0", 2) > 0 && (
+                            <form.AppField
+                                name="method"
+                                children={(field) => (
+                                    <field.SelectField
+                                        id="return-settlement-method"
+                                        label="处理方式"
+                                        required
+                                        allowClear={false}
+                                        disabled={mutation.isPending || unknown}
+                                        options={[
+                                            {
+                                                value: "refund",
+                                                label: "供应商退款",
+                                            },
+                                            {
+                                                value: "credit",
+                                                label: "留抵下次采购",
+                                            },
+                                            {
+                                                value: "split",
+                                                label: "部分退款、部分留抵",
+                                            },
+                                        ]}
+                                    />
+                                )}
+                            />
+                        )}
+                        <form.Subscribe
+                            selector={(state) => state.values.method}
+                            children={(method) =>
+                                method === "split" ? (
+                                    <form.AppField
+                                        name="refund"
+                                        children={(field) => (
+                                            <field.TextField
+                                                id="return-settlement-refund"
+                                                label="供应商应退现金"
+                                                inputMode="decimal"
+                                                disabled={
+                                                    mutation.isPending ||
+                                                    unknown
+                                                }
+                                                description="剩余金额转为留抵"
+                                            />
+                                        )}
+                                    />
+                                ) : null
+                            }
+                        />
                         <form.AppField
-                            name="method"
+                            name="confirmation"
                             children={(field) => (
-                                <field.SelectField
-                                    id="return-settlement-method"
-                                    label="处理方式"
+                                <field.TextareaField
+                                    id="return-settlement-confirmation"
+                                    label="供应商确认依据"
                                     required
-                                    allowClear={false}
                                     disabled={mutation.isPending || unknown}
-                                    options={[
-                                        {
-                                            value: "refund",
-                                            label: "供应商退款",
-                                        },
-                                        {
-                                            value: "credit",
-                                            label: "留抵下次采购",
-                                        },
-                                        {
-                                            value: "split",
-                                            label: "部分退款、部分留抵",
-                                        },
-                                    ]}
+                                    placeholder="填写确认人、确认日期，以及退款或留抵的约定"
                                 />
                             )}
                         />
-                    )}
-                    <form.Subscribe
-                        selector={(state) => state.values.method}
-                        children={(method) =>
-                            method === "split" ? (
-                                <form.AppField
-                                    name="refund"
-                                    children={(field) => (
-                                        <field.TextField
-                                            id="return-settlement-refund"
-                                            label="供应商应退现金"
-                                            inputMode="decimal"
-                                            disabled={
-                                                mutation.isPending || unknown
-                                            }
-                                            description="剩余金额转为留抵"
-                                        />
-                                    )}
-                                />
-                            ) : null
-                        }
-                    />
-                    <form.AppField
-                        name="confirmation"
-                        children={(field) => (
-                            <field.TextareaField
-                                id="return-settlement-confirmation"
-                                label="供应商确认依据"
-                                required
-                                disabled={mutation.isPending || unknown}
-                                placeholder="填写确认人、确认日期，以及退款或留抵的约定"
-                            />
+                        {error && (
+                            <p
+                                role="alert"
+                                className="text-body-compact text-destructive"
+                            >
+                                {error}
+                            </p>
                         )}
-                    />
-                    {error && (
-                        <p
-                            role="alert"
-                            className="text-body-compact text-destructive"
-                        >
-                            {error}
-                        </p>
-                    )}
+                    </DialogBody>
                     <DialogFooter>
                         <Button
                             id="return-settlement-cancel"

@@ -60,7 +60,7 @@ function CancelPendingDialog({
             }}
         >
             <DialogContent
-                className="sm:max-w-lg"
+                size="md"
                 closeButtonId="operations-import-batch-detail-execution-cancel-dialog-close"
             >
                 <DialogHeader>

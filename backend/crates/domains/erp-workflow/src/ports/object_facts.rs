@@ -109,6 +109,8 @@ pub struct ObjectFact {
     pub created_by: String,
     /// Authoritative subject versions when the domain has a lock version.
     pub subject_versions: WorkItemSubjectVersions,
+    /// Counterparty stable ids (customer / supplier / settlement party) for authorized filtering.
+    pub counterparty_ids: Vec<String>,
     /// Counterparty display name.
     pub counterparty_label: Option<String>,
     /// Impact summary.
@@ -135,9 +137,19 @@ impl ObjectFact {
             label: label.into(),
             created_by: created_by.into(),
             subject_versions: WorkItemSubjectVersions::unrestricted(),
+            counterparty_ids: Vec::new(),
             counterparty_label: None,
             impact_summary: None,
             subject_briefs: HashMap::new(),
+        }
+    }
+
+    /// 登记稳定往来方 ID（去重且忽略空白），仅用于授权后的任务筛选。
+    pub fn push_counterparty_id(&mut self, id: impl Into<String>) {
+        let id = id.into();
+        let trimmed = id.trim();
+        if !trimmed.is_empty() && !self.counterparty_ids.iter().any(|existing| existing == trimmed) {
+            self.counterparty_ids.push(trimmed.to_owned());
         }
     }
 

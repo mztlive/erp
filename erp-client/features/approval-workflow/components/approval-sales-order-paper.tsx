@@ -20,11 +20,12 @@ import {
     approvalSalesUnit,
     displayActorName,
     displayReadableName,
+    displayUnixDate,
+    displayUnixSeconds,
 } from "../display"
 import { fullDeliveryAddress } from "@/lib/delivery-address"
 
-const dateLabel = (value: number | null) =>
-    value == null ? "—" : new Date(value * 1000).toLocaleDateString("zh-CN")
+const dateLabel = (value: number | null) => displayUnixDate(value)
 
 /** 仅使用审批实例授权返回的不可变提交，不读取当前销售详情。 */
 export function ApprovalSalesOrderPaper({
@@ -74,11 +75,15 @@ export function ApprovalSalesOrderPaper({
                         {
                             id: "submitted",
                             label: isSubmission ? "提交时间" : "生效时间",
-                            value: new Date(
-                                (isSubmission
-                                    ? submission.submitted_at
-                                    : submission.effective_at) * 1000,
-                            ).toLocaleString("zh-CN", { hour12: false }),
+                            value: (
+                                <span className="num">
+                                    {displayUnixSeconds(
+                                        isSubmission
+                                            ? submission.submitted_at
+                                            : submission.effective_at,
+                                    )?.label ?? "—"}
+                                </span>
+                            ),
                         },
                         {
                             id: "invoice",

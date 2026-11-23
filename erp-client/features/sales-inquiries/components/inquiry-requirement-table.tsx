@@ -314,7 +314,7 @@ export function InquiryRequirementTable({
             >
                 <div
                     key={activeLine?.line_id}
-                    className="min-h-0 flex-1 overflow-y-auto px-7 py-6"
+                    className="min-h-0 flex-1 overflow-y-auto px-sheet-inline py-5"
                 >
                     {activeLine && (
                         <InquiryRequirementDetail

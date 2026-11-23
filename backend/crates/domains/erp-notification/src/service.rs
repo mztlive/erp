@@ -7,7 +7,7 @@ use persistence_core::NoTransaction;
 use persistence_core::change_feed::ChangeSource;
 
 use crate::ports::NotificationChannel;
-use crate::{Channel, Error, InboxPage, InboxQuery, NotificationData, Result, repository};
+use crate::{Channel, Error, InboxPage, InboxQuery, MarkAllReadResult, NotificationData, Result, repository};
 
 /// 所有生产者使用的统一通知入口。
 #[derive(Clone)]
@@ -52,6 +52,14 @@ impl NotificationService {
     /// 幂等标记会话账号的指定消息已读，重复操作保留首次已读时间。找不到消息或消息不属于本人均返回 `NotFound`，仓储错误直接返回。
     pub async fn mark_read(&self, recipient: &str, id: &str) -> Result<()> {
         repository::mark_read(&self.db, recipient, id, Instant::now().unix_secs(), &mut NoTransaction).await
+    }
+
+    /// 幂等标记会话账号当前全部未读消息已读，保留已有已读时间，返回本次标记数量；仓储错误直接返回。
+    pub async fn mark_all_read(&self, recipient: &str) -> Result<MarkAllReadResult> {
+        let updated_count =
+            repository::mark_all_read(&self.db, recipient, Instant::now().unix_secs(), &mut NoTransaction)
+                .await?;
+        Ok(MarkAllReadResult { updated_count })
     }
 }
 

@@ -14,7 +14,7 @@ fn supplier_portal_review_has_dedicated_handler_and_registered_family() {
     .unwrap();
     assert_eq!(route.handler_key, "supplier_portal_review");
     assert_eq!(route.destination_workspace_id, "W21");
-    assert_eq!(family_of(WorkItemType::SupplierPortalReview), WorkItemFamily::Approval);
+    assert_eq!(family_of(WorkItemType::SupplierPortalReview), WorkItemFamily::Procurement);
     assert!(WORK_ITEM_TYPES.contains(&WorkItemType::SupplierPortalReview));
     assert!(
         handler_route(WorkItemType::SupplierPortalReview, "purchase_order", "supplier_portal_reviewer")
@@ -34,6 +34,7 @@ fn params(scope: WorkItemScope) -> WorkItemListParams {
         handler_user_ids: None,
         sales_order_ids: None,
         purchase_order_ids: None,
+        counterparty_ids: None,
         sort: None,
         queue_context_id: None,
         scope_version: None,

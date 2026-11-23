@@ -329,7 +329,6 @@ function DataFreshness({
 
 /**
  * 工作面内容区统一脚手架：max-width、页边距、区块间距。
- * 标题贴画布；主工作面用 1～2 张浮起表面（见 surfacePanelClassName）。
  */
 export type PageScaffoldDensity = "default" | "compact"
 
@@ -350,10 +349,6 @@ function PageScaffold({
                 "mx-auto flex w-full max-w-none flex-1 flex-col bg-background",
                 "px-page-inline py-page-block md:px-page-inline-lg md:py-page-block-lg",
                 density === "compact" ? "gap-page-gap-compact" : "gap-page-gap",
-                "[&>[data-slot=page-header]]:pb-1",
-                "[&:has(>[data-slot=document-header])>[data-slot=page-header]_h1]:text-body-compact",
-                "[&:has(>[data-slot=document-header])>[data-slot=page-header]_h1]:font-normal",
-                "[&:has(>[data-slot=document-header])>[data-slot=page-header]_h1]:text-muted-foreground",
                 className,
             )}
             {...props}
@@ -361,8 +356,8 @@ function PageScaffold({
     )
 }
 
-/** 主工作面：飞书经典白底浮起卡片（浅灰画布 + 1px 精致边线 + 极轻投影）。 */
-const surfacePanelClassName =
+/** 独立作业区白底表面（仅由 surfaceClassName(false) 内部使用）。 */
+const standaloneSurfaceClassName =
     "erp-raised-surface min-w-0 rounded-lg border border-border/90 bg-card shadow-2xs"
 
 /** 嵌入已有表面时去掉卡片壳，只保留分区线。 */
@@ -370,24 +365,15 @@ const surfaceFlatClassName =
     "rounded-none border-0 border-b border-grid bg-transparent shadow-none ring-0 last:border-b-0"
 
 function surfaceClassName(flat?: boolean) {
-    return flat ? surfaceFlatClassName : surfacePanelClassName
+    return flat ? surfaceFlatClassName : standaloneSurfaceClassName
 }
 
 /** 作业面内容左右内边距；分割线画在区块外沿，与容器同宽。 */
 const workspaceTaskSurfacePadClassName = "px-5"
 
 /** 工作台内嵌页面脚手架：贴齐作业面，不再套一层页边距和卡片间隙。 */
-const workspaceEmbeddedScaffoldClassName = cn(
-    "erp-embedded-scaffold h-full min-h-0 max-w-none gap-0 p-0 md:p-0",
-    "[&>[data-slot=page-header]]:static",
-    "[&>[data-slot=page-header]]:mx-0",
-    "[&>[data-slot=page-header]]:mt-0",
-    "[&>[data-slot=page-header]]:mb-0",
-    "[&>[data-slot=page-header]]:bg-transparent",
-    "[&>[data-slot=page-header]]:px-5",
-    "[&>[data-slot=page-header]]:pt-5",
-    "[&>[data-slot=page-header]]:pb-5",
-)
+const workspaceEmbeddedScaffoldClassName =
+    "erp-embedded-scaffold h-full min-h-0 max-w-none gap-0 p-0 md:p-0"
 
 /**
  * 工作台作业面：把嵌套浮起表面压成扁平分区。
@@ -418,19 +404,6 @@ const workspaceTaskSurfaceClassName = cn(
     "[&_[data-slot=card-footer]]:rounded-none",
     "[&_[data-slot=card-footer]]:-mx-5",
     "[&_[data-slot=card-footer]]:px-5",
-    "[&_[data-slot=sequential-process-bar]]:rounded-none",
-    "[&_[data-slot=sequential-process-bar]]:border-x-0",
-    "[&_[data-slot=sequential-process-bar]]:border-t-0",
-    "[&_[data-slot=sequential-process-bar]]:bg-transparent",
-    "[&_[data-slot=sequential-process-bar]]:px-5",
-    "[&_[data-slot=sequential-process-bar]]:shadow-none",
-    "[&_[data-slot=document-header]]:rounded-none",
-    "[&_[data-slot=document-header]]:border-x-0",
-    "[&_[data-slot=document-header]]:border-t-0",
-    "[&_[data-slot=document-header]]:shadow-none",
-    "[&_[data-slot=document-header]]:bg-transparent",
-    "[&_[data-slot=document-header]]:px-5",
-    "[&_[data-slot=page-header]]:px-5",
     "[&_[data-slot=document-section]]:px-5",
 )
 
@@ -446,7 +419,6 @@ export {
     surfaceClassName,
     surfaceFlatClassName,
     surfaceInsetClassName,
-    surfacePanelClassName,
     workspaceEmbeddedScaffoldClassName,
     workspaceTaskSurfaceClassName,
     workspaceTaskSurfacePadClassName,

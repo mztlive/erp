@@ -74,28 +74,31 @@ work item、租约、投影、事实、幂等键只出现在代码注释、字�
 - 纯 UI primitive 已完整透传 `id` 时无需改动；primitive 自行生成额外交互控件时必须提供可派生 ID 的 API。
 - disabled 控件仍需 ID；路由互斥可复用概念，同一文档内同时挂载的列表、表格、对话框、抽屉和重复卡片不可重复。
 
-## 7. 列表轻预览 Sheet
+## 7. 双轨抽屉规范：只读轻预览与有界轻作业 Sheet
 
-列表行点开后的右侧窄栏，用来对着表格读一张卡片。信息架构以公司商品池为准：
+右侧滑出抽屉实行**双轨治理**（ADR-3），按场景严格区分只读轻预览与有界轻作业，业务页面复用共享壳，不复制后代选择器去覆盖头、标题、页脚、padding 或字号：
 
-- 壳：`features/master-data/components/list/sellable-preview-sheet.tsx`
-- 正文：`features/master-data/components/list/master-data-sellable-preview.tsx`
+- **轨道一 · 只读轻预览 `QuickPreviewSheet`**（`components/business/list.tsx`）：用于主数据/目录点读、概览指标下钻与只读主记录查看，**严禁接入 `useAppForm`**。信息架构以公司商品池为准：
+    - 壳：`features/master-data/components/list/sellable-preview-sheet.tsx`
+    - 正文：`features/master-data/components/list/master-data-sellable-preview.tsx`
+- **轨道二 · 有界轻作业 `TaskActionSheet`**（`components/business/task-action-sheet.tsx`）：固定采用 `size="detail"`（复用 `--spacing-detail` = 768px，最大 92vw），专用于**工作台窄屏分诊快审、库存调整侧边查看/审批、财务应收/应付侧边审批**等有界轻作业；内置固定顶栏（队列步进/完整页面入口）、独立滚动正文与固定底栏，**禁止抽屉内套娃抽屉（Sheet-on-Sheet）**。
 
-共享样式在 `components/ui/sheet.tsx`（遮罩、头、标题、页脚）和 `components/business/list.tsx` 的 `QuickPreviewSheet`（插槽与正文布局）。业务页面复用这两处，不复制后代选择器去覆盖头、标题、页脚、padding 或字号。
+共享基础原语在 `components/ui/sheet.tsx`（遮罩、头、标题、页脚，且 `SheetHeader` 通过 `SheetCloseContext` 在显示关闭按钮时自动追加 `pr-12` 防止标题与右上角关闭按钮碰撞）。
 
-| 场景                                               | 用什么                               |
-| -------------------------------------------------- | ------------------------------------ |
-| 列表里确认「这是谁、现在能不能用、关键数字是多少」 | `QuickPreviewSheet` `size="preview"` |
-| 正式单据纸质核对                                   | `PaperDocument` 浮层                 |
-| 对照行项目、双栏或读完整主记录                     | `QuickPreviewSheet` `size="detail"`  |
-| 编辑、校验、提交                                   | 对象中心或 Dialog + TanStack Form    |
-| 破坏性确认                                         | `FormalActionConfirmDialog`          |
+| 场景                                                 | 用什么                                                        |
+| ---------------------------------------------------- | ------------------------------------------------------------- |
+| 列表里确认「这是谁、现在能不能用、关键数字是多少」   | `QuickPreviewSheet` `size="preview"`                          |
+| 正式单据纸质核对                                     | `PaperDocument` 浮层                                          |
+| 只读对照行项目、双栏或读完整主记录                   | `QuickPreviewSheet` `size="detail"`                           |
+| 工作台窄屏快审、库存调整与财务侧边审批（有界轻作业） | `TaskActionSheet`（固定 `size="detail"` 768px，禁止套娃抽屉） |
+| 重型编辑、校验、提交                                 | 对象中心或 `DialogContent`（按 `size` 规范）+ TanStack Form   |
+| 破坏性确认                                           | `FormalActionConfirmDialog`                                   |
 
-宽度和遮罩只来自 `size`（`app/globals.css` 的 `--spacing-preview` / `--spacing-detail`）。不传 `contentClassName` / `overlayClassName` 改宽度或遮罩。商品池上残留的 460px `contentClassName` 不要照抄。主数据 / 目录点读用 `preview`。
+宽度和遮罩只来自 `size`（`app/globals.css` 的 `--spacing-preview` / `--spacing-detail`）。不传 `contentClassName` / `overlayClassName` 改宽度或遮罩。商品池上残留的 460px `contentClassName` 不要照抄。主数据 / 目录点读用 `QuickPreviewSheet` `size="preview"`；有界轻作业固定用 `TaskActionSheet`（`size="detail"` 768px）。
 
-点读前列表行已经要能回答上面三个问题。不为了打开 Sheet 再请求整份详情；正文里确有列表没有的块时，只把该块做成可失败的局部状态。
+点读前列表行已经要能回答上面三个问题。不为了打开轻预览 Sheet 再请求整份详情；正文里确有列表没有的块时，只把该块做成可失败的局部状态。
 
-遮罩、竖边距、标题字号和页脚横排由共享壳提供：浅遮罩、不模糊。`size="detail"` 的正文滚动由业务组件负责，外缘 `px-7 py-6` 只加一次。
+遮罩、竖边距、标题字号和页脚横排由共享壳提供：浅遮罩、不模糊。**抽屉正文外边距统一为 `px-sheet-inline py-5`（禁止手写 `px-7`）**，与 `SheetHeader` / `SheetFooter` 严格对齐并响应高度紧凑断点。`QuickPreviewSheet` `size="detail"` 的正文滚动由业务组件负责，外缘 `px-sheet-inline py-5` 只加一次；`TaskActionSheet` 由壳体统一提供 `px-sheet-inline py-5` 独立滚动正文。
 
 `QuickPreviewSheet` 的顺序是 identity → title → description → summary。
 
@@ -106,11 +109,11 @@ work item、租约、投影、事实、幂等键只出现在代码注释、字�
 | `description` | 一条次身份，例如规格。占位文案（「无规格」）则省略整个插槽                                   |
 | `summary`     | 一个状态 Badge + 一句弱化限定。状态用 `BusinessStatusBadge context="preview"` 或语义 `Badge` |
 
-正文是短文：先给这张列表要回答的那个数字（金额 `MoneyValue`，数量 `QuantityValue`，比例 `RateValue`），没有这种数字就从资料区起笔。分区用正文级标题；空值写成 `—` 或「未标注」；名称已在 title 就不再做名称行。内部 ID、审计字段、行项目表、纸质单据、完整时间线和筛选控件不进窄栏，放到对象中心或 `size="detail"`。
+只读轻预览正文是短文：先给这张列表要回答的那个数字（金额 `MoneyValue`，数量 `QuantityValue`，比例 `RateValue`），没有这种数字就从资料区起笔。分区用正文级标题；空值写成 `—` 或「未标注」；名称已在 title 就不再做名称行。内部 ID、审计字段、行项目表、纸质单据、完整时间线和筛选控件不进窄栏，放到对象中心、`QuickPreviewSheet` `size="detail"` 或 `TaskActionSheet`。
 
-页脚横排右对齐：次要是「关闭」，主要是「打开{对象}资料」（`ArrowUpRightIcon`，`data-icon="inline-end"`）。右上角关闭和页脚关闭使用不同的稳定原生 id。额外动作不能把 Sheet 变成表单。主按钮禁用时用 `DisabledActionHint` 说明原因。
+页脚横排右对齐：只读轻预览次要是「关闭」，主要是「打开{对象}资料」（`ArrowUpRightIcon`，`data-icon="inline-end"`）。右上角关闭和页脚关闭使用不同的稳定原生 id。额外动作不能把 `QuickPreviewSheet` 变成表单。主按钮禁用时用 `DisabledActionHint` 说明原因。
 
-交互：用 `DataTable` 的 `onRowPreview` 打开，并设置 `highlightedRowId`。打开前记下 `lastFocusedRowId`，关闭后把焦点还回 `[data-row-id="…"]`，选择器对业务 ID 做 `CSS.escape`。Sheet 打开时，页面级 `/` 聚焦搜索框停掉。轻预览只读，不接 `useAppForm`。
+交互：用 `DataTable` 的 `onRowPreview` 打开，并设置 `highlightedRowId`。打开前记下 `lastFocusedRowId`，关闭后把焦点还回 `[data-row-id="…"]`，选择器对业务 ID 做 `CSS.escape`。Sheet 打开时，页面级 `/` 聚焦搜索框停掉。`QuickPreviewSheet` 严格只读，**严禁接入 `useAppForm`**；`TaskActionSheet` 仅承接有界轻作业与审批，**严禁在抽屉内嵌套打开第二个抽屉**。
 
 高级筛选沿用同一外观，保留重置和应用。工作台沿用作业面内容与操作。移动端导航保留导航结构。
 

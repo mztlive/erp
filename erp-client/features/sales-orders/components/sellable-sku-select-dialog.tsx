@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -214,8 +215,9 @@ export function SellableSkuSelectDialog({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
+                size="2xl"
+                scroll="body"
                 closeButtonId="sales-orders-sku-picker-close"
-                className="flex max-h-[90vh] w-full flex-col gap-4 overflow-hidden sm:max-w-6xl"
                 showCloseButton
             >
                 <DialogHeader>
@@ -223,7 +225,10 @@ export function SellableSkuSelectDialog({
                     <DialogDescription>{description}</DialogDescription>
                 </DialogHeader>
 
-                <div id="sales-orders-sku-picker-toolbar">
+                <div
+                    id="sales-orders-sku-picker-toolbar"
+                    className="shrink-0 border-b border-border/60 px-overlay-padding py-3"
+                >
                     <SellableItemsFilterBar
                         idPrefix="sales-orders-sku-picker-filter"
                         formAriaLabel="销售单商品查询"
@@ -243,7 +248,7 @@ export function SellableSkuSelectDialog({
                     />
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-auto">
+                <DialogBody className="overflow-auto">
                     <DataTable
                         id="sales-orders-sku-picker-table"
                         data={rows}
@@ -315,10 +320,10 @@ export function SellableSkuSelectDialog({
                             ) : undefined
                         }
                     />
-                </div>
+                </DialogBody>
 
                 {selectedItems.length > 0 ? (
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border/60 px-overlay-padding py-2.5">
                         <span className="text-xs text-muted-foreground">
                             已选 {selectedItems.length} 个
                         </span>

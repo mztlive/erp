@@ -5,7 +5,6 @@ import {
     ValidationSummary,
     WorkspaceTaskFooter,
     surfaceInsetClassName,
-    surfacePanelClassName,
     type ValidationIssue,
 } from "@/components/business"
 import { LoadingButton } from "@/components/ui/loading-button"
@@ -144,7 +143,7 @@ export function AllocationFactFormCard({
 }: AllocationFactFormCardProps) {
     return (
         <section
-            className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
+            className="erp-raised-surface min-w-0 overflow-hidden rounded-lg border border-border/60 bg-background"
             aria-label={track === "payment" ? "付款信息" : "本次进项发票记录"}
         >
             {hideHeading ? null : (

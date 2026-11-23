@@ -92,14 +92,16 @@ export function FinancialDraftEditDialog({
     )
 }
 
-function FinancialDraftEditor({
+export function FinancialDraftEditor({
     kind,
     documentId,
     onClose,
+    onSubmitted,
 }: {
     kind: FinancialDraftKind
     documentId: string
     onClose: () => void
+    onSubmitted?: () => void
 }) {
     const profile = useAccountProfileQuery()
     const permitted = hasPermission(profile.data?.permissions, `${kind}:submit`)
@@ -110,9 +112,9 @@ function FinancialDraftEditor({
     return (
         <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
             <DialogContent
+                size="lg"
                 closeButtonId={`${id}-close`}
                 showCloseButton={!busy}
-                className="max-h-[85dvh] overflow-y-auto sm:max-w-xl"
             >
                 <DialogHeader>
                     <DialogTitle>
@@ -162,6 +164,7 @@ function FinancialDraftEditor({
                         draft={query.data}
                         id={id}
                         onClose={onClose}
+                        onSubmitted={onSubmitted}
                         onBusyChange={setBusy}
                         onRefresh={async () => {
                             const result = await query.refetch()
@@ -181,6 +184,7 @@ function FinancialDraftForm({
     draft,
     id,
     onClose,
+    onSubmitted,
     onRefresh,
     onBusyChange,
 }: {
@@ -188,6 +192,7 @@ function FinancialDraftForm({
     draft: FinancialDraft
     id: string
     onClose: () => void
+    onSubmitted?: () => void
     onRefresh: () => Promise<FinancialDraft | undefined>
     onBusyChange: (busy: boolean) => void
 }) {
@@ -317,6 +322,7 @@ function FinancialDraftForm({
                 allocations: intent.allocations,
             })
             setUnknown(null)
+            onSubmitted?.()
             onClose()
         } catch (cause) {
             setUnknown(
@@ -386,6 +392,7 @@ function FinancialDraftForm({
                 if (!isFinancialDraft(current)) {
                     await mutations.confirm(current)
                     setUnknown(null)
+                    onSubmitted?.()
                     onClose()
                 } else setError("暂未确认是否提交成功，请直接点击重新提交。")
             } else if (unknown.stage === "save") {
@@ -397,6 +404,7 @@ function FinancialDraftForm({
                     setSaved(true)
                     if (!isFinancialDraft(current)) {
                         setUnknown(null)
+                        onSubmitted?.()
                         onClose()
                     } else
                         setUnknown({

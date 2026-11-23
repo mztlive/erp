@@ -132,10 +132,7 @@ export function VoucherCategoryStatusDialog({
                 }
             }}
         >
-            <DialogContent
-                closeButtonId={`${prefix}-close`}
-                className="sm:max-w-md"
-            >
+            <DialogContent size="sm" closeButtonId={`${prefix}-close`}>
                 <DialogHeader>
                     <DialogTitle>{action}卡券类目</DialogTitle>
                     <DialogDescription>

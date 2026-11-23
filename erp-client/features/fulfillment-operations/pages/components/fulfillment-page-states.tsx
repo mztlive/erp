@@ -5,9 +5,12 @@ import Link from "next/link"
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    PageHeader,
     PageScaffold,
 } from "@/components/business"
+import {
+    ListWorkspaceHeader,
+    listWorkspaceStyles,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import type { FulfillmentOperationType } from "@/features/fulfillment-operations/types"
 import {
@@ -27,7 +30,7 @@ export type FulfillmentPageStatesProps = {
     visibleTypes?: readonly FulfillmentOperationType[]
     filterSummary?: string
     onClearAllFilters?: () => void
-    /** 已由页面脚手架承载时跳过 PageScaffold / PageHeader，只渲染状态体 */
+    /** 已由页面脚手架承载时跳过 PageScaffold / ListWorkspaceHeader，只渲染状态体 */
     standalone?: boolean
     /** 销售单详情内仅提供刷新，不跳去其它页面或解除销售单范围。 */
     embedded?: boolean
@@ -64,8 +67,11 @@ export function FulfillmentPageStates({
         )
         if (standalone) return body
         return (
-            <PageScaffold>
-                <PageHeader
+            <PageScaffold
+                density="compact"
+                className={`${listWorkspaceStyles.page} gap-4`}
+            >
+                <ListWorkspaceHeader
                     title={headerDescription}
                     description="正在加载队列…"
                 />
@@ -91,8 +97,11 @@ export function FulfillmentPageStates({
         )
         if (standalone) return body
         return (
-            <PageScaffold>
-                <PageHeader
+            <PageScaffold
+                density="compact"
+                className={`${listWorkspaceStyles.page} gap-4`}
+            >
+                <ListWorkspaceHeader
                     title={headerDescription}
                     description="队列加载失败"
                 />

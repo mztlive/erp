@@ -529,7 +529,8 @@ function MediaListEditor({
                 }}
             >
                 <DialogContent
-                    className="gap-4 p-4 sm:max-w-4xl"
+                    size="xl"
+                    className="gap-4 p-4"
                     closeButtonId={`${derivedBasePrefix}-preview-close`}
                 >
                     <DialogHeader className="pr-10">
@@ -967,7 +968,8 @@ function ProductBasicMediaRail({
                 }}
             >
                 <DialogContent
-                    className="gap-4 p-4 sm:max-w-4xl"
+                    size="xl"
+                    className="gap-4 p-4"
                     closeButtonId={`${idPrefix}-preview-close`}
                 >
                     <DialogHeader className="pr-10">

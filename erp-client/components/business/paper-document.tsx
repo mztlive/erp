@@ -87,6 +87,8 @@ interface PaperDocumentProps<Row> extends Omit<
      * bare：仅纸张本体，适合透明浮层预览，避免再套一层灰框。
      */
     frame?: PaperDocumentFrame
+    /** 弹窗预览等紧凑容器内使用，收紧页边留白（`px-6 py-6 min-h-0`）。 */
+    compact?: boolean
 }
 
 const alignmentClasses = {
@@ -123,6 +125,7 @@ function PaperDocument<Row>({
     appendix,
     footer,
     frame = "framed",
+    compact = false,
     className,
     "aria-label": ariaLabel,
     ...props
@@ -142,7 +145,10 @@ function PaperDocument<Row>({
                 data-slot="paper-document"
                 aria-label={ariaLabel ?? "纸质单据预览"}
                 className={cn(
-                    "mx-auto min-h-screen min-w-3xl max-w-5xl border border-border bg-card px-10 py-12 text-sm text-card-foreground shadow-lg print:min-h-0 print:min-w-0 print:max-w-none print:border-0 print:px-0 print:py-0 print:shadow-none",
+                    "mx-auto min-w-3xl max-w-5xl border border-border bg-card text-sm text-card-foreground shadow-lg print:min-h-0 print:min-w-0 print:max-w-none print:border-0 print:px-0 print:py-0 print:shadow-none",
+                    compact || frame === "bare"
+                        ? "min-h-0 px-6 py-6"
+                        : "min-h-screen px-10 py-12",
                     frame === "bare" && "min-h-0 shadow-2xl",
                     className,
                 )}

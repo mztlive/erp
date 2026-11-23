@@ -13,6 +13,13 @@ import type { AdminAccount } from "../types"
 /** 通配全权编码：不在权限目录内，界面不可勾选，保存时原样保留。 */
 export const WILDCARD_CODE = "*:*"
 
+const FULFILLMENT_ENTRY_ANY_OF = [
+    "purchase_receipt:list",
+    "delivery:list",
+    "electronic_delivery:list",
+    "service_fulfillment:list",
+] as const
+
 /**
  * 各岗位工作台的最低入口权限（与后端 `RoleWorkbench::accessible` 口径一致）。
  * 配置工作台本身不授予业务权限，仅当角色具备这些入口权限时，绑定人员才可进入对应工作台。
@@ -22,6 +29,7 @@ export const WORKBENCH_REQUIRED_PERMISSIONS: Record<
     readonly string[]
 > = {
     "WB-01": ["sales_order:list", "sales_inquiry:list", "work_item:list"],
+    "WB-02": ["work_item:list", ...FULFILLMENT_ENTRY_ANY_OF],
     "WB-03": [
         "purchase_order:list",
         "procurement_inquiry:list",
@@ -32,6 +40,7 @@ export const WORKBENCH_REQUIRED_PERMISSIONS: Record<
         "supplier_payment:list",
         "work_item:list",
     ],
+    "WB-05": ["cost_entry:list", "sales_order:list", "work_item:list"],
 }
 
 export type WorkbenchRequirementItem = {
@@ -52,6 +61,35 @@ export function evaluateWorkbenchReadiness(
     workbenchId: RoleWorkbenchId,
     permissions: readonly string[],
 ): WorkbenchReadiness {
+    if (workbenchId === "WB-02") {
+        const hasWorkItem = hasPermission(permissions, "work_item:list")
+        const hasAnyFulfillment = FULFILLMENT_ENTRY_ANY_OF.some((code) =>
+            hasPermission(permissions, code),
+        )
+        const requirements: WorkbenchRequirementItem[] = [
+            {
+                code: "work_item:list",
+                label: permissionLabel("work_item:list"),
+                granted: hasWorkItem,
+            },
+            ...FULFILLMENT_ENTRY_ANY_OF.map((code) => ({
+                code,
+                label: `${permissionLabel(code)}（任一）`,
+                granted: hasPermission(permissions, code),
+            })),
+        ]
+        const missingCodes: string[] = []
+        if (!hasWorkItem) missingCodes.push("work_item:list")
+        if (!hasAnyFulfillment) {
+            missingCodes.push("purchase_receipt:list", "delivery:list")
+        }
+        return {
+            id: workbenchId,
+            ready: hasWorkItem && hasAnyFulfillment,
+            requirements,
+            missingCodes,
+        }
+    }
     const required = WORKBENCH_REQUIRED_PERMISSIONS[workbenchId] ?? []
     const requirements: WorkbenchRequirementItem[] = required.map((code) => ({
         code,

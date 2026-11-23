@@ -106,9 +106,9 @@ export function UpdateAvailabilityDialog({
             }}
         >
             <DialogContent
+                size="md"
                 closeButtonId="supplier-offerings-dialog-availability-close"
                 showCloseButton={!mutation.isPending}
-                className="sm:max-w-lg"
                 onKeyDownCapture={(event) => {
                     if (event.key !== "Escape" || mutation.isPending) return
                     const target = event.target

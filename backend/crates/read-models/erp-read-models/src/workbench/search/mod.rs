@@ -1,5 +1,6 @@
 //! 审批业务搜索资料。
 mod approvals;
+mod counterparties;
 mod related_sales;
 mod sources;
 use erp_workflow::service::work_item::read::search::{SearchDocument, approval_label, collect_options};

@@ -1,4 +1,9 @@
 import {
+    APPROVAL_INSTANCE_LIST_VIEWS,
+    type ApprovalInstanceListView,
+    type ApprovalInstanceStatusFilter,
+} from "@/features/approval-workflow/api"
+import {
     parseWorkspaceFilters,
     type WorkspaceFilters,
 } from "@/lib/workspace-search"
@@ -16,6 +21,13 @@ import type { PeriodPreset } from "@/features/actual-profit-loss/types"
 
 const DUE_VALUES = ["today", "overdue"] as const
 const VIEW_VALUES = ["inbox", "started", "managed", "history"] as const
+const APPROVAL_STATUS_VALUES = [
+    "RUNNING",
+    "APPROVED",
+    "REJECTED",
+    "CANCELLED",
+    "BLOCKED",
+] as const satisfies readonly ApprovalInstanceStatusFilter[]
 const SORT_VALUES = ["priority_due", "due_asc", "created_desc"] as const
 export const DEFAULT_WORKSPACE_SORT = "created_desc" satisfies WorkspaceSort
 
@@ -25,6 +37,9 @@ export type WorkspaceUrlState = {
     filters?: WorkspaceFilters
     scopeVersion?: string
     view: WorkspaceViewFilter
+    approvalView?: ApprovalInstanceListView
+    approvalDocumentType?: string
+    approvalStatus?: ApprovalInstanceStatusFilter
     due?: WorkspaceDueFilter
     blocked?: boolean
     workItemType?: string
@@ -32,6 +47,7 @@ export type WorkspaceUrlState = {
     handlerUserIds?: string
     salesOrderIds?: string
     purchaseOrderIds?: string
+    counterpartyIds?: string
     sort: WorkspaceSort
     queue?: boolean
     page?: number
@@ -63,6 +79,23 @@ const codec = createUrlStateCodec<WorkspaceUrlState>([
         values: VIEW_VALUES,
         defaultValue: "inbox",
     },
+    {
+        key: "approvalView",
+        type: "enum",
+        values: APPROVAL_INSTANCE_LIST_VIEWS,
+    },
+    {
+        key: "docType",
+        name: "approvalDocumentType",
+        type: "string",
+        trim: true,
+    },
+    {
+        key: "status",
+        name: "approvalStatus",
+        type: "enum",
+        values: APPROVAL_STATUS_VALUES,
+    },
     { key: "due", type: "enum", values: DUE_VALUES },
     { key: "blocked", type: "boolean", defaultValue: false },
     { key: "type", name: "workItemType", type: "string", trim: true },
@@ -86,6 +119,13 @@ const codec = createUrlStateCodec<WorkspaceUrlState>([
         build: (value) => buildIdListParam(value),
     },
     {
+        key: "counterpartyIds",
+        type: "custom",
+        parse: (get) =>
+            parseIdListParam(get("counterpartyIds") ?? get("counterparty_ids")),
+        build: (value) => buildIdListParam(value),
+    },
+    {
         key: "sort",
         type: "enum",
         values: SORT_VALUES,
@@ -97,25 +137,52 @@ const codec = createUrlStateCodec<WorkspaceUrlState>([
 
 export const parseWorkspaceSearchParams: typeof codec.parse = (params) => {
     const state = codec.parse(params)
+    const approvalView =
+        state.view === "started" ? (state.approvalView ?? "started") : undefined
     const filters: WorkspaceFilters = { ...state.filters }
     if (state.workItemType)
         filters.item_types = [
             `${state.view === "started" ? "approval" : "task"}:${state.workItemType}`,
         ]
+    if (
+        state.view === "started" &&
+        state.approvalDocumentType &&
+        !filters.item_types?.length
+    ) {
+        filters.item_types = [
+            state.approvalDocumentType.startsWith("approval:")
+                ? state.approvalDocumentType
+                : `approval:${state.approvalDocumentType}`,
+        ]
+    }
+    if (
+        state.view === "started" &&
+        state.approvalStatus &&
+        !filters.statuses?.length
+    ) {
+        filters.statuses = [state.approvalStatus]
+    }
     if (state.handlerUserIds) filters.handlers = state.handlerUserIds.split(",")
     if (state.salesOrderIds)
         filters.sales_orders = state.salesOrderIds.split(",")
     if (state.purchaseOrderIds)
         filters.purchase_orders = state.purchaseOrderIds.split(",")
+    if (state.counterpartyIds && !filters.counterparties?.length)
+        filters.counterparties = state.counterpartyIds.split(",")
     if (state.blocked) filters.blocked = true
-    if (state.due) filters.due = state.due
+    if (state.due && state.view !== "started") filters.due = state.due
     return {
         ...state,
+        approvalView,
+        approvalDocumentType: undefined,
+        approvalStatus: undefined,
         filters,
+        page: state.page,
         workItemType: undefined,
         handlerUserIds: undefined,
         salesOrderIds: undefined,
         purchaseOrderIds: undefined,
+        counterpartyIds: undefined,
         blocked: undefined,
         due: undefined,
     }
@@ -256,9 +323,13 @@ export function urlStateFromMetricKey(
 export function toTodayWorkspaceQuery(
     state: WorkspaceUrlState,
     timezone: string,
+    cursor?: string,
 ): TodayWorkspaceQuery {
+    const approvalView =
+        state.view === "started" ? (state.approvalView ?? "started") : undefined
     return {
         view: state.view,
+        approvalView,
         filters: state.filters,
         scopeVersion: state.scopeVersion,
         due: state.due,
@@ -268,7 +339,9 @@ export function toTodayWorkspaceQuery(
         handlerUserIds: state.handlerUserIds,
         salesOrderIds: state.salesOrderIds,
         purchaseOrderIds: state.purchaseOrderIds,
+        counterpartyIds: state.counterpartyIds,
         sort: state.sort,
+        cursor,
         page: state.page,
         timezone,
     }

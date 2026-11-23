@@ -7,7 +7,7 @@ use axum::response::IntoResponse;
 
 mod feed;
 use axum::extract::{Path, State};
-use erp_notification::{Error as NotificationError, InboxPage, InboxQuery};
+use erp_notification::{Error as NotificationError, InboxPage, InboxQuery, MarkAllReadResult};
 pub use feed::events;
 
 use crate::http::errors::{Error, Result};
@@ -39,6 +39,17 @@ pub async fn mark_read(
     Ok(ApiResponse::ok_with_data(()))
 }
 
+/// 标记本人全部未读消息已读。
+/// 本次实际标记数量。
+/// 仓储失败返回统一 HTTP 错误。
+pub async fn mark_all_read(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+) -> Result<MarkAllReadResult> {
+    let result = state.application().notifications().mark_all_read(actor.id()).await.map_err(http_error)?;
+    Ok(ApiResponse::ok_with_data(result))
+}
+
 fn http_error(error: NotificationError) -> Error {
     match error {
         NotificationError::NotFound => Error::NotFound("消息不存在，请刷新收件箱".into()),
@@ -49,6 +60,7 @@ fn http_error(error: NotificationError) -> Error {
 
 #[cfg(test)]
 mod tests {
+    use axum::body::to_bytes;
     use axum::http::StatusCode;
 
     use super::*;
@@ -59,5 +71,14 @@ mod tests {
             http_error(NotificationError::Invalid("分页条件无效，请重新打开收件箱")).into_response().status(),
             StatusCode::BAD_REQUEST
         );
+    }
+
+    #[tokio::test]
+    async fn mark_all_read_response_serializes_updated_count() {
+        let response = ApiResponse::ok_with_data(MarkAllReadResult { updated_count: 4 }).into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["data"], serde_json::json!({ "updated_count": 4 }));
     }
 }

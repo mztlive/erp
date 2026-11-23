@@ -65,9 +65,9 @@ export function PublishDialog({
             }}
         >
             <DialogContent
+                size="lg"
                 closeButtonId={`${id}-close`}
                 showCloseButton={!publish.isPending}
-                className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
             >
                 <DialogHeader>
                     <DialogTitle>发布审批流程</DialogTitle>

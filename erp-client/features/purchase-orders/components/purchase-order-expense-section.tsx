@@ -356,7 +356,7 @@ function ConfirmExpenseDialog({
             }}
         >
             <DialogContent
-                className="sm:max-w-lg"
+                size="md"
                 closeButtonId="procurement-orders-expense-confirm-close"
                 showCloseButton={!mutation.isPending}
             >

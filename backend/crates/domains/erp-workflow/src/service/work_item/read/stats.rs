@@ -1,6 +1,6 @@
-//! 本人待办统计按持久化分配累计；办理资格不参与任务计数。
+//! 待办统计按持久化责任范围与业务筛选累计；办理资格不参与任务计数。
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
@@ -11,7 +11,7 @@ use validator::Validate;
 
 use super::access::QueueAccess;
 use super::dto::WorkItemTypeTiming;
-use super::query::{AUTHORIZED_SCAN_BATCH_SIZE, matches_handler};
+use super::query::{AUTHORIZED_SCAN_BATCH_SIZE, matches_counterparty, matches_handler};
 use super::{
     WorkItemDueFilter, WorkItemFamily, WorkItemFamilyCountsView, WorkItemFilter, WorkItemReadService,
     WorkItemScope, WorkItemStatsParams, WorkItemStatsView, dto, family_of,
@@ -29,63 +29,88 @@ struct StatsContext<'a> {
 }
 
 /// 一批投影保留的统计字段；其寿命不跨越下一批读取。
-#[derive(Clone, Copy)]
 struct StatIdentity {
     work_item_type: WorkItemType,
+    business_object_type: String,
+    status: WorkItemStatus,
     due_at: Option<Instant>,
+    matches_item_types: bool,
 }
 
-/// 累计个人全部任务族，并同时汇总当前选中类型。
+/// 累计当前范围的全部任务族、类型、审批单据拆解，并同时汇总当前选中类型。
 #[derive(Default)]
 struct StatsCounts {
     selected: SelectedCounts,
     family_counts: WorkItemFamilyCountsView,
     work_item_type_counts: HashMap<WorkItemType, u64>,
     work_item_type_timing: HashMap<WorkItemType, WorkItemTypeTiming>,
+    approval_document_type_counts: BTreeMap<String, u64>,
+    item_type_counts: BTreeMap<String, u64>,
 }
 
 /// 选中范围的待办总数、到期及异常指标。
 #[derive(Default)]
 struct SelectedCounts {
-    assigned: u64,
+    total: u64,
     due_today: u64,
     overdue: u64,
     exception: u64,
 }
 
 impl StatsCounts {
-    // 累计一批经授权的本人开放任务后释放该批数据；累计器只保留计数，不留任务和单据明细。
+    // 累计一批经授权任务后释放该批数据；累计器只保留计数，不留任务和单据明细。
     fn extend_batch(&mut self, batch: impl IntoIterator<Item = StatIdentity>, context: &StatsContext<'_>) {
         for item in batch {
             self.observe(item, context);
         }
     }
 
-    // 在同一当前分配范围内计算总数和各类型计数；业务筛选只能收窄要计数的集合。
-    fn extend_pending(
+    // 在当前责任范围内按 `q`、`filters`、处理人与往来方收窄并累计各类拆分统计。
+    fn extend_scoped(
         &mut self,
         fields: impl IntoIterator<Item = dto::WorkItemFields>,
         query: &dto::WorkItemListQuery,
+        keyword: Option<&str>,
         context: &StatsContext<'_>,
     ) {
         self.extend_batch(
             fields
                 .into_iter()
-                .filter(|item| item.is_pending_for(context.actor.id()))
+                .filter(|item| matches_scope_row(item, query, context.actor.id()))
                 .filter(|item| matches_handler(item, &query.handler_user_ids))
-                .map(|item| StatIdentity { work_item_type: item.work_item_type, due_at: item.due_at }),
+                .filter(|item| matches_counterparty(item, &query.counterparty_ids))
+                .filter(|item| item.search.matches(keyword).is_some())
+                .filter(|item| query.filters.matches_without_item_types(&item.search))
+                .map(|item| {
+                    let matches_item_types = query.filters.matches_item_types(&item.search);
+                    StatIdentity {
+                        work_item_type: item.work_item_type,
+                        business_object_type: item.business_object_type.clone(),
+                        status: item.status,
+                        due_at: item.due_at,
+                        matches_item_types,
+                    }
+                }),
             context,
         );
     }
 
-    // 只统计已通过当前分配及开放状态筛选的任务；没有办理权限不从本人待办计数中移除。
+    // 只统计已通过范围及非类型业务筛选的任务；没有办理权限不从本人待办计数中移除。
     fn observe(&mut self, item: StatIdentity, context: &StatsContext<'_>) {
         increment_family_count(&mut self.family_counts, item.work_item_type);
+        increment_item_type_counts(
+            &mut self.approval_document_type_counts,
+            &mut self.item_type_counts,
+            item.work_item_type,
+            &item.business_object_type,
+        );
         let count = self.work_item_type_counts.entry(item.work_item_type).or_default();
         *count = count.saturating_add(1);
         let timing = self.work_item_type_timing.entry(item.work_item_type).or_default();
-        let today = item.due_at.is_some_and(|due| due >= context.today_start && due < context.tomorrow_start);
-        let overdue = item.due_at.is_some_and(|due| due < context.as_of);
+        let open = item.status == WorkItemStatus::Open;
+        let today =
+            open && item.due_at.is_some_and(|due| due >= context.today_start && due < context.tomorrow_start);
+        let overdue = open && item.due_at.is_some_and(|due| due < context.as_of);
         if today {
             timing.due_today = timing.due_today.saturating_add(1);
         }
@@ -93,10 +118,10 @@ impl StatsCounts {
             timing.overdue = timing.overdue.saturating_add(1);
         }
 
-        if !context.selected_types.contains(&item.work_item_type) {
+        if !context.selected_types.contains(&item.work_item_type) || !item.matches_item_types {
             return;
         }
-        self.selected.assigned = self.selected.assigned.saturating_add(1);
+        self.selected.total = self.selected.total.saturating_add(1);
         if today {
             self.selected.due_today = self.selected.due_today.saturating_add(1);
         }
@@ -112,13 +137,39 @@ impl StatsCounts {
     }
 }
 
+fn matches_scope_row(item: &dto::WorkItemFields, query: &dto::WorkItemListQuery, actor_id: &str) -> bool {
+    match query.scope {
+        WorkItemScope::Mine => item.is_pending_for(actor_id),
+        WorkItemScope::Managed => item.status == WorkItemStatus::Open,
+        WorkItemScope::History => query.statuses.contains(&item.status),
+    }
+}
+
+fn increment_item_type_counts(
+    approval_counts: &mut BTreeMap<String, u64>,
+    item_type_counts: &mut BTreeMap<String, u64>,
+    work_item_type: WorkItemType,
+    business_object_type: &str,
+) {
+    let key = if work_item_type == WorkItemType::DocumentApproval {
+        let approval_key = format!("approval:{business_object_type}");
+        let entry = approval_counts.entry(approval_key.clone()).or_default();
+        *entry = entry.saturating_add(1);
+        approval_key
+    } else {
+        format!("task:{}", work_item_type.as_str())
+    };
+    let entry = item_type_counts.entry(key).or_default();
+    *entry = entry.saturating_add(1);
+}
+
 impl WorkItemReadService {
     /// 查询与正式队列复用同一授权快照的待办统计。
-    /// 返回个人、今日到期、超期、异常、任务族计数及服务端统计时点。
+    /// 返回个人待办、当前范围总数、到期、超期、异常、任务族、类型、审批单据拆解及服务端统计时点。
     ///
     /// 查询参数、权限范围或对象事实读取失败时返回错误。
     ///
-    /// `params`：责任范围、任务族、类型、时限与工作时区。
+    /// `params`：责任范围、任务族、类型、状态、时限、关键词、结构化筛选与工作时区。
     #[inline(never)]
     pub fn work_item_stats(
         &self,
@@ -140,7 +191,7 @@ impl WorkItemReadService {
         })
     }
 
-    // 在指定时点单遍计算本人待办和任务族统计。若请求不是个人范围，先校验入口再返回零待办指标。
+    // 在指定时点按请求范围（mine / managed / history）统计任务分布及明细计数；非个人范围同时保留个人开放待办数 `assigned`。
     async fn stats_at(
         &self,
         query: dto::WorkItemListQuery,
@@ -159,34 +210,38 @@ impl WorkItemReadService {
             tomorrow_start,
         };
 
-        let mut personal_query = query.clone();
-        personal_query.scope = WorkItemScope::Mine;
-        personal_query.statuses = vec![WorkItemStatus::Open];
+        let mut scoped_query = query.clone();
         if !all_families {
-            personal_query.work_item_types = registered_work_item_types();
+            scoped_query.work_item_types = registered_work_item_types();
         }
-        let personal = self.stream_stats(&personal_query, &access, &context, executor).await?;
-        let assigned = personal.selected.assigned;
-        let selected = if query.scope == WorkItemScope::Mine {
-            personal.selected
+        let scoped = self.stream_stats(&scoped_query, &access, &context, executor).await?;
+        let assigned = if query.scope == WorkItemScope::Mine {
+            scoped.selected.total
         } else {
-            self.stream_stats(&query, &access, &context, executor).await?.selected
+            let mut personal_query = scoped_query.clone();
+            personal_query.scope = WorkItemScope::Mine;
+            personal_query.statuses = vec![WorkItemStatus::Open];
+            personal_query.filters.statuses.clear();
+            self.stream_stats(&personal_query, &access, &context, executor).await?.selected.total
         };
 
         self.validate_access(&access, executor).await?;
         Ok(WorkItemStatsView {
             assigned,
-            due_today: selected.due_today,
-            overdue: selected.overdue,
-            exception: selected.exception,
-            family_counts: personal.family_counts,
-            work_item_type_counts: personal.work_item_type_counts,
-            work_item_type_timing: personal.work_item_type_timing,
+            total: scoped.selected.total,
+            due_today: scoped.selected.due_today,
+            overdue: scoped.selected.overdue,
+            exception: scoped.selected.exception,
+            family_counts: scoped.family_counts,
+            work_item_type_counts: scoped.work_item_type_counts,
+            work_item_type_timing: scoped.work_item_type_timing,
+            approval_document_type_counts: scoped.approval_document_type_counts,
+            item_type_counts: scoped.item_type_counts,
             as_of,
         })
     }
 
-    // 分批扫描满足当前指派的任务，只累计类型和时限计数，不在内存保留全部命中任务。
+    // 分批扫描授权任务，完成往来方与结构化筛选后只累计统计计数，不在内存保留全部命中任务。
     async fn stream_stats(
         &self,
         query: &dto::WorkItemListQuery,
@@ -197,11 +252,8 @@ impl WorkItemReadService {
         let mut filter = access.scope_filter(query)?;
         apply_due_filter_at(&mut filter, query.due, context.as_of)?;
         filter.narrow_current_handlers(&query.handler_user_ids);
-        filter.query = None;
+        let keyword = filter.query.take();
         let mut counts = StatsCounts::default();
-        if query.scope != WorkItemScope::Mine {
-            return Ok(counts);
-        }
 
         let mut scan = self.candidate_scan(&filter, executor).await?;
         loop {
@@ -210,7 +262,9 @@ impl WorkItemReadService {
             if candidate_count == 0 {
                 break;
             }
-            counts.extend_pending(rows.into_iter().map(dto::WorkItemFields::from), query, context);
+            let mut fields = rows.into_iter().map(dto::WorkItemFields::from).collect::<Vec<_>>();
+            self.prepare_search_fields(&mut fields, query, access, executor).await?;
+            counts.extend_scoped(fields, query, keyword.as_deref(), context);
             if candidate_count < AUTHORIZED_SCAN_BATCH_SIZE.get() as usize {
                 break;
             }
@@ -356,26 +410,132 @@ mod tests {
         let query = params.normalized().unwrap();
         let context = context(&actor, &query.work_item_types, at);
         let mut counts = StatsCounts::default();
+        let indexed = |items: Vec<dto::WorkItemFields>| {
+            items
+                .into_iter()
+                .map(|mut item| {
+                    item.search = super::super::search::task_document(&item);
+                    item
+                })
+                .collect::<Vec<_>>()
+        };
         // 来源事实缺失或授权未就绪不改变持久化任务数量。
-        counts.extend_pending(rows.clone(), &query, &context);
-        assert_eq!(counts.selected.assigned, 2);
+        counts.extend_scoped(indexed(rows.clone()), &query, None, &context);
+        assert_eq!(counts.selected.total, 2);
         assert_eq!(counts.family_counts.approval, 1);
         assert_eq!(counts.family_counts.procurement, 1);
+        assert_eq!(counts.approval_document_type_counts.get("approval:sales_order"), Some(&1));
+        assert_eq!(counts.item_type_counts.get("approval:sales_order"), Some(&1));
+        assert_eq!(counts.item_type_counts.get("task:PROCUREMENT_ORDER_CREATION"), Some(&1));
         assert_eq!(counts.selected.due_today, 2);
 
         for (page, expected) in [(1, vec!["approval"]), (2, vec!["procurement"]), (3, vec![])] {
             let mut collector = AuthorizedPageCollector::new(page, 1).unwrap();
             collector.extend(rows.clone().into_iter().filter(|item| item.is_pending_for(actor.id())));
             let page = collector.finish();
-            assert_eq!(u64::try_from(page.total).unwrap(), counts.selected.assigned);
+            assert_eq!(u64::try_from(page.total).unwrap(), counts.selected.total);
             assert_eq!(page.items.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(), expected);
         }
 
         let mut other_handler = query.clone();
         other_handler.handler_user_ids = vec!["other".into()];
         let mut narrowed = StatsCounts::default();
-        narrowed.extend_pending(rows, &other_handler, &context);
-        assert_eq!(narrowed.selected.assigned, 0);
+        narrowed.extend_scoped(indexed(rows), &other_handler, None, &context);
+        assert_eq!(narrowed.selected.total, 0);
+    }
+
+    // 验证：managed/history 范围、关键词 `q`、结构化 `filters`、`counterparty_ids` 及 `approval:<document_type>` 拆分计数。
+    #[test]
+    fn stats_supports_managed_history_keyword_filters_and_approval_document_breakdown() {
+        use bpm::ids::ApprovalNodeExecutionId;
+        use erp_core::ids::WorkItemId;
+
+        use crate::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
+
+        let actor = AuditActor::new("manager".into(), "manager".into(), AccountKind::Admin);
+        let at = Instant::from_unix_secs(1_790_784_000);
+        let make_approval =
+            |id: &str, doc_type: &str, owner: &str, status: WorkItemStatus, party: &str, party_id: &str| {
+                let mut fields: dto::WorkItemFields = WorkItem::new_document_approval(
+                    WorkItemId::new(id),
+                    DocumentApprovalWorkItemData {
+                        approval_node_execution_id: ApprovalNodeExecutionId::new(format!("exec-{id}")),
+                        business_object_type: doc_type.into(),
+                        business_object_id: format!("obj-{id}"),
+                        subject_version: "1".into(),
+                        owner_role: "approver".into(),
+                        owner_organization_id: "org".into(),
+                        owner_user_id: owner.into(),
+                        priority: WorkItemPriority::Normal,
+                        due_at: Some(at),
+                    },
+                    at,
+                )
+                .unwrap()
+                .into();
+                fields.status = status;
+                fields.counterparty_label = Some(party.into());
+                fields.counterparty_ids = vec![party_id.into()];
+                fields.search = super::super::search::task_document(&fields);
+                fields
+            };
+
+        let rows = vec![
+            make_approval("a1", "sales_order", "staff-1", WorkItemStatus::Open, "星辰科技", "cust-1"),
+            make_approval("a2", "purchase_order", "staff-2", WorkItemStatus::Open, "星辰供应链", "sup-1"),
+            make_approval("a3", "sales_order", "staff-1", WorkItemStatus::Completed, "星辰科技", "cust-1"),
+        ];
+
+        // Managed + q 命中往来单位 + filters.item_types 选中 sales_order 时：
+        // breakdown 保留所有命中的 approval:<doc_type>，selected.total 只统计选中类型。
+        let managed_params: WorkItemStatsParams = serde_json::from_value(serde_json::json!({
+            "scope": "managed",
+            "q": "星辰",
+            "filters": r#"{"item_types":["approval:sales_order"]}"#
+        }))
+        .unwrap();
+        let managed_query = managed_params.normalized().unwrap();
+        let ctx = context(&actor, &managed_query.work_item_types, at);
+        let mut managed_counts = StatsCounts::default();
+        managed_counts.extend_scoped(rows.clone(), &managed_query, managed_query.query.as_deref(), &ctx);
+        assert_eq!(managed_counts.selected.total, 1);
+        assert_eq!(managed_counts.selected.due_today, 1);
+        assert_eq!(managed_counts.family_counts.approval, 2);
+        assert_eq!(
+            managed_counts.approval_document_type_counts,
+            BTreeMap::from([("approval:purchase_order".into(), 1), ("approval:sales_order".into(), 1),])
+        );
+
+        // counterparty_ids 精确收窄。
+        let cp_params: WorkItemStatsParams = serde_json::from_value(serde_json::json!({
+            "scope": "managed",
+            "counterparty_ids": "sup-1"
+        }))
+        .unwrap();
+        let cp_query = cp_params.normalized().unwrap();
+        let mut cp_counts = StatsCounts::default();
+        cp_counts.extend_scoped(rows.clone(), &cp_query, None, &ctx);
+        assert_eq!(cp_counts.selected.total, 1);
+        assert_eq!(
+            cp_counts.approval_document_type_counts,
+            BTreeMap::from([("approval:purchase_order".into(), 1)])
+        );
+
+        // History 只统计历史终态且不计入 due_today / overdue。
+        let history_params: WorkItemStatsParams = serde_json::from_value(serde_json::json!({
+            "scope": "history"
+        }))
+        .unwrap();
+        let history_query = history_params.normalized().unwrap();
+        let mut history_counts = StatsCounts::default();
+        history_counts.extend_scoped(rows, &history_query, None, &ctx);
+        assert_eq!(history_counts.selected.total, 1);
+        assert_eq!(history_counts.selected.due_today, 0);
+        assert_eq!(history_counts.selected.overdue, 0);
+        assert_eq!(
+            history_counts.approval_document_type_counts,
+            BTreeMap::from([("approval:sales_order".into(), 1)])
+        );
     }
 
     // 以固定业务时间构造统计测试上下文，避免运行单测时跨越真实日期或时限。
@@ -386,7 +546,17 @@ mod tests {
 
     // 搭建已明确当前个人分配的最小任务身份，使计数断言只依赖分配及开放状态。
     fn assigned(kind: WorkItemType, due: Option<Instant>) -> StatIdentity {
-        StatIdentity { work_item_type: kind, due_at: due }
+        StatIdentity {
+            work_item_type: kind,
+            business_object_type: if kind == WorkItemType::DocumentApproval {
+                "sales_order".into()
+            } else {
+                "object".into()
+            },
+            status: WorkItemStatus::Open,
+            due_at: due,
+            matches_item_types: true,
+        }
     }
 
     /// 模拟扫描批次寿命；生产累计方法消费后必须释放源批次。
@@ -429,7 +599,7 @@ mod tests {
             counts.extend_batch(TrackedBatch { rows: rows.into_iter(), drops: drops.clone() }, &context);
             assert_eq!(drops.load(Ordering::SeqCst), previous + 1);
         }
-        assert_eq!(counts.selected.assigned, 2);
+        assert_eq!(counts.selected.total, 2);
         assert_eq!(counts.selected.exception, 0);
         assert_eq!(
             counts.work_item_type_counts,
@@ -460,7 +630,7 @@ mod tests {
             let item = assigned(WorkItemType::SupplierPaymentExecution, due);
             counts.observe(item, &context);
         }
-        assert_eq!(counts.selected.assigned, 0);
+        assert_eq!(counts.selected.total, 0);
         assert_eq!(counts.work_item_type_counts[&WorkItemType::SupplierPaymentExecution], 4);
         assert_eq!(
             counts.work_item_type_timing[&WorkItemType::SupplierPaymentExecution],
@@ -483,7 +653,7 @@ mod tests {
                 &context,
             );
         }
-        assert_eq!(counts.selected.assigned, 125);
+        assert_eq!(counts.selected.total, 125);
         assert_eq!(counts.family_counts.procurement, 125);
         assert_eq!(
             serde_json::to_value(&counts.work_item_type_counts).unwrap(),
@@ -510,7 +680,7 @@ mod tests {
             ],
             &context,
         );
-        assert_eq!(counts.selected.assigned, 4);
+        assert_eq!(counts.selected.total, 4);
         assert_eq!(counts.selected.due_today, 1);
         assert_eq!(
             counts.work_item_type_timing.get(&WorkItemType::BusinessException),

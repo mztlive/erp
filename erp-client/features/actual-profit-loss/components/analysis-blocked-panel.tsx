@@ -1,4 +1,3 @@
-import { surfacePanelClassName } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
     Card,
@@ -50,7 +49,10 @@ export function AnalysisBlockedPanel({
                 </AlertDescription>
             </Alert>
 
-            <Card size="sm" className={surfacePanelClassName}>
+            <Card
+                size="sm"
+                className="min-w-0 border-border/60 bg-background shadow-none"
+            >
                 <CardHeader className="border-b border-grid">
                     <CardTitle>计算范围</CardTitle>
                     <CardDescription>选定口径后加载数据。</CardDescription>

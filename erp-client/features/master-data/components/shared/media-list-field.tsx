@@ -319,7 +319,7 @@ export function MediaListField({
                 }}
             >
                 <DialogContent
-                    className="sm:max-w-4xl"
+                    size="xl"
                     closeButtonId={`${basePrefix}-preview-close`}
                 >
                     <DialogHeader>

@@ -567,22 +567,42 @@
     }
 
     /* 列表工作面撑满剩余高度：卡片吃掉画布空白，表格在卡内滚动，分页吸在卡底。
-       仅当列表框架是脚手架的**直接最后一块**时生效 —— 嵌在对象中心里的
-       section / panel 不是 page-scaffold 的直接子级，一律不受影响。 */
+       仅当列表框架是脚手架的**直接最后一块**（或置于 workspace-split-queue 分栏容器内）时生效 ——
+       嵌在对象中心里的 section / panel 不是 page-scaffold 的直接子级，一律不受影响。 */
     [data-slot="page-scaffold"]:has(
         > [data-business-component="table-frame"]:last-child
+    ),
+    [data-slot="page-scaffold"]:has(
+        > [data-slot="workspace-split-queue"]:last-child
     ) {
         min-height: 0;
     }
     [data-slot="page-scaffold"]
-        > [data-business-component="table-frame"]:last-child {
+        > [data-business-component="table-frame"]:last-child,
+    [data-slot="page-scaffold"]
+        > [data-slot="workspace-split-queue"]:last-child {
         flex: 1 1 auto;
         /* 下限：筛选面板展开或窗口过矮时，宁可让壳层恢复整页滚动，
            也不要把表格挤成几十像素的缝。 */
         min-height: 16rem;
     }
     [data-slot="page-scaffold"]
+        > [data-slot="workspace-split-queue"]:last-child
+        [data-slot="list-work-surface"] {
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+    [data-slot="page-scaffold"]
         > [data-business-component="table-frame"]:last-child
+        :is(
+            [data-slot="business-table-frame-result"],
+            [data-slot="business-table-frame-table"],
+            [data-slot="data-table"],
+            [data-slot="data-table-surface"]
+        ),
+    [data-slot="page-scaffold"]
+        > [data-slot="workspace-split-queue"]:last-child
+        [data-slot="list-work-surface"]
         :is(
             [data-slot="business-table-frame-result"],
             [data-slot="business-table-frame-table"],
@@ -596,6 +616,10 @@
     }
     [data-slot="page-scaffold"]
         > [data-business-component="table-frame"]:last-child
+        [data-slot="table-container"],
+    [data-slot="page-scaffold"]
+        > [data-slot="workspace-split-queue"]:last-child
+        [data-slot="list-work-surface"]
         [data-slot="table-container"] {
         flex: 1 1 auto;
         min-height: 0;
@@ -636,10 +660,11 @@
         --scaffold-pt: 0px;
     }
 }
-@media (min-width: 75rem) {
+@container workspace (min-width: 70rem) {
     [data-slot="page-scaffold"].erp-list-workspace-page,
     [data-slot="page-scaffold"].erp-detail-workspace-page {
         --scaffold-px: var(--spacing-page-inline-lg);
+        padding-inline: var(--scaffold-px);
     }
 }
 /* 飞书风格纯白通栏详情工作面：吸顶头部通栏、分区细线、12px 沉稳标签、柔底轻控件、无框内联编辑表 */
@@ -899,6 +924,21 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
             + [data-slot="list-work-surface"]
             > [data-slot="list-workspace-views"]
     )
+    > [data-slot="list-workspace-header"],
+[data-slot="page-scaffold"].erp-list-workspace-page:has(
+        > [data-slot="list-workspace-header"]
+            + [data-slot="workspace-split-queue"]
+            [data-slot="list-work-surface"]
+            > [data-slot="list-workspace-views"]
+    )
+    > [data-slot="list-workspace-header"],
+[data-slot="page-scaffold"].erp-list-workspace-page:has(
+        > [data-slot="list-workspace-header"]
+            + .sr-only
+            + [data-slot="workspace-split-queue"]
+            [data-slot="list-work-surface"]
+            > [data-slot="list-workspace-views"]
+    )
     > [data-slot="list-workspace-header"] {
     border-bottom-width: 0;
     padding-bottom: 0.375rem;
@@ -906,18 +946,39 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
 [data-slot="page-scaffold"].erp-list-workspace-page
     > :not([data-slot="list-workspace-header"]):not(
         [data-slot="list-workspace-metrics"]
-    ):not([data-slot="list-work-surface"]):not(.sr-only) {
+    ):not([data-slot="list-work-surface"]):not(
+        [data-slot="workspace-split-queue"]
+    ):not(.sr-only) {
     margin-block: 0.75rem;
 }
 [data-slot="page-scaffold"].erp-list-workspace-page
-    > [data-slot="list-work-surface"] {
+    > [data-slot="list-work-surface"],
+[data-slot="page-scaffold"].erp-list-workspace-page
+    > [data-slot="workspace-split-queue"] {
     margin-inline: calc(var(--scaffold-px) * -1);
+}
+[data-slot="page-scaffold"].erp-list-workspace-page
+    > [data-slot="list-work-surface"],
+[data-slot="page-scaffold"].erp-list-workspace-page
+    [data-slot="workspace-split-queue"]
+    [data-slot="list-work-surface"] {
     border: 0;
     border-radius: 0;
     box-shadow: none;
 }
 [data-slot="page-scaffold"].erp-list-workspace-page
     > [data-slot="list-work-surface"]
+    :is(
+        [data-slot="list-workspace-views"],
+        [data-slot="list-workspace-toolbar"],
+        [data-slot="list-work-surface-applied-chips"],
+        [data-slot="list-filter-tray"],
+        [data-slot="table-toolbar-wrapper"],
+        [data-slot="data-table-pagination"]
+    ),
+[data-slot="page-scaffold"].erp-list-workspace-page
+    [data-slot="workspace-split-queue"]
+    [data-slot="list-work-surface"]
     :is(
         [data-slot="list-workspace-views"],
         [data-slot="list-workspace-toolbar"],
@@ -932,17 +993,28 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
 /* 通栏纯白工作面内的无框表格（方案 A）：去掉四周边框与圆角，表头改纯白以消除与左侧浅灰导航的粘连，
    全表以水平细线建立秩序，首尾列外沿与页头/筛选栏严格对齐 --scaffold-px。 */
 [data-slot="page-scaffold"].erp-list-workspace-page
-    > [data-slot="list-work-surface"] {
+    > [data-slot="list-work-surface"],
+[data-slot="page-scaffold"].erp-list-workspace-page
+    [data-slot="workspace-split-queue"]
+    [data-slot="list-work-surface"] {
     --table-header: var(--card);
 }
 [data-slot="page-scaffold"].erp-list-workspace-page
     > [data-slot="list-work-surface"]
+    [data-slot="table-toolbar-wrapper"],
+[data-slot="page-scaffold"].erp-list-workspace-page
+    [data-slot="workspace-split-queue"]
+    [data-slot="list-work-surface"]
     [data-slot="table-toolbar-wrapper"] {
     padding-top: 0.625rem;
     border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
 }
 [data-slot="page-scaffold"].erp-list-workspace-page
     > [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"],
+[data-slot="page-scaffold"].erp-list-workspace-page
+    [data-slot="workspace-split-queue"]
+    [data-slot="list-work-surface"]
     [data-slot="data-table-surface"] {
     margin-inline: 0;
     border: 0;
@@ -951,6 +1023,11 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
 [data-slot="page-scaffold"].erp-list-workspace-page
     > [data-slot="list-work-surface"]
     [data-slot="data-table-surface"]
+    > [role="status"],
+[data-slot="page-scaffold"].erp-list-workspace-page
+    [data-slot="workspace-split-queue"]
+    [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"]
     > [role="status"] {
     padding-inline: var(--scaffold-px);
 }
@@ -958,11 +1035,22 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
     > [data-slot="list-work-surface"]
     [data-slot="data-table-surface"]
     [data-slot="table-header"]
+    tr,
+[data-slot="page-scaffold"].erp-list-workspace-page
+    [data-slot="workspace-split-queue"]
+    [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"]
+    [data-slot="table-header"]
     tr {
     border-bottom-color: color-mix(in oklab, var(--border) 85%, transparent);
 }
 [data-slot="page-scaffold"].erp-list-workspace-page
     > [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"]
+    [data-slot="table-head"]:hover,
+[data-slot="page-scaffold"].erp-list-workspace-page
+    [data-slot="workspace-split-queue"]
+    [data-slot="list-work-surface"]
     [data-slot="data-table-surface"]
     [data-slot="table-head"]:hover {
     background-color: color-mix(in oklab, var(--muted) 55%, transparent);
@@ -974,11 +1062,27 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
 [data-slot="page-scaffold"].erp-list-workspace-page
     > [data-slot="list-work-surface"]
     [data-slot="data-table-surface"]
+    [data-slot="table-head"][data-sorted="true"]:hover,
+[data-slot="page-scaffold"].erp-list-workspace-page
+    [data-slot="workspace-split-queue"]
+    [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"]
+    [data-slot="table-head"][data-sorted="true"],
+[data-slot="page-scaffold"].erp-list-workspace-page
+    [data-slot="workspace-split-queue"]
+    [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"]
     [data-slot="table-head"][data-sorted="true"]:hover {
     background-color: var(--row-hover);
 }
 [data-slot="page-scaffold"].erp-list-workspace-page
     > [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"]
+    [data-slot="table-body"]
+    [data-slot="table-row"],
+[data-slot="page-scaffold"].erp-list-workspace-page
+    [data-slot="workspace-split-queue"]
+    [data-slot="list-work-surface"]
     [data-slot="data-table-surface"]
     [data-slot="table-body"]
     [data-slot="table-row"] {
@@ -987,6 +1091,14 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
 /* 轻量化未选行复选框描边，减少左列机械网格感；行悬停或勾选时再强化 */
 [data-slot="page-scaffold"].erp-list-workspace-page
     > [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"]
+    [data-slot="table-body"]
+    [data-slot="checkbox"]:not([data-checked]):not([data-indeterminate]):not(
+        :hover
+    ):not(:focus-visible),
+[data-slot="page-scaffold"].erp-list-workspace-page
+    [data-slot="workspace-split-queue"]
+    [data-slot="list-work-surface"]
     [data-slot="data-table-surface"]
     [data-slot="table-body"]
     [data-slot="checkbox"]:not([data-checked]):not([data-indeterminate]):not(
@@ -1001,6 +1113,15 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
     [data-slot="table-row"]:hover
     [data-slot="checkbox"]:not([data-checked]):not([data-indeterminate]):not(
         :hover
+    ):not(:focus-visible),
+[data-slot="page-scaffold"].erp-list-workspace-page
+    [data-slot="workspace-split-queue"]
+    [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"]
+    [data-slot="table-body"]
+    [data-slot="table-row"]:hover
+    [data-slot="checkbox"]:not([data-checked]):not([data-indeterminate]):not(
+        :hover
     ):not(:focus-visible) {
     border-color: var(--input);
 }
@@ -1010,11 +1131,26 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
     [data-slot="data-table-surface"]
     :is([data-slot="table-head"], [data-slot="table-cell"]):first-child:not(
         [data-column-id="__selection"]
+    ),
+[data-slot="page-scaffold"].erp-list-workspace-page
+    [data-slot="workspace-split-queue"]
+    [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"]
+    :is([data-slot="table-head"], [data-slot="table-cell"]):first-child:not(
+        [data-column-id="__selection"]
     ) {
     padding-inline-start: var(--scaffold-px);
 }
 [data-slot="page-scaffold"].erp-list-workspace-page
     > [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"]
+    :is(
+        [data-slot="table-head"],
+        [data-slot="table-cell"]
+    ):first-child[data-column-id="__selection"],
+[data-slot="page-scaffold"].erp-list-workspace-page
+    [data-slot="workspace-split-queue"]
+    [data-slot="list-work-surface"]
     [data-slot="data-table-surface"]
     :is(
         [data-slot="table-head"],
@@ -1031,11 +1167,26 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
     [data-slot="data-table-surface"]
     :is([data-slot="table-head"], [data-slot="table-cell"]):last-child:not(
         [data-column-id="__preview"]
+    ),
+[data-slot="page-scaffold"].erp-list-workspace-page
+    [data-slot="workspace-split-queue"]
+    [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"]
+    :is([data-slot="table-head"], [data-slot="table-cell"]):last-child:not(
+        [data-column-id="__preview"]
     ) {
     padding-inline-end: var(--scaffold-px);
 }
 [data-slot="page-scaffold"].erp-list-workspace-page
     > [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"]
+    :is(
+        [data-slot="table-head"],
+        [data-slot="table-cell"]
+    ):last-child[data-column-id="__preview"],
+[data-slot="page-scaffold"].erp-list-workspace-page
+    [data-slot="workspace-split-queue"]
+    [data-slot="list-work-surface"]
     [data-slot="data-table-surface"]
     :is(
         [data-slot="table-head"],
@@ -1171,7 +1322,7 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
     font-weight: 500;
     color: var(--muted-foreground);
 }
-@media (min-width: 48rem) {
+@container workspace (min-width: 48rem) {
     [data-slot="list-filter-tray-body"] fieldset {
         padding-inline-start: 3.75rem;
     }
@@ -1200,7 +1351,7 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
         gap: 0.5rem 0.75rem;
     }
 }
-@media (min-width: 64rem) {
+@container workspace (min-width: 52rem) {
     [data-slot="list-filter-tray-body"]
         fieldset
         > .grid:not([class*="grid-cols-["]),
@@ -1208,7 +1359,7 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 }
-@media (min-width: 80rem) {
+@container workspace (min-width: 60rem) {
     [data-slot="list-filter-tray-body"]
         fieldset
         > .grid:not([class*="grid-cols-["]),
@@ -1444,10 +1595,57 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
         0 2px 6px -2px rgb(31 35 41 / 0.07);
 }
 
-/* 桌面密度按当前文档的可用高度切换，iframe 内自动扣除外层页签。
+/* 桌面密度由宿主 WorkspaceTabs 统一计算并同步 data-viewport-density 到宿主及全部子 iframe，
+ * 消除 961–1004px 屏高下宿主与 iframe 扣顶栏高度后的密度不同步；非工作区独立路由保留 @media 兜底。
  * 收紧留白与控件高度；不修改根字号，不缩放整页，不压缩手机触控区域。 */
+:root[data-viewport-density="compact"],
+:root[data-viewport-density="dense"] {
+    --spacing-topbar: 2.5rem;
+    --spacing-workspace-topbar: 2.5rem;
+    --spacing-control: 2rem;
+    --spacing-control-lg: 2.25rem;
+    --spacing-page-inline: 1rem;
+    --spacing-page-inline-lg: 1.25rem;
+    --spacing-page-block: 0.75rem;
+    --spacing-page-block-lg: 1rem;
+    --spacing-page-gap: 0.875rem;
+    --spacing-page-gap-compact: 0.625rem;
+    --spacing-workspace-block-start-lg: 0.75rem;
+    --spacing-workspace-header-block-end: 0.625rem;
+    --spacing-workspace-toolbar-block: 0.5rem;
+    --spacing-workspace-view: 2.25rem;
+    --spacing-workspace-view-gap: 1.125rem;
+    --spacing-row-comfortable: 2.875rem;
+    --spacing-table-header: 2.125rem;
+    --spacing-table-cell-block-comfortable: 0.375rem;
+    --spacing-table-toolbar-block: 0.375rem;
+    --spacing-table-pagination-block: 0.5rem;
+    --spacing-overlay-padding: 1.125rem;
+    --spacing-overlay-gap: 1rem;
+    --spacing-sheet-inline: 1.25rem;
+    --spacing-sheet-start: 1.5rem;
+    --spacing-sheet-end: 1rem;
+    --spacing-sheet-footer: 0.75rem;
+    --spacing-filter-block: 0.5rem;
+    --spacing-filter-body: 0.75rem;
+    --spacing-filter-max: 32rem;
+    --spacing-filter-medium-max: 32rem;
+}
+
+:root[data-viewport-density="dense"] {
+    --spacing-page-block: 0.625rem;
+    --spacing-page-block-lg: 0.75rem;
+    --spacing-workspace-block-start-lg: 0.625rem;
+    --spacing-workspace-header-block-end: 0.5rem;
+    --spacing-workspace-toolbar-block: 0.375rem;
+    --spacing-row-comfortable: 2.625rem;
+    --spacing-overlay-padding: 1rem;
+    --spacing-filter-max: 28rem;
+    --spacing-filter-medium-max: 28rem;
+}
+
 @media (min-width: 48rem) and (max-height: 960px) {
-    :root {
+    :root:not([data-viewport-density]) {
         --spacing-topbar: 2.5rem;
         --spacing-workspace-topbar: 2.5rem;
         --spacing-control: 2rem;
@@ -1482,7 +1680,7 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
 }
 
 @media (min-width: 48rem) and (max-height: 720px) {
-    :root {
+    :root:not([data-viewport-density]) {
         --spacing-page-block: 0.625rem;
         --spacing-page-block-lg: 0.75rem;
         --spacing-workspace-block-start-lg: 0.625rem;

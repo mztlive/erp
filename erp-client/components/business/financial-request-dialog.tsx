@@ -7,6 +7,7 @@ import { MoneyValue } from "@/components/business/values"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogHeader,
@@ -110,7 +111,8 @@ export function FinancialRequestDialog({
             }}
         >
             <DialogContent
-                className="max-h-[85dvh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-lg"
+                size="md"
+                scroll="body"
                 closeButtonId={`${id}-close`}
                 showCloseButton={!pending && !unknown}
             >
@@ -119,67 +121,73 @@ export function FinancialRequestDialog({
                     <DialogDescription>{description}</DialogDescription>
                 </DialogHeader>
                 <form
-                    className="space-y-4"
+                    className="flex min-h-0 flex-1 flex-col overflow-hidden"
                     onSubmit={(event) => {
                         event.preventDefault()
                         void form.handleSubmit()
                     }}
                 >
-                    <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-lg bg-muted/50 p-3 text-body-compact">
-                        <dt className="text-muted-foreground">原单</dt>
-                        <dd>{sourceLabel || "—"}</dd>
-                        <dt className="text-muted-foreground">
-                            {editableAmount ? "可退金额上限" : "全额金额"}
-                        </dt>
-                        <dd>
-                            {amount ? <MoneyValue value={amount} /> : "待核对"}
-                        </dd>
-                    </dl>
-                    {editableAmount ? (
+                    <DialogBody className="space-y-4">
+                        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-lg bg-muted/50 p-3 text-body-compact">
+                            <dt className="text-muted-foreground">原单</dt>
+                            <dd>{sourceLabel || "—"}</dd>
+                            <dt className="text-muted-foreground">
+                                {editableAmount ? "可退金额上限" : "全额金额"}
+                            </dt>
+                            <dd>
+                                {amount ? (
+                                    <MoneyValue value={amount} />
+                                ) : (
+                                    "待核对"
+                                )}
+                            </dd>
+                        </dl>
+                        {editableAmount ? (
+                            <form.AppField
+                                name="refundAmount"
+                                children={(field) => (
+                                    <field.TextField
+                                        id={`${id}-amount`}
+                                        money
+                                        label={amountLabel}
+                                        required
+                                        inputMode="decimal"
+                                        disabled={pending || unknown}
+                                        description={amountDescription}
+                                    />
+                                )}
+                            />
+                        ) : null}
                         <form.AppField
-                            name="refundAmount"
+                            name="reason"
                             children={(field) => (
-                                <field.TextField
-                                    id={`${id}-amount`}
-                                    money
-                                    label={amountLabel}
+                                <field.TextareaField
+                                    id={`${id}-reason`}
+                                    label="原因"
                                     required
-                                    inputMode="decimal"
                                     disabled={pending || unknown}
-                                    description={amountDescription}
+                                    placeholder="说明本次退款或纠错原因"
                                 />
                             )}
                         />
-                    ) : null}
-                    <form.AppField
-                        name="reason"
-                        children={(field) => (
-                            <field.TextareaField
-                                id={`${id}-reason`}
-                                label="原因"
-                                required
-                                disabled={pending || unknown}
-                                placeholder="说明本次退款或纠错原因"
-                            />
-                        )}
-                    />
-                    {approvalContent}
-                    {error ? (
-                        <p
-                            role="alert"
-                            className="text-body-compact text-destructive"
-                        >
-                            {error}
-                        </p>
-                    ) : null}
-                    {unknown ? (
-                        <p
-                            role="status"
-                            className="text-body-compact text-muted-foreground"
-                        >
-                            提交结果尚未确定，请保持原内容并核对结果。
-                        </p>
-                    ) : null}
+                        {approvalContent}
+                        {error ? (
+                            <p
+                                role="alert"
+                                className="text-body-compact text-destructive"
+                            >
+                                {error}
+                            </p>
+                        ) : null}
+                        {unknown ? (
+                            <p
+                                role="status"
+                                className="text-body-compact text-muted-foreground"
+                            >
+                                提交结果尚未确定，请保持原内容并核对结果。
+                            </p>
+                        ) : null}
+                    </DialogBody>
                     <DialogFooter>
                         <Button
                             id={`${id}-cancel`}

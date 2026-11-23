@@ -118,8 +118,12 @@ impl WorkspaceFilters {
     ///
     /// `document` 为已授权事项检索资料。
     pub fn matches(&self, document: &SearchDocument) -> bool {
+        self.matches_without_item_types(document) && self.matches_item_types(document)
+    }
+
+    // 统计分类拆解时先应用除 `item_types` 之外的全部结构化筛选。
+    pub(crate) fn matches_without_item_types(&self, document: &SearchDocument) -> bool {
         let facets = [
-            (&self.item_types, "item_types"),
             (&self.counterparties, "counterparties"),
             (&self.handlers, "handlers"),
             (&self.sales_orders, "sales_orders"),
@@ -128,14 +132,14 @@ impl WorkspaceFilters {
             (&self.business_types, "business_types"),
             (&self.statuses, "statuses"),
         ];
-        facets.iter().all(|(selected, key)| {
-            selected.is_empty()
-                || document
-                    .values
-                    .get(*key)
-                    .is_some_and(|values| values.iter().any(|v| selected.contains(&v.value)))
-        }) && (!self.blocked || document.blocked)
+        facets.iter().all(|(selected, key)| matches_facet(document, selected, key))
+            && (!self.blocked || document.blocked)
             && self.matches_date(document)
+    }
+
+    // 仅检查 `item_types` 维度，供统计汇总选中集使用。
+    pub(crate) fn matches_item_types(&self, document: &SearchDocument) -> bool {
+        matches_facet(document, &self.item_types, "item_types")
     }
 
     fn matches_date(&self, document: &SearchDocument) -> bool {
@@ -159,6 +163,17 @@ impl WorkspaceFilters {
                 .as_deref()
                 .is_none_or(|date| date_seconds(date).is_ok_and(|v| timestamp < v + 86400))
     }
+}
+
+fn matches_facet(document: &SearchDocument, selected: &[String], key: &str) -> bool {
+    if selected.is_empty() {
+        return true;
+    }
+    document.values.get(key).is_some_and(|values| values.iter().any(|v| selected.contains(&v.value)))
+        || document
+            .facet_aliases
+            .get(key)
+            .is_some_and(|aliases| aliases.iter().any(|alias| selected.contains(alias)))
 }
 
 fn date_seconds(value: &str) -> Result<i64> {

@@ -5,21 +5,17 @@ import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import { useState } from "react"
 import { FileTextIcon } from "lucide-react"
 
-import {
-    DetailWorkspaceChrome,
-    DetailWorkspaceMeta,
-} from "@/components/business"
+import { DetailWorkspaceMeta } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { PurchaseOrderCreatePage } from "@/features/purchase-orders/pages/purchase-order-create-page"
 import { useCreationBasesQuery } from "@/features/purchase-orders/hooks/queries"
 import { SalesOrderPaperPreviewDialog } from "@/features/sales-orders/components/sales-order-paper-preview-dialog"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
-import { StatusBadge } from "@/components/ui/status-badge"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { isBlockedWorkItem } from "../lib/work-item"
+import { TASK_TYPE_CANONICAL_LABELS } from "@/lib/task-status-dictionary"
 import type { WorkspaceWorkItem } from "../types"
 import { stripDocumentNumberPrefix } from "../lib/stable-number"
-import { WorkspaceTaskHeaderActions } from "./workspace-task-context"
+import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
 /** W01 供给分配作业面：锁定当前任务及销售责任行，正文展开供给操作。 */
 export function WorkspaceProcurementTask({
@@ -41,20 +37,14 @@ export function WorkspaceProcurementTask({
         <WorkspaceProcessingPane
             className="@container/document"
             header={
-                <DetailWorkspaceChrome
-                    title="供给分配"
-                    primaryStatus={{
-                        label: item.statusLabel,
-                        tone: item.statusTone,
-                    }}
-                    titleExtra={
-                        isBlockedWorkItem(item) ? (
-                            <StatusBadge label="受阻" tone="warning" />
-                        ) : item.dueBucket === "overdue" ? (
-                            <StatusBadge label="已超期" tone="destructive" />
-                        ) : null
+                <WorkspaceTaskIdentityHeader
+                    item={item}
+                    title={
+                        item.workItemTypeLabel ||
+                        TASK_TYPE_CANONICAL_LABELS.PROCUREMENT_ORDER_CREATION
+                            .label
                     }
-                    meta={
+                    subtitle={
                         <DetailWorkspaceMeta
                             items={[
                                 item.counterpartyName,
@@ -84,28 +74,23 @@ export function WorkspaceProcurementTask({
                             ]}
                         />
                     }
-                    secondaryActions={
-                        <WorkspaceTaskHeaderActions
-                            item={item}
-                            contextLabel="任务详情"
-                        >
-                            <Button
-                                id={`workspace-procurement-sales-preview-${toAutomationIdSegment(item.workItemId)}`}
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() =>
-                                    setPreviewTaskId(item.workItemId)
-                                }
-                            >
-                                <FileTextIcon aria-hidden="true" />
-                                预览销售单
-                            </Button>
-                        </WorkspaceTaskHeaderActions>
-                    }
-                />
+                >
+                    <Button
+                        id={`workspace-procurement-sales-preview-${toAutomationIdSegment(item.workItemId)}`}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setPreviewTaskId(item.workItemId)}
+                    >
+                        <FileTextIcon
+                            aria-hidden="true"
+                            data-icon="inline-start"
+                        />
+                        预览销售单
+                    </Button>
+                </WorkspaceTaskIdentityHeader>
             }
-            aria-label="当前供给分配任务"
+            aria-label="当前采购供给分配任务"
         >
             {item.actionBlockers.length ? (
                 <Alert variant="warning">

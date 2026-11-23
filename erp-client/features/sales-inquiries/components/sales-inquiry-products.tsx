@@ -3,7 +3,13 @@
 import type { ReactNode } from "react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Label } from "@/components/ui/label"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { deliveryAttention } from "../lib/delivery-progress"
 import { salesInquiryFeedback } from "../lib/feedback-view"
@@ -68,6 +74,9 @@ export function SalesInquiryProducts({
     const unavailableCount =
         feedback?.data.lines.filter((item) => item.conclusion === "unavailable")
             .length ?? 0
+    const currentRoundLabel = `当前需求${waiting ? "（等待反馈）" : ""}`
+    const formatRoundLabel = (item: (typeof rounds)[number]) =>
+        `第 ${item.round} 轮 · 需求第 ${item.requirement_version} 版${item === currentFeedback ? "（最新）" : ""}`
 
     return (
         <div className="min-w-0 space-y-4">
@@ -143,45 +152,53 @@ export function SalesInquiryProducts({
                             >
                                 轮次
                             </Label>
-                            <NativeSelect
-                                id="sales-inquiry-products-round"
-                                className="h-control-sm"
+                            <Select
                                 value={
                                     feedback
                                         ? String(feedback.round)
                                         : "current"
                                 }
-                                onChange={(event) => {
+                                onValueChange={(value) => {
+                                    if (!value) return
                                     const next = rounds.find(
-                                        (item) =>
-                                            String(item.round) ===
-                                            event.target.value,
+                                        (item) => String(item.round) === value,
                                     )
                                     onRoundChange(next?.round ?? null)
                                 }}
                             >
-                                {!currentFeedback && (
-                                    <NativeSelectOption
-                                        id="sales-inquiry-products-round-current"
-                                        value="current"
-                                    >
-                                        当前需求{waiting ? "（等待反馈）" : ""}
-                                    </NativeSelectOption>
-                                )}
-                                {rounds.map((item) => (
-                                    <NativeSelectOption
-                                        key={item.round}
-                                        id={`sales-inquiry-products-round-${item.round}`}
-                                        value={String(item.round)}
-                                    >
-                                        第 {item.round} 轮 · 需求第{" "}
-                                        {item.requirement_version} 版
-                                        {item === currentFeedback
-                                            ? "（最新）"
-                                            : ""}
-                                    </NativeSelectOption>
-                                ))}
-                            </NativeSelect>
+                                <SelectTrigger
+                                    id="sales-inquiry-products-round"
+                                    size="sm"
+                                >
+                                    <SelectValue>
+                                        {feedback
+                                            ? formatRoundLabel(feedback)
+                                            : currentRoundLabel}
+                                    </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent
+                                    align="end"
+                                    alignItemWithTrigger={false}
+                                >
+                                    {!currentFeedback && (
+                                        <SelectItem
+                                            id="sales-inquiry-products-round-current"
+                                            value="current"
+                                        >
+                                            {currentRoundLabel}
+                                        </SelectItem>
+                                    )}
+                                    {rounds.map((item) => (
+                                        <SelectItem
+                                            key={item.round}
+                                            id={`sales-inquiry-products-round-${item.round}`}
+                                            value={String(item.round)}
+                                        >
+                                            {formatRoundLabel(item)}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                     )}
                 </div>

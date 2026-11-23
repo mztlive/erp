@@ -1,5 +1,6 @@
 import { FormalActionResult } from "@/components/business"
 import type { SalesOrdersListExportJob } from "@/features/sales-orders/lib/sales-orders-list-csv"
+import { formatDateTime } from "@/lib/datetime"
 
 export function SalesOrdersListExportResult({
     exportJob,
@@ -22,9 +23,7 @@ export function SalesOrdersListExportResult({
                 },
                 {
                     label: "导出时间",
-                    value: new Date(exportJob.exportedAt).toLocaleString(
-                        "zh-CN",
-                    ),
+                    value: formatDateTime(exportJob.exportedAt, "full"),
                 },
             ]}
         />

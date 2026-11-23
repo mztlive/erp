@@ -4,13 +4,19 @@ import { SystemFeedback } from "@/components/business/system-feedback"
 
 import Link from "next/link"
 import { useRouter } from "@/lib/navigation"
-import { TriangleAlertIcon } from "lucide-react"
-
 import {
-    BusinessStatusBadge,
-    FormalActionResult,
-    SequentialProcessBar,
-} from "@/components/business"
+    ArrowLeftIcon,
+    CheckIcon,
+    CircleCheckIcon,
+    CircleDashedIcon,
+    ShieldAlertIcon,
+    ShieldCheckIcon,
+    TriangleAlertIcon,
+    UsersRoundIcon,
+    type LucideIcon,
+} from "lucide-react"
+
+import { BusinessStatusBadge, FormalActionResult } from "@/components/business"
 import type { ResponsibilityStatus } from "@/components/business/workflow-actions"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
@@ -20,12 +26,46 @@ import {
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
+import { responsibilityText } from "@/lib/ui-text"
 import type { SupplierOrderDetailView } from "@/features/supplier-orders/types"
 import {
     WORK_ITEM_STATUS_LABEL,
     WORK_ITEM_TYPE_LABEL,
 } from "@/features/supplier-orders/types"
 import type { SupplierOrderCenterResult } from "@/features/supplier-orders/hooks/use-supplier-order-center-actions"
+
+const RESPONSIBILITY_STATUS_META: Record<
+    ResponsibilityStatus,
+    { label: string; tone: StatusTone; icon: LucideIcon }
+> = {
+    assigned_to_me: {
+        label: responsibilityText.assignedToMe,
+        tone: "success",
+        icon: ShieldCheckIcon,
+    },
+    assigned_to_other: {
+        label: responsibilityText.assignedToOther,
+        tone: "neutral",
+        icon: UsersRoundIcon,
+    },
+    blocked: {
+        label: responsibilityText.blocked,
+        tone: "warning",
+        icon: ShieldAlertIcon,
+    },
+    completed: {
+        label: responsibilityText.completed,
+        tone: "success",
+        icon: CircleCheckIcon,
+    },
+    closed: {
+        label: responsibilityText.closed,
+        tone: "neutral",
+        icon: CircleDashedIcon,
+    },
+}
 
 export function WorkItemProcessPanel({
     workItem,
@@ -49,6 +89,9 @@ export function WorkItemProcessPanel({
         profile.data?.permissions,
         "supplier_fulfillment_order:complete",
     )
+    const responsibility = RESPONSIBILITY_STATUS_META[responsibilityStatus]
+    const processDisabled =
+        responsibilityStatus !== "assigned_to_me" || !canCompleteTask || pending
 
     return (
         <>
@@ -62,33 +105,80 @@ export function WorkItemProcessPanel({
             ) : null}
 
             {workItem && canProcess ? (
-                <div className="space-y-2">
-                    {inWorkspace ? (
-                        <WorkspaceTaskFooter>
+                inWorkspace ? (
+                    <WorkspaceTaskFooter>
+                        <LoadingButton
+                            id="supplier-order-center-complete-task"
+                            type="button"
+                            loading={pending}
+                            disabled={processDisabled}
+                            onClick={onProcess}
+                        >
+                            {!pending ? (
+                                <CheckIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                            ) : null}
+                            {pending ? "正在处理" : "确认处理结果并完成任务"}
+                        </LoadingButton>
+                    </WorkspaceTaskFooter>
+                ) : (
+                    <section
+                        aria-label="关联待办处理操作"
+                        className="flex flex-col gap-3 border-b border-border/60 pb-4 lg:flex-row lg:items-center lg:justify-between"
+                    >
+                        <div
+                            className="flex min-w-0 flex-wrap items-center gap-2.5"
+                            aria-live="polite"
+                        >
+                            <StatusBadge
+                                tone={responsibility.tone}
+                                icon={responsibility.icon}
+                                label={responsibility.label}
+                            />
+                            {responsibilityStatus === "assigned_to_other" ? (
+                                <span className="text-body-compact text-destructive">
+                                    {responsibilityText.changed}
+                                </span>
+                            ) : null}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
                             <Button
+                                id="supplier-order-center-process-bar-back"
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={pending}
+                                onClick={() => router.push("/workspace")}
+                            >
+                                <ArrowLeftIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                                返回工作台
+                            </Button>
+                            <LoadingButton
                                 id="supplier-order-center-complete-task"
-                                disabled={!canCompleteTask || pending}
+                                type="button"
+                                size="sm"
+                                loading={pending}
+                                disabled={processDisabled}
                                 onClick={onProcess}
                             >
-                                确认处理结果并完成任务
-                            </Button>
-                        </WorkspaceTaskFooter>
-                    ) : (
-                        <SequentialProcessBar
-                            id="supplier-order-center-process-bar"
-                            current={1}
-                            total={1}
-                            responsibilityStatus={responsibilityStatus}
-                            processLabel="确认处理结果并完成任务"
-                            processDisabled={!canCompleteTask}
-                            showProcessNext={false}
-                            pending={pending}
-                            onBack={() => router.push("/workspace")}
-                            onProcess={onProcess}
-                            onProcessNext={() => undefined}
-                        />
-                    )}
-                </div>
+                                {!pending ? (
+                                    <CheckIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
+                                ) : null}
+                                {pending
+                                    ? "正在处理"
+                                    : "确认处理结果并完成任务"}
+                            </LoadingButton>
+                        </div>
+                    </section>
+                )
             ) : null}
         </>
     )

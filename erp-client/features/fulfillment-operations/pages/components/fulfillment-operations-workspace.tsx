@@ -1,8 +1,10 @@
 "use client"
 
+import * as React from "react"
 import { FormalActionConfirmDialog } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { cn } from "@/lib/utils"
+import { isWorkspaceFrame } from "@/lib/workspace-tabs"
 import { FulfillmentQueueList } from "@/features/fulfillment-operations/components/queue/fulfillment-queue-list"
 import { confirmDescription } from "@/features/fulfillment-operations/lib/validation"
 import {
@@ -19,10 +21,7 @@ import {
 } from "@/features/fulfillment-operations/pages/lib/presentation"
 import { FulfillmentPageStates } from "./fulfillment-page-states"
 import { FulfillmentResultPanel } from "./fulfillment-result-panel"
-import {
-    FulfillmentWorkSurface,
-    type FulfillmentWorkSurfaceProps,
-} from "./fulfillment-work-surface"
+import { FulfillmentWorkSurface } from "./fulfillment-work-surface"
 
 type FulfillmentOperationsWorkspaceProps = {
     controller: FulfillmentOperationsController
@@ -31,9 +30,15 @@ type FulfillmentOperationsWorkspaceProps = {
     roleLabel: string
     embedded?: boolean
     singleOperation?: boolean
-    deliveryDialog?: FulfillmentWorkSurfaceProps["deliveryDialog"]
     onBack: () => void
     onOpenAcceptance?: () => void
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false
+    if (target.isContentEditable) return true
+    const tag = target.tagName
+    return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT"
 }
 
 /** 履约队列、处理表单、结果与确认框；独立页和销售单详情共用。 */
@@ -44,7 +49,6 @@ export function FulfillmentOperationsWorkspace({
     roleLabel,
     embedded = false,
     singleOperation = false,
-    deliveryDialog,
     onBack,
     onOpenAcceptance,
 }: FulfillmentOperationsWorkspaceProps) {
@@ -53,12 +57,89 @@ export function FulfillmentOperationsWorkspace({
         controller.canExecute,
     )
 
+    React.useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.defaultPrevented || event.isComposing) return
+            if (
+                isWorkspaceFrame() &&
+                window.frameElement?.getAttribute("data-workspace-active") !==
+                    "true"
+            ) {
+                return
+            }
+            if (
+                document.querySelector(
+                    '[role="dialog"]:not([data-closed]), [role="alertdialog"]:not([data-closed])',
+                )
+            ) {
+                return
+            }
+            const modifier = event.ctrlKey || event.metaKey
+            if (
+                modifier &&
+                !event.altKey &&
+                event.key.toLowerCase() === "s" &&
+                controller.canExecute &&
+                controller.supportsSave &&
+                controller.dirty &&
+                !controller.formalPending &&
+                !controller.savePending
+            ) {
+                event.preventDefault()
+                void controller.handleSave()
+                return
+            }
+            if (
+                modifier &&
+                !event.altKey &&
+                event.key === "Enter" &&
+                controller.canExecute &&
+                controller.canPost &&
+                !controller.formalPending &&
+                !controller.savePending &&
+                !controller.confirmOpen
+            ) {
+                event.preventDefault()
+                void controller.handleSubmit()
+                return
+            }
+            if (
+                !modifier &&
+                !event.altKey &&
+                event.key === "?" &&
+                !isEditableTarget(event.target)
+            ) {
+                event.preventDefault()
+                controller.setShortcutsOpen((value) => !value)
+                return
+            }
+            if (
+                !singleOperation &&
+                !modifier &&
+                !event.altKey &&
+                !event.shiftKey &&
+                !isEditableTarget(event.target)
+            ) {
+                const key = event.key.toLowerCase()
+                if (key === "j") {
+                    event.preventDefault()
+                    controller.handleNavigate(1)
+                } else if (key === "k") {
+                    event.preventDefault()
+                    controller.handleNavigate(-1)
+                }
+            }
+        }
+        window.addEventListener("keydown", handleKeyDown)
+        return () => window.removeEventListener("keydown", handleKeyDown)
+    }, [controller, singleOperation])
+
     return (
         <div
             className={cn(
                 "flex min-w-0 flex-col",
                 embedded || singleOperation ? "gap-0" : "gap-4",
-                singleOperation && !deliveryDialog && "min-h-0 flex-1",
+                singleOperation && "min-h-0 flex-1",
             )}
         >
             {controller.lastResult ? (
@@ -123,11 +204,9 @@ export function FulfillmentOperationsWorkspace({
             ) : (
                 <div
                     className={
-                        deliveryDialog
-                            ? "min-w-0"
-                            : singleOperation
-                              ? "flex min-h-0 min-w-0 flex-1 flex-col"
-                              : "grid min-h-[28rem] min-w-0 gap-4 xl:grid-cols-[minmax(15rem,0.9fr)_minmax(0,2.1fr)]"
+                        singleOperation
+                            ? "flex min-h-0 min-w-0 flex-1 flex-col"
+                            : "grid min-h-[28rem] min-w-0 gap-4 xl:grid-cols-[minmax(15rem,0.9fr)_minmax(0,2.1fr)]"
                     }
                 >
                     {!singleOperation ? (
@@ -200,7 +279,6 @@ export function FulfillmentOperationsWorkspace({
                             controller.lastResult?.status === "unknown"
                         }
                         singleOperation={singleOperation}
-                        deliveryDialog={deliveryDialog}
                         showBack={!embedded && !singleOperation}
                         showSalesOrderLinks={!embedded && !singleOperation}
                         onDraftChange={controller.updateDraft}

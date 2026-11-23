@@ -7,7 +7,7 @@ pub mod ports;
 mod refresh;
 mod repository;
 mod service;
-pub use dto::{InboxPage, InboxQuery, NotificationView};
+pub use dto::{InboxPage, InboxQuery, MarkAllReadResult, NotificationView};
 pub use entity::{Channel, Notification, NotificationData};
 pub use error::{Error, Result};
 pub use refresh::{RefreshHub, RefreshSignal, RefreshTopic};

@@ -10,7 +10,6 @@ import {
     YAxis,
 } from "recharts"
 
-import { surfacePanelClassName } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import {
     Card,
@@ -102,7 +101,10 @@ export function ProfitLossChartsAndStageReference({
                 }
             >
                 {showTrend && (
-                    <Card size="sm" className={surfacePanelClassName}>
+                    <Card
+                        size="sm"
+                        className="min-w-0 border-border/60 bg-background shadow-none"
+                    >
                         <CardHeader className="border-b border-grid">
                             <CardTitle>
                                 经营趋势（{PROFIT_LOSS_SCOPE_LABEL} · 万元）
@@ -248,7 +250,10 @@ export function ProfitLossChartsAndStageReference({
                 )}
 
                 {canViewCost && (
-                    <Card size="sm" className={surfacePanelClassName}>
+                    <Card
+                        size="sm"
+                        className="min-w-0 border-border/60 bg-background shadow-none"
+                    >
                         <CardHeader className="border-b border-grid">
                             <CardTitle>
                                 成本构成（{PROFIT_LOSS_SCOPE_LABEL}）
@@ -339,7 +344,10 @@ export function ProfitLossChartsAndStageReference({
 
             {/* EXPECTED / CONFIRMED 对照区 */}
             {canViewCost && (
-                <Card size="sm" className={surfacePanelClassName}>
+                <Card
+                    size="sm"
+                    className="min-w-0 border-border/60 bg-background shadow-none"
+                >
                     <CardHeader className="border-b border-grid">
                         <CardTitle>预计/已确认成本参考</CardTitle>
                         <CardDescription>

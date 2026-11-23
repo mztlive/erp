@@ -48,34 +48,75 @@ function DialogOverlay({
     )
 }
 
-const DialogCloseContext = React.createContext(false)
+type DialogSize = "sm" | "md" | "lg" | "xl" | "2xl" | "full"
+type DialogScroll = "body" | "popup"
+
+type DialogContentProps = DialogPrimitive.Popup.Props & {
+    size?: DialogSize
+    /**
+     * `"popup"`（默认）：弹窗整体滚动，兼容未包 `DialogBody` 的存量弹窗。
+     * `"body"`：固定 `DialogHeader`/`DialogFooter` 槽位，由 `DialogBody` 独立滚动。
+     */
+    scroll?: DialogScroll
+    showCloseButton?: boolean
+    closeButtonId?: string
+    forceOverlay?: boolean
+}
+
+const DIALOG_SIZE_CLASS: Record<DialogSize, string> = {
+    sm: "sm:max-w-md max-h-[calc(100dvh-2rem)]",
+    md: "sm:max-w-lg max-h-[calc(100dvh-2rem)]",
+    lg: "sm:max-w-2xl max-h-[85dvh]",
+    xl: "sm:max-w-4xl max-h-[88dvh]",
+    "2xl": "sm:max-w-6xl max-h-[92dvh]",
+    full: "w-[calc(100vw-2rem)] max-w-none h-[calc(100dvh-2rem)]",
+}
+
+type DialogLayoutContextValue = {
+    showCloseButton: boolean
+    scroll: DialogScroll
+}
+
+const DialogLayoutContext = React.createContext<DialogLayoutContextValue>({
+    showCloseButton: false,
+    scroll: "popup",
+})
 
 function DialogContent({
     className,
     children,
+    size = "md",
+    scroll = "popup",
     showCloseButton = true,
     closeButtonId,
     forceOverlay = false,
     ...props
-}: DialogPrimitive.Popup.Props & {
-    showCloseButton?: boolean
-    closeButtonId?: string
-    forceOverlay?: boolean
-}) {
+}: DialogContentProps) {
+    const layoutContext = React.useMemo(
+        () => ({ showCloseButton, scroll }),
+        [showCloseButton, scroll],
+    )
+
     return (
         <DialogPortal>
             <DialogOverlay forceRender={forceOverlay} />
             <DialogPrimitive.Popup
                 data-slot="dialog-content"
+                data-size={size}
+                data-scroll={scroll}
                 className={cn(
-                    "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 max-h-[calc(100dvh-2rem)] gap-overlay-gap overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-popover p-overlay-padding text-body-compact text-popover-foreground shadow-lg duration-100 outline-none sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+                    "fixed top-1/2 left-1/2 z-50 w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overscroll-contain rounded-xl border border-border/80 bg-popover text-body-compact text-popover-foreground shadow-lg duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+                    DIALOG_SIZE_CLASS[size],
+                    scroll === "body"
+                        ? "flex flex-col overflow-hidden p-0"
+                        : "grid gap-overlay-gap overflow-y-auto p-overlay-padding",
                     className,
                 )}
                 {...props}
             >
-                <DialogCloseContext.Provider value={showCloseButton}>
+                <DialogLayoutContext.Provider value={layoutContext}>
                     {children}
-                </DialogCloseContext.Provider>
+                </DialogLayoutContext.Provider>
                 {showCloseButton && (
                     <DialogPrimitive.Close
                         id={closeButtonId}
@@ -98,13 +139,35 @@ function DialogContent({
 }
 
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
-    const hasCloseButton = React.useContext(DialogCloseContext)
+    const { showCloseButton, scroll } = React.useContext(DialogLayoutContext)
     return (
         <div
             data-slot="dialog-header"
             className={cn(
                 "flex flex-col gap-1.5",
-                hasCloseButton && "pr-8",
+                scroll === "body"
+                    ? cn(
+                          "shrink-0 border-b border-border/80 py-3.5",
+                          showCloseButton
+                              ? "pl-overlay-padding pr-12"
+                              : "px-overlay-padding",
+                      )
+                    : showCloseButton && "pr-8",
+                className,
+            )}
+            {...props}
+        />
+    )
+}
+
+function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
+    const { scroll } = React.useContext(DialogLayoutContext)
+    return (
+        <div
+            data-slot="dialog-body"
+            className={cn(
+                "min-h-0 flex-1 overflow-y-auto overscroll-contain",
+                scroll === "body" && "px-overlay-padding py-4",
                 className,
             )}
             {...props}
@@ -122,11 +185,14 @@ function DialogFooter({
     showCloseButton?: boolean
     closeButtonId?: string
 }) {
+    const { scroll } = React.useContext(DialogLayoutContext)
     return (
         <div
             data-slot="dialog-footer"
             className={cn(
                 "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
+                scroll === "body" &&
+                    "shrink-0 border-t border-border/80 px-overlay-padding py-3",
                 className,
             )}
             {...props}
@@ -175,6 +241,7 @@ function DialogDescription({
 
 export {
     Dialog,
+    DialogBody,
     DialogClose,
     DialogContent,
     DialogDescription,
@@ -184,4 +251,7 @@ export {
     DialogPortal,
     DialogTitle,
     DialogTrigger,
+    type DialogContentProps,
+    type DialogScroll,
+    type DialogSize,
 }

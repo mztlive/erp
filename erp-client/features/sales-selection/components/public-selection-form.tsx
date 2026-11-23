@@ -23,8 +23,10 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
@@ -1014,8 +1016,9 @@ export const SelectionForm = ({
                 }}
             >
                 <DialogContent
+                    size="md"
                     closeButtonId="sales-selection-public-item-close"
-                    className="max-h-[85dvh] space-y-4 overflow-y-auto rounded-3xl p-5 sm:max-w-lg"
+                    className="space-y-4 rounded-3xl p-5"
                 >
                     {detailItem && (
                         <>
@@ -1147,10 +1150,12 @@ export const SelectionForm = ({
             {/* 6. 已选清单抽屉 (Cart Sheet) */}
             <Dialog open={cartDrawerOpen} onOpenChange={setCartDrawerOpen}>
                 <DialogContent
+                    size="md"
+                    scroll="body"
                     closeButtonId="sales-selection-public-cart-close"
-                    className="flex max-h-[75dvh] flex-col overflow-hidden rounded-3xl p-5 sm:max-w-lg"
+                    className="rounded-3xl"
                 >
-                    <DialogHeader className="shrink-0">
+                    <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <ShoppingBag className="h-5 w-5 text-primary" />
                             已选商品清单 ({selectedCount} 款)
@@ -1160,7 +1165,7 @@ export const SelectionForm = ({
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto py-2">
+                    <DialogBody className="space-y-3">
                         {page.items
                             .filter((item) => picks[item.item_id]?.selected)
                             .map((item) => {
@@ -1203,9 +1208,9 @@ export const SelectionForm = ({
                                 尚未选择任何商品
                             </p>
                         )}
-                    </div>
+                    </DialogBody>
 
-                    <div className="pt-2 border-t border-grid">
+                    <DialogFooter className="sm:flex-col">
                         <Button
                             id="sales-selection-public-cart-finish"
                             className="w-full rounded-full"
@@ -1213,7 +1218,7 @@ export const SelectionForm = ({
                         >
                             继续选品
                         </Button>
-                    </div>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </main>

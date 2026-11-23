@@ -22,6 +22,8 @@ pub type SearchOptions = BTreeMap<String, Vec<SearchOption>>;
 #[derive(Debug, Clone, Default)]
 pub struct SearchDocument {
     pub values: SearchOptions,
+    /// 不进入筛选项展示的稳定 ID 别名，仅用于结构化筛选匹配。
+    pub facet_aliases: BTreeMap<String, Vec<String>>,
     pub texts: Vec<SearchOption>,
     pub created_at: Option<i64>,
     pub due_at: Option<i64>,
@@ -39,6 +41,23 @@ impl SearchDocument {
             for value in values {
                 self.facet(key, &value.value, &value.label);
             }
+        }
+        for (key, aliases) in &source.facet_aliases {
+            for alias in aliases {
+                self.facet_alias(key, alias);
+            }
+        }
+    }
+
+    /// 登记仅用于精确匹配的内部筛选别名，不加入候选项展示。
+    pub fn facet_alias(&mut self, key: &str, value: &str) {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return;
+        }
+        let aliases = self.facet_aliases.entry(key.to_owned()).or_default();
+        if !aliases.iter().any(|existing| existing == trimmed) {
+            aliases.push(trimmed.to_owned());
         }
     }
 
@@ -134,6 +153,13 @@ pub(super) fn task_document(field: &WorkItemFields) -> SearchDocument {
 
     doc.text("任务编号", &field.id);
     doc.text("关联对象编号", &field.business_object_id);
+    if let Some(label) = field.counterparty_label.as_deref() {
+        doc.text("往来单位", label);
+        doc.facet("counterparties", label, label);
+    }
+    for id in &field.counterparty_ids {
+        doc.facet_alias("counterparties", id);
+    }
     if let Some(id) = &field.owner_user_id {
         doc.facet("handlers", id, id);
     }

@@ -8,6 +8,7 @@ import { toFieldErrors, useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -124,10 +125,11 @@ function DeliveryAllocationForm({
     })
     return (
         <DialogContent
-            className="flex max-h-[85dvh] flex-col overflow-hidden sm:max-w-2xl"
+            size="lg"
+            scroll="body"
             closeButtonId={`${prefix}-close`}
         >
-            <DialogHeader className="shrink-0">
+            <DialogHeader>
                 <DialogTitle>设置收货地址</DialogTitle>
                 <DialogDescription className="break-words">
                     {line.name || "商品"}
@@ -137,7 +139,7 @@ function DeliveryAllocationForm({
                 </DialogDescription>
             </DialogHeader>
             <form
-                className="flex min-h-0 flex-1 flex-col gap-4"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden"
                 noValidate
                 onSubmit={(event) => {
                     event.preventDefault()
@@ -152,27 +154,29 @@ function DeliveryAllocationForm({
                             deliveryAllocations: rows,
                         })
                         return (
-                            <div
-                                className="shrink-0 space-y-1 rounded-lg bg-muted/40 px-3 py-2 text-body-compact"
-                                aria-live="polite"
-                            >
-                                <p className="num">
-                                    {rows.length
-                                        ? summary.summary
-                                        : "暂不设置收货地址"}
-                                </p>
-                                <p
-                                    className={`text-xs ${rows.length && !summary.complete ? "text-warning-soft-foreground" : "text-muted-foreground"}`}
+                            <div className="shrink-0 border-b border-border/60 px-overlay-padding py-3">
+                                <div
+                                    className="space-y-1 rounded-lg bg-muted/40 px-3 py-2 text-body-compact"
+                                    aria-live="polite"
                                 >
-                                    {rows.length
-                                        ? summary.status
-                                        : "保存后清除该商品的地址，可在履约前补充。"}
-                                </p>
+                                    <p className="num">
+                                        {rows.length
+                                            ? summary.summary
+                                            : "暂不设置收货地址"}
+                                    </p>
+                                    <p
+                                        className={`text-xs ${rows.length && !summary.complete ? "text-warning-soft-foreground" : "text-muted-foreground"}`}
+                                    >
+                                        {rows.length
+                                            ? summary.status
+                                            : "保存后清除该商品的地址，可在履约前补充。"}
+                                    </p>
+                                </div>
                             </div>
                         )
                     }}
                 </form.Subscribe>
-                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+                <DialogBody className="space-y-4">
                     <form.AppField name="rows" mode="array">
                         {(arrayField) => (
                             <div className="space-y-4">
@@ -345,8 +349,8 @@ function DeliveryAllocationForm({
                             </div>
                         )}
                     </form.AppField>
-                </div>
-                <DialogFooter className="shrink-0">
+                </DialogBody>
+                <DialogFooter>
                     <Button
                         id={`${prefix}-cancel`}
                         type="button"

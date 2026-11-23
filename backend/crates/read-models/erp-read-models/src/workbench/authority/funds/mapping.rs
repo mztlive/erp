@@ -39,6 +39,8 @@ pub(in crate::workbench) fn receivable_account_fact(
         format!("应收子账 {}", account.account_seq),
         account.stable.created_by.clone(),
     );
+    fact.push_counterparty_id(account.customer_id.to_string());
+    fact.push_counterparty_id(account.counterparty_party_id.to_string());
     fact.counterparty_label = counterparty;
     fact.impact_summary = Some(receivable_account_impact(is_voucher));
     fact
@@ -60,6 +62,7 @@ pub(in crate::workbench) fn payable_account_fact(
         purchase_no.as_ref().map(|no| format!("采购应付 {no}")).unwrap_or_else(|| "采购应付".to_string());
     let mut fact =
         ObjectFact::new(account.source_document_id.clone(), label, account.stable.created_by.clone());
+    fact.push_counterparty_id(account.supplier_id.to_string());
     fact.counterparty_label = supplier;
     fact.impact_summary = Some(format!("未付金额 {}", format_yuan(&account.open_total)));
     fact
@@ -80,6 +83,10 @@ pub(in crate::workbench) fn customer_receipt_fact(
         format!("回款单 {}", receipt.receipt_no),
         receipt.created_by.clone(),
     );
+    fact.push_counterparty_id(receipt.counterparty_party_id.to_string());
+    if let Some(customer_id) = &receipt.customer_id {
+        fact.push_counterparty_id(customer_id.to_string());
+    }
     fact.counterparty_label = counterparty;
     fact.impact_summary = Some("不审批则回款不能过账、不能核销应收".to_string());
     fact
@@ -100,6 +107,7 @@ pub(in crate::workbench) fn supplier_payment_fact(
         format!("供应商付款 {}", payment.payment_no),
         payment.created_by.clone(),
     );
+    fact.push_counterparty_id(payment.supplier_id.to_string());
     fact.counterparty_label = counterparty;
     fact.impact_summary = Some("付款已登记并过账；纠错须走付款冲正或供应商退款".to_string());
     fact
@@ -128,6 +136,7 @@ pub(in crate::workbench) fn customer_refund_fact(
         format!("客户退款 {}", refund.refund_no),
         refund.created_by.clone(),
     );
+    fact.push_counterparty_id(refund.customer_id.to_string());
     fact.counterparty_label = customer.or_else(|| origin.cloned());
     fact.impact_summary = Some("不审批则客户退款不能过账".to_string());
     fact
@@ -166,6 +175,7 @@ pub(in crate::workbench) fn supplier_refund_fact(
         ),
         refund.created_by.clone(),
     );
+    fact.push_counterparty_id(refund.supplier_id.to_string());
     fact.counterparty_label = supplier.or_else(|| origin.cloned());
     fact.impact_summary = Some("审核采购处置依据及本次结算方式，批准后入账".to_string());
     fact
@@ -239,6 +249,8 @@ pub(in crate::workbench) fn invoice_request_fact(
         format!("开票申请 {}", request.request_no),
         request.created_by.clone(),
     );
+    fact.push_counterparty_id(request.customer_id.to_string());
+    fact.push_counterparty_id(request.counterparty_party_id.to_string());
     fact.counterparty_label = Some(request.data.invoice_title.clone());
     fact.impact_summary = Some(format!("申请开票 {} 元，审批通过后交财务开票", request.data.amount));
     fact

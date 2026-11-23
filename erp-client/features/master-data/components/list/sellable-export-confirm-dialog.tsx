@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -16,7 +17,6 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { SellableItemThumbnail } from "@/features/master-data/components/list/sellable-item-thumbnail"
-import { DialogScrollBody } from "@/features/master-data/components/shared/action-dialog-shared"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { sellableSupplierLabel } from "@/features/master-data/lib/sellable-excel-rows"
 import type { MasterDataListItem } from "@/features/master-data/types"
@@ -210,7 +210,8 @@ export function SellableExportConfirmDialog({
             }}
         >
             <DialogContent
-                className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-5xl"
+                size="2xl"
+                scroll="body"
                 closeButtonId={`${prefix}-dismiss`}
             >
                 <DialogHeader>
@@ -225,7 +226,7 @@ export function SellableExportConfirmDialog({
                         件已选商品，保留原有全部列和主图，并附客户选品及配送地址填写页。发送客户前请自行处理供应商等内部信息；卡券可导出查看，但不参与询价。
                     </DialogDescription>
                 </DialogHeader>
-                <DialogScrollBody>
+                <DialogBody>
                     <DataTable
                         id={`${prefix}-table`}
                         data={tableRows}
@@ -244,7 +245,7 @@ export function SellableExportConfirmDialog({
                         caption="已选待导出商品"
                         showColumnVisibility={false}
                     />
-                </DialogScrollBody>
+                </DialogBody>
                 <DialogFooter>
                     <Button
                         id={`${prefix}-cancel`}

@@ -4,6 +4,7 @@ import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -102,8 +103,9 @@ export function CatalogPreviewGallery({
             }}
         >
             <DialogContent
+                size="xl"
+                scroll="body"
                 closeButtonId="supplier-catalog-preview-gallery-close"
-                className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-3xl"
                 onKeyDown={(event) => {
                     if (event.key === "ArrowLeft" && index > 0) {
                         event.preventDefault()
@@ -117,13 +119,13 @@ export function CatalogPreviewGallery({
                     }
                 }}
             >
-                <DialogHeader className="shrink-0 pr-8">
+                <DialogHeader>
                     <DialogTitle>{name}</DialogTitle>
                     <DialogDescription>
                         {active?.label} · {index + 1} / {available.length}
                     </DialogDescription>
                 </DialogHeader>
-                <div key={activeKey} className="min-h-0 flex-1 overflow-y-auto">
+                <DialogBody key={activeKey}>
                     {active ? (
                         <CatalogSourceImage
                             image={active.image}
@@ -133,8 +135,8 @@ export function CatalogPreviewGallery({
                             className="h-auto w-full object-contain"
                         />
                     ) : null}
-                </div>
-                <DialogFooter className="shrink-0">
+                </DialogBody>
+                <DialogFooter>
                     <Button
                         id="supplier-catalog-preview-gallery-previous"
                         variant="outline"

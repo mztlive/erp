@@ -384,12 +384,16 @@ mod tests {
         assert!(payload["errorMessage"].as_str().is_some_and(|message| !message.is_empty()));
     }
 
-    // 经生产提取器验证合法审批查询，并确认管理视图游标保留整个 `i64` 排序时间范围。
+    // 经生产提取器验证合法审批查询，并确认管理视图游标保留整个 `i64` 排序时间范围，同时全视图支持 page/page_size/filters。
     #[tokio::test]
     async fn instance_list_query_extractor_accepts_valid_values() {
         for uri in [
             "/?view=mine&status=RUNNING&cursor=mine%7C1%7Cwi-1&limit=1",
             "/?view=managed&status=APPROVED&cursor=managed%7C-1%7Cinst-1&limit=100&q=%20SO-1%20",
+            "/?view=blocked&page=1&page_size=25&filters=%7B%22counterparties%22%3A%5B%22%E6%98%9F%E8%BE%B0%22%5D%7D",
+            "/?view=managed&page=2&page_size=50&filters=%7B%22item_types%22%3A%5B%22approval%3Asales_order%22%5D%7D",
+            "/?view=mine&page=1&page_size=20&filters=%7B%22include_options%22%3Atrue%7D",
+            "/?view=started&page=1&limit=20&page_size=20",
         ] {
             assert_eq!(instance_list_query_status(uri).await, StatusCode::OK, "{uri}");
         }

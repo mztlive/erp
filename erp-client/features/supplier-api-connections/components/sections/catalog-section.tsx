@@ -173,7 +173,7 @@ export function CatalogSection({
                     <SheetTitle>同步记录</SheetTitle>
                     <SheetDescription>{conn.supplier.name}</SheetDescription>
                 </SheetHeader>
-                <div className="min-h-0 flex-1 overflow-y-auto px-7 pb-6 break-words">
+                <div className="min-h-0 flex-1 overflow-y-auto px-sheet-inline pb-5 break-words">
                     {query.isPending ? (
                         <p
                             role="status"

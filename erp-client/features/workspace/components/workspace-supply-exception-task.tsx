@@ -24,6 +24,7 @@ export function WorkspaceSupplyExceptionTask({
             aria-label="当前供应停止核对任务"
         >
             <SupplyExceptionTaskPanel
+                key={item.workItemId}
                 workItemId={item.workItemId}
                 task={taskQuery.data}
                 isPending={taskQuery.isPending}

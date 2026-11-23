@@ -5,6 +5,7 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -37,17 +38,18 @@ export function PortalBatchDraftEditor({
         >
             <DialogContent
                 id="supplier-portal-batch-draft-dialog"
+                size="2xl"
+                scroll="body"
                 showCloseButton={!unresolved}
-                className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-6xl"
                 closeButtonId="supplier-portal-batch-draft-close"
             >
-                <DialogHeader className="shrink-0">
+                <DialogHeader>
                     <DialogTitle>补充本批新品资料</DialogTitle>
                     <DialogDescription>
                         补齐当前草稿的图片与商品资料，保存后返回本批次统一提交采购确认。
                     </DialogDescription>
                 </DialogHeader>
-                <div className="min-h-0 flex-1 overflow-y-auto">
+                <DialogBody>
                     <PortalError
                         error={query.error}
                         retry={() => void query.refetch()}
@@ -74,8 +76,8 @@ export function PortalBatchDraftEditor({
                                 原申请已进入采购确认。返回批次读取当前结果后继续。
                             </p>
                         )}
-                </div>
-                <DialogFooter className="shrink-0 border-t border-border pt-3 sm:items-center sm:justify-between">
+                </DialogBody>
+                <DialogFooter className="sm:items-center sm:justify-between">
                     {unresolved ? (
                         <p className="text-xs text-muted-foreground">
                             本次上传或保存结果尚未确认，请在原草稿恢复操作后再返回批次。

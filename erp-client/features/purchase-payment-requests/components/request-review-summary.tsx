@@ -7,7 +7,7 @@ import {
     MoneyValue,
 } from "@/components/business"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import {
     paymentReviewBasis,
@@ -15,6 +15,21 @@ import {
     fulfillmentLabel,
 } from "../lib/review"
 import type { PaymentRequest } from "../types"
+
+function fulfillmentStatusTone(status?: string | null): StatusTone {
+    switch (status) {
+        case "PARTIAL":
+            return "info"
+        case "COMPLETED":
+        case "COMPLETE":
+            return "success"
+        case "NONE":
+        case "PENDING":
+        case "NOT_STARTED":
+        default:
+            return "neutral"
+    }
+}
 
 export function RequestReviewSummary({
     request,
@@ -27,13 +42,20 @@ export function RequestReviewSummary({
     const terms = [
         ...new Set(request.lines.map((line) => line.payment_term_name)),
     ]
-    const progress = [
-        ...new Set(
-            request.lines
-                .map((line) => fulfillmentLabel[line.current_fulfillment ?? ""])
-                .filter(Boolean),
-        ),
-    ]
+    const progressByLabel = new Map<
+        string,
+        { label: string; tone: StatusTone }
+    >()
+    for (const line of request.lines) {
+        const label = fulfillmentLabel[line.current_fulfillment ?? ""]
+        if (label && !progressByLabel.has(label)) {
+            progressByLabel.set(label, {
+                label,
+                tone: fulfillmentStatusTone(line.current_fulfillment),
+            })
+        }
+    }
+    const progress = [...progressByLabel.values()]
     const dates = [
         ...new Set(
             request.review_lines?.flatMap((line) => line.due_dates) ?? [],
@@ -123,7 +145,10 @@ export function RequestReviewSummary({
                     </p>
                 )}
                 {progress.length === 1 && (
-                    <Badge variant="neutral">{progress[0]}</Badge>
+                    <StatusBadge
+                        label={progress[0].label}
+                        tone={progress[0].tone}
+                    />
                 )}
             </div>
 

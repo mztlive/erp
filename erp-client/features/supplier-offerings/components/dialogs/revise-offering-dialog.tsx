@@ -129,9 +129,9 @@ export function ReviseOfferingDialog({
             }}
         >
             <DialogContent
+                size="xl"
                 closeButtonId="supplier-offerings-dialog-revise-close"
                 showCloseButton={!mutation.isPending}
-                className="w-[calc(100vw-2rem)] gap-4 p-5 sm:max-w-4xl"
             >
                 <DialogHeader>
                     <DialogTitle>修订供给条款</DialogTitle>

@@ -1,4 +1,3 @@
-import { surfacePanelClassName } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { DatePicker } from "@/components/ui/date-picker"
@@ -34,7 +33,10 @@ export function PeriodBasisPanel({
     ) => void
 }) {
     return (
-        <Card size="sm" className={surfacePanelClassName}>
+        <Card
+            size="sm"
+            className="min-w-0 border-border/60 bg-background shadow-none"
+        >
             <CardHeader className="border-b border-grid">
                 <CardTitle>统计期间与归属口径</CardTitle>
             </CardHeader>

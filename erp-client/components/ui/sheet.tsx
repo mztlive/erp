@@ -41,6 +41,8 @@ function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {
     )
 }
 
+const SheetCloseContext = React.createContext(false)
+
 function SheetContent({
     className,
     children,
@@ -75,7 +77,9 @@ function SheetContent({
                 )}
                 {...props}
             >
-                {children}
+                <SheetCloseContext.Provider value={showCloseButton}>
+                    {children}
+                </SheetCloseContext.Provider>
                 {showCloseButton && (
                     <SheetPrimitive.Close
                         id={closeButtonId}
@@ -98,11 +102,13 @@ function SheetContent({
 }
 
 function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
+    const hasCloseButton = React.useContext(SheetCloseContext)
     return (
         <div
             data-slot="sheet-header"
             className={cn(
-                "flex shrink-0 flex-col gap-3 px-sheet-inline pt-sheet-start pb-sheet-end",
+                "flex shrink-0 flex-col gap-3 pt-sheet-start pb-sheet-end",
+                hasCloseButton ? "pl-sheet-inline pr-12" : "px-sheet-inline",
                 className,
             )}
             {...props}

@@ -52,9 +52,6 @@ export function badgeCountFor(
             return counts.inquiryFeedback
         case "procurement-inquiry-count":
             return counts.procurementInquiry
-        case "delivery-count":
-        case "warehouse-count":
-            return undefined
     }
 }
 

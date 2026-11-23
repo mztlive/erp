@@ -384,7 +384,7 @@ function QuickPreviewSheet({
                     <ScrollArea className="min-h-0 flex-1">
                         <div
                             data-slot="quick-preview-content"
-                            className="space-y-6 px-7 py-6"
+                            className="space-y-6 px-sheet-inline py-5"
                         >
                             {children}
                         </div>

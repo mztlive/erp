@@ -141,7 +141,7 @@ function AccessPreviewSheets({
                 }
                 title="审计事件详情"
             >
-                <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6">
+                <div className="min-h-0 flex-1 overflow-y-auto px-sheet-inline py-5">
                     <AuditEventBody query={eventQuery} />
                 </div>
             </QuickPreviewSheet>

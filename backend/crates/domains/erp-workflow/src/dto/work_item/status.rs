@@ -113,13 +113,13 @@ pub fn family_of(work_item_type: WorkItemType) -> WorkItemFamily {
         WorkItemType::SalesInquiryProcessing
         | WorkItemType::ProcurementOrderCreation
         | WorkItemType::PurchaseSourceUpdate
-        | WorkItemType::PurchasePaymentArrangement => WorkItemFamily::Procurement,
+        | WorkItemType::PurchasePaymentArrangement
+        | WorkItemType::SupplierPortalReview => WorkItemFamily::Procurement,
         WorkItemType::FulfillmentOperation | WorkItemType::CustomerAcceptanceRegistration => {
             WorkItemFamily::Fulfillment
         },
         WorkItemType::DocumentApproval
         | WorkItemType::ApprovalRework
-        | WorkItemType::SupplierPortalReview
         | WorkItemType::OwnershipMigrationSalesConfirmation => WorkItemFamily::Approval,
         WorkItemType::CardFundsReview
         | WorkItemType::CardFundsDeltaReview

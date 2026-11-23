@@ -197,16 +197,52 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         if query.view != RuntimeInstanceListView::Started {
             return Err(Error::ValidationError("工作台审批查询只允许本人发起范围".into()));
         }
+        self.scan_scoped_workspace_page(actor, query, executor).await
+    }
 
+    /// 在调用方快照中按视图（`started` / `mine` / `managed` / `blocked`）读取一批授权候选。
+    /// 返回原顺序的候选页与续读游标，供工作台全量检索与结构化筛选使用。
+    ///
+    /// 参数非法、授权失败或仓储错误时拒绝。
+    pub async fn workspace_instance_page_with(
+        &self,
+        actor: &AuditActor,
+        query: &RuntimeInstanceListQuery,
+        executor: &mut dyn Executor,
+    ) -> Result<(Vec<RuntimeInstanceListItem>, Option<RuntimeInstanceListCursor>)> {
+        query.validate()?;
+        if query.view == RuntimeInstanceListView::Mine {
+            let page = self.list_mine_stage(actor, query, executor).await?;
+            return Ok((page.items, page.next_cursor));
+        }
+        self.scan_scoped_workspace_page(actor, query, executor).await
+    }
+
+    // 在调用方事务快照中扫描 Started / Managed / Blocked 授权实例批次。
+    async fn scan_scoped_workspace_page(
+        &self,
+        actor: &AuditActor,
+        query: &RuntimeInstanceListQuery,
+        executor: &mut dyn Executor,
+    ) -> Result<(Vec<RuntimeInstanceListItem>, Option<RuntimeInstanceListCursor>)> {
         let type_scopes = self.runtime_read_type_scopes(query)?;
         let filter = instance_list_filter(actor, query)?;
-        let scope = ApprovalRuntimeReadScope::Started {
-            process_kinds: type_scopes.iter().map(|scope| scope.process_kind).collect(),
-            submitted_by: actor.id().to_owned(),
+        let (permission, scope) = if query.view == RuntimeInstanceListView::Started {
+            (
+                &internal_permissions::APPROVAL_STARTED_LIST,
+                ApprovalRuntimeReadScope::Started {
+                    process_kinds: type_scopes.iter().map(|scope| scope.process_kind).collect(),
+                    submitted_by: actor.id().to_owned(),
+                },
+            )
+        } else {
+            (
+                &internal_permissions::APPROVAL_MANAGEMENT_READ,
+                ApprovalRuntimeReadScope::Managed { type_scopes: type_scopes.clone() },
+            )
         };
 
-        let access =
-            self.authorization.query(actor, &internal_permissions::APPROVAL_STARTED_LIST, executor).await?;
+        let access = self.authorization.query(actor, permission, executor).await?;
         let (rows, last) = ApprovalRuntimeReadRepository::new(&self.db)
             .scan_authorized(&filter, &scope, &access, executor)
             .await?;
@@ -378,6 +414,12 @@ mod tests {
             assert!(
                 matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"),
                 "{view:?}"
+            );
+            let workspace_result =
+                runtime.workspace_instance_page_with(&actor, &query, &mut SnapshotExecutor::default()).await;
+            assert!(
+                matches!(workspace_result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"),
+                "workspace {view:?}"
             );
         }
     }

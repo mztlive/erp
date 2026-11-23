@@ -30,7 +30,7 @@ import type {
 import { formatDateTime } from "@/lib/datetime"
 
 const bodyClassName =
-    "min-h-0 flex-1 space-y-6 overflow-auto px-7 py-6 text-body-compact"
+    "min-h-0 flex-1 space-y-6 overflow-auto px-sheet-inline py-5 text-body-compact"
 
 const receivableEntryLabels: Record<string, string> = {
     original: "原始应收",
@@ -242,6 +242,7 @@ export function ReceiptDetailBody({
 export function CustomerRefundDetailBody({
     row,
     className = bodyClassName,
+    approvalActionsInFooter = false,
     workItemId,
     expectedTaskVersion,
     workItemAllowedActions,
@@ -249,6 +250,7 @@ export function CustomerRefundDetailBody({
 }: {
     row: CustomerRefundRow
     className?: string
+    approvalActionsInFooter?: boolean
     workItemId?: string
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
@@ -277,6 +279,9 @@ export function CustomerRefundDetailBody({
             ) : null}
             <PreviewSection title="审批记录">
                 <CustomerRefundApprovalArea
+                    presentation={
+                        approvalActionsInFooter ? "timeline" : "default"
+                    }
                     phase={customerRefundApprovalPhase(
                         row.approval,
                         row.status === "in_approval"
@@ -303,6 +308,7 @@ export function CustomerRefundDetailBody({
 export function ReceiptReversalDetailBody({
     row,
     className = bodyClassName,
+    approvalActionsInFooter = false,
     workItemId,
     expectedTaskVersion,
     workItemAllowedActions,
@@ -310,6 +316,7 @@ export function ReceiptReversalDetailBody({
 }: {
     row: ReceiptReversalRow
     className?: string
+    approvalActionsInFooter?: boolean
     workItemId?: string
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
@@ -328,6 +335,9 @@ export function ReceiptReversalDetailBody({
             </PreviewSection>
             <PreviewSection title="审批记录">
                 <ReceiptReversalApprovalArea
+                    presentation={
+                        approvalActionsInFooter ? "timeline" : "default"
+                    }
                     phase={receiptReversalApprovalPhase(
                         row.approval,
                         row.status === "in_approval"

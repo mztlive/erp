@@ -41,7 +41,7 @@ type Props = Readonly<{
     finalFocus?: ComponentProps<typeof QuickPreviewSheet>["finalFocus"]
 }>
 
-const bodyClassName = "space-y-6 px-7 py-6 text-body-compact"
+const bodyClassName = "space-y-6 px-sheet-inline py-5 text-body-compact"
 
 /** 范围详情抽屉：获授权份额常显，整单与未分配受限时为空并注明。 */
 export function ReceivableScopeDetailPreview({
@@ -147,12 +147,15 @@ export function ReceivableScopeDetailPreview({
             }
         >
             {isPending ? (
-                <div className="flex flex-col gap-3 px-7 py-6" aria-busy="true">
+                <div
+                    className="flex flex-col gap-3 px-sheet-inline py-5"
+                    aria-busy="true"
+                >
                     <Skeleton className="h-24" />
                     <Skeleton className="h-40" />
                 </div>
             ) : isError ? (
-                <div className="space-y-3 px-7 py-6">
+                <div className="space-y-3 px-sheet-inline py-5">
                     <p className="text-xs text-muted-foreground">
                         {getErrorMessage(error, "详情加载失败，请重试。")}
                     </p>
@@ -311,7 +314,7 @@ export function ReceivableScopeDetailPreview({
                     ) : null}
                 </div>
             ) : (
-                <div className="px-7 py-6 text-body-compact text-muted-foreground">
+                <div className="px-sheet-inline py-5 text-body-compact text-muted-foreground">
                     未找到该笔记录，可能已超出当前数据范围。
                 </div>
             )}

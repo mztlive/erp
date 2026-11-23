@@ -21,6 +21,7 @@ export function WorkspaceSupplierInvestigationTask({
             aria-label="当前供应商履约异常调查任务"
         >
             <SupplierOrderCenterPage
+                key={item.workItemId}
                 supplierOrderId={item.businessObjectId}
                 section="overview"
                 workItemId={item.workItemId}

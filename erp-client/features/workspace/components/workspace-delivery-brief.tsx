@@ -23,8 +23,7 @@ import { workspaceFulfillmentDescriptor } from "../lib/workspace-fulfillment"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspacePurchasePaymentSummary } from "./workspace-purchase-payment"
 
-const sectionClass =
-    "border-b border-grid px-5 py-3 in-data-[slot=sheet-content]:px-7"
+const sectionClass = "border-b border-grid py-3"
 
 export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
     const fields = item.summarySections ?? []
@@ -221,8 +220,6 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
                                     <Link
                                         id={`workspace-delivery-${identity}-${field.label === "来源销售单" ? "sales" : "purchase"}`}
                                         href={`/${field.label === "来源销售单" ? "sales" : "procurement"}/orders/${encodeURIComponent(field.objectId)}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
                                         className="underline underline-offset-4"
                                     >
                                         {field.value}

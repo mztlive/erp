@@ -1,6 +1,6 @@
 "use client"
 
-import { SensitiveValue, surfacePanelClassName } from "@/components/business"
+import { SensitiveValue } from "@/components/business"
 import {
     DescriptionDetails,
     DescriptionItem,
@@ -10,7 +10,6 @@ import {
 import { useRevealPaymentRecipientMutation } from "@/features/supplier-payables/hooks/queries"
 import type { PaymentRecipient } from "@/features/supplier-payables/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { cn } from "@/lib/utils"
 
 export type PaymentRecipientRevealProps = Readonly<{
     payableAccountId: string
@@ -109,7 +108,7 @@ export function PaymentRecipientCard({
     const titleId = `supplier-payables-payment-recipient-${toAutomationIdSegment(payableAccountId)}-title`
     return (
         <section
-            className={cn(surfacePanelClassName, "space-y-4 p-4")}
+            className="erp-raised-surface min-w-0 space-y-4 rounded-lg border border-border/60 bg-background p-4"
             aria-labelledby={titleId}
         >
             <PaymentRecipientHeading payableAccountId={payableAccountId} />

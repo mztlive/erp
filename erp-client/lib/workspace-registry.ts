@@ -66,12 +66,10 @@ type WorkspaceMode =
 
 export type WorkspaceId =
     | "W01"
-    | "W02"
     | "W03"
     | "W04"
     | "W05"
     | "W06"
-    | "W07"
     | "W08"
     | "W09"
     | "W10"
@@ -96,8 +94,6 @@ export type WorkspaceNavBadgeKey =
     | "approval-started-unread-count"
     | "copy-unread-count"
     | "background-job-active-count"
-    | "delivery-count"
-    | "warehouse-count"
     | "selection-actionable-count"
     | "inquiry-feedback-count"
     | "procurement-inquiry-count"
@@ -174,8 +170,6 @@ function defaultNavPermissionsFor(
     switch (routeId) {
         case "W01":
             return []
-        case "W02":
-            return ["work_item:list"]
         case "W03":
             return ["customer:list"]
         case "W04":
@@ -183,8 +177,6 @@ function defaultNavPermissionsFor(
         case "W05":
         case "W06":
             return ["sales_order:list"]
-        case "W07":
-            return []
         case "W08":
             return ["purchase_order:list"]
         case "W09":
@@ -341,13 +333,6 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
         navHref: "/workspace",
     },
     {
-        id: "W02",
-        name: "待办事项",
-        mode: "M3",
-        mainRoute: "/workspace",
-        navHref: "/workspace",
-    },
-    {
         id: "W03",
         name: "客户中心",
         mode: "M4",
@@ -369,19 +354,13 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
         navHref: "/sales/orders",
     },
     {
+        // 后端客户验收任务仍使用 destination_workspace_id="W06"，保留嵌套标识供路由校验，不暴露侧栏与静态 mock 单号。
         id: "W06",
         name: "客户验收",
         mode: "nested",
         mainRoute: "/sales/orders/:salesOrderId?section=acceptance",
-        navHref: "/sales/orders/so_1002?section=acceptance",
+        navHref: "/sales/orders",
         nestedUnder: "W05",
-    },
-    {
-        id: "W07",
-        name: "二次确认队列",
-        mode: "M3",
-        mainRoute: "/procurement/orders",
-        navHref: "/procurement/orders",
     },
     {
         id: "W08",

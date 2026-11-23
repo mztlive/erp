@@ -3,7 +3,7 @@
  * Mirrors `listWorkspaceStyles` so list pages and detail pages share one cohesive visual system.
  */
 export const detailWorkspaceStyles = {
-    page: "erp-detail-workspace-page max-w-none gap-0 bg-card px-workspace-inline py-0 md:px-page-inline md:py-0 min-[75rem]:px-page-inline-lg",
+    page: "erp-detail-workspace-page max-w-none gap-0 bg-card px-workspace-inline py-0 md:px-page-inline md:py-0 @[70rem]/workspace:px-page-inline-lg",
     chrome: "sticky top-0 z-20 border-b border-border/60 bg-card transition-shadow duration-150",
     header: "flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 py-3.5",
     title: "min-w-0 max-w-full break-words text-page-title font-semibold tracking-tight text-foreground",

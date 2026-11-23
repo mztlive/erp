@@ -54,7 +54,7 @@ function AccessChangeDialog({
             }}
         >
             <DialogContent
-                className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"
+                size="lg"
                 closeButtonId="operations-access-change-dialog-close"
                 showCloseButton={!isSubmitting}
             >

@@ -34,11 +34,25 @@ const focus = "rounded-md focus-visible:outline-2 focus-visible:outline-primary"
 
 function stageBarTone(key: string): string {
     const normalized = key.toLowerCase()
-    if (normalized === "stage-effective") return "bg-primary"
-    if (normalized === "stage-pending_review") return "bg-warning"
-    if (normalized === "stage-partial" || normalized === "stage-completed")
+    if (
+        normalized === "stage-effective" ||
+        normalized === "stage-warehouse_ship"
+    )
+        return "bg-primary"
+    if (
+        normalized === "stage-pending_review" ||
+        normalized === "stage-supplier_direct"
+    )
+        return "bg-warning"
+    if (
+        normalized === "stage-partial" ||
+        normalized === "stage-completed" ||
+        normalized === "stage-receipt"
+    )
         return "bg-success"
-    if (normalized === "stage-voided") return "bg-muted-foreground/35"
+    if (normalized === "stage-electronic") return "bg-info"
+    if (normalized === "stage-voided" || normalized === "stage-service")
+        return "bg-muted-foreground/35"
     return "bg-primary/45"
 }
 
@@ -46,15 +60,17 @@ export function RoleWorkbenchBody({
     role,
     profile,
     returnTo,
+    period,
     onSelect,
 }: {
     role: Role
     profile: AccountProfile
     returnTo: string
+    period?: { from: string; to: string }
     onSelect: (metric: OverviewMetric) => void
 }) {
     return (
-        <div className="grid flex-1 items-start gap-x-6 gap-y-0 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem] 2xl:grid-cols-[minmax(0,1fr)_24rem]">
+        <div className="grid flex-1 items-start gap-x-6 gap-y-0 @[960px]/workspace:grid-cols-[minmax(0,1fr)_20rem] @[1120px]/workspace:grid-cols-[minmax(0,1fr)_22rem] @[1480px]/workspace:grid-cols-[minmax(0,1fr)_24rem]">
             <div
                 className="min-w-0 divide-y divide-border/60"
                 aria-label="岗位业务分析"
@@ -67,10 +83,12 @@ export function RoleWorkbenchBody({
                 <RoleWorkbenchActivity
                     workbenchId={role.template.id}
                     profile={profile}
+                    returnTo={returnTo}
+                    period={period}
                 />
             </div>
             <div
-                className="min-w-0 divide-y divide-border/60 border-t border-border/60 lg:self-stretch lg:border-t-0 lg:border-l lg:border-border/60 lg:pl-6"
+                className="min-w-0 divide-y divide-border/60 border-t border-border/60 @[960px]/workspace:self-stretch @[960px]/workspace:border-t-0 @[960px]/workspace:border-l @[960px]/workspace:border-border/60 @[960px]/workspace:pl-6"
                 aria-label="本人待办与时限"
             >
                 <RoleWorkbenchUrgent urgent={role.urgent} returnTo={returnTo} />
@@ -251,7 +269,16 @@ function RoleWorkbenchStages({
     role: Role
     onSelect: (metric: OverviewMetric) => void
 }) {
+    if (role.metrics.length === 0) return null
     const presentation = WORKBENCH_PRESENTATION[role.template.id]
+    const isFulfillment = role.template.id === "WB-02"
+    const isManagement = role.template.id === "WB-05"
+    const unitLabel = isFulfillment ? "项" : "单"
+    const scopeHint = isFulfillment
+        ? "本人履约责任 · 截至当前"
+        : isManagement
+          ? "授权范围汇总 · 截至当前"
+          : "本人负责 · 截至当前"
     const counts = role.stages.map((query) =>
         query.isPending || query.isError || query.data?.noScope
             ? 0
@@ -283,14 +310,14 @@ function RoleWorkbenchStages({
                             {presentation.stagesTitle}
                         </h2>
                         <span className="text-xs text-muted-foreground">
-                            本人负责 · 截至当前
+                            {scopeHint}
                         </span>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
                     {allReady ? (
                         <span className="num rounded-sm bg-muted/75 px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                            共 {total} 单
+                            共 {total} {unitLabel}
                         </span>
                     ) : null}
                     <span className="hidden text-xs text-muted-foreground sm:inline">
@@ -353,7 +380,14 @@ function RoleWorkbenchStages({
                         })}
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div
+                    className={cn(
+                        "grid grid-cols-2 gap-2",
+                        role.metrics.length > 4
+                            ? "sm:grid-cols-3 @[1120px]/workspace:grid-cols-5"
+                            : "sm:grid-cols-4",
+                    )}
+                >
                     {role.metrics.map((item, index) => {
                         const query = role.stages[index]!
                         const value = query.isError
@@ -425,7 +459,7 @@ function RoleWorkbenchStages({
                                             <span className="num flex items-baseline gap-1 text-value-compact font-semibold tracking-tight text-foreground">
                                                 {value}
                                                 <span className="text-xs font-normal text-muted-foreground">
-                                                    单
+                                                    {unitLabel}
                                                 </span>
                                             </span>
                                             {share != null && (

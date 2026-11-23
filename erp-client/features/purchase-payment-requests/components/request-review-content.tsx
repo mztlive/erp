@@ -25,6 +25,9 @@ export function RequestReviewContent({
     showHistory,
     submissionVersion,
     workItemId,
+    onSelectFile,
+    activeFileId,
+    hideEmbeddedMaterials = false,
 }: {
     request: PaymentRequest
     account: ReactNode
@@ -33,9 +36,19 @@ export function RequestReviewContent({
     showHistory: boolean
     submissionVersion?: number
     workItemId?: string
+    onSelectFile?: (fileId: string) => void
+    activeFileId?: string
+    hideEmbeddedMaterials?: boolean
 }) {
     const [historyOpen, setHistoryOpen] = useState(false)
     const bank = request.execution_method.type === "bank_transfer"
+    const paymentSectionTitle = hideEmbeddedMaterials
+        ? bank
+            ? "收款信息"
+            : "预存款信息"
+        : bank
+          ? "收款与材料"
+          : "预存款与材料"
     return (
         <div className="@container/payment-review min-w-0">
             <RequestReviewSummary
@@ -51,8 +64,8 @@ export function RequestReviewContent({
                 />
             </DetailWorkspaceSection>
             <DetailWorkspaceSection
-                title={bank ? "收款与材料" : "预存款与材料"}
-                ariaLabel="收款与材料"
+                title={paymentSectionTitle}
+                ariaLabel={paymentSectionTitle}
             >
                 <DetailWorkspaceFacts columns={3}>
                     <DetailWorkspaceFact
@@ -112,12 +125,16 @@ export function RequestReviewContent({
                         批准后占用预存款额度，实际扣款核实后核销，不登记银行付款。
                     </p>
                 )}
-                <RequestMaterials
-                    request={request}
-                    workItemId={workItemId}
-                    submissionVersion={submissionVersion}
-                    concise
-                />
+                {!hideEmbeddedMaterials ? (
+                    <RequestMaterials
+                        request={request}
+                        workItemId={workItemId}
+                        submissionVersion={submissionVersion}
+                        concise
+                        onSelectFile={onSelectFile}
+                        activeFileId={activeFileId}
+                    />
+                ) : null}
                 {showHistory && !embedded && (
                     <div className="border-t border-border/60 pt-4">
                         <Button

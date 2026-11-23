@@ -1,7 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { BusinessStatusBadge } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    DetailWorkspaceSection,
+} from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
@@ -28,11 +31,13 @@ export function SupplierOrderExecutionSetup({
     canEdit,
     addressSummary,
     executionNotice,
+    asSection = false,
 }: {
     orderId: string
     canEdit: boolean
     addressSummary: string
     executionNotice?: string
+    asSection?: boolean
 }) {
     const query = useSupplierExecutionSetupQuery(orderId)
     const mutation = useSaveSupplierExecutionSetupMutation(orderId)
@@ -75,7 +80,7 @@ export function SupplierOrderExecutionSetup({
     }
 
     if (query.isPending) {
-        return (
+        const skeleton = (
             <section className="space-y-2" aria-busy="true">
                 <h2 className="text-body-compact font-semibold text-foreground">
                     接口执行配置
@@ -83,11 +88,18 @@ export function SupplierOrderExecutionSetup({
                 <div className="h-16 animate-pulse rounded-md bg-muted/70" />
             </section>
         )
+        return asSection ? (
+            <DetailWorkspaceSection width="form">
+                {skeleton}
+            </DetailWorkspaceSection>
+        ) : (
+            skeleton
+        )
     }
 
     if (!query.isError && !setup) {
         if (!executionNotice) return null
-        return (
+        const noticeSection = (
             <section className="space-y-1.5" aria-label="接口执行说明">
                 <h2 className="text-body-compact font-semibold text-foreground">
                     供应商接口履约
@@ -97,6 +109,13 @@ export function SupplierOrderExecutionSetup({
                 </p>
             </section>
         )
+        return asSection ? (
+            <DetailWorkspaceSection width="form">
+                {noticeSection}
+            </DetailWorkspaceSection>
+        ) : (
+            noticeSection
+        )
     }
 
     const stageLabel = query.isError
@@ -105,118 +124,123 @@ export function SupplierOrderExecutionSetup({
 
     const hasWarning = Boolean(setup?.blocker || query.isError || unknown)
 
+    const content = (
+        <section className="space-y-3" aria-label="接口执行状态与配置">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-body-compact font-semibold text-foreground">
+                    接口执行配置
+                </h2>
+                <BusinessStatusBadge
+                    context="list"
+                    tone={hasWarning ? "warning" : "info"}
+                    appearance={hasWarning ? "badge" : "quiet"}
+                    label={stageLabel}
+                />
+            </div>
+
+            {query.isError ? (
+                <Alert variant="warning">
+                    <AlertTitle>接口配送资料暂不可查</AlertTitle>
+                    <AlertDescription>
+                        {getErrorMessage(query.error)}
+                    </AlertDescription>
+                </Alert>
+            ) : setup?.blocker ? (
+                <Alert variant="warning">
+                    <AlertTitle>执行阻塞</AlertTitle>
+                    <AlertDescription>{setup.blocker}</AlertDescription>
+                </Alert>
+            ) : (
+                <p className="text-xs leading-5 text-muted-foreground">
+                    {executionNotice ||
+                        "系统按已批准的采购和配送条件执行，实际结果以订单和物流状态为准。"}
+                </p>
+            )}
+
+            {saved ? (
+                <p role="status" className="text-xs text-muted-foreground">
+                    配送资料已保存，等待后台继续核验；尚不代表供应商下单成功。
+                </p>
+            ) : null}
+
+            <div className="flex flex-wrap gap-2">
+                {editable && canEdit ? (
+                    <Button
+                        id={`${prefix}-open`}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                            if (!saveOutcomeUnknown) mutation.reset()
+                            setOpen(true)
+                        }}
+                    >
+                        完善接口配送资料
+                    </Button>
+                ) : null}
+
+                <LoadingButton
+                    id={`${prefix}-refresh`}
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    loading={query.isFetching}
+                    disabled={query.isFetching || mutation.isPending}
+                    onClick={() => void refresh()}
+                >
+                    刷新执行状态
+                </LoadingButton>
+
+                {setup?.result_query_available && canEdit ? (
+                    <LoadingButton
+                        id={`${prefix}-query-original`}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        loading={resultQuery.isPending}
+                        disabled={
+                            !canEdit ||
+                            resultQuery.isPending ||
+                            query.isFetching
+                        }
+                        onClick={() =>
+                            void resultQuery
+                                .mutateAsync(setup.execution_version)
+                                .catch(() => undefined)
+                        }
+                    >
+                        {resultQuery.isPending ? "核验中…" : "核验接口执行进度"}
+                    </LoadingButton>
+                ) : null}
+            </div>
+
+            {unknown ? (
+                <p className="text-xs text-warning-soft-foreground">
+                    原请求可能已送达，暂未查到或尚未确认不代表可以重新发送。
+                </p>
+            ) : null}
+            {resultQuery.error ? (
+                <p role="alert" className="text-body-compact text-destructive">
+                    {getErrorMessage(resultQuery.error)}
+                </p>
+            ) : null}
+            {resultQuery.isSuccess ? (
+                <p role="status" className="text-xs text-muted-foreground">
+                    已安排核验原执行请求，实际结果以随后核实的订单进度为准。
+                </p>
+            ) : null}
+        </section>
+    )
+
     return (
         <>
-            <section className="space-y-3" aria-label="接口执行状态与配置">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h2 className="text-body-compact font-semibold text-foreground">
-                        接口执行配置
-                    </h2>
-                    <BusinessStatusBadge
-                        context="list"
-                        tone={hasWarning ? "warning" : "info"}
-                        appearance={hasWarning ? "badge" : "quiet"}
-                        label={stageLabel}
-                    />
-                </div>
-
-                {query.isError ? (
-                    <Alert variant="warning">
-                        <AlertTitle>接口配送资料暂不可查</AlertTitle>
-                        <AlertDescription>
-                            {getErrorMessage(query.error)}
-                        </AlertDescription>
-                    </Alert>
-                ) : setup?.blocker ? (
-                    <Alert variant="warning">
-                        <AlertTitle>执行阻塞</AlertTitle>
-                        <AlertDescription>{setup.blocker}</AlertDescription>
-                    </Alert>
-                ) : (
-                    <p className="text-xs leading-5 text-muted-foreground">
-                        {executionNotice ||
-                            "系统按已批准的采购和配送条件执行，实际结果以订单和物流状态为准。"}
-                    </p>
-                )}
-
-                {saved ? (
-                    <p role="status" className="text-xs text-muted-foreground">
-                        配送资料已保存，等待后台继续核验；尚不代表供应商下单成功。
-                    </p>
-                ) : null}
-
-                <div className="flex flex-wrap gap-2">
-                    {editable && canEdit ? (
-                        <Button
-                            id={`${prefix}-open`}
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                                if (!saveOutcomeUnknown) mutation.reset()
-                                setOpen(true)
-                            }}
-                        >
-                            完善接口配送资料
-                        </Button>
-                    ) : null}
-
-                    <LoadingButton
-                        id={`${prefix}-refresh`}
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        loading={query.isFetching}
-                        disabled={query.isFetching || mutation.isPending}
-                        onClick={() => void refresh()}
-                    >
-                        刷新执行状态
-                    </LoadingButton>
-
-                    {setup?.result_query_available && canEdit ? (
-                        <LoadingButton
-                            id={`${prefix}-query-original`}
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            loading={resultQuery.isPending}
-                            disabled={
-                                !canEdit ||
-                                resultQuery.isPending ||
-                                query.isFetching
-                            }
-                            onClick={() =>
-                                void resultQuery
-                                    .mutateAsync(setup.execution_version)
-                                    .catch(() => undefined)
-                            }
-                        >
-                            {resultQuery.isPending
-                                ? "核验中…"
-                                : "核验接口执行进度"}
-                        </LoadingButton>
-                    ) : null}
-                </div>
-
-                {unknown ? (
-                    <p className="text-xs text-warning-soft-foreground">
-                        原请求可能已送达，暂未查到或尚未确认不代表可以重新发送。
-                    </p>
-                ) : null}
-                {resultQuery.error ? (
-                    <p
-                        role="alert"
-                        className="text-body-compact text-destructive"
-                    >
-                        {getErrorMessage(resultQuery.error)}
-                    </p>
-                ) : null}
-                {resultQuery.isSuccess ? (
-                    <p role="status" className="text-xs text-muted-foreground">
-                        已安排核验原执行请求，实际结果以随后核实的订单进度为准。
-                    </p>
-                ) : null}
-            </section>
+            {asSection ? (
+                <DetailWorkspaceSection width="form">
+                    {content}
+                </DetailWorkspaceSection>
+            ) : (
+                content
+            )}
 
             <Dialog
                 open={open}
@@ -224,10 +248,7 @@ export function SupplierOrderExecutionSetup({
                     if (!mutation.isPending) setOpen(next)
                 }}
             >
-                <DialogContent
-                    closeButtonId={`${prefix}-close`}
-                    className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl"
-                >
+                <DialogContent size="lg" closeButtonId={`${prefix}-close`}>
                     <DialogHeader>
                         <DialogTitle>完善接口配送资料</DialogTitle>
                         <DialogDescription>

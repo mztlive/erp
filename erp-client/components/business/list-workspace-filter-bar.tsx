@@ -274,12 +274,13 @@ export function ListWorkspaceFilterBar({
     onClearChip,
     onClearAll,
     hasPendingChanges = false,
+    reactive = false,
     pendingHint = "条件已修改，待查询",
     idleHint,
     statusActions,
     extraPrimary,
     onResetMore,
-    moreHint = "可组合多个条件，点击「查询」后统一生效。",
+    moreHint,
     actions,
     className,
     queryButtonId,
@@ -315,6 +316,8 @@ export function ListWorkspaceFilterBar({
     onClearChip?: (key: string) => void
     onClearAll?: () => void
     hasPendingChanges?: boolean
+    /** 全即时响应式筛选模式：隐藏手动「查询」按钮与待查询标记，改由控件变更直接触发。 */
+    reactive?: boolean
     pendingHint?: string
     idleHint?: string
     /** 跟在结果说明右侧，例如展示方式切换、导出。 */
@@ -329,6 +332,12 @@ export function ListWorkspaceFilterBar({
     resetMoreButtonId?: string
     clearButtonId?: string
 }) {
+    const effectivePending = reactive ? false : hasPendingChanges
+    const resolvedMoreHint =
+        moreHint ??
+        (reactive
+            ? "选择条件后即时生效，无需点击查询。"
+            : "可组合多个条件，点击「查询」后统一生效。")
     const panelId = morePanelId ?? `${idPrefix}-more-panel`
     const triggerId = moreButtonId ?? `${idPrefix}-more`
     const showMore = morePanel != null && onToggleMore != null
@@ -342,10 +351,10 @@ export function ListWorkspaceFilterBar({
     const resolvedMoreCount =
         moreCount ?? (foldedChipKeys ? visibleChips.length : 0)
     // 展开「更多筛选」时顶栏主按钮退场，由展开区页脚「查询」作为唯一提交入口。
-    const hideTopQuery = showMore && moreOpen
+    const hideTopQuery = reactive || (showMore && moreOpen)
 
     React.useEffect(() => {
-        if (!hideTopQuery) return
+        if (!(showMore && moreOpen)) return
         const onEscape = (event: KeyboardEvent) => {
             if (
                 event.key !== "Escape" ||
@@ -362,7 +371,7 @@ export function ListWorkspaceFilterBar({
         }
         window.addEventListener("keydown", onEscape)
         return () => window.removeEventListener("keydown", onEscape)
-    }, [hideTopQuery, onToggleMore, triggerId])
+    }, [showMore, moreOpen, onToggleMore, triggerId])
     const statusHost = useTableFilterStatusHost()
     const inlineStatusHost = useTableInlineFilterStatusHost()
     const appliedChipsHost = useTableAppliedChipsHost()
@@ -420,7 +429,7 @@ export function ListWorkspaceFilterBar({
         resultStatus ||
         (morePresentation !== "popover" && appliedChips) ||
         idleHint ||
-        hasPendingChanges ||
+        effectivePending ||
         statusActions ? (
             <div
                 className={cn(
@@ -441,18 +450,18 @@ export function ListWorkspaceFilterBar({
                     </span>
                 ) : null}
                 {morePresentation !== "popover" ? appliedChips : null}
-                {idleHint || hasPendingChanges || statusActions ? (
+                {idleHint || effectivePending || statusActions ? (
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:ml-auto">
-                        {idleHint || hasPendingChanges ? (
+                        {idleHint || effectivePending ? (
                             <span
                                 role="status"
                                 className={
-                                    hasPendingChanges
+                                    effectivePending
                                         ? "rounded-sm bg-warning-soft px-1.5 py-0.5 font-medium text-warning-soft-foreground"
                                         : "hidden text-muted-foreground/75 xl:inline"
                                 }
                             >
-                                {hasPendingChanges ? pendingHint : idleHint}
+                                {effectivePending ? pendingHint : idleHint}
                             </span>
                         ) : null}
                         {statusActions}
@@ -461,10 +470,10 @@ export function ListWorkspaceFilterBar({
             </div>
         ) : null
 
-    const queryButton = (
+    const queryButton = reactive ? null : (
         <ListFilterQueryButton
             id={queryButtonId ?? `${idPrefix}-query`}
-            hasPendingChanges={hasPendingChanges}
+            hasPendingChanges={effectivePending}
         />
     )
 
@@ -472,7 +481,9 @@ export function ListWorkspaceFilterBar({
         <form
             aria-label={formAriaLabel}
             data-pending-query={
-                hasPendingChanges || hideTopQuery ? "" : undefined
+                effectivePending || (showMore && moreOpen && !reactive)
+                    ? ""
+                    : undefined
             }
             onSubmit={(event) => {
                 event.preventDefault()
@@ -480,7 +491,7 @@ export function ListWorkspaceFilterBar({
                 onSubmit()
             }}
         >
-            {hideTopQuery && filterTrayHost ? (
+            {hideTopQuery && filterTrayHost && !reactive ? (
                 <input
                     id={`${idPrefix}-implicit-submit`}
                     type="submit"
@@ -559,10 +570,12 @@ export function ListWorkspaceFilterBar({
                                     label={morePanelAriaLabel}
                                     open={moreOpen}
                                     onApply={onSubmit}
+                                    onClose={onToggleMore}
                                     onReset={onResetMore}
                                     resetId={resetMoreButtonId}
-                                    hasPendingChanges={hasPendingChanges}
-                                    hint={moreHint}
+                                    hasPendingChanges={effectivePending}
+                                    reactive={reactive}
+                                    hint={resolvedMoreHint}
                                     inPortal={false}
                                 >
                                     {morePanel}
@@ -592,10 +605,12 @@ export function ListWorkspaceFilterBar({
                           label={morePanelAriaLabel}
                           open={moreOpen}
                           onApply={onSubmit}
+                          onClose={onToggleMore}
                           onReset={onResetMore}
                           resetId={resetMoreButtonId}
-                          hasPendingChanges={hasPendingChanges}
-                          hint={moreHint}
+                          hasPendingChanges={effectivePending}
+                          reactive={reactive}
+                          hint={resolvedMoreHint}
                           inPortal
                       >
                           {morePanel}
@@ -604,10 +619,10 @@ export function ListWorkspaceFilterBar({
                   )
                 : null}
             {compactInlineStatus && inlineStatusHost
-                ? hasPendingChanges || resultStatus != null
+                ? effectivePending || resultStatus != null
                     ? createPortal(
                           <div className="flex items-center gap-2">
-                              {hasPendingChanges ? (
+                              {effectivePending ? (
                                   <span
                                       role="status"
                                       title={pendingHint}

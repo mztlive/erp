@@ -10,6 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -201,11 +202,12 @@ export function AccountFormDialog({
         <>
             <Dialog open onOpenChange={(open) => !open && close()}>
                 <DialogContent
+                    size="lg"
+                    scroll="body"
                     closeButtonId={`${id}-close`}
                     showCloseButton={!pending}
-                    className="flex max-h-[90dvh] flex-col gap-5 overflow-hidden sm:max-w-xl"
                 >
-                    <DialogHeader className="shrink-0 pr-8">
+                    <DialogHeader>
                         <DialogTitle>{title}</DialogTitle>
                         {section && account ? (
                             <DialogDescription>
@@ -214,13 +216,13 @@ export function AccountFormDialog({
                         ) : null}
                     </DialogHeader>
                     <form
-                        className="flex min-h-0 flex-col gap-4"
+                        className="flex min-h-0 flex-1 flex-col overflow-hidden"
                         onSubmit={(e) => {
                             e.preventDefault()
                             void form.handleSubmit()
                         }}
                     >
-                        <div className="min-h-0 overflow-y-auto pr-1">
+                        <DialogBody className="space-y-4">
                             {isEdit && departmentLabel ? (
                                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/30 p-3 text-body-compact">
                                     <span>所属部门：{departmentLabel}</span>
@@ -409,8 +411,8 @@ export function AccountFormDialog({
                                     </AlertDescription>
                                 </Alert>
                             ) : null}
-                        </div>
-                        <DialogFooter className="shrink-0 border-t border-border pt-4">
+                        </DialogBody>
+                        <DialogFooter>
                             <Button
                                 id={`${id}-cancel`}
                                 type="button"

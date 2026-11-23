@@ -158,6 +158,9 @@ export function RequestDetailContent({
     showHistory = true,
     submissionVersion,
     workItemId,
+    onSelectFile,
+    activeFileId,
+    hideEmbeddedMaterials = false,
 }: {
     request: PaymentRequest
     account: ReactNode
@@ -166,6 +169,9 @@ export function RequestDetailContent({
     showHistory?: boolean
     submissionVersion?: number
     workItemId?: string
+    onSelectFile?: (fileId: string) => void
+    activeFileId?: string
+    hideEmbeddedMaterials?: boolean
 }) {
     const fullPage = useWorkspaceTaskPage()
     const [section, setSection] = useState<DetailSectionId>("details")
@@ -179,9 +185,17 @@ export function RequestDetailContent({
                 showHistory={showHistory}
                 submissionVersion={submissionVersion}
                 workItemId={workItemId}
+                onSelectFile={onSelectFile}
+                activeFileId={activeFileId}
+                hideEmbeddedMaterials={hideEmbeddedMaterials}
             />
         )
-    const items = showHistory ? detailSections : detailSections.slice(0, 2)
+    const baseItems = showHistory ? detailSections : detailSections.slice(0, 2)
+    const items = hideEmbeddedMaterials
+        ? baseItems.filter((item) => item.id !== "materials")
+        : baseItems
+    const activeSection =
+        hideEmbeddedMaterials && section === "materials" ? "details" : section
     return (
         <div className="@container/payment-detail min-w-0 space-y-5">
             <WorkspaceTaskPageSlot slot="aside">
@@ -190,18 +204,20 @@ export function RequestDetailContent({
                     submissionVersion={submissionVersion}
                 />
             </WorkspaceTaskPageSlot>
-            <div className="border-b border-border/60">
-                <DetailWorkspaceTabs
-                    value={section}
-                    onValueChange={(next) =>
-                        setSection(resolveDetailSection(next))
-                    }
-                    items={items}
-                    ariaLabel="付款申请分区"
-                    tabIdPrefix={`${sectionsId}-tab`}
-                />
-            </div>
-            {section === "details" && (
+            {items.length >= 2 ? (
+                <div className="border-b border-border/60">
+                    <DetailWorkspaceTabs
+                        value={activeSection}
+                        onValueChange={(next) =>
+                            setSection(resolveDetailSection(next))
+                        }
+                        items={items}
+                        ariaLabel="付款申请分区"
+                        tabIdPrefix={`${sectionsId}-tab`}
+                    />
+                </div>
+            ) : null}
+            {activeSection === "details" && (
                 <div className="space-y-6">
                     <PaymentInformation request={request} account={account} />
                     <div className="border-t border-border/60 pt-5">
@@ -210,22 +226,26 @@ export function RequestDetailContent({
                             compact={embedded}
                         />
                     </div>
-                    <RequestMaterialsLink
-                        request={request}
-                        onOpen={() => setSection("materials")}
-                    />
+                    {!hideEmbeddedMaterials ? (
+                        <RequestMaterialsLink
+                            request={request}
+                            onOpen={() => setSection("materials")}
+                        />
+                    ) : null}
                 </div>
             )}
-            {section === "materials" && (
+            {!hideEmbeddedMaterials && activeSection === "materials" && (
                 <div className="[&>section]:border-t-0 [&>section]:pt-0">
                     <RequestMaterials
                         request={request}
                         workItemId={workItemId}
                         submissionVersion={submissionVersion}
+                        onSelectFile={onSelectFile}
+                        activeFileId={activeFileId}
                     />
                 </div>
             )}
-            {showHistory && section === "payments" && (
+            {showHistory && activeSection === "payments" && (
                 <div className="[&>section]:border-t-0 [&>section]:pt-0">
                     <RequestPaymentHistory
                         request={request}
@@ -233,7 +253,7 @@ export function RequestDetailContent({
                     />
                 </div>
             )}
-            {showHistory && section === "history" && (
+            {showHistory && activeSection === "history" && (
                 <div className="space-y-5">
                     {approval ?? (
                         <p className="text-xs text-muted-foreground">
@@ -375,17 +395,30 @@ export function RequestDetailWorkspaceContent({
     approval,
     alerts,
     renderChrome,
+    onSelectFile,
+    activeFileId,
+    hideEmbeddedMaterials = false,
 }: {
     request: PaymentRequest
     account: ReactNode
     approval: ReactNode
     alerts: ReactNode
     renderChrome: (tabs: ReactNode) => ReactNode
+    onSelectFile?: (fileId: string) => void
+    activeFileId?: string
+    hideEmbeddedMaterials?: boolean
 }) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
-    const section = resolveDetailSection(searchParams.get("section"))
+    const rawSection = resolveDetailSection(searchParams.get("section"))
+    const section =
+        hideEmbeddedMaterials && rawSection === "materials"
+            ? "details"
+            : rawSection
+    const workspaceSections = hideEmbeddedMaterials
+        ? detailSections.filter((item) => item.id !== "materials")
+        : detailSections
 
     const selectSection = useCallback(
         (next: string) => {
@@ -407,7 +440,7 @@ export function RequestDetailWorkspaceContent({
                 <DetailWorkspaceTabs
                     value={section}
                     onValueChange={selectSection}
-                    items={detailSections}
+                    items={workspaceSections}
                     ariaLabel="付款申请分区"
                     tabIdPrefix={`${sectionsId}-tab`}
                 />,
@@ -465,17 +498,24 @@ export function RequestDetailWorkspaceContent({
                             request={request}
                             detailWorkspace
                         />
-                        <DetailWorkspaceSection width="form">
-                            <RequestMaterialsLink
-                                request={request}
-                                onOpen={() => selectSection("materials")}
-                                detailWorkspace
-                            />
-                        </DetailWorkspaceSection>
+                        {!hideEmbeddedMaterials ? (
+                            <DetailWorkspaceSection width="form">
+                                <RequestMaterialsLink
+                                    request={request}
+                                    onOpen={() => selectSection("materials")}
+                                    detailWorkspace
+                                />
+                            </DetailWorkspaceSection>
+                        ) : null}
                     </>
                 )}
-                {section === "materials" && (
-                    <RequestMaterials request={request} detailWorkspace />
+                {!hideEmbeddedMaterials && section === "materials" && (
+                    <RequestMaterials
+                        request={request}
+                        detailWorkspace
+                        onSelectFile={onSelectFile}
+                        activeFileId={activeFileId}
+                    />
                 )}
                 {section === "payments" && (
                     <DetailWorkspaceSection width="form" divider={false}>

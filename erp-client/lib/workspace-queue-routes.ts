@@ -14,20 +14,34 @@ export function workspaceQueueView(pathname: string) {
     ).find((view) => WORKSPACE_QUEUE_ROUTES[view].href === pathname)
 }
 
-/** 固定页面不能通过 view 参数变成其他页面；范围内待办仍属于任务页。 */
+const APPROVAL_SUB_VIEWS = new Set(["started", "mine", "blocked", "managed"])
+
+/** 固定页面不能通过 view 参数变成其他页面；范围内待办仍属于任务页，审批四视图归属审批页。 */
 export function workspaceQueueParams(
     pathname: string,
     params: URLSearchParams,
 ) {
     const next = new URLSearchParams(params)
     const view = workspaceQueueView(pathname)
-    if (view && view !== "copied")
-        next.set(
-            "view",
-            view === "inbox" && next.get("view") === "managed"
-                ? "managed"
-                : view,
-        )
+    if (view && view !== "copied") {
+        if (view === "started") {
+            const rawApprovalView = next.get("view") ?? next.get("approvalView")
+            if (rawApprovalView && APPROVAL_SUB_VIEWS.has(rawApprovalView)) {
+                next.set("approvalView", rawApprovalView)
+            } else {
+                next.delete("approvalView")
+            }
+            next.set("view", "started")
+        } else {
+            next.delete("approvalView")
+            next.set(
+                "view",
+                view === "inbox" && next.get("view") === "managed"
+                    ? "managed"
+                    : view,
+            )
+        }
+    }
     return next
 }
 
@@ -41,10 +55,23 @@ export function workspaceQueueLocation(
         WORKSPACE_QUEUE_ROUTES[key as keyof typeof WORKSPACE_QUEUE_ROUTES] ??
         WORKSPACE_QUEUE_ROUTES.inbox
     const next = new URLSearchParams(params)
+    const approvalView = next.get("approvalView")
     next.delete("queue")
     next.delete("view")
+    next.delete("approvalView")
     next.delete("_workspace_frame")
     if (view === "managed") next.set("view", "managed")
+    if (view === "started") {
+        if (
+            approvalView &&
+            approvalView !== "started" &&
+            APPROVAL_SUB_VIEWS.has(approvalView)
+        ) {
+            next.set("view", approvalView)
+        }
+        next.delete("docType")
+        next.delete("status")
+    }
     const query = next.toString()
     return `${route.href}${query ? `?${query}` : ""}`
 }

@@ -8,6 +8,7 @@ import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogClose,
     DialogContent,
     DialogDescription,
@@ -205,8 +206,9 @@ export function VoucherCategoryFormDialog({
     return (
         <Dialog open={open} onOpenChange={requestClose}>
             <DialogContent
+                size="md"
+                scroll="body"
                 closeButtonId={`${baseId}-close`}
-                className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg"
             >
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
@@ -222,103 +224,110 @@ export function VoucherCategoryFormDialog({
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-                    {result?.outcome === "blocked" ? (
-                        <FormalActionResult
-                            status="blocked"
-                            title={blockedTitle}
-                            description={result.message}
-                            facts={
-                                result.detail
-                                    ? [{ label: "说明", value: result.detail }]
-                                    : undefined
-                            }
-                        />
-                    ) : null}
-
-                    {result?.outcome === "conflict" ? (
-                        <FormalActionResult
-                            status="blocked"
-                            title={masterDataCopy.reviseConflictTitle}
-                            description={
-                                result.message ||
-                                masterDataCopy.reviseConflictHint
-                            }
-                            facts={[
-                                {
-                                    label: "当前版本",
-                                    value: `v${result.serverRevisionNo}`,
-                                },
-                            ]}
-                        />
-                    ) : null}
-
-                    {result?.outcome !== "succeeded" ? (
-                        <form
-                            className="grid gap-3"
-                            onSubmit={(e) => {
-                                e.preventDefault()
-                                void form.handleSubmit()
-                            }}
-                        >
-                            <form.AppField
-                                name="voucherNo"
-                                children={(field) => (
-                                    <field.TextField
-                                        id={`${baseId}-voucher-no`}
-                                        label="卡券类目编号"
-                                        placeholder="请输入唯一的卡券类目编号"
-                                        disabled={isEdit}
-                                        required
-                                    />
-                                )}
-                            />
-                            <form.AppField
-                                name="name"
-                                children={(field) => (
-                                    <field.TextField
-                                        id={`${baseId}-name`}
-                                        label="卡券类目名称"
-                                        required
-                                    />
-                                )}
-                            />
-                            <form.AppField
-                                name="description"
-                                children={(field) => (
-                                    <field.TextareaField
-                                        id={`${baseId}-description`}
-                                        label={masterDataCopy.fDescription}
-                                        required
-                                    />
-                                )}
-                            />
-                            <DialogFooter>
-                                <DialogClose
-                                    id={`${baseId}-cancel`}
-                                    render={
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            disabled={mutationPending}
-                                        />
+                {result?.outcome !== "succeeded" ? (
+                    <form
+                        className="flex min-h-0 flex-1 flex-col overflow-hidden"
+                        onSubmit={(e) => {
+                            e.preventDefault()
+                            void form.handleSubmit()
+                        }}
+                    >
+                        <DialogBody className="space-y-4">
+                            {result?.outcome === "blocked" ? (
+                                <FormalActionResult
+                                    status="blocked"
+                                    title={blockedTitle}
+                                    description={result.message}
+                                    facts={
+                                        result.detail
+                                            ? [
+                                                  {
+                                                      label: "说明",
+                                                      value: result.detail,
+                                                  },
+                                              ]
+                                            : undefined
                                     }
-                                >
-                                    关闭
-                                </DialogClose>
-                                <form.AppForm>
-                                    <form.SubmitButton
-                                        loading={mutationPending}
-                                        id={`${baseId}-submit`}
-                                        label={submitLabel}
-                                        pendingLabel="提交中…"
+                                />
+                            ) : null}
+
+                            {result?.outcome === "conflict" ? (
+                                <FormalActionResult
+                                    status="blocked"
+                                    title={masterDataCopy.reviseConflictTitle}
+                                    description={
+                                        result.message ||
+                                        masterDataCopy.reviseConflictHint
+                                    }
+                                    facts={[
+                                        {
+                                            label: "当前版本",
+                                            value: `v${result.serverRevisionNo}`,
+                                        },
+                                    ]}
+                                />
+                            ) : null}
+
+                            <div className="grid gap-3">
+                                <form.AppField
+                                    name="voucherNo"
+                                    children={(field) => (
+                                        <field.TextField
+                                            id={`${baseId}-voucher-no`}
+                                            label="卡券类目编号"
+                                            placeholder="请输入唯一的卡券类目编号"
+                                            disabled={isEdit}
+                                            required
+                                        />
+                                    )}
+                                />
+                                <form.AppField
+                                    name="name"
+                                    children={(field) => (
+                                        <field.TextField
+                                            id={`${baseId}-name`}
+                                            label="卡券类目名称"
+                                            required
+                                        />
+                                    )}
+                                />
+                                <form.AppField
+                                    name="description"
+                                    children={(field) => (
+                                        <field.TextareaField
+                                            id={`${baseId}-description`}
+                                            label={masterDataCopy.fDescription}
+                                            required
+                                        />
+                                    )}
+                                />
+                            </div>
+                        </DialogBody>
+                        <DialogFooter>
+                            <DialogClose
+                                id={`${baseId}-cancel`}
+                                render={
+                                    <Button
+                                        type="button"
+                                        variant="outline"
                                         disabled={mutationPending}
                                     />
-                                </form.AppForm>
-                            </DialogFooter>
-                        </form>
-                    ) : null}
-                </div>
+                                }
+                            >
+                                关闭
+                            </DialogClose>
+                            <form.AppForm>
+                                <form.SubmitButton
+                                    loading={mutationPending}
+                                    id={`${baseId}-submit`}
+                                    label={submitLabel}
+                                    pendingLabel="提交中…"
+                                    disabled={mutationPending}
+                                />
+                            </form.AppForm>
+                        </DialogFooter>
+                    </form>
+                ) : null}
             </DialogContent>
         </Dialog>
     )

@@ -11,6 +11,7 @@ import { LoadingButton } from "@/components/ui/loading-button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -70,11 +71,12 @@ export function BuiltinRoleDialog() {
                 从内建岗位生成
             </DialogTrigger>
             <DialogContent
-                className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-3xl"
+                size="xl"
+                scroll="body"
                 closeButtonId="roles-builtin-close"
                 showCloseButton={!generate.isPending}
             >
-                <DialogHeader className="shrink-0">
+                <DialogHeader>
                     <DialogTitle>生成岗位角色</DialogTitle>
                     <DialogDescription>
                         选择适合本公司的岗位，查看职责和权限后生成。已有角色保留当前配置，生成后可以继续编辑。
@@ -86,20 +88,27 @@ export function BuiltinRoleDialog() {
                         onClose={() => setOpen(false)}
                     />
                 ) : catalog.isPending ? (
-                    <p role="status">正在加载岗位模板…</p>
+                    <DialogBody>
+                        <p role="status">正在加载岗位模板…</p>
+                    </DialogBody>
                 ) : catalog.isError ? (
-                    <div role="alert" className="space-y-3">
-                        <p>
-                            {getErrorMessage(catalog.error, "岗位模板加载失败")}
-                        </p>
-                        <Button
-                            id="roles-builtin-retry"
-                            variant="outline"
-                            onClick={() => void catalog.refetch()}
-                        >
-                            重新加载
-                        </Button>
-                    </div>
+                    <DialogBody>
+                        <div role="alert" className="space-y-3">
+                            <p>
+                                {getErrorMessage(
+                                    catalog.error,
+                                    "岗位模板加载失败",
+                                )}
+                            </p>
+                            <Button
+                                id="roles-builtin-retry"
+                                variant="outline"
+                                onClick={() => void catalog.refetch()}
+                            >
+                                重新加载
+                            </Button>
+                        </div>
+                    </DialogBody>
                 ) : catalog.data ? (
                     <TemplateSelection
                         catalog={catalog.data}
@@ -164,54 +173,62 @@ function TemplateSelection({
     })
     return (
         <form
-            className="flex min-h-0 flex-1 flex-col gap-4"
+            className="flex min-h-0 flex-1 flex-col overflow-hidden"
             onSubmit={(event) => {
                 event.preventDefault()
                 event.stopPropagation()
                 void form.handleSubmit()
             }}
         >
-            <p className="text-xs text-muted-foreground">
-                财务分岗时选择“财务总监、出纳、开票”；“财务”是包含全部财务能力的可选综合岗位。分岗人员不要同时绑定综合财务角色。角色生成后，在人员资料分配角色和数据范围，并指定审批、付款、开票及仓库经办人。
-            </p>
-            <div className="min-h-0 overflow-y-auto divide-y rounded-lg border">
-                <form.AppField name="ids">
-                    {(field) =>
-                        catalog.templates.map((template) => (
-                            <TemplateRow
-                                key={template.id}
-                                template={template}
-                                checked={field.state.value.includes(
-                                    template.id,
-                                )}
-                                disabled={
-                                    pending || stale || !template.can_generate
-                                }
-                                onChange={(checked) =>
-                                    field.handleChange(
-                                        checked
-                                            ? [
-                                                  ...field.state.value,
-                                                  template.id,
-                                              ]
-                                            : field.state.value.filter(
-                                                  (id) => id !== template.id,
-                                              ),
-                                    )
-                                }
-                            />
-                        ))
-                    }
-                </form.AppField>
-            </div>
-            {(error || stale) && (
-                <p role="alert" className="text-body-compact text-destructive">
-                    {stale
-                        ? "权限配置已更新，请关闭后重新打开，核对岗位再生成。"
-                        : error}
+            <DialogBody className="space-y-4">
+                <p className="text-xs text-muted-foreground">
+                    财务分岗时选择“财务总监、出纳、开票”；“财务”是包含全部财务能力的可选综合岗位。分岗人员不要同时绑定综合财务角色。角色生成后，在人员资料分配角色和数据范围，并指定审批、付款、开票及仓库经办人。
                 </p>
-            )}
-            <DialogFooter className="shrink-0">
+                <div className="divide-y rounded-lg border">
+                    <form.AppField name="ids">
+                        {(field) =>
+                            catalog.templates.map((template) => (
+                                <TemplateRow
+                                    key={template.id}
+                                    template={template}
+                                    checked={field.state.value.includes(
+                                        template.id,
+                                    )}
+                                    disabled={
+                                        pending ||
+                                        stale ||
+                                        !template.can_generate
+                                    }
+                                    onChange={(checked) =>
+                                        field.handleChange(
+                                            checked
+                                                ? [
+                                                      ...field.state.value,
+                                                      template.id,
+                                                  ]
+                                                : field.state.value.filter(
+                                                      (id) =>
+                                                          id !== template.id,
+                                                  ),
+                                        )
+                                    }
+                                />
+                            ))
+                        }
+                    </form.AppField>
+                </div>
+                {(error || stale) && (
+                    <p
+                        role="alert"
+                        className="text-body-compact text-destructive"
+                    >
+                        {stale
+                            ? "权限配置已更新，请关闭后重新打开，核对岗位再生成。"
+                            : error}
+                    </p>
+                )}
+            </DialogBody>
+            <DialogFooter>
                 {error && (
                     <Button
                         id="roles-builtin-refresh"
@@ -353,40 +370,42 @@ function GenerationResult({
 }) {
     return (
         <>
-            <p role="status">
-                已生成 {results.filter((result) => result.created).length}{" "}
-                个岗位，保留{" "}
-                {results.filter((result) => !result.created).length}{" "}
-                个已有角色。
-            </p>
-            <ul className="min-h-0 space-y-2 overflow-y-auto">
-                {results.map((result) => (
-                    <li
-                        key={result.id}
-                        className="flex items-center justify-between gap-3 border-b pb-2"
-                    >
-                        <span>
-                            {result.name} ·{" "}
-                            {result.created
-                                ? "已生成"
-                                : STATE_LABEL[result.state]}
-                        </span>
-                        {result.state === "existing" && (
-                            <Link
-                                id={`roles-builtin-result-${toAutomationIdSegment(result.id)}`}
-                                className="text-body-compact underline"
-                                href={`/system/roles/${encodeURIComponent(result.id)}/edit`}
-                            >
-                                查看角色
-                            </Link>
-                        )}
-                    </li>
-                ))}
-            </ul>
-            <p className="text-xs text-muted-foreground">
-                下一步：到“组织与人员”分配岗位角色，按岗位说明配置数据范围和业务责任。
-            </p>
-            <DialogFooter className="shrink-0">
+            <DialogBody className="space-y-4">
+                <p role="status">
+                    已生成 {results.filter((result) => result.created).length}{" "}
+                    个岗位，保留{" "}
+                    {results.filter((result) => !result.created).length}{" "}
+                    个已有角色。
+                </p>
+                <ul className="space-y-2">
+                    {results.map((result) => (
+                        <li
+                            key={result.id}
+                            className="flex items-center justify-between gap-3 border-b pb-2"
+                        >
+                            <span>
+                                {result.name} ·{" "}
+                                {result.created
+                                    ? "已生成"
+                                    : STATE_LABEL[result.state]}
+                            </span>
+                            {result.state === "existing" && (
+                                <Link
+                                    id={`roles-builtin-result-${toAutomationIdSegment(result.id)}`}
+                                    className="text-body-compact underline"
+                                    href={`/system/roles/${encodeURIComponent(result.id)}/edit`}
+                                >
+                                    查看角色
+                                </Link>
+                            )}
+                        </li>
+                    ))}
+                </ul>
+                <p className="text-xs text-muted-foreground">
+                    下一步：到“组织与人员”分配岗位角色，按岗位说明配置数据范围和业务责任。
+                </p>
+            </DialogBody>
+            <DialogFooter>
                 <Button id="roles-builtin-result-close" onClick={onClose}>
                     完成
                 </Button>

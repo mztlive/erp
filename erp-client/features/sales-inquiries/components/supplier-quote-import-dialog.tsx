@@ -10,6 +10,7 @@ import { FileUpload } from "@/components/ui/file-upload"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogHeader,
     DialogTitle,
@@ -145,17 +146,18 @@ export function SupplierQuoteImportButton({
                 }}
             >
                 <DialogContent
+                    size="xl"
+                    scroll="body"
                     closeButtonId="procurement-quote-import-close"
                     showCloseButton={!pending}
-                    className="flex max-h-[85svh] flex-col overflow-hidden sm:max-w-4xl"
                 >
-                    <DialogHeader className="shrink-0">
+                    <DialogHeader>
                         <DialogTitle>导入供应商报价</DialogTitle>
                         <DialogDescription>
                             选择供应商回填的新版报价表。核对后统一登记内部报价，不覆盖正在填写的供给价。
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+                    <DialogBody className="space-y-4">
                         <FileUpload
                             idPrefix="procurement-quote-import"
                             inputId="procurement-quote-import-files"
@@ -245,8 +247,8 @@ export function SupplierQuoteImportButton({
                         {preview.data && (
                             <SupplierQuotePreviewPanel preview={preview.data} />
                         )}
-                    </div>
-                    <DialogFooter className="shrink-0">
+                    </DialogBody>
+                    <DialogFooter>
                         {command.unresolved && (
                             <Button
                                 id="procurement-quote-import-recover"

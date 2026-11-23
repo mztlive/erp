@@ -14,6 +14,7 @@ import {
 import { MetricItem, MetricStrip, MoneyValue } from "@/components/business"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { formatDate, unixSecondsToIsoOrEmpty } from "@/lib/datetime"
 import {
     requestStatusLabels,
     type InvoiceRequest,
@@ -301,10 +302,12 @@ export function InvoiceRequestPanel({
                                             <TableCell>
                                                 {request.created_by_name ?? "—"}
                                             </TableCell>
-                                            <TableCell className="whitespace-nowrap">
-                                                {new Date(
-                                                    request.created_at * 1000,
-                                                ).toLocaleDateString("zh-CN")}
+                                            <TableCell className="num whitespace-nowrap">
+                                                {formatDate(
+                                                    unixSecondsToIsoOrEmpty(
+                                                        request.created_at,
+                                                    ),
+                                                )}
                                             </TableCell>
                                         </TableRow>
                                     ))}

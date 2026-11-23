@@ -23,12 +23,14 @@ import { formatDateTime } from "@/lib/datetime"
  */
 export function SupplierRefundDetailBody({
     row,
+    approvalActionsInFooter = false,
     workItemId,
     expectedTaskVersion,
     workItemAllowedActions,
     onDecisionApplied,
 }: {
     row: SupplierRefundRow
+    approvalActionsInFooter?: boolean
     workItemId?: string
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
@@ -95,6 +97,9 @@ export function SupplierRefundDetailBody({
             ) : null}
             <PreviewSection title="审批记录">
                 <SupplierRefundApprovalArea
+                    presentation={
+                        approvalActionsInFooter ? "timeline" : "default"
+                    }
                     phase={supplierRefundApprovalPhase(
                         row.approval,
                         row.status === "in_approval"

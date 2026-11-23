@@ -16,6 +16,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -173,6 +174,8 @@ export const InquiryExtraCostsDialog = withForm({
             <Dialog open={open} onOpenChange={handleOpenChange}>
                 <DialogContent
                     id="procurement-feedback-fees-dialog"
+                    size="xl"
+                    scroll="body"
                     closeButtonId="procurement-feedback-fees-close"
                     finalFocus={triggerRef}
                     initialFocus={(openType) => {
@@ -193,10 +196,9 @@ export const InquiryExtraCostsDialog = withForm({
                             ) ?? undefined
                         )
                     }}
-                    className="flex max-h-[85svh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
                 >
                     <div className="shrink-0 border-b border-border/70">
-                        <DialogHeader className="gap-1 px-6 pt-4 pb-3 pr-14">
+                        <DialogHeader className="gap-1 border-b-0 pb-3">
                             <div className="flex flex-wrap items-center gap-2">
                                 <DialogTitle>登记额外成本</DialogTitle>
                                 {fees.length > 0 && (
@@ -210,7 +212,7 @@ export const InquiryExtraCostsDialog = withForm({
                             </DialogDescription>
                         </DialogHeader>
 
-                        <div className="px-6 pb-3.5">
+                        <div className="px-overlay-padding pb-3.5">
                             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 rounded-lg bg-surface-sunken/80 px-3.5 py-2 text-xs">
                                 <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                                     <span className="text-muted-foreground">
@@ -290,7 +292,7 @@ export const InquiryExtraCostsDialog = withForm({
                         </div>
                     </div>
 
-                    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+                    <DialogBody className="space-y-4">
                         {error && (
                             <Alert variant="destructive">
                                 <AlertDescription>{error}</AlertDescription>
@@ -1092,9 +1094,9 @@ export const InquiryExtraCostsDialog = withForm({
                                 />
                             )}
                         </fieldset>
-                    </div>
+                    </DialogBody>
 
-                    <DialogFooter className="shrink-0 flex-wrap items-center gap-3 border-t border-border/70 px-6 py-3.5">
+                    <DialogFooter className="flex-wrap items-center gap-3">
                         <p className="mr-auto text-xs text-muted-foreground">
                             关闭保留当前输入，保存将连同商品反馈一并提交。
                         </p>

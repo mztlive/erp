@@ -4,6 +4,7 @@ import { BusinessStatusBadge } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogFooter,
     DialogHeader,
@@ -40,14 +41,14 @@ export function SupplierPaymentDetailDialog({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
+                size="2xl"
+                scroll="body"
                 closeButtonId="supplier-payables-payment-detail-close"
-                className="flex h-[min(42rem,calc(100vh-2rem))] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
+                className="h-[42rem]"
             >
-                <DialogHeader className="shrink-0 px-6 pt-6 pr-14 pb-4">
+                <DialogHeader>
                     <div className="flex flex-wrap items-center gap-2">
-                        <DialogTitle className="text-section-title font-semibold tracking-tight">
-                            付款详情
-                        </DialogTitle>
+                        <DialogTitle>付款详情</DialogTitle>
                         {row ? (
                             <BusinessStatusBadge
                                 context="preview"
@@ -57,7 +58,7 @@ export function SupplierPaymentDetailDialog({
                         ) : null}
                     </div>
                 </DialogHeader>
-                <div className="flex min-h-0 flex-1 flex-col border-t">
+                <DialogBody className="flex flex-col overflow-hidden p-0">
                     {isPending ? (
                         <PaymentDetailSkeleton />
                     ) : row ? (
@@ -89,8 +90,8 @@ export function SupplierPaymentDetailDialog({
                             未找到付款详情
                         </p>
                     )}
-                </div>
-                <DialogFooter className="shrink-0 border-t px-6 py-4">
+                </DialogBody>
+                <DialogFooter>
                     <Button
                         id="supplier-payables-payment-detail-cancel"
                         type="button"

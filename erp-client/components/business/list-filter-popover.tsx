@@ -90,9 +90,11 @@ export function ListFilterTray({
     label,
     open,
     onApply,
+    onClose,
     onReset,
     resetId,
     hasPendingChanges = false,
+    reactive = false,
     hint,
     inPortal = true,
     children,
@@ -102,9 +104,12 @@ export function ListFilterTray({
     label: string
     open: boolean
     onApply: () => void
+    onClose?: () => void
     onReset?: () => void
     resetId?: string
     hasPendingChanges?: boolean
+    /** 即时筛选模式：条件选择后立即生效，隐藏手点「查询」按钮并改为收起「完成」。 */
+    reactive?: boolean
     hint?: string
     /** true：已挂载到外层通栏槽（独立 form）；false：内联在父 form 内部（使用 div）。 */
     inPortal?: boolean
@@ -146,11 +151,23 @@ export function ListFilterTray({
                             {listFilterText.resetMore}
                         </Button>
                     ) : null}
-                    <ListFilterQueryButton
-                        id={`${idPrefix}-more-apply`}
-                        hasPendingChanges={hasPendingChanges}
-                        emphasize
-                    />
+                    {reactive ? (
+                        <Button
+                            id={`${idPrefix}-more-done`}
+                            type="button"
+                            variant="outline"
+                            className="shadow-none"
+                            onClick={onClose ?? onApply}
+                        >
+                            完成
+                        </Button>
+                    ) : (
+                        <ListFilterQueryButton
+                            id={`${idPrefix}-more-apply`}
+                            hasPendingChanges={hasPendingChanges}
+                            emphasize
+                        />
+                    )}
                 </div>
             </div>
         </>

@@ -5,6 +5,7 @@ import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogHeader,
     DialogTitle,
@@ -24,12 +25,14 @@ export function ReturnInvoiceDialog({
     amount,
     onClose,
     onResult,
+    onSucceeded,
 }: {
     invoice: PurchaseInvoiceRow
     payableAccountId: string
     amount: string
     onClose: () => void
     onResult: (result: FormalSubmitResult) => void
+    onSucceeded?: (submittedAmount: string) => void | Promise<void>
 }) {
     const mutation = useReverseInvoiceMutation()
     const submitted = useRef<ReverseInvoiceInput | null>(null)
@@ -71,6 +74,7 @@ export function ReturnInvoiceDialog({
             onResult(result)
             if (result.status === "succeeded") {
                 onClose()
+                await onSucceeded?.(value.amount)
                 return
             }
             const uncertain = result.status === "unknown"
@@ -86,7 +90,12 @@ export function ReturnInvoiceDialog({
                 if (!open && !unknown && !mutation.isPending) onClose()
             }}
         >
-            <DialogContent closeButtonId="return-invoice-close">
+            <DialogContent
+                size="md"
+                scroll="body"
+                closeButtonId="return-invoice-close"
+                showCloseButton={!unknown && !mutation.isPending}
+            >
                 <DialogHeader>
                     <DialogTitle>登记进项红票</DialogTitle>
                     <DialogDescription>
@@ -95,55 +104,57 @@ export function ReturnInvoiceDialog({
                     </DialogDescription>
                 </DialogHeader>
                 <form
-                    className="space-y-4"
+                    className="flex min-h-0 flex-1 flex-col overflow-hidden"
                     onSubmit={(event) => {
                         event.preventDefault()
                         void form.handleSubmit()
                     }}
                 >
-                    <form.AppField
-                        name="number"
-                        children={(field) => (
-                            <field.TextField
-                                id="return-invoice-number"
-                                label="红票号码"
-                                required
-                                disabled={unknown || mutation.isPending}
-                            />
+                    <DialogBody className="space-y-4">
+                        <form.AppField
+                            name="number"
+                            children={(field) => (
+                                <field.TextField
+                                    id="return-invoice-number"
+                                    label="红票号码"
+                                    required
+                                    disabled={unknown || mutation.isPending}
+                                />
+                            )}
+                        />
+                        <form.AppField
+                            name="amount"
+                            children={(field) => (
+                                <field.TextField
+                                    money
+                                    id="return-invoice-amount"
+                                    label="本次红冲含税金额"
+                                    inputMode="decimal"
+                                    required
+                                    disabled={unknown || mutation.isPending}
+                                />
+                            )}
+                        />
+                        <form.AppField
+                            name="reason"
+                            children={(field) => (
+                                <field.TextareaField
+                                    id="return-invoice-reason"
+                                    label="原因"
+                                    required
+                                    disabled={unknown || mutation.isPending}
+                                />
+                            )}
+                        />
+                        {error && (
+                            <p
+                                role="alert"
+                                className="text-body-compact text-destructive"
+                            >
+                                {error}
+                            </p>
                         )}
-                    />
-                    <form.AppField
-                        name="amount"
-                        children={(field) => (
-                            <field.TextField
-                                money
-                                id="return-invoice-amount"
-                                label="本次红冲含税金额"
-                                inputMode="decimal"
-                                required
-                                disabled={unknown || mutation.isPending}
-                            />
-                        )}
-                    />
-                    <form.AppField
-                        name="reason"
-                        children={(field) => (
-                            <field.TextareaField
-                                id="return-invoice-reason"
-                                label="原因"
-                                required
-                                disabled={unknown || mutation.isPending}
-                            />
-                        )}
-                    />
-                    {error && (
-                        <p
-                            role="alert"
-                            className="text-body-compact text-destructive"
-                        >
-                            {error}
-                        </p>
-                    )}
+                    </DialogBody>
                     <DialogFooter>
                         <Button
                             id="return-invoice-cancel"

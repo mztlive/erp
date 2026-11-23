@@ -9,7 +9,6 @@ import {
     DetailWorkspaceSection,
     WorkspaceTaskFooter,
     useWorkspaceTaskPane,
-    workspaceTaskSurfacePadClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -34,7 +33,6 @@ import { useAcceptanceMutations } from "@/features/sales-orders/hooks/use-accept
 import type { AcceptanceTaskIdentity } from "@/features/sales-orders/lib/acceptance-workspace-fetch"
 import { mapWorkItemDto } from "@/features/work-items/types"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
-import { cn } from "@/lib/utils"
 import {
     AcceptanceBlockedState,
     AcceptanceNoFactsState,
@@ -46,7 +44,10 @@ import {
     AcceptanceProgressTable,
     AcceptanceSummaryMetrics,
 } from "@/features/sales-orders/components/acceptance-progress-table"
-import { AcceptanceRegisterDialog } from "@/features/sales-orders/components/acceptance-register-dialog"
+import {
+    AcceptanceRegisterDialog,
+    AcceptanceRegisterFormBody,
+} from "@/features/sales-orders/components/acceptance-register-dialog"
 
 export function AcceptanceWorkspace({
     id,
@@ -56,6 +57,7 @@ export function AcceptanceWorkspace({
     ownerName,
     workItem,
     persistRegisterInUrl = true,
+    inlineRegister = false,
     onPosted,
 }: {
     id?: string
@@ -65,6 +67,8 @@ export function AcceptanceWorkspace({
     ownerName?: string
     workItem?: AcceptanceTaskIdentity
     persistRegisterInUrl?: boolean
+    /** true 时直接在页面主画布内联渲染可编辑验收表单，仅底栏提交弹单层确认，零弹窗套娃。 */
+    inlineRegister?: boolean
     onPosted?: (payload: {
         remainingEligibleCount: number
         acceptanceNo: string
@@ -76,10 +80,16 @@ export function AcceptanceWorkspace({
         setRegisterMode: setUrlRegisterMode,
     } = useAcceptanceWorkspaceUrlState()
     const [localRegister, setLocalRegister] = React.useState(false)
+    const [dialogStep, setDialogStep] = React.useState<"edit" | "confirm">(
+        "edit",
+    )
     const workItemId = workItem?.workItemId ?? urlWorkItemId
     const isRegister = persistRegisterInUrl ? urlRegister : localRegister
     const setRegisterMode = React.useCallback(
         (next: boolean, options?: { clearTask?: boolean }) => {
+            if (!next) {
+                setDialogStep("edit")
+            }
             if (!persistRegisterInUrl) {
                 setLocalRegister(next)
                 return
@@ -117,7 +127,11 @@ export function AcceptanceWorkspace({
             if (!pendingPostInputRef.current) {
                 pendingPostLinesRef.current = selection.selected
             }
-            setConfirmOpen(true)
+            if (inlineRegister) {
+                setConfirmOpen(true)
+            } else {
+                setDialogStep("confirm")
+            }
         },
     })
 
@@ -151,6 +165,7 @@ export function AcceptanceWorkspace({
                 setIdempotencyKey(`acc-${salesOrderId}-${crypto.randomUUID()}`)
                 submittedOverallRef.current = "PASS"
                 setConfirmOpen(false)
+                setDialogStep("edit")
                 setRegisterMode(false, {
                     clearTask:
                         persistRegisterInUrl &&
@@ -170,20 +185,42 @@ export function AcceptanceWorkspace({
     }, [formalResult])
 
     const inWorkspaceTaskPane = useWorkspaceTaskPane()
-    const insetClassName = inWorkspaceTaskPane
-        ? cn(workspaceTaskSurfacePadClassName, "py-5")
-        : undefined
-    const sectionClassName = inWorkspaceTaskPane
-        ? workspaceTaskSurfacePadClassName
-        : undefined
+    const insetClassName = inWorkspaceTaskPane ? "py-4" : undefined
 
     const prefilledOpenRef = React.useRef(false)
+    const prefilledInlineKeyRef = React.useRef<string>("")
     const replaceSelection = selection.replace
     const registerOpen = Boolean(
-        isRegister && view && view.salesOrder.businessType !== "CARD_VOUCHER",
+        !inlineRegister &&
+        isRegister &&
+        view &&
+        view.salesOrder.businessType !== "CARD_VOUCHER",
     )
+    const pendingFactsKey = view
+        ? pendingFactsOf(view.salesLines)
+              .map(
+                  (fact) =>
+                      `${fact.fulfillmentLineId}:${fact.eligibleQuantity}`,
+              )
+              .join("|")
+        : ""
 
     React.useEffect(() => {
+        if (inlineRegister) {
+            if (
+                !view ||
+                view.salesOrder.businessType === "CARD_VOUCHER" ||
+                !pendingFactsKey
+            ) {
+                prefilledInlineKeyRef.current = ""
+                return
+            }
+            if (prefilledInlineKeyRef.current === pendingFactsKey) return
+            prefilledInlineKeyRef.current = pendingFactsKey
+            if (pendingPostInputRef.current) return
+            replaceSelection(pendingAsPassSelection(view.salesLines))
+            return
+        }
         if (!registerOpen || !view) {
             prefilledOpenRef.current = false
             return
@@ -192,7 +229,7 @@ export function AcceptanceWorkspace({
         prefilledOpenRef.current = true
         if (pendingPostInputRef.current) return
         replaceSelection(pendingAsPassSelection(view.salesLines))
-    }, [registerOpen, replaceSelection, view])
+    }, [inlineRegister, pendingFactsKey, registerOpen, replaceSelection, view])
 
     const currentUserId = accountQuery.data?.userid
     const ownerId =
@@ -322,6 +359,7 @@ export function AcceptanceWorkspace({
         if (!pendingPostInputRef.current) {
             selection.replace(pendingAsPassSelection(view.salesLines))
         }
+        setDialogStep("edit")
         setRegisterMode(true)
     }
     const registerButton = (
@@ -336,6 +374,67 @@ export function AcceptanceWorkspace({
             登记客户验收
         </Button>
     )
+    const inlinePassCount = [...selection.selected.values()].filter(
+        (draft) => draft.result === "PASS",
+    ).length
+    const inlineExceptionCount = selection.selected.size - inlinePassCount
+    const inlineSkippedCount = Math.max(
+        0,
+        pendingCount - selection.selected.size,
+    )
+    const confirmSelected = pendingPostInputRef.current
+        ? pendingPostLinesRef.current
+        : selection.selected
+    const confirmOverallPreview = pendingPostInputRef.current
+        ? submittedOverallRef.current
+        : selection.overallPreview
+
+    const handleConfirmAcceptance = async () => {
+        if (!pendingPostInputRef.current) {
+            submittedOverallRef.current = selection.overallPreview
+            const values = form.state.values
+            pendingPostInputRef.current = {
+                workItemId: view.workItem?.id,
+                expectedTaskVersion: view.workItem?.expectedTaskVersion,
+                salesOrderId,
+                acceptanceDraftId: `draft_${idempotencyKey}`,
+                expectedDraftVersion: 0,
+                expectedSalesOrderLockVersion: view.salesOrder.lockVersion,
+                idempotencyKey,
+                acceptedAt: values.acceptedAt
+                    ? new Date(values.acceptedAt).toISOString()
+                    : new Date().toISOString(),
+                comment: values.comment,
+                evidenceFile: values.evidenceFile,
+                lines: buildDraftLines(pendingPostLinesRef.current),
+            }
+        }
+        try {
+            const result = await postMutation.mutateAsync(
+                pendingPostInputRef.current,
+            )
+            if (result.status === "unknown") {
+                pendingPostWasUnknownRef.current = true
+            } else if (result.status === "failed") {
+                if (pendingPostWasUnknownRef.current) {
+                    setFormalResult({
+                        kind: "post",
+                        status: "unknown",
+                        title: "尚未确认上次提交结果",
+                        description: `${result.message} 请保留原操作并重试。`,
+                        facts: [],
+                    })
+                } else {
+                    pendingPostInputRef.current = null
+                    setIdempotencyKey(
+                        `acc-${salesOrderId}-${crypto.randomUUID()}`,
+                    )
+                }
+            }
+        } catch {
+            pendingPostWasUnknownRef.current = true
+        }
+    }
 
     const body = (
         <>
@@ -370,8 +469,12 @@ export function AcceptanceWorkspace({
                             onDismiss={() => setFormalResult(null)}
                             onRetry={() => {
                                 setFormalResult(null)
-                                if (!registerOpen) setRegisterMode(true)
-                                setConfirmOpen(true)
+                                if (inlineRegister) {
+                                    setConfirmOpen(true)
+                                } else {
+                                    if (!registerOpen) setRegisterMode(true)
+                                    setDialogStep("confirm")
+                                }
                             }}
                         />
                     </div>
@@ -383,8 +486,12 @@ export function AcceptanceWorkspace({
                             onDismiss={() => setFormalResult(null)}
                             onRetry={() => {
                                 setFormalResult(null)
-                                if (!registerOpen) setRegisterMode(true)
-                                setConfirmOpen(true)
+                                if (inlineRegister) {
+                                    setConfirmOpen(true)
+                                } else {
+                                    if (!registerOpen) setRegisterMode(true)
+                                    setDialogStep("confirm")
+                                }
                             }}
                         />
                     </DetailWorkspaceSection>
@@ -423,8 +530,32 @@ export function AcceptanceWorkspace({
                         <AcceptanceSummaryMetrics progress={progress} />
                     ) : null}
 
+                    {inlineRegister && canRegister ? (
+                        <DetailWorkspaceSection
+                            width="full"
+                            title="登记本次客户验收"
+                            subtitle={`默认纳入全部 ${pendingCount} 批并预填为全部通过，核对并上传签收单凭证后即可直接提交。`}
+                        >
+                            <AcceptanceRegisterFormBody
+                                inline
+                                form={form}
+                                salesLines={view.salesLines}
+                                selection={selection}
+                                canPost={
+                                    canPost && !pendingPostInputRef.current
+                                }
+                                ownerLabel={ownerLabel}
+                                isOwner={isOwner}
+                                clientIssues={clientIssues}
+                                postBlockerMessage={postBlocker?.message}
+                                postPending={postMutation.isPending}
+                                activeKey={pendingFactsKey}
+                            />
+                        </DetailWorkspaceSection>
+                    ) : null}
+
                     <AcceptanceProgressTable
-                        surface={inWorkspaceTaskPane ? "task" : "detail"}
+                        surface="detail"
                         progress={progress}
                         showSummary={inWorkspaceTaskPane}
                         pendingHint={progressHint}
@@ -433,17 +564,54 @@ export function AcceptanceWorkspace({
                                 ? registerButton
                                 : undefined
                         }
-                        className={sectionClassName}
                     />
 
                     {inWorkspaceTaskPane && canRegister ? (
-                        <WorkspaceTaskFooter fallback={null}>
-                            {registerButton}
-                        </WorkspaceTaskFooter>
+                        inlineRegister ? (
+                            <WorkspaceTaskFooter
+                                summary={
+                                    <p
+                                        className="text-xs text-muted-foreground"
+                                        role="status"
+                                        aria-live="polite"
+                                    >
+                                        <span className="font-medium text-foreground">
+                                            本次登记 {selection.selected.size}{" "}
+                                            批
+                                        </span>
+                                        {" · "}全部通过 {inlinePassCount} 批 ·
+                                        有异常 {inlineExceptionCount} 批 ·
+                                        暂不登记 {inlineSkippedCount} 批
+                                    </p>
+                                }
+                                fallback={null}
+                            >
+                                <form.AppForm>
+                                    <form.SubmitButton
+                                        id="sales-orders-acceptance-register-submit"
+                                        form="acceptance-form"
+                                        size="sm"
+                                        label="提交本次验收"
+                                        pendingLabel="提交中…"
+                                        loading={postMutation.isPending}
+                                        disabled={
+                                            !canPost ||
+                                            postMutation.isPending ||
+                                            selection.selected.size === 0 ||
+                                            Boolean(pendingPostInputRef.current)
+                                        }
+                                    />
+                                </form.AppForm>
+                            </WorkspaceTaskFooter>
+                        ) : (
+                            <WorkspaceTaskFooter fallback={null}>
+                                {registerButton}
+                            </WorkspaceTaskFooter>
+                        )
                     ) : null}
 
                     <AcceptanceHistoryList
-                        surface={inWorkspaceTaskPane ? "task" : "detail"}
+                        surface="detail"
                         history={view.history}
                         canReverse={view.permissions.allowedActions.includes(
                             "REVERSE_ACCEPTANCE",
@@ -453,106 +621,57 @@ export function AcceptanceWorkspace({
                             setReverseReason("")
                             reverseIdempotencyKeyRef.current = `rev-${item.acceptanceId}-${crypto.randomUUID()}`
                         }}
-                        className={sectionClassName}
                     />
                 </>
             )}
 
-            <AcceptanceRegisterDialog
-                open={registerOpen}
-                form={form}
-                salesLines={view.salesLines}
-                selection={selection}
-                canPost={canPost && !pendingPostInputRef.current}
-                ownerLabel={ownerLabel}
-                isOwner={isOwner}
-                clientIssues={clientIssues}
-                postBlockerMessage={postBlocker?.message}
-                pendingCount={pendingCount}
-                postPending={postMutation.isPending}
-                onOpenChange={(open) => {
-                    if (open) setRegisterMode(true)
-                    else requestCloseRegister()
-                }}
-            >
-                {registerOpen &&
-                formalResult &&
-                formalResult.status !== "succeeded" ? (
-                    <div className="mb-4">
-                        <AcceptanceFormalResult
-                            formalResult={formalResult}
-                            resultRef={resultRef}
-                            onDismiss={() => setFormalResult(null)}
-                            onRetry={() => {
-                                setFormalResult(null)
-                                setConfirmOpen(true)
-                            }}
-                        />
-                    </div>
-                ) : null}
-            </AcceptanceRegisterDialog>
+            {!inlineRegister ? (
+                <AcceptanceRegisterDialog
+                    open={registerOpen}
+                    step={dialogStep}
+                    onStepChange={setDialogStep}
+                    form={form}
+                    salesLines={view.salesLines}
+                    selection={selection}
+                    confirmSelected={confirmSelected}
+                    overallPreview={confirmOverallPreview}
+                    canPost={canPost && !pendingPostInputRef.current}
+                    ownerLabel={ownerLabel}
+                    isOwner={isOwner}
+                    clientIssues={clientIssues}
+                    postBlockerMessage={postBlocker?.message}
+                    pendingCount={pendingCount}
+                    postPending={postMutation.isPending}
+                    onConfirmAcceptance={handleConfirmAcceptance}
+                    onOpenChange={(open) => {
+                        if (open) setRegisterMode(true)
+                        else requestCloseRegister()
+                    }}
+                >
+                    {registerOpen &&
+                    formalResult &&
+                    formalResult.status !== "succeeded" ? (
+                        <div className="mb-4">
+                            <AcceptanceFormalResult
+                                formalResult={formalResult}
+                                resultRef={resultRef}
+                                onDismiss={() => setFormalResult(null)}
+                                onRetry={() => {
+                                    setFormalResult(null)
+                                    setDialogStep("confirm")
+                                }}
+                            />
+                        </div>
+                    ) : null}
+                </AcceptanceRegisterDialog>
+            ) : null}
 
             <AcceptanceDialogs
-                confirmOpen={confirmOpen}
+                confirmOpen={inlineRegister && confirmOpen}
                 onConfirmOpenChange={setConfirmOpen}
-                selected={
-                    pendingPostInputRef.current
-                        ? pendingPostLinesRef.current
-                        : selection.selected
-                }
-                overallPreview={
-                    pendingPostInputRef.current
-                        ? submittedOverallRef.current
-                        : selection.overallPreview
-                }
-                onConfirmAcceptance={async () => {
-                    if (!pendingPostInputRef.current) {
-                        submittedOverallRef.current = selection.overallPreview
-                        const values = form.state.values
-                        pendingPostInputRef.current = {
-                            workItemId: view.workItem?.id,
-                            expectedTaskVersion:
-                                view.workItem?.expectedTaskVersion,
-                            salesOrderId,
-                            acceptanceDraftId: `draft_${idempotencyKey}`,
-                            expectedDraftVersion: 0,
-                            expectedSalesOrderLockVersion:
-                                view.salesOrder.lockVersion,
-                            idempotencyKey,
-                            acceptedAt: values.acceptedAt
-                                ? new Date(values.acceptedAt).toISOString()
-                                : new Date().toISOString(),
-                            comment: values.comment,
-                            evidenceFile: values.evidenceFile,
-                            lines: buildDraftLines(pendingPostLinesRef.current),
-                        }
-                    }
-                    try {
-                        const result = await postMutation.mutateAsync(
-                            pendingPostInputRef.current,
-                        )
-                        if (result.status === "unknown") {
-                            pendingPostWasUnknownRef.current = true
-                        } else if (result.status === "failed") {
-                            if (pendingPostWasUnknownRef.current) {
-                                setFormalResult({
-                                    kind: "post",
-                                    status: "unknown",
-                                    title: "尚未确认上次提交结果",
-                                    description: `${result.message} 请保留原操作并重试。`,
-                                    facts: [],
-                                })
-                            } else {
-                                pendingPostInputRef.current = null
-                                setIdempotencyKey(
-                                    `acc-${salesOrderId}-${crypto.randomUUID()}`,
-                                )
-                            }
-                        }
-                    } catch {
-                        pendingPostWasUnknownRef.current = true
-                    }
-                }}
+                selected={confirmSelected}
+                overallPreview={confirmOverallPreview}
+                onConfirmAcceptance={handleConfirmAcceptance}
                 reverseTarget={reverseTarget}
                 onReverseOpenChange={(open) => {
                     if (!open) {

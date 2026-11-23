@@ -109,6 +109,7 @@ export function WorkspaceAcceptanceTask({
                     ownerName={item.ownerUserLabel}
                     workItem={workspaceAcceptanceTaskIdentity(item)}
                     persistRegisterInUrl={false}
+                    inlineRegister
                     onPosted={(payload) => {
                         void queryClient.invalidateQueries({
                             queryKey: workspaceHomeKeys.all,

@@ -1,6 +1,6 @@
 import Link from "next/link"
 
-import { WorkTaskItem, surfacePanelClassName } from "@/components/business"
+import { WorkTaskItem } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import {
     Card,
@@ -29,7 +29,10 @@ export function IntegrationQueuePanel({
     onSelect,
 }: IntegrationQueuePanelProps) {
     return (
-        <Card size="sm" className={cn("min-h-[28rem]", surfacePanelClassName)}>
+        <Card
+            size="sm"
+            className="min-h-[28rem] min-w-0 border-border/60 bg-background shadow-none"
+        >
             <CardHeader className="border-b border-grid">
                 <CardTitle>任务 / 差异队列</CardTitle>
                 <CardDescription>

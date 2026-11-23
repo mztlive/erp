@@ -4,6 +4,7 @@ import { BusinessFailureState, PaperDocument } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -35,18 +36,19 @@ export function ContractPaperDialog({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
-                className="flex max-h-[92vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
+                size="2xl"
+                scroll="body"
                 closeButtonId="card-contracts-paper-dialog-x"
                 showCloseButton
             >
-                <DialogHeader className="shrink-0 border-b border-border px-6 py-4 pr-14 text-left">
+                <DialogHeader className="text-left">
                     <DialogTitle>合同纸质预览</DialogTitle>
                     <DialogDescription>
                         合同关键条款打印摘要，具体条款以签署的合同原件为准。
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="min-h-0 flex-1 overflow-y-auto bg-surface-sunken px-3 py-4 sm:px-6">
+                <DialogBody className="bg-surface-sunken px-3 sm:px-6">
                     {contract?.loadWarnings?.map((message) => (
                         <div key={message} className="print:hidden">
                             <BusinessFailureState
@@ -58,9 +60,9 @@ export function ContractPaperDialog({
                     {contract ? (
                         <ContractPaperDocument contract={contract} />
                     ) : null}
-                </div>
+                </DialogBody>
 
-                <DialogFooter className="shrink-0 border-t border-border px-6 py-4 sm:items-center sm:justify-between">
+                <DialogFooter className="sm:items-center sm:justify-between">
                     <p className="text-xs text-muted-foreground">
                         {contract
                             ? `${contract.contractNo} · v${contract.currentRevision.revisionNo} · ${contract.statusLabel}`

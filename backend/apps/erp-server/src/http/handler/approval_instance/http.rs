@@ -38,6 +38,8 @@ pub struct InstanceListQuery {
     pub cursor: Option<String>,
     /// 页大小，默认 20，最大 100。
     pub limit: Option<u32>,
+    /// 分页大小别名，与 `limit` 等价（1 至 100）。
+    pub page_size: Option<u32>,
     /// 可选字面量检索，匹配单据编号、对象 ID、当前节点或当前审批人。
     pub q: Option<String>,
 }
@@ -81,16 +83,19 @@ impl PreparedInstanceListQuery {
         if page == Some(0) {
             return Err(ApprovalHttpError::unprocessable("页码必须大于0", headers));
         }
+        if let (Some(limit), Some(page_size)) = (query.limit, query.page_size)
+            && limit != page_size
+        {
+            return Err(ApprovalHttpError::unprocessable("limit 与 page_size 不能同时指定不同的值", headers));
+        }
+        let effective_limit = query.limit.or(query.page_size);
         let filters = WorkspaceFilters::parse(query.filters.as_deref())
             .map_err(|_| ApprovalHttpError::unprocessable("工作台筛选条件不正确", headers))?;
         if page.is_none() && query.filters.is_some() {
             return Err(ApprovalHttpError::unprocessable("结构化筛选必须同时提供page", headers));
         }
-        if page.is_some() && (query.view != RuntimeInstanceListView::Started || query.cursor.is_some()) {
-            return Err(ApprovalHttpError::unprocessable(
-                "页码查询仅支持started视图，且不能同时提供cursor",
-                headers,
-            ));
+        if page.is_some() && query.cursor.is_some() {
+            return Err(ApprovalHttpError::unprocessable("页码查询不能同时提供cursor", headers));
         }
         let view = query.view;
         let query = RuntimeInstanceListQuery::prepare(
@@ -98,7 +103,7 @@ impl PreparedInstanceListQuery {
             query.document_type,
             query.status,
             cursor,
-            query.limit,
+            effective_limit,
             query.q,
         )
         .map_err(|error| match crate::wiring::errors::Error::from(error) {
@@ -433,18 +438,31 @@ mod tests {
         let headers = axum::http::HeaderMap::new();
         for value in [
             json!({"view":"started","page":0}),
-            json!({"view":"mine","page":1}),
             json!({"view":"started","page":1,"cursor":"started|1|inst-1"}),
+            json!({"view":"blocked","page":1,"cursor":"blocked|1|inst-1"}),
+            json!({"view":"managed","page":1,"limit":20,"page_size":50}),
+            json!({"view":"mine","page":1,"page_size":0}),
+            json!({"view":"mine","page":1,"page_size":101}),
             json!({"view":"started","filters":"{}"}),
+            json!({"view":"blocked","filters":"{}"}),
             json!({"view":"started","page":1,"filters":"{\"date_from\":\"2026-02-30\"}"}),
         ] {
             let query = serde_json::from_value(value).unwrap();
             assert!(super::PreparedInstanceListQuery::prepare(query, &headers).is_err());
         }
-        let query = serde_json::from_value(json!({"view":"started","page":2,"limit":50,"filters":"{\"item_types\":[\"approval:sales_order\"]}"})).unwrap();
-        let prepared = super::PreparedInstanceListQuery::prepare(query, &headers).unwrap();
-        assert_eq!(prepared.page, Some(2));
-        assert_eq!(prepared.filters.item_types, ["approval:sales_order"]);
+        for view in ["started", "mine", "managed", "blocked"] {
+            let query = serde_json::from_value(json!({
+                "view": view,
+                "page": 2,
+                "page_size": 50,
+                "filters": "{\"item_types\":[\"approval:sales_order\"]}"
+            }))
+            .unwrap();
+            let prepared = super::PreparedInstanceListQuery::prepare(query, &headers).unwrap();
+            assert_eq!(prepared.page, Some(2));
+            assert_eq!(prepared.query.limit, 50);
+            assert_eq!(prepared.filters.item_types, ["approval:sales_order"]);
+        }
     }
 
     #[test]
@@ -481,6 +499,7 @@ mod tests {
             status: None,
             cursor: None,
             limit: None,
+            page_size: None,
             q: None,
         };
         assert_eq!(first_page.decode_cursor().expect("未提交 cursor"), None);

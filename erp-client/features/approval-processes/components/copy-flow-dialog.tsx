@@ -46,10 +46,7 @@ export function CopyFlowDialog({
 }) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent
-                closeButtonId={`${id}-close`}
-                className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl"
-            >
+            <DialogContent size="lg" closeButtonId={`${id}-close`}>
                 <DialogHeader>
                     <DialogTitle>从其它审批流复制</DialogTitle>
                     <DialogDescription>

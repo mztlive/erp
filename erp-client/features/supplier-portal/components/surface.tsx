@@ -1,7 +1,6 @@
 "use client"
 import type { ReactNode } from "react"
 import { PageScaffold } from "@/components/business/page"
-import { PageHeader } from "@/components/business/page-header"
 import {
     ListWorkspaceHeader,
     listWorkspaceStyles,
@@ -32,17 +31,13 @@ export function PortalSurface({
                     {actions}
                 </ListWorkspaceHeader>
             ) : (
-                <PageHeader
+                <ListWorkspaceHeader
+                    className="bg-transparent pb-3"
                     title={title}
                     description={description}
-                    actions={
-                        actions ? (
-                            <div className="flex flex-wrap gap-2">
-                                {actions}
-                            </div>
-                        ) : undefined
-                    }
-                />
+                >
+                    {actions}
+                </ListWorkspaceHeader>
             )}
             {children}
         </PageScaffold>

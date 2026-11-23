@@ -1,5 +1,5 @@
 use mongodb::Database;
-use mongodb::bson::doc;
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{Executor, Repository, mongo_ops};
 
@@ -10,6 +10,14 @@ pub(crate) const COLLECTION: &str = "notifications";
 
 fn notifications(db: &Database) -> Repository<'_, Notification> {
     Repository::new(db, COLLECTION)
+}
+
+fn unread_filter(recipient: &str) -> Document {
+    doc! { "recipient_id": recipient, "read_at": null }
+}
+
+fn mark_read_update(at: i64) -> Document {
+    doc! { "$set": { "read_at": at } }
 }
 
 pub(crate) async fn receive(
@@ -56,12 +64,8 @@ pub(crate) async fn inbox(
 }
 
 pub(crate) async fn unread(db: &Database, recipient: &str, executor: &mut dyn Executor) -> Result<u64> {
-    Ok(mongo_ops::count_documents(
-        &notifications(db).collection(),
-        doc! { "recipient_id": recipient, "read_at": null },
-        executor,
-    )
-    .await?)
+    Ok(mongo_ops::count_documents(&notifications(db).collection(), unread_filter(recipient), executor)
+        .await?)
 }
 
 pub(crate) async fn mark_read(
@@ -75,7 +79,7 @@ pub(crate) async fn mark_read(
     let result = mongo_ops::update_one(
         &repo.collection(),
         doc! { "id": id, "recipient_id": recipient, "read_at": null },
-        doc! { "$set": { "read_at": at } },
+        mark_read_update(at),
         false,
         executor,
     )
@@ -87,4 +91,31 @@ pub(crate) async fn mark_read(
         return Err(Error::NotFound);
     }
     Ok(())
+}
+
+pub(crate) async fn mark_all_read(
+    db: &Database,
+    recipient: &str,
+    at: i64,
+    executor: &mut dyn Executor,
+) -> Result<u64> {
+    let result = mongo_ops::update_many(
+        &notifications(db).collection(),
+        unread_filter(recipient),
+        mark_read_update(at),
+        executor,
+    )
+    .await?;
+    Ok(result.modified_count)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mark_all_read_filter_only_targets_recipient_unread_messages() {
+        assert_eq!(unread_filter("u1"), doc! { "recipient_id": "u1", "read_at": null });
+        assert_eq!(mark_read_update(1_700_000_000), doc! { "$set": { "read_at": 1_700_000_000_i64 } });
+    }
 }

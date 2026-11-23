@@ -144,7 +144,7 @@ export const BookCreateDialog = ({
             }}
         >
             <DialogContent
-                className="max-h-[90svh] overflow-y-auto sm:max-w-2xl"
+                size="lg"
                 closeButtonId="sales-selection-create-close"
                 showCloseButton={!operations.create.isPending}
             >

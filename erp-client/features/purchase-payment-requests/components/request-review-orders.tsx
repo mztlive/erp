@@ -1,7 +1,7 @@
 "use client"
 
 import { MoneyValue, QuantityValue } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import {
     Table,
     TableBody,
@@ -12,6 +12,21 @@ import {
 } from "@/components/ui/table"
 import { fulfillmentLabel, paymentReviewBasis } from "../lib/review"
 import type { PaymentRequest } from "../types"
+
+function fulfillmentStatusTone(status?: string | null): StatusTone {
+    switch (status) {
+        case "PARTIAL":
+            return "info"
+        case "COMPLETED":
+        case "COMPLETE":
+            return "success"
+        case "NONE":
+        case "PENDING":
+        case "NOT_STARTED":
+        default:
+            return "neutral"
+    }
+}
 
 /** 按提交时采购版本直接展示商品明细，多单保留各自申请金额与付款条件。 */
 export function RequestReviewOrders({ request }: { request: PaymentRequest }) {
@@ -48,11 +63,16 @@ export function RequestReviewOrders({ request }: { request: PaymentRequest }) {
                                 </div>
                                 <div className="flex flex-wrap items-center gap-3">
                                     {line.current_fulfillment && (
-                                        <Badge variant="secondary">
-                                            {fulfillmentLabel[
-                                                line.current_fulfillment
-                                            ] ?? "履约待核对"}
-                                        </Badge>
+                                        <StatusBadge
+                                            label={
+                                                fulfillmentLabel[
+                                                    line.current_fulfillment
+                                                ] ?? "履约待核对"
+                                            }
+                                            tone={fulfillmentStatusTone(
+                                                line.current_fulfillment,
+                                            )}
+                                        />
                                     )}
                                     <span>
                                         本次申请{" "}

@@ -1,67 +1,73 @@
 "use client"
 
-import { WorkspaceProcessingPane } from "./workspace-processing-layout"
-
-import { BusinessFailureState } from "@/components/business"
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { useMutation } from "@tanstack/react-query"
-import { downloadFileAsset } from "@/features/file-assets/api"
 import { usePathname, useSearchParams } from "next/navigation"
 import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
-import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
-import { ApprovalMaterialFiles } from "@/features/approval-workflow/components/approval-material-files"
-import { ApprovalSubmittedSummary } from "@/features/approval-workflow/components/approval-submitted-summary"
+
 import {
-    approvalSalesTaxPoint,
-    displayUnixSeconds,
-} from "@/features/approval-workflow/display"
-import { WorkspacePurchasePayment } from "./workspace-purchase-payment"
-import { WorkspaceApprovalReworkActions } from "./workspace-approval-rework"
-import { WorkspaceRejectionNotice } from "./workspace-rejection-notice"
-import { workspaceFulfillmentDescriptor } from "../lib/workspace-fulfillment"
-import { WorkspaceDeliveryBrief } from "./workspace-delivery-brief"
-import { WorkspaceInvoiceApproval } from "./workspace-invoice-approval"
-import { WorkspaceReceiptApproval } from "./workspace-receipt-approval"
-import { WorkspaceMoney } from "./workspace-money"
-import { WorkspacePurchaseApproval } from "./workspace-purchase-approval"
-import { WorkspaceSalesApproval } from "./workspace-sales-approval"
-import { WorkspaceApprovalProgress } from "./workspace-approval-progress"
-import { WorkspaceApprovalRouteSummary } from "./workspace-approval-route-summary"
-import { useWorkspaceTaskPage } from "@/components/business/workspace-task-pane"
-import { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-approval-materials"
-import { useRecoveryOptionsQuery } from "@/features/approval-workflow/queries"
-import type { ApprovalCommandView } from "@/features/approval-workflow/types"
-import {
-    DetailWorkspaceChrome,
+    BusinessFailureState,
     DetailWorkspaceMeta,
     DetailWorkspaceSection,
     IconActionButton,
     taxAmountToneClass,
 } from "@/components/business"
+import type { MaterialFileItem } from "@/components/business/unified-material-viewer"
+import { useWorkspaceTaskPage } from "@/components/business/workspace-task-pane"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { LoadingButton } from "@/components/ui/loading-button"
 import {
     DescriptionDetails,
     DescriptionItem,
     DescriptionList,
     DescriptionTerm,
 } from "@/components/ui/description-list"
+import { LoadingButton } from "@/components/ui/loading-button"
+import { fetchApprovalMaterialPreview } from "@/features/approval-workflow/api/materials"
+import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
+import { ApprovalMaterialFiles } from "@/features/approval-workflow/components/approval-material-files"
+import { ApprovalRouteStepper } from "@/features/approval-workflow/components/approval-route-stepper"
+import { ApprovalSubmittedSummary } from "@/features/approval-workflow/components/approval-submitted-summary"
+import {
+    FinancialApprovalRenderer,
+    isFinancialApprovalDocumentType,
+    isReversalDocumentType,
+} from "@/features/approval-workflow/components/financial-approval-renderer"
+import {
+    StructuredDiffApprovalRenderer,
+    isStructuredDiffDocumentType,
+} from "@/features/approval-workflow/components/structured-diff-approval"
+import {
+    approvalSalesTaxPoint,
+    displayUnixDate,
+    displayUnixSeconds,
+} from "@/features/approval-workflow/display"
+import {
+    useApprovalMaterials,
+    useDownloadApprovalMaterial,
+} from "@/features/approval-workflow/hooks/use-approval-materials"
+import {
+    useApprovalHistoryInfiniteQuery,
+    useRecoveryOptionsQuery,
+} from "@/features/approval-workflow/queries"
+import type { ApprovalCommandView } from "@/features/approval-workflow/types"
+import { timelineDocumentTypes } from "@/features/document-timeline/types"
+import { downloadFileAsset } from "@/features/file-assets/api"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { displayName } from "@/lib/display-name"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import { hasPermission } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
-import { WorkspaceDocumentBadge } from "./workspace-document-badge"
-import { WorkspaceTaskHeaderActions } from "./workspace-task-context"
-import { stripDocumentNumberPrefix } from "../lib/stable-number"
+import { subscribeWorkspaceHotkeyAction } from "@/lib/workspace-hotkeys"
+import { workspaceApprovalListFacts } from "../api/task-materials"
 import {
     workspaceDocumentName,
     workspaceOpenActionLabel,
     workspaceReadActionLabel,
 } from "../api/work-item-meta"
-import { workspaceApprovalListFacts } from "../api/task-materials"
-import { useWorkspaceDocumentFacts } from "../hooks/use-workspace-document-facts"
+import { useInvoiceApprovalReview } from "../hooks/use-invoice-review"
 import { useWorkspaceDetailDocumentTitle } from "../hooks/use-workspace-detail-title"
+import { useWorkspaceDocumentFacts } from "../hooks/use-workspace-document-facts"
 import { useWorkspaceSourceSalesOrder } from "../hooks/use-workspace-source-sales-order"
 import { buildDocumentHref } from "../lib/destination"
 import { type DetailSection, splitDetailSections } from "../lib/detail-facts"
@@ -75,16 +81,39 @@ import {
     linkedDocumentPaperKind,
     withSourceSalesOrder,
 } from "../lib/source-sales-order"
+import { stripDocumentNumberPrefix } from "../lib/stable-number"
 import { isBlockedWorkItem } from "../lib/work-item"
+import { workspaceFulfillmentDescriptor } from "../lib/workspace-fulfillment"
 import type { WorkspaceWorkItem } from "../types"
 import {
-    WorkspaceFulfillmentProcessAction,
-    WorkspaceFulfillmentReassignAction,
-} from "./workspace-fulfillment-task"
+    WorkspaceApprovalContextRail,
+    type ApprovalContextRailTab,
+} from "./workspace-approval-context-rail"
+import { WorkspaceApprovalReworkActions } from "./workspace-approval-rework"
+import { WorkspaceDeliveryBrief } from "./workspace-delivery-brief"
+import { WorkspaceDocumentBadge } from "./workspace-document-badge"
 import {
     WorkspaceDocumentPaperDialog,
     type WorkspacePaperTarget,
 } from "./workspace-document-paper-dialog"
+import { WorkspaceFulfillmentProcessAction } from "./workspace-fulfillment-task"
+import { WorkspaceInvoiceApproval } from "./workspace-invoice-approval"
+import { WorkspaceMoney } from "./workspace-money"
+import { WorkspaceProcessingPane } from "./workspace-processing-layout"
+import {
+    WorkspacePurchaseApproval,
+    assessPurchaseApprovalRisk,
+} from "./workspace-purchase-approval"
+import { WorkspacePurchasePayment } from "./workspace-purchase-payment"
+import { WorkspaceReceiptApproval } from "./workspace-receipt-approval"
+import { WorkspaceRejectionNotice } from "./workspace-rejection-notice"
+import {
+    WorkspaceSalesApproval,
+    assessSalesApprovalRisk,
+} from "./workspace-sales-approval"
+import { WorkspaceTaskHeaderActions } from "./workspace-task-context"
+import { WorkspaceCompactTaskHeader } from "./workspace-task-identity-header"
+import { WorkspaceTaskResponsibilityActions } from "./workspace-task-responsibility-actions"
 
 const exactInvoiceFields = new Set([
     "开票抬头",
@@ -97,6 +126,14 @@ const exactInvoiceFields = new Set([
     "销方纳税人识别号",
 ])
 
+const HIGH_RISK_REFUND_THRESHOLD = "100000"
+
+function extractUnsignedDecimal(label?: string | null): string | null {
+    if (!label) return null
+    const cleaned = label.replace(/[¥￥,\s元]/g, "").replace(/^-/, "")
+    return /^\d+(?:\.\d+)?$/.test(cleaned) ? cleaned : null
+}
+
 export function WorkspaceDocumentTaskDetail({
     item,
     reworkTask,
@@ -104,6 +141,7 @@ export function WorkspaceDocumentTaskDetail({
     onDecisionApplied,
     onTaskCompleted,
     grantedPermissions = [],
+    inspectorMode = false,
 }: {
     item: WorkspaceWorkItem
     reworkTask?: WorkspaceWorkItem
@@ -114,6 +152,8 @@ export function WorkspaceDocumentTaskDetail({
         view: ApprovalCommandView,
         completedWorkItemId: string,
     ) => void
+    /** 列表分栏检查器模式：隐藏独立 2 栏右轨，采用精简单栏排版。 */
+    inspectorMode?: boolean
 }) {
     const fullPage = useWorkspaceTaskPage()
     const rework = item.workItemType === "APPROVAL_REWORK"
@@ -159,6 +199,16 @@ export function WorkspaceDocumentTaskDetail({
         item.businessObjectType === "sales_invoice_request" &&
         Boolean(instanceId) &&
         canReadSubmission
+    const structuredDiffDocType =
+        approvalDocument &&
+        isStructuredDiffDocumentType(item.businessObjectType)
+            ? item.businessObjectType
+            : null
+    const financialDocType =
+        approvalDocument &&
+        isFinancialApprovalDocumentType(item.businessObjectType)
+            ? item.businessObjectType
+            : null
     const specializedApproval =
         salesApproval ||
         purchaseApproval ||
@@ -179,15 +229,23 @@ export function WorkspaceDocumentTaskDetail({
     const searchParams = useSearchParams()
     const returnTo = `${pathname}${searchParams.toString() ? `?${searchParams}` : ""}`
     const [paper, setPaper] = useState<WorkspacePaperTarget | null>(null)
+    const [railTab, setRailTab] = useState<ApprovalContextRailTab>("trail")
+    const [railCollapsed, setRailCollapsed] = useState(false)
+    const [activeMaterialFileId, setActiveMaterialFileId] = useState<
+        string | undefined
+    >(undefined)
+
     useEffect(() => {
         setPaper(null)
+        setRailTab("trail")
+        setRailCollapsed(false)
+        setActiveMaterialFileId(undefined)
     }, [item.workItemId])
+
     const documentFacts = useWorkspaceDocumentFacts(item)
     const sourceSales = useWorkspaceSourceSalesOrder(item)
     const shouldReadSubmission =
-        canReadSubmission &&
-        Boolean(instanceId) &&
-        (salesApproval || rework || (approvalDocument && !specializedApproval))
+        canReadSubmission && Boolean(instanceId) && approvalDocument
     const materials = useApprovalMaterials(
         instanceId ?? "",
         shouldReadSubmission,
@@ -195,11 +253,136 @@ export function WorkspaceDocumentTaskDetail({
     )
     const submission = canReadSubmission ? materials.data : undefined
     const salesSubmission = submission?.sales_order
+    const useStructuredDiffRenderer = Boolean(
+        structuredDiffDocType && submission,
+    )
+    const useFinancialRenderer = Boolean(financialDocType && submission)
     const useInlineGenericSummary =
         approvalDocument &&
         !specializedApproval &&
+        !useStructuredDiffRenderer &&
+        !useFinancialRenderer &&
         Boolean(submission) &&
         !salesSubmission
+
+    const invoiceReviewQuery = useInvoiceApprovalReview(
+        invoiceApproval && instanceId ? instanceId : "",
+    )
+
+    const downloadSubmittedMaterial = useDownloadApprovalMaterial(
+        instanceId ?? "",
+    )
+    const currentBasisRevisionId =
+        submission?.current_sales_basis?.source.revision_id
+    const downloadCurrentBasisMaterial = useDownloadApprovalMaterial(
+        instanceId ?? "",
+        currentBasisRevisionId,
+    )
+
+    const dockedMaterialFiles = useMemo<readonly MaterialFileItem[]>(() => {
+        if (!instanceId || !submission) return []
+        const seen = new Set<string>()
+        const items: MaterialFileItem[] = []
+        for (const file of submission.attachments) {
+            if (seen.has(file.file_asset_id)) continue
+            seen.add(file.file_asset_id)
+            items.push({
+                id: file.file_asset_id,
+                name: file.file_name,
+                mimeType: file.content_type,
+                sizeBytes: file.byte_size,
+                loadPreview: () =>
+                    fetchApprovalMaterialPreview(
+                        instanceId,
+                        file.file_asset_id,
+                    ),
+                onDownload: () => downloadSubmittedMaterial.mutateAsync(file),
+            })
+        }
+        const currentBasis = submission.current_sales_basis
+        if (currentBasis) {
+            const revId = currentBasis.source.revision_id
+            for (const file of currentBasis.attachments) {
+                if (seen.has(file.file_asset_id)) continue
+                seen.add(file.file_asset_id)
+                items.push({
+                    id: file.file_asset_id,
+                    name: file.file_name,
+                    mimeType: file.content_type,
+                    sizeBytes: file.byte_size,
+                    loadPreview: () =>
+                        fetchApprovalMaterialPreview(
+                            instanceId,
+                            file.file_asset_id,
+                            revId,
+                        ),
+                    onDownload: () =>
+                        downloadCurrentBasisMaterial.mutateAsync(file),
+                })
+            }
+        }
+        return items
+    }, [
+        downloadCurrentBasisMaterial,
+        downloadSubmittedMaterial,
+        instanceId,
+        submission,
+    ])
+
+    const showDecisionRail = Boolean(
+        fullPage && !inspectorMode && approvalDocument && instanceId,
+    )
+    const railIdPrefix = `workspace-approval-rail-${toAutomationIdSegment(item.workItemId)}`
+
+    useEffect(() => {
+        if (!showDecisionRail) return
+        return subscribeWorkspaceHotkeyAction((action) => {
+            if (action === "toggle-rail") {
+                setRailCollapsed((prev) => !prev)
+                return
+            }
+            if (action === "materials") {
+                if (railCollapsed || railTab !== "materials") {
+                    setRailCollapsed(false)
+                    setRailTab("materials")
+                    window.requestAnimationFrame(() => {
+                        document
+                            .getElementById(`${railIdPrefix}-tab-materials`)
+                            ?.focus()
+                    })
+                } else {
+                    setRailCollapsed(true)
+                }
+                return
+            }
+            if (action === "history") {
+                if (railCollapsed || railTab !== "trail") {
+                    setRailCollapsed(false)
+                    setRailTab("trail")
+                    window.requestAnimationFrame(() => {
+                        document
+                            .getElementById(`${railIdPrefix}-tab-trail`)
+                            ?.focus()
+                    })
+                } else {
+                    setRailCollapsed(true)
+                }
+            }
+        })
+    }, [railCollapsed, railIdPrefix, railTab, showDecisionRail])
+
+    const handleSelectMaterialFile = (fileId: string) => {
+        setActiveMaterialFileId(fileId)
+        setRailTab("materials")
+        setRailCollapsed(false)
+    }
+
+    const compactStepperHistoryQuery = useApprovalHistoryInfiniteQuery(
+        { instanceId: instanceId ?? "", order: "desc" },
+        !showDecisionRail && approvalDocument && Boolean(instanceId),
+    )
+    const compactStepperRoute = compactStepperHistoryQuery.data?.pages[0]?.route
+
     const reworkFacts =
         rework && submission
             ? workspaceApprovalListFacts({
@@ -322,13 +505,10 @@ export function WorkspaceDocumentTaskDetail({
                   ? [
                         {
                             label: "卡券履约期限",
-                            value:
-                                salesSubmission.voucher_expiry_at == null
-                                    ? "—"
-                                    : new Date(
-                                          salesSubmission.voucher_expiry_at *
-                                              1000,
-                                      ).toLocaleDateString("zh-CN"),
+                            value: displayUnixDate(
+                                salesSubmission.voucher_expiry_at,
+                            ),
+                            numeric: true,
                         },
                     ]
                   : []),
@@ -338,6 +518,7 @@ export function WorkspaceDocumentTaskDetail({
                   value:
                       displayUnixSeconds(salesSubmission.submitted_at)?.label ??
                       "—",
+                  numeric: true,
               },
           ]
         : [
@@ -369,22 +550,80 @@ export function WorkspaceDocumentTaskDetail({
               processVersion: item.approval.processVersion,
           }
         : undefined
-    const showCurrentAssignee = rework
-        ? item.status === "OPEN"
-        : approvalDocument &&
-          (Boolean(reworkTask) ||
-              ["RUNNING", "BLOCKED"].includes(instance?.status ?? ""))
     const deliveryBrief =
         item.workItemType === "FULFILLMENT_OPERATION" &&
         item.businessObjectType === "delivery" &&
         item.deliveryLines !== undefined
-    const blockers = [
-        ...new Set(
-            item.actionBlockers
-                .map(({ message }) => message.trim())
-                .filter(Boolean),
-        ),
-    ]
+    const blockers = useMemo(
+        () => [
+            ...new Set(
+                item.actionBlockers
+                    .map(({ message }) => message.trim())
+                    .filter(Boolean),
+            ),
+        ],
+        [item.actionBlockers],
+    )
+
+    const highRiskReasons = useMemo(() => {
+        const reasons: string[] = []
+        if (isReversalDocumentType(item.businessObjectType)) {
+            reasons.push(
+                "红字冲正单据：审批通过后将冲回原收付款记录并同步调整往来余额。",
+            )
+        }
+        if (salesApproval && salesSubmission) {
+            reasons.push(...assessSalesApprovalRisk(salesSubmission).reasons)
+        }
+        if (purchaseApproval && submission?.purchase_lines) {
+            reasons.push(
+                ...assessPurchaseApprovalRisk(submission.purchase_lines)
+                    .reasons,
+            )
+        }
+        if (invoiceApproval && invoiceReviewQuery.data) {
+            const shortage = invoiceReviewQuery.data.amounts.shortage
+            if (compareDecimal(shortage, "0", 2) > 0) {
+                reasons.push(`当前开票申请超出可开票额度 ¥${shortage}。`)
+            }
+            for (const warning of invoiceReviewQuery.data.warnings) {
+                if (warning.trim()) reasons.push(warning.trim())
+            }
+        }
+        if (
+            item.businessObjectType === "customer_refund" ||
+            item.businessObjectType === "supplier_refund"
+        ) {
+            const amountValue = extractUnsignedDecimal(
+                item.amountSummary?.value ??
+                    submission?.display.source.amount_label ??
+                    primaryAmount?.value,
+            )
+            if (
+                amountValue &&
+                compareDecimal(amountValue, HIGH_RISK_REFUND_THRESHOLD, 2) >= 0
+            ) {
+                reasons.push("大额退款复核：单笔退款金额已达到高危复核阈值。")
+            }
+        }
+        if (blockers.length > 0) {
+            reasons.push(...blockers)
+        }
+        return [...new Set(reasons)]
+    }, [
+        blockers,
+        invoiceApproval,
+        invoiceReviewQuery.data,
+        item.amountSummary?.value,
+        item.businessObjectType,
+        primaryAmount?.value,
+        purchaseApproval,
+        salesApproval,
+        salesSubmission,
+        submission?.display.source.amount_label,
+        submission?.purchase_lines,
+    ])
+
     const actions = reworkTask ? (
         <WorkspaceApprovalReworkActions
             item={reworkTask}
@@ -394,6 +633,8 @@ export function WorkspaceDocumentTaskDetail({
         <ApprovalActionBar
             presentation="workspace"
             id={`workspace-task-detail-approval-${toAutomationIdSegment(item.workItemId)}`}
+            documentType={item.businessObjectType}
+            documentId={item.businessObjectId}
             allowedActions={item.allowedActions}
             recoveryOptions={recoveryQuery.data?.actions ?? []}
             workItemId={item.workItemId}
@@ -401,6 +642,7 @@ export function WorkspaceDocumentTaskDetail({
             instance={instance}
             canReadSensitive={canReadSensitive}
             hiddenActions={["OPEN_DOCUMENT", "VIEW"]}
+            highRiskReasons={highRiskReasons}
             decisionContext={{
                 documentLabel: item.objectTitle,
                 amountLabel: primaryAmount?.value,
@@ -452,14 +694,72 @@ export function WorkspaceDocumentTaskDetail({
         />
     ) : null
 
+    const timelineTarget = timelineDocumentTypes.has(item.businessObjectType)
+        ? {
+              kind: (item.workItemType === "APPROVAL_INSTANCE"
+                  ? "approval"
+                  : "task") as "approval" | "task",
+              id: item.workItemId,
+          }
+        : undefined
+
+    const hideCustomSummaryHeader =
+        receiptApproval ||
+        deliveryBrief ||
+        useInlineGenericSummary ||
+        useStructuredDiffRenderer ||
+        useFinancialRenderer
+
     return (
         <WorkspaceProcessingPane
+            archetype={
+                approvalDocument
+                    ? showDecisionRail
+                        ? "decision"
+                        : "informational"
+                    : "action"
+            }
+            idPrefix={`workspace-document-${toAutomationIdSegment(item.workItemId)}`}
             className={cn(
                 "@container/document",
                 purchaseApproval && "purchase-approval-surface",
             )}
+            contextRail={
+                showDecisionRail && instanceId
+                    ? {
+                          defaultTab: "trail",
+                          collapsible: true,
+                          resizable: true,
+                          defaultWidthPercent: 34,
+                          minWidthPercent: 24,
+                          maxWidthPercent: 50,
+                          collapsed: railCollapsed,
+                          onCollapsedChange: setRailCollapsed,
+                          label: "审批进度、轨迹与附件对照",
+                          content: (
+                              <WorkspaceApprovalContextRail
+                                  instanceId={instanceId}
+                                  instance={instance}
+                                  timelineTarget={timelineTarget}
+                                  currentDocument={{
+                                      type: item.businessObjectType,
+                                      id: item.businessObjectId,
+                                  }}
+                                  materialFiles={dockedMaterialFiles}
+                                  materialsLoading={materials.isPending}
+                                  isRework={rework}
+                                  activeTab={railTab}
+                                  onActiveTabChange={setRailTab}
+                                  activeFileId={activeMaterialFileId}
+                                  onActiveFileChange={setActiveMaterialFileId}
+                                  idPrefix={`workspace-approval-rail-${toAutomationIdSegment(item.workItemId)}`}
+                              />
+                          ),
+                      }
+                    : undefined
+            }
             header={
-                <DetailWorkspaceChrome
+                <WorkspaceCompactTaskHeader
                     title={canReadSensitive ? headerTitle : "业务详情"}
                     primaryStatus={{
                         label:
@@ -468,7 +768,8 @@ export function WorkspaceDocumentTaskDetail({
                                 : item.statusLabel,
                         tone: item.statusTone,
                     }}
-                    titleExtra={<WorkspaceDocumentBadge item={item} />}
+                    badges={<WorkspaceDocumentBadge item={item} />}
+                    documentNumber={documentNumber}
                     meta={
                         <DetailWorkspaceMeta
                             items={[
@@ -496,35 +797,18 @@ export function WorkspaceDocumentTaskDetail({
                                 submission
                                     ? `提交版本 ${submission.subject_version}`
                                     : null,
-                                fullPage && showCurrentAssignee ? (
-                                    <span key="assignee">
-                                        {reworkTask
-                                            ? "当前处理人："
-                                            : "当前审批人："}
-                                        <span className="text-foreground">
-                                            {reworkTask?.ownerUserLabel ||
-                                                instance?.currentAssigneeName ||
-                                                item.ownerUserLabel ||
-                                                "—"}
-                                        </span>
-                                    </span>
-                                ) : null,
                                 fullPage && item.dueAt
-                                    ? `截止时间：${item.dueAtLabel}`
+                                    ? `截止：${item.dueAtLabel}`
                                     : null,
                             ]}
                         />
                     }
-                    secondaryActions={
+                    actions={
                         <WorkspaceTaskHeaderActions item={headerItem}>
-                            {item.workItemType === "FULFILLMENT_OPERATION" ? (
-                                <WorkspaceFulfillmentReassignAction
-                                    item={item}
-                                    onReassigned={() =>
-                                        onTaskCompleted?.(item.workItemId)
-                                    }
-                                />
-                            ) : null}
+                            <WorkspaceTaskResponsibilityActions
+                                item={item}
+                                onCompleted={onTaskCompleted}
+                            />
                             {canReadPaper &&
                             !(
                                 approvalDocument &&
@@ -582,15 +866,23 @@ export function WorkspaceDocumentTaskDetail({
                 />
             }
             headerSupplement={
-                approvalDocument && fullPage && instance ? (
-                    <WorkspaceApprovalRouteSummary instance={instance} />
+                !showDecisionRail &&
+                approvalDocument &&
+                compactStepperRoute?.nodes.length ? (
+                    <ApprovalRouteStepper
+                        route={compactStepperRoute}
+                        instanceStatus={instance?.status}
+                        latestRejection={instance?.latestRejection}
+                        latestRejectionByName={instance?.latestRejectionByName}
+                        idPrefix={`workspace-compact-stepper-${toAutomationIdSegment(item.workItemId)}`}
+                    />
                 ) : null
             }
             footer={actions}
             aria-label="当前任务"
         >
             {(rework
-                ? canReadSubmission && Boolean(instanceId)
+                ? !showDecisionRail && canReadSubmission && Boolean(instanceId)
                 : item.approval?.status === "REJECTED") && (
                 <WorkspaceRejectionNotice
                     item={item}
@@ -653,6 +945,8 @@ export function WorkspaceDocumentTaskDetail({
                 ) : null}
                 {!salesSubmission &&
                 !useInlineGenericSummary &&
+                !useStructuredDiffRenderer &&
+                !useFinancialRenderer &&
                 item.documentSummaryResolved &&
                 !item.summarySections?.length &&
                 !item.briefLines?.length ? (
@@ -687,16 +981,20 @@ export function WorkspaceDocumentTaskDetail({
                         key={instanceId}
                         item={item}
                         instanceId={instanceId}
+                        onSelectFile={
+                            showDecisionRail
+                                ? handleSelectMaterialFile
+                                : undefined
+                        }
+                        activeFileId={activeMaterialFileId}
+                        hideEmbeddedMaterials={showDecisionRail}
                     />
                 ) : null}
                 {deliveryBrief ? <WorkspaceDeliveryBrief item={item} /> : null}
-                {!receiptApproval &&
-                !deliveryBrief &&
-                !useInlineGenericSummary &&
-                primaryAmount ? (
+                {!hideCustomSummaryHeader && primaryAmount ? (
                     <DetailBlock compact>
-                        <div className="flex flex-wrap items-start gap-x-8 gap-y-3 py-1">
-                            <div className="flex flex-col gap-1">
+                        <div className="flex flex-wrap items-start gap-x-8 gap-y-2.5 py-0.5">
+                            <div className="flex flex-col gap-0.5">
                                 <span className="text-xs text-muted-foreground">
                                     {primaryAmount.label}
                                 </span>
@@ -709,7 +1007,7 @@ export function WorkspaceDocumentTaskDetail({
                             {otherAmounts.map((amount) => (
                                 <div
                                     key={amount.label}
-                                    className="flex flex-col gap-1 border-l border-border/60 pl-6"
+                                    className="flex flex-col gap-0.5 border-l border-border/60 pl-6"
                                 >
                                     <span className="text-xs text-muted-foreground">
                                         {amount.label}
@@ -725,7 +1023,7 @@ export function WorkspaceDocumentTaskDetail({
                                 </div>
                             ))}
                             {purchaseApproval && lineCount > 0 && (
-                                <div className="flex flex-col gap-1 border-l border-border/60 pl-6">
+                                <div className="flex flex-col gap-0.5 border-l border-border/60 pl-6">
                                     <span className="text-xs text-muted-foreground">
                                         采购明细
                                     </span>
@@ -735,7 +1033,7 @@ export function WorkspaceDocumentTaskDetail({
                                 </div>
                             )}
                             {purchaseApproval && purchasePaymentTerm && (
-                                <div className="flex flex-col gap-1 border-l border-border/60 pl-6">
+                                <div className="flex flex-col gap-0.5 border-l border-border/60 pl-6">
                                     <span className="text-xs text-muted-foreground">
                                         付款条件
                                     </span>
@@ -747,10 +1045,7 @@ export function WorkspaceDocumentTaskDetail({
                         </div>
                         {purchaseInformation}
                     </DetailBlock>
-                ) : !receiptApproval &&
-                  !deliveryBrief &&
-                  !useInlineGenericSummary &&
-                  documentFacts.isPending ? (
+                ) : !hideCustomSummaryHeader && documentFacts.isPending ? (
                     <DetailBlock title="金额">
                         <p className="text-xs text-muted-foreground">
                             正在加载单据详情…
@@ -767,7 +1062,76 @@ export function WorkspaceDocumentTaskDetail({
                         key={instanceId}
                         instanceId={instanceId}
                         onPreview={setPaper}
+                        onSelectFile={
+                            showDecisionRail
+                                ? handleSelectMaterialFile
+                                : undefined
+                        }
+                        activeFileId={activeMaterialFileId}
+                        hideEmbeddedMaterials={showDecisionRail}
                     />
+                ) : useStructuredDiffRenderer &&
+                  structuredDiffDocType &&
+                  submission &&
+                  instanceId ? (
+                    <>
+                        <StructuredDiffApprovalRenderer
+                            documentType={structuredDiffDocType}
+                            source={submission.display.source}
+                            submitterName={submitter}
+                            impactSummary={submission.display.impact_summary}
+                            documentNo={documentNumber}
+                            counterpartyLabel={counterpartyName}
+                        />
+                        {!showDecisionRail ? (
+                            <DetailBlock
+                                title="合同、凭证及附件"
+                                description={
+                                    submission.attachments.length
+                                        ? `共 ${submission.attachments.length} 个文件`
+                                        : undefined
+                                }
+                            >
+                                <ApprovalMaterialFiles
+                                    instanceId={instanceId}
+                                    attachments={submission.attachments}
+                                    idPrefix={`workspace-diff-material-${toAutomationIdSegment(item.workItemId)}`}
+                                    emptyMessage="本次提交未附带合同、凭证或其他附件。"
+                                />
+                            </DetailBlock>
+                        ) : null}
+                    </>
+                ) : useFinancialRenderer &&
+                  financialDocType &&
+                  submission &&
+                  instanceId ? (
+                    <>
+                        <FinancialApprovalRenderer
+                            documentType={financialDocType}
+                            source={submission.display.source}
+                            submitterName={submitter}
+                            impactSummary={submission.display.impact_summary}
+                            documentNo={documentNumber}
+                            counterpartyLabel={counterpartyName}
+                        />
+                        {!showDecisionRail ? (
+                            <DetailBlock
+                                title="合同、凭证及附件"
+                                description={
+                                    submission.attachments.length
+                                        ? `共 ${submission.attachments.length} 个文件`
+                                        : undefined
+                                }
+                            >
+                                <ApprovalMaterialFiles
+                                    instanceId={instanceId}
+                                    attachments={submission.attachments}
+                                    idPrefix={`workspace-financial-material-${toAutomationIdSegment(item.workItemId)}`}
+                                    emptyMessage="本次提交未附带合同、凭证或其他附件。"
+                                />
+                            </DetailBlock>
+                        ) : null}
+                    </>
                 ) : useInlineGenericSummary && submission && instanceId ? (
                     <>
                         <DetailBlock>
@@ -781,21 +1145,23 @@ export function WorkspaceDocumentTaskDetail({
                                 />
                             </div>
                         </DetailBlock>
-                        <DetailBlock
-                            title="合同、凭证及附件"
-                            description={
-                                submission.attachments.length
-                                    ? `共 ${submission.attachments.length} 个文件`
-                                    : undefined
-                            }
-                        >
-                            <ApprovalMaterialFiles
-                                instanceId={instanceId}
-                                attachments={submission.attachments}
-                                idPrefix={`workspace-inline-material-${toAutomationIdSegment(item.workItemId)}`}
-                                emptyMessage="本次提交未附带合同、凭证或其他附件。"
-                            />
-                        </DetailBlock>
+                        {!showDecisionRail ? (
+                            <DetailBlock
+                                title="合同、凭证及附件"
+                                description={
+                                    submission.attachments.length
+                                        ? `共 ${submission.attachments.length} 个文件`
+                                        : undefined
+                                }
+                            >
+                                <ApprovalMaterialFiles
+                                    instanceId={instanceId}
+                                    attachments={submission.attachments}
+                                    idPrefix={`workspace-inline-material-${toAutomationIdSegment(item.workItemId)}`}
+                                    emptyMessage="本次提交未附带合同、凭证或其他附件。"
+                                />
+                            </DetailBlock>
+                        ) : null}
                     </>
                 ) : (
                     <>
@@ -834,6 +1200,13 @@ export function WorkspaceDocumentTaskDetail({
                         key={instanceId}
                         instanceId={instanceId}
                         onPreview={setPaper}
+                        onSelectFile={
+                            showDecisionRail
+                                ? handleSelectMaterialFile
+                                : undefined
+                        }
+                        activeFileId={activeMaterialFileId}
+                        hideEmbeddedMaterials={showDecisionRail}
                     />
                 ) : null}
 
@@ -843,11 +1216,20 @@ export function WorkspaceDocumentTaskDetail({
                         key={instanceId}
                         instanceId={instanceId}
                         onPreview={setPaper}
+                        onSelectFile={
+                            showDecisionRail
+                                ? handleSelectMaterialFile
+                                : undefined
+                        }
+                        activeFileId={activeMaterialFileId}
+                        hideEmbeddedMaterials={showDecisionRail}
                     />
                 ) : null}
 
                 {!invoiceApproval &&
                 !useInlineGenericSummary &&
+                !useStructuredDiffRenderer &&
+                !useFinancialRenderer &&
                 !(salesApproval && instanceId && canReadSubmission) &&
                 !deliveryBrief &&
                 !receiptApproval &&
@@ -923,15 +1305,6 @@ export function WorkspaceDocumentTaskDetail({
                         <WorkspacePurchasePayment
                             key={item.workItemId}
                             workItemId={item.workItemId}
-                        />
-                    </DetailBlock>
-                ) : null}
-
-                {!fullPage && !purchaseApproval && approvalTask && instance ? (
-                    <DetailBlock compact={purchaseApproval || receiptApproval}>
-                        <WorkspaceApprovalProgress
-                            instance={instance}
-                            compact={purchaseApproval || receiptApproval}
                         />
                     </DetailBlock>
                 ) : null}

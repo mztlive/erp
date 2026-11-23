@@ -93,6 +93,133 @@ const inlinePaintProperties = new Set([
     "boxShadow",
     "textShadow",
 ])
+
+// ============================================================================
+// 6 条精准门禁规则（docs/task-interaction-refactoring-plan.md §3.4E）
+// 全仓已清零 Phase 2C 临时白名单：Rule-1/2/3/4/5B/6 均执行严格零白名单；
+// 仅保留 STRUCTURAL_SHEET_ALLOWLIST 豁免 5 处非预览结构抽屉。
+// ============================================================================
+
+// Rule-3: 禁止使用旧版布局壳与外框卡片（全仓零白名单）
+const LEGACY_SHELL_COMPONENTS = new Set([
+    "PageHeader",
+    "DocumentHeader",
+    "DetailPageHeader",
+    "ObjectSectionTabs",
+])
+const LEGACY_SHELL_SYMBOLS = new Set([
+    "surfacePanelClassName",
+    ...LEGACY_SHELL_COMPONENTS,
+])
+
+// Rule-5A: 非预览结构抽屉显式白名单（移动左侧类目树 / 抄送规则编辑器 / 交付工作面等）
+const STRUCTURAL_SHEET_ALLOWLIST = new Set([
+    "features/approval-processes/components/copy-rule-editor.tsx",
+    "features/master-data/pages/category-tree-page.tsx",
+    "features/sales-inquiries/components/inquiry-demand-lines.tsx",
+    "features/sales-orders/components/sales-delivery-workspace-sheet.tsx",
+    "features/supplier-api-connections/components/sections/catalog-section.tsx",
+])
+
+const SHEET_FILE_PATTERN =
+    /\b(?:QuickPreviewSheet|TaskActionSheet|SheetContent|SheetHeader|SheetFooter)\b/
+
+function isNewDateExpression(node, source) {
+    let target = node
+    while (
+        target &&
+        (ts.isParenthesizedExpression(target) ||
+            ts.isNonNullExpression(target) ||
+            ts.isAsExpression(target))
+    ) {
+        target = target.expression
+    }
+    return Boolean(
+        target &&
+        ts.isNewExpression(target) &&
+        ts.isIdentifier(target.expression) &&
+        target.expression.getText(source) === "Date",
+    )
+}
+
+function isDateTypeNode(typeNode, source) {
+    if (!typeNode) return false
+    if (
+        ts.isTypeReferenceNode(typeNode) &&
+        typeNode.typeName.getText(source) === "Date"
+    ) {
+        return true
+    }
+    if (ts.isUnionTypeNode(typeNode)) {
+        return typeNode.types.some((member) => isDateTypeNode(member, source))
+    }
+    return false
+}
+
+function collectDateIdentifiers(source) {
+    const names = new Set()
+    function walk(node) {
+        if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+            if (
+                isDateTypeNode(node.type, source) ||
+                (node.initializer &&
+                    isNewDateExpression(node.initializer, source))
+            ) {
+                names.add(node.name.text)
+            }
+        } else if (ts.isParameter(node) && ts.isIdentifier(node.name)) {
+            if (isDateTypeNode(node.type, source)) {
+                names.add(node.name.text)
+            }
+        }
+        ts.forEachChild(node, walk)
+    }
+    walk(source)
+    return names
+}
+
+function inspectDialogContentClassName(file, source, initializer) {
+    function walk(node) {
+        if (
+            ts.isStringLiteral(node) ||
+            ts.isNoSubstitutionTemplateLiteral(node) ||
+            ts.isTemplateHead(node) ||
+            ts.isTemplateMiddle(node) ||
+            ts.isTemplateTail(node)
+        ) {
+            for (const candidate of node.text.match(/\S+/g) ?? []) {
+                const utility = utilityName(candidate)
+                if (
+                    utility.startsWith("max-w-") ||
+                    /^max-h-\[[^\]]*(?<![a-zA-Z])(?:vh|svh)\b/.test(utility)
+                ) {
+                    report(
+                        file,
+                        source,
+                        node,
+                        "弹窗尺寸须通过 DialogContent size 属性声明，高度统一使用 dvh，禁止手写 max-w/vh",
+                        candidate,
+                    )
+                }
+            }
+        }
+        ts.forEachChild(node, walk)
+    }
+    walk(initializer)
+}
+
+function unwrapExpression(node) {
+    let target = node
+    while (
+        target &&
+        (ts.isParenthesizedExpression(target) ||
+            ts.isNonNullExpression(target) ||
+            ts.isAsExpression(target))
+    ) {
+        target = target.expression
+    }
+    return target
+}
 const violations = []
 
 function sourceFiles(directory) {
@@ -327,6 +454,11 @@ for (const file of scanDirectories.flatMap((directory) =>
     }
     const hasDetailWorkspaceShell =
         isFeature && content.includes("DetailWorkspacePage")
+    const isWorkspaceFeature = path.startsWith("features/workspace/")
+    const isSheetFeatureFile = isFeature && SHEET_FILE_PATTERN.test(content)
+    const dateIdentifiers = isFeature
+        ? collectDateIdentifiers(source)
+        : new Set()
     const isDetailRoutePage =
         path.startsWith("app/(workspace)/") &&
         /\/\[[^/]+\]\/page\.tsx$/.test(path)
@@ -359,6 +491,97 @@ for (const file of scanDirectories.flatMap((directory) =>
                 "详情工作面改用 DetailWorkspaceTabs / 纯白通栏表格，禁止混用列表壳或旧分页标签",
                 node.tagName.getText(source),
             )
+        }
+        // Rule-2: 禁止从 @/components/ui/native-select 导入（全仓零白名单）
+        if (
+            isFeature &&
+            ts.isImportDeclaration(node) &&
+            ts.isStringLiteral(node.moduleSpecifier)
+        ) {
+            const specifier = node.moduleSpecifier.text
+            if (
+                specifier === "@/components/ui/native-select" ||
+                specifier.endsWith("/ui/native-select")
+            ) {
+                report(
+                    file,
+                    source,
+                    node,
+                    "业务页面禁止使用 NativeSelect，请改用 Select 或 OptionCombobox",
+                    specifier,
+                )
+            }
+        }
+        // Rule-3: 禁止使用旧版布局壳与外框卡片（导入与引用均拦截，全仓零白名单）
+        if (isFeature) {
+            if (ts.isImportSpecifier(node)) {
+                const imported = (node.propertyName ?? node.name).getText(
+                    source,
+                )
+                if (
+                    LEGACY_SHELL_SYMBOLS.has(imported) &&
+                    !(
+                        hasDetailWorkspaceShell &&
+                        imported === "surfacePanelClassName"
+                    )
+                ) {
+                    report(
+                        file,
+                        source,
+                        node,
+                        "禁止使用旧版布局壳或外框卡片（surfacePanelClassName / PageHeader / DocumentHeader / DetailPageHeader / ObjectSectionTabs）",
+                        imported,
+                    )
+                }
+            } else if (
+                !hasDetailWorkspaceShell &&
+                ts.isIdentifier(node) &&
+                node.text === "surfacePanelClassName" &&
+                !ts.isImportSpecifier(node.parent)
+            ) {
+                report(
+                    file,
+                    source,
+                    node,
+                    "禁止使用旧版布局壳或外框卡片（surfacePanelClassName / PageHeader / DocumentHeader / DetailPageHeader / ObjectSectionTabs）",
+                    node.text,
+                )
+            }
+        }
+        // Rule-4: 禁止在 features/** 中裸用 Date.toLocale*（零白名单，不误伤 number.toLocaleString）
+        if (
+            isFeature &&
+            ts.isCallExpression(node) &&
+            ts.isPropertyAccessExpression(node.expression)
+        ) {
+            const method = node.expression.name.text
+            if (
+                method === "toLocaleDateString" ||
+                method === "toLocaleTimeString"
+            ) {
+                report(
+                    file,
+                    source,
+                    node,
+                    "禁止裸用 Date.toLocale*，时间统一使用 formatDateTime / displayUnixSeconds",
+                    node.getText(source),
+                )
+            } else if (method === "toLocaleString") {
+                const receiver = unwrapExpression(node.expression.expression)
+                if (
+                    isNewDateExpression(receiver, source) ||
+                    (ts.isIdentifier(receiver) &&
+                        dateIdentifiers.has(receiver.text))
+                ) {
+                    report(
+                        file,
+                        source,
+                        node,
+                        "禁止裸用 Date.toLocale*，时间统一使用 formatDateTime / displayUnixSeconds",
+                        node.getText(source),
+                    )
+                }
+            }
         }
         if (
             isDetailRoutePage &&
@@ -407,6 +630,57 @@ for (const file of scanDirectories.flatMap((directory) =>
             (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node))
         ) {
             const tagName = node.tagName.getText(source)
+            // Rule-1: <DialogContent> 禁止手写 max-w-* / max-h-[...vh|svh]（全仓零白名单）
+            if (tagName === "DialogContent") {
+                const classAttr = node.attributes.properties.find(
+                    (entry) =>
+                        ts.isJsxAttribute(entry) &&
+                        entry.name.getText(source) === "className",
+                )
+                if (classAttr?.initializer) {
+                    inspectDialogContentClassName(
+                        file,
+                        source,
+                        classAttr.initializer,
+                    )
+                }
+            }
+            // Rule-2: <NativeSelect>（全仓零白名单）
+            if (tagName === "NativeSelect") {
+                report(
+                    file,
+                    source,
+                    node,
+                    "业务页面禁止使用 NativeSelect，请改用 Select 或 OptionCombobox",
+                    tagName,
+                )
+            }
+            // Rule-3: 旧版页头与旧分页标签（全仓零白名单）
+            if (
+                LEGACY_SHELL_COMPONENTS.has(tagName) &&
+                !(hasDetailWorkspaceShell && tagName === "ObjectSectionTabs")
+            ) {
+                report(
+                    file,
+                    source,
+                    node,
+                    "禁止使用旧版布局壳或外框卡片（surfacePanelClassName / PageHeader / DocumentHeader / DetailPageHeader / ObjectSectionTabs）",
+                    tagName,
+                )
+            }
+            // Rule-5A: 裸 <SheetContent>
+            if (
+                tagName === "SheetContent" &&
+                !STRUCTURAL_SHEET_ALLOWLIST.has(path)
+            ) {
+                report(
+                    file,
+                    source,
+                    node,
+                    "预览或任务抽屉须复用 QuickPreviewSheet / TaskActionSheet，禁止裸用 SheetContent",
+                    tagName,
+                )
+            }
             if (
                 [
                     "table",
@@ -485,6 +759,34 @@ for (const file of scanDirectories.flatMap((directory) =>
         ) {
             inspectTypography(file, source, node, path, node.text)
             if (isFeature) inspectFeatureText(file, source, node, node.text)
+            // Rule-5B: 抽屉/Sheet 文件内禁止手写 px-7（全仓零白名单）
+            if (isSheetFeatureFile) {
+                for (const candidate of node.text.match(/\S+/g) ?? []) {
+                    if (utilityName(candidate) === "px-7") {
+                        report(
+                            file,
+                            source,
+                            node,
+                            "抽屉正文边距统一使用 px-sheet-inline，禁止手写 px-7",
+                            candidate,
+                        )
+                    }
+                }
+            }
+            // Rule-6: features/workspace/** 禁止使用视口 xl:grid-cols-（零白名单）
+            if (isWorkspaceFeature) {
+                for (const candidate of node.text.match(/\S+/g) ?? []) {
+                    if (/(?:^|:)xl:grid-cols-/.test(candidate)) {
+                        report(
+                            file,
+                            source,
+                            node,
+                            "工作台 iframe 在 1440px 屏净宽仅 1200px，禁止使用视口 xl:grid-cols-，请改用命名容器查询 @[960px]/workspace: / @[1120px]/workspace:",
+                            candidate,
+                        )
+                    }
+                }
+            }
         }
         if (ts.isJsxAttribute(node)) {
             const name = node.name.getText(source)

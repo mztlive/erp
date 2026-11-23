@@ -44,6 +44,14 @@ pub trait ApprovalInstanceReadPort: Send + Sync {
         query: &'a RuntimeInstanceListQuery,
         executor: &'a mut dyn Executor,
     ) -> BoxFuture<'a, Result<(Vec<RuntimeInstanceListItem>, Option<RuntimeInstanceListCursor>)>>;
+
+    /// 读取工作台审批列表时，在调用方事务快照中按 `started|mine|managed|blocked` 读取一批授权候选。
+    fn workspace_instance_page<'a>(
+        &'a self,
+        actor: &'a AuditActor,
+        query: &'a RuntimeInstanceListQuery,
+        executor: &'a mut dyn Executor,
+    ) -> BoxFuture<'a, Result<(Vec<RuntimeInstanceListItem>, Option<RuntimeInstanceListCursor>)>>;
 }
 
 impl<A: WorkflowAuthorizationPort> ApprovalInstanceReadPort for ApprovalRuntimeService<A> {
@@ -62,5 +70,14 @@ impl<A: WorkflowAuthorizationPort> ApprovalInstanceReadPort for ApprovalRuntimeS
         executor: &'a mut dyn Executor,
     ) -> BoxFuture<'a, Result<(Vec<RuntimeInstanceListItem>, Option<RuntimeInstanceListCursor>)>> {
         Box::pin(ApprovalRuntimeService::started_instance_page_with(self, actor, query, executor))
+    }
+
+    fn workspace_instance_page<'a>(
+        &'a self,
+        actor: &'a AuditActor,
+        query: &'a RuntimeInstanceListQuery,
+        executor: &'a mut dyn Executor,
+    ) -> BoxFuture<'a, Result<(Vec<RuntimeInstanceListItem>, Option<RuntimeInstanceListCursor>)>> {
+        Box::pin(ApprovalRuntimeService::workspace_instance_page_with(self, actor, query, executor))
     }
 }

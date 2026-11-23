@@ -3,6 +3,7 @@
 import { useQueries, useQuery } from "@tanstack/react-query"
 import type { AccountProfile } from "@/features/auth/api"
 import { getWorkItemStats } from "@/features/work-items/api"
+import { hasPermission } from "@/lib/permissions"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 import { roleWorkbench } from "@/lib/role-workbenches"
 import { fetchOverviewData } from "../api/overview"
@@ -30,7 +31,24 @@ export function stageMetrics(id: string): OverviewMetric[] {
                 field: "balance",
             },
         ]
-    if (id === "WB-01")
+    if (id === "WB-02")
+        return (
+            [
+                ["RECEIPT", "待收货", "purchase_receipt:list"],
+                ["WAREHOUSE_SHIP", "待仓发", "delivery:list"],
+                ["SUPPLIER_DIRECT", "待直发", "delivery:list"],
+                ["ELECTRONIC", "待电子交付", "electronic_delivery:list"],
+                ["SERVICE", "待服务交付", "service_fulfillment:list"],
+            ] as const
+        ).map(([operationType, label, permission]) => ({
+            key: `stage-${operationType}`,
+            label,
+            detail: "我的履约责任 · 当前未完成",
+            permission,
+            source: { kind: "fulfillment", operationType },
+            field: "count",
+        }))
+    if (id === "WB-01" || id === "WB-05")
         return (
             [
                 ["draft", "草稿"],
@@ -66,33 +84,37 @@ export function stageMetrics(id: string): OverviewMetric[] {
 export function useRoleWorkbench(profile: AccountProfile, id: string) {
     const template = roleWorkbench(id)!
     const identity = overviewIdentity(profile)
-    const metrics = stageMetrics(id).map((metric): OverviewMetric => {
-        if (metric.source.kind === "sales")
-            return {
-                ...metric,
-                detail: `本人负责 · ${metric.detail}`,
-                source: {
-                    kind: "sales",
-                    query: {
-                        ...metric.source.query,
-                        ownerUserIds: profile.userid,
+    const metrics = stageMetrics(id)
+        .filter((metric) =>
+            hasPermission(profile.permissions, metric.permission),
+        )
+        .map((metric): OverviewMetric => {
+            if (id === "WB-01" && metric.source.kind === "sales")
+                return {
+                    ...metric,
+                    detail: `本人负责 · ${metric.detail}`,
+                    source: {
+                        kind: "sales",
+                        query: {
+                            ...metric.source.query,
+                            ownerUserIds: profile.userid,
+                        },
                     },
-                },
-            }
-        if (metric.source.kind === "purchase")
-            return {
-                ...metric,
-                detail: `本人负责 · ${metric.detail}`,
-                source: {
-                    kind: "purchase",
-                    query: {
-                        ...metric.source.query,
-                        ownerUserIds: profile.userid,
+                }
+            if (id === "WB-03" && metric.source.kind === "purchase")
+                return {
+                    ...metric,
+                    detail: `本人负责 · ${metric.detail}`,
+                    source: {
+                        kind: "purchase",
+                        query: {
+                            ...metric.source.query,
+                            ownerUserIds: profile.userid,
+                        },
                     },
-                },
-            }
-        return metric
-    })
+                }
+            return metric
+        })
     const stages = useQueries({
         queries: metrics.map((metric) => ({
             queryKey: [

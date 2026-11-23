@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
+    DialogBody,
     DialogClose,
     DialogContent,
     DialogFooter,
@@ -198,48 +199,52 @@ export function RegisterSupplyForSkuDialog({
         <>
             <Dialog open={open} onOpenChange={requestClose}>
                 <DialogContent
+                    size="xl"
+                    scroll="body"
                     closeButtonId={`${prefix}-close`}
-                    className="flex max-h-[92dvh] w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[920px]"
                 >
-                    <DialogHeader className="shrink-0 px-5 pt-5 pb-4 pr-14 sm:px-6 sm:pr-16">
-                        <DialogTitle className="text-section-title font-semibold tracking-tight">
-                            添加供给
-                        </DialogTitle>
+                    <DialogHeader>
+                        <DialogTitle>添加供给</DialogTitle>
                     </DialogHeader>
-                    {skuName && (
-                        <div className="mx-5 mb-2 flex shrink-0 items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2.5 sm:mx-6">
-                            {imageUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element -- 复用商品编辑页已解析的对象存储或本地预览地址。
-                                <img
-                                    src={imageUrl}
-                                    alt=""
-                                    className="size-10 shrink-0 rounded-md object-cover"
-                                />
-                            ) : (
-                                <PackageIcon
-                                    className="size-8 shrink-0 text-muted-foreground"
-                                    aria-hidden="true"
-                                />
+                    {(skuName || submitError) && (
+                        <div className="flex shrink-0 flex-col gap-2 border-b border-border/80 px-overlay-padding py-3">
+                            {skuName && (
+                                <div className="flex items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2.5">
+                                    {imageUrl ? (
+                                        // eslint-disable-next-line @next/next/no-img-element -- 复用商品编辑页已解析的对象存储或本地预览地址。
+                                        <img
+                                            src={imageUrl}
+                                            alt=""
+                                            className="size-10 shrink-0 rounded-md object-cover"
+                                        />
+                                    ) : (
+                                        <PackageIcon
+                                            className="size-8 shrink-0 text-muted-foreground"
+                                            aria-hidden="true"
+                                        />
+                                    )}
+                                    <div className="min-w-0">
+                                        <div className="font-medium break-words">
+                                            {skuName}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground break-words">
+                                            {skuDetails
+                                                .filter(Boolean)
+                                                .join(" · ") ||
+                                                "请选择需要添加供给的商品规格"}
+                                        </div>
+                                    </div>
+                                </div>
                             )}
-                            <div className="min-w-0">
-                                <div className="font-medium break-words">
-                                    {skuName}
-                                </div>
-                                <div className="text-xs text-muted-foreground break-words">
-                                    {skuDetails.filter(Boolean).join(" · ") ||
-                                        "请选择需要添加供给的商品规格"}
-                                </div>
-                            </div>
+                            {submitError && (
+                                <Alert variant="destructive">
+                                    <AlertTitle>保存失败</AlertTitle>
+                                    <AlertDescription>
+                                        {submitError}
+                                    </AlertDescription>
+                                </Alert>
+                            )}
                         </div>
-                    )}
-                    {submitError && (
-                        <Alert
-                            variant="destructive"
-                            className="mx-5 mb-2 w-auto shrink-0 sm:mx-6"
-                        >
-                            <AlertTitle>保存失败</AlertTitle>
-                            <AlertDescription>{submitError}</AlertDescription>
-                        </Alert>
                     )}
                     <form
                         ref={formElement}
@@ -250,7 +255,7 @@ export function RegisterSupplyForSkuDialog({
                             void form.handleSubmit()
                         }}
                     >
-                        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-5 pt-3 pb-2 sm:px-6">
+                        <DialogBody className="overflow-x-hidden">
                             <fieldset
                                 disabled={mutation.isPending}
                                 className="min-w-0 [&_[data-slot=field]]:gap-2"
@@ -672,8 +677,8 @@ export function RegisterSupplyForSkuDialog({
                                     </form.Subscribe>
                                 </FormSection>
                             </fieldset>
-                        </div>
-                        <DialogFooter className="shrink-0 flex-row items-center justify-end border-t px-5 py-3 sm:px-6">
+                        </DialogBody>
+                        <DialogFooter className="flex-row items-center justify-end">
                             <p className="mr-auto text-xs text-muted-foreground">
                                 带 <span className="text-destructive">*</span>{" "}
                                 为必填项

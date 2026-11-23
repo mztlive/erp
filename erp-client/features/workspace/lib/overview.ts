@@ -97,7 +97,11 @@ export function availableOverviewViews(
                 "supplier_payment:list",
             ].some(can)
         if (view === "management")
-            return can("cost_entry:list") && can("sales_order:list")
+            return (
+                can("cost_entry:list") &&
+                can("sales_order:list") &&
+                can("work_item:list")
+            )
         return (
             can("work_item:list") &&
             [

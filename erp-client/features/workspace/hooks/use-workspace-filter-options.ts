@@ -2,7 +2,10 @@
 import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
 import { listWorkItems } from "@/features/work-items/api"
-import { listApprovalInstances } from "@/features/approval-workflow/api"
+import {
+    listApprovalInstances,
+    type ApprovalInstanceListView,
+} from "@/features/approval-workflow/api"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useDebouncedSearch } from "@/features/entity-selectors/hooks/queries"
 import {
@@ -21,6 +24,7 @@ export function useWorkspaceFilterOptions(
     view: WorkspaceViewFilter,
     filters?: WorkspaceFilters,
     name?: WorkspaceChoiceKey,
+    approvalView: ApprovalInstanceListView = "started",
 ) {
     const [search, setSearch] = useState("")
     const queryText = useDebouncedSearch(search, 300)
@@ -38,6 +42,7 @@ export function useWorkspaceFilterOptions(
         queryKey: [
             "workspace-filter-options",
             view,
+            view === "started" ? approvalView : undefined,
             name,
             queryText,
             filters,
@@ -54,9 +59,9 @@ export function useWorkspaceFilterOptions(
             }
             if (view === "started") {
                 const page = await listApprovalInstances({
-                    view: "started",
+                    view: approvalView,
                     page: 1,
-                    limit: 1,
+                    pageSize: 1,
                     filters: options,
                 })
                 return page.filterOptions ?? {}

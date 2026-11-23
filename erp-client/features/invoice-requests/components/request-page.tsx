@@ -34,6 +34,7 @@ import { CustomerSearchCombobox } from "@/features/entity-selectors/components/c
 import { SalesOrderSearchCombobox } from "@/features/entity-selectors/components/sales-order-search-combobox"
 import { getErrorCode } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { formatDate, unixSecondsToIsoOrEmpty } from "@/lib/datetime"
 import { subtractFixed } from "@/lib/fixed-decimal"
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 import { listFilterText } from "@/lib/ui-text"
@@ -684,9 +685,9 @@ function invoiceRequestColumns(
             meta: { width: "default", numeric: true },
             cell: ({ row }) => (
                 <TableTextCell
-                    value={new Date(
-                        row.original.created_at * 1000,
-                    ).toLocaleDateString("zh-CN")}
+                    value={formatDate(
+                        unixSecondsToIsoOrEmpty(row.original.created_at),
+                    )}
                     numeric
                 />
             ),

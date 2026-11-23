@@ -1,6 +1,9 @@
 "use client"
 
-import { DocumentApprovalArea } from "@/features/approval-workflow/components/document-approval-area"
+import {
+    DocumentApprovalArea,
+    type DocumentApprovalPresentation,
+} from "@/features/approval-workflow/components/document-approval-area"
 import type {
     ApprovalCommandView,
     DocumentApprovalView,
@@ -39,6 +42,7 @@ export function FinancialApprovalArea({
     surface,
     historyId,
     actionBarId,
+    presentation = "default",
 }: {
     kind: FinancialApprovalKind
     documentType: string
@@ -54,6 +58,7 @@ export function FinancialApprovalArea({
     surface: string
     historyId?: string
     actionBarId?: string
+    presentation?: DocumentApprovalPresentation
 }) {
     const editDocumentHref = documentId
         ? financialDraftEditHref(kind, documentId)
@@ -77,9 +82,10 @@ export function FinancialApprovalArea({
             expectedTaskVersion={expectedTaskVersion}
             workItemAllowedActions={workItemAllowedActions}
             onDecisionApplied={onDecisionApplied}
-            runtimeClassName="space-y-3"
+            runtimeClassName="space-y-4"
             draftAddon={editButton}
             runtimeHistoryAddon={editButton}
+            presentation={presentation}
         />
     )
 }

@@ -44,6 +44,70 @@ export function formatClock(iso: string): string {
     }
 }
 
+/** 本地时间 HH:mm:ss（zh-CN，24 小时制）；无法解析时原样返回。 */
+export function formatTime(iso: string | null | undefined): string {
+    if (!iso) return "—"
+    const parsed = new Date(iso)
+    if (Number.isNaN(parsed.getTime())) return iso
+    return new Intl.DateTimeFormat("zh-CN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+    }).format(parsed)
+}
+
+/** 本地日期 YYYY/MM/DD（zh-CN）；无效值返回「—」。 */
+export function formatDate(
+    iso: string | null | undefined,
+    options?: { timeZone?: string },
+): string {
+    if (!iso) return "—"
+    const parsed = new Date(iso)
+    if (Number.isNaN(parsed.getTime())) return "—"
+    return new Intl.DateTimeFormat("zh-CN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        ...(options?.timeZone ? { timeZone: options.timeZone } : {}),
+    }).format(parsed)
+}
+
+/** ISO 日期 YYYY-MM-DD（支持指定时区）；无效值返回 null。 */
+export function formatIsoDate(
+    iso: string | null | undefined,
+    options?: { timeZone?: string },
+): string | null {
+    if (!iso) return null
+    const parsed = new Date(iso)
+    if (Number.isNaN(parsed.getTime())) return null
+    return new Intl.DateTimeFormat("sv-SE", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        ...(options?.timeZone ? { timeZone: options.timeZone } : {}),
+    }).format(parsed)
+}
+
+/** 指定时区日期时间 YYYY/MM/DD HH:mm（zh-CN，24 小时制）；无效值返回「—」。 */
+export function formatDateTimeInZone(
+    iso: string | null | undefined,
+    timeZone = "Asia/Shanghai",
+): string {
+    if (!iso) return "—"
+    const parsed = new Date(iso)
+    if (Number.isNaN(parsed.getTime())) return "—"
+    return new Intl.DateTimeFormat("zh-CN", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+    }).format(parsed)
+}
+
 /** Unix 秒转 ISO；空值、非有限值或非正数返回空串。 */
 export function unixSecondsToIsoOrEmpty(
     secs: number | null | undefined,

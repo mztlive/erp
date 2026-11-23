@@ -5,6 +5,7 @@ import { apiGet, getErrorMessage } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { COPY_TRIGGER_LABELS } from "@/features/approval-processes/copy-rules"
 import type { CopyTrigger } from "@/features/approval-processes/types"
+import { displayUnixSeconds } from "../display"
 type CopyHistoryPage = {
     items: {
         id: string
@@ -74,13 +75,25 @@ export function ApprovalCopyHistory({
                         轮
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                        {new Date(row.copied_at * 1000).toLocaleString("zh-CN")}{" "}
+                        <span className="num">
+                            {displayUnixSeconds(row.copied_at)?.label ?? "—"}
+                        </span>{" "}
                         ·{" "}
-                        {row.delivered
-                            ? row.read_at
-                                ? `已读 ${new Date(row.read_at * 1000).toLocaleString("zh-CN")}`
-                                : "未读"
-                            : row.undelivered_reason || "未送达"}
+                        {row.delivered ? (
+                            row.read_at ? (
+                                <>
+                                    已读{" "}
+                                    <span className="num">
+                                        {displayUnixSeconds(row.read_at)
+                                            ?.label ?? "—"}
+                                    </span>
+                                </>
+                            ) : (
+                                "未读"
+                            )
+                        ) : (
+                            row.undelivered_reason || "未送达"
+                        )}
                     </p>
                 </div>
             ))}

@@ -675,9 +675,9 @@ export function InquiryFeesContent({
                         }}
                     >
                         <DialogContent
+                            size="lg"
                             closeButtonId="inquiry-fees-allocation-close"
                             finalFocus={editorTrigger}
-                            className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl"
                         >
                             <DialogHeader>
                                 <DialogTitle>分摊费用归属</DialogTitle>
@@ -927,9 +927,9 @@ export function InquiryFeesContent({
                             }}
                         >
                             <DialogContent
+                                size="lg"
                                 closeButtonId="inquiry-fees-expense-close"
                                 finalFocus={editorTrigger}
-                                className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl"
                             >
                                 <DialogHeader>
                                     <DialogTitle>办理费用采购</DialogTitle>

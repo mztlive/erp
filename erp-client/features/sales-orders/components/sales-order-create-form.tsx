@@ -1376,6 +1376,7 @@ export function SalesOrderCreateForm({
                     onOpenChange={submission.setSubmitConfirmOpen}
                     pending={submission.isSubmitting}
                     snapshot={buildSalesOrderSubmitSnapshot(form.state.values)}
+                    approval={submission.approval}
                     resubmitting={
                         initialDraft?.rejected ||
                         submission.approval?.instance?.status === "REJECTED"
@@ -1391,6 +1392,7 @@ export function SalesOrderCreateForm({
                         form.state.values,
                         inquirySource ? skuDetails.unitNames : undefined,
                     )}
+                    approval={submission.approval}
                     resubmitting={
                         initialDraft?.rejected ||
                         submission.approval?.instance?.status === "REJECTED"

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogClose,
     DialogContent,
     DialogDescription,
@@ -18,7 +19,6 @@ import {
 } from "@/components/ui/dialog"
 import { SellableItemPreviewPanel } from "@/features/master-data/components/list/master-data-preview"
 import { SellableItemThumbnail } from "@/features/master-data/components/list/sellable-item-thumbnail"
-import { DialogScrollBody } from "@/features/master-data/components/shared/action-dialog-shared"
 import type { MasterDataListItem } from "@/features/master-data/types"
 
 export function SellablePreviewDialog({
@@ -46,7 +46,8 @@ export function SellablePreviewDialog({
             }}
         >
             <DialogContent
-                className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg"
+                size="md"
+                scroll="body"
                 finalFocus={() => {
                     const id = lastFocusedRowId.current
                     return id
@@ -80,7 +81,7 @@ export function SellablePreviewDialog({
                         </div>
                     ) : null}
                 </DialogHeader>
-                <DialogScrollBody>
+                <DialogBody>
                     {previewRow?.sellableItem ? (
                         <div className="flex flex-col gap-6">
                             <SellableItemThumbnail
@@ -93,7 +94,7 @@ export function SellablePreviewDialog({
                             <SellableItemPreviewPanel row={previewRow} />
                         </div>
                     ) : null}
-                </DialogScrollBody>
+                </DialogBody>
                 {previewRow?.sellableItem ? (
                     <DialogFooter>
                         <DialogClose

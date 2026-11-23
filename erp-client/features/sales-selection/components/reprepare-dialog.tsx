@@ -133,10 +133,7 @@ export const ReprepareDialog = ({
                 if (!open && !operations.prepare.isPending) onClose()
             }}
         >
-            <DialogContent
-                closeButtonId="selection-reprepare-close"
-                className="max-h-[90svh] overflow-y-auto sm:max-w-2xl"
-            >
+            <DialogContent size="lg" closeButtonId="selection-reprepare-close">
                 <DialogHeader>
                     <DialogTitle>调整来源与档位并准备</DialogTitle>
                     <DialogDescription>

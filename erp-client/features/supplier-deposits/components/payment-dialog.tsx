@@ -135,8 +135,8 @@ export function RechargePaymentDialog({
             }}
         >
             <DialogContent
+                size="md"
                 closeButtonId="supplier-deposits-payment-close"
-                className="sm:max-w-xl"
             >
                 <DialogHeader>
                     <DialogTitle>

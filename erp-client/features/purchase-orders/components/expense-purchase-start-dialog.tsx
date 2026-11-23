@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -94,10 +95,11 @@ function ExpensePurchaseStartContent({
     return (
         <Dialog open onOpenChange={onOpenChange}>
             <DialogContent
+                size="lg"
+                scroll="body"
                 closeButtonId="procurement-expense-source-close"
-                className="flex max-h-[min(90svh,44rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
             >
-                <DialogHeader className="shrink-0 gap-2 border-b border-grid px-6 py-4 pr-14 text-left">
+                <DialogHeader className="gap-2 border-grid text-left">
                     <DialogTitle>新建费用采购单 · 选择归属销售单</DialogTitle>
                     <DialogDescription>
                         先选择费用所属的销售单，再填写收款供应商和费用明细。仅显示协同范围内已生效的实物与服务销售单。
@@ -142,7 +144,7 @@ function ExpensePurchaseStartContent({
                     ) : null}
                 </DialogHeader>
 
-                <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+                <DialogBody>
                     {selectedId ? (
                         detail.isError ? (
                             <BusinessFailureState
@@ -239,9 +241,9 @@ function ExpensePurchaseStartContent({
                             ))}
                         </ul>
                     )}
-                </div>
+                </DialogBody>
 
-                <DialogFooter className="shrink-0 border-t border-grid bg-card px-6 py-3.5 sm:items-center sm:justify-between">
+                <DialogFooter className="border-grid bg-card sm:items-center sm:justify-between">
                     {selectedId && !salesOrderId ? (
                         <Button
                             id="procurement-expense-source-back"

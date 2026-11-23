@@ -70,9 +70,9 @@ export function CustomerSaveReasonDialog({
             }}
         >
             <DialogContent
+                size="sm"
                 closeButtonId="customers-form-save-reason-close"
                 showCloseButton={!pending}
-                className="sm:max-w-md"
             >
                 <DialogHeader>
                     <DialogTitle>保存客户资料</DialogTitle>

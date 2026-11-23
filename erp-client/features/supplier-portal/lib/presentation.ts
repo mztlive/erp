@@ -1,4 +1,5 @@
 import { commandFailureDisposition } from "@/lib/api/command-recovery"
+import { formatDateTime } from "@/lib/datetime"
 import type { PortalOffering, PortalTerms } from "../types"
 export const relationLabels: Record<string, string> = {
     ACTIVE: "合作中",
@@ -63,7 +64,7 @@ export function timeLabel(value?: number | string) {
     const date = new Date(typeof value === "number" ? value * 1000 : value)
     return Number.isNaN(date.getTime())
         ? "未报送"
-        : date.toLocaleString("zh-CN")
+        : formatDateTime(date.toISOString(), "full")
 }
 
 /** 输入被明确拒绝时可修正；未知结果继续保留原请求。 */

@@ -1,13 +1,20 @@
 "use client"
 
-import { PageHeader, PageScaffold } from "@/components/business"
+import { PageScaffold } from "@/components/business"
+import {
+    ListWorkspaceHeader,
+    listWorkspaceStyles,
+} from "@/components/business/list-workspace"
 import { ResourceNav } from "@/features/master-data/components/list/list-chrome"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 
 export function UnknownMasterDataPage() {
     return (
-        <PageScaffold>
-            <PageHeader
+        <PageScaffold
+            density="compact"
+            className={`${listWorkspaceStyles.page} gap-4`}
+        >
+            <ListWorkspaceHeader
                 title={masterDataCopy.unknownResourceTitle}
                 description={masterDataCopy.unknownResourceDesc()}
             />

@@ -5,6 +5,18 @@ export const AUDIT_ACTION_OPTIONS = [
         label: "授权配置 · 应用",
     },
     {
+        value: "permission.create",
+        label: "权限定义 · 新建",
+    },
+    {
+        value: "permission.update",
+        label: "权限定义 · 修改",
+    },
+    {
+        value: "permission.delete",
+        label: "权限定义 · 删除",
+    },
+    {
         value: "data_scope.create",
         label: "数据范围 · 新建",
     },
@@ -31,6 +43,14 @@ export const AUDIT_ACTION_OPTIONS = [
     {
         value: "personal_business_grant.revoke",
         label: "个人业务范围 · 撤销",
+    },
+    {
+        value: "user_role.assign",
+        label: "用户角色 · 授权",
+    },
+    {
+        value: "user_role.revoke",
+        label: "用户角色 · 撤权",
     },
     {
         value: "person_query_qualification.change",

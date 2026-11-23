@@ -9,6 +9,8 @@ import {
 } from "@/lib/workspace-queue-routes"
 import { workspaceHost } from "@/lib/workspace-tabs"
 import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
+import { stashWorkspaceQueueSequence } from "@/lib/workspace-queue-sequence"
+import type { ApprovalInstanceListView } from "@/features/approval-workflow/api"
 import { approvalKeys } from "@/features/approval-workflow/queries"
 import {
     hasWorkspaceFilters,
@@ -39,10 +41,12 @@ import type {
     WorkspaceSort,
     WorkspaceWorkItem,
 } from "@/features/workspace/types"
+import { useWorkspaceQueueCounts } from "./use-workspace-queue-counts"
 
 const VIEWER_TIMEZONE = "Asia/Shanghai"
+
 /**
- * W01 队列状态：URL 筛选、指标切换与独立详情导航。
+ * W01 队列状态：URL 筛选、聚合计数、分页与独立详情导航。
  */
 export function useWorkspaceHome() {
     const router = useRouter()
@@ -67,6 +71,10 @@ export function useWorkspaceHome() {
         () => restrictWorkspaceFilters(parsedState, permissions),
         [parsedState, permissions],
     )
+    const approvalView: ApprovalInstanceListView =
+        urlState.view === "started"
+            ? (urlState.approvalView ?? "started")
+            : "started"
     const queryInput = React.useMemo(
         () => toTodayWorkspaceQuery(urlState, VIEWER_TIMEZONE),
         [urlState],
@@ -85,6 +93,12 @@ export function useWorkspaceHome() {
         ),
     )
     const view = dashboardQuery.data
+    const queueCounts = useWorkspaceQueueCounts(
+        urlState,
+        view?.total ?? 0,
+        accountProfileQuery.data,
+        view?.documentTypeCounts,
+    )
     const refreshing =
         (accountProfileQuery.isFetching || dashboardQuery.isFetching) &&
         !dashboardQuery.isPending &&
@@ -99,7 +113,8 @@ export function useWorkspaceHome() {
         urlState.query ||
         urlState.handlerUserIds ||
         urlState.salesOrderIds ||
-        urlState.purchaseOrderIds,
+        urlState.purchaseOrderIds ||
+        urlState.counterpartyIds,
     )
 
     const replaceUrl = React.useCallback(
@@ -165,6 +180,8 @@ export function useWorkspaceHome() {
         (query: string, filters: WorkspaceFilters) => {
             replaceUrl({
                 view: urlState.view,
+                approvalView:
+                    urlState.view === "started" ? approvalView : undefined,
                 sort: urlState.sort,
                 query: query.trim() || undefined,
                 filters,
@@ -175,6 +192,7 @@ export function useWorkspaceHome() {
             })
         },
         [
+            approvalView,
             replaceUrl,
             urlState.view,
             urlState.sort,
@@ -183,15 +201,34 @@ export function useWorkspaceHome() {
         ],
     )
 
+    const onApprovalViewChange = React.useCallback(
+        (nextApprovalView: ApprovalInstanceListView) => {
+            replaceUrl({
+                view: "started",
+                approvalView: nextApprovalView,
+                sort: DEFAULT_WORKSPACE_SORT,
+                page: 1,
+                queue: true,
+                overviewView: urlState.overviewView,
+                overviewPeriod: urlState.overviewPeriod,
+            })
+        },
+        [replaceUrl, urlState.overviewPeriod, urlState.overviewView],
+    )
+
     const clearFilters = React.useCallback(() => {
         replaceUrl({
             view: urlState.view,
+            approvalView:
+                urlState.view === "started" ? approvalView : undefined,
             sort: DEFAULT_WORKSPACE_SORT,
+            page: 1,
             queue: true,
             overviewView: urlState.overviewView,
             overviewPeriod: urlState.overviewPeriod,
         })
     }, [
+        approvalView,
         replaceUrl,
         urlState.view,
         urlState.overviewView,
@@ -222,18 +259,29 @@ export function useWorkspaceHome() {
                 urlState.view,
                 new URLSearchParams(buildWorkspaceSearchParams(urlState)),
             )
+            const kind =
+                typeof item !== "string" &&
+                item.workItemType === "APPROVAL_INSTANCE"
+                    ? "approvals"
+                    : "tasks"
+            const userId = accountProfileQuery.data?.userid
+            if (userId && view?.items.length) {
+                stashWorkspaceQueueSequence(
+                    userId,
+                    kind,
+                    returnTo,
+                    view.items.map((entry) => entry.workItemId),
+                )
+            }
             router.push(
                 buildWorkspaceDetailHref(
-                    typeof item !== "string" &&
-                        item.workItemType === "APPROVAL_INSTANCE"
-                        ? "approvals"
-                        : "tasks",
+                    kind,
                     typeof item === "string" ? item : item.workItemId,
                     { returnTo },
                 ),
             )
         },
-        [router, urlState],
+        [accountProfileQuery.data?.userid, router, urlState, view?.items],
     )
 
     const onSortChange = React.useCallback(
@@ -249,8 +297,9 @@ export function useWorkspaceHome() {
     )
 
     const refresh = React.useCallback(() => {
-        if ((urlState.page ?? 1) > 1)
+        if ((urlState.page ?? 1) > 1) {
             replaceUrl({ ...urlState, page: 1, scopeVersion: undefined })
+        }
         void accountProfileQuery.refetch().then((profileResult) => {
             if (!profileResult.isSuccess) return
             workspaceHost()?.changed(window)
@@ -268,14 +317,17 @@ export function useWorkspaceHome() {
 
     return {
         urlState,
+        approvalView,
         queryInput,
         view,
+        queueCounts,
         accountProfileQuery,
         dashboardQuery,
         refreshing,
         activeMetric,
         hasActiveFilter,
         onMetricClick,
+        onApprovalViewChange,
         onOverviewChange,
         clearFilters,
         onPageChange,

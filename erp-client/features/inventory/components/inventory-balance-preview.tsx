@@ -125,14 +125,14 @@ function InventoryBalancePreview({
         >
             {isPending ? (
                 <div
-                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-7 py-6"
+                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-sheet-inline py-5"
                     aria-busy="true"
                 >
                     <Skeleton className="h-24 rounded-lg" />
                     <Skeleton className="mt-3 h-40 rounded-lg" />
                 </div>
             ) : detail ? (
-                <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-7 py-6">
+                <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-sheet-inline py-5">
                     <div className="grid gap-4 border-b border-border pb-6 sm:grid-cols-3">
                         <div>
                             <div className="text-xs text-muted-foreground">

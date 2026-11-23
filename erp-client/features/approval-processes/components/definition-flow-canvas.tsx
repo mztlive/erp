@@ -25,7 +25,9 @@ import {
     CopyIcon,
     EllipsisIcon,
     LayoutGridIcon,
+    Maximize2Icon,
     MaximizeIcon,
+    Minimize2Icon,
     MinusIcon,
     PlusIcon,
 } from "lucide-react"
@@ -104,6 +106,7 @@ export function DefinitionFlowCanvas({
     > | null>(null)
     const [notice, setNotice] = useState("")
     const [zoom, setZoom] = useState(layout.viewport?.zoom ?? 1)
+    const [fullscreen, setFullscreen] = useState(false)
     const containerRef = useRef<HTMLDivElement>(null)
     const defaults = useMemo(
         () => arrangeNodes(nodes, layout.direction),
@@ -314,12 +317,41 @@ export function DefinitionFlowCanvas({
         window.addEventListener("keydown", handleKeyDown)
         return () => window.removeEventListener("keydown", handleKeyDown)
     }, [instance])
+    useEffect(() => {
+        if (!fullscreen) return
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key !== "Escape" || event.defaultPrevented) return
+            if (
+                event.target instanceof HTMLElement &&
+                event.target.closest(
+                    'input,textarea,select,[contenteditable="true"],[role="dialog"],[role="alertdialog"],[data-slot="popover-content"],[data-slot="dropdown-menu-content"]',
+                )
+            ) {
+                return
+            }
+            event.preventDefault()
+            setFullscreen(false)
+        }
+        window.addEventListener("keydown", handleEscape)
+        return () => window.removeEventListener("keydown", handleEscape)
+    }, [fullscreen])
+
     return (
         <section
             aria-label="审批流程自由画布"
-            className="min-w-0 overflow-hidden border-y border-border/60"
+            className={cn(
+                "min-w-0 overflow-hidden",
+                fullscreen
+                    ? "fixed inset-0 z-40 flex flex-col bg-card"
+                    : "border-y border-border/60",
+            )}
         >
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 py-2.5">
+            <div
+                className={cn(
+                    "flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 py-2.5",
+                    fullscreen && "px-page-inline",
+                )}
+            >
                 <div className="flex min-w-0 items-center gap-2">
                     <h3 className="font-medium">审批流程</h3>
                     <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
@@ -356,7 +388,7 @@ export function DefinitionFlowCanvas({
                                 </span>
                                 <span className="block">
                                     快捷键：+ / − 缩放，0 恢复 100%，F
-                                    适应画布。
+                                    适应画布，Esc 退出全屏。
                                 </span>
                             </PopoverDescription>
                         </PopoverContent>
@@ -452,6 +484,18 @@ export function DefinitionFlowCanvas({
                     >
                         <MaximizeIcon />
                     </Button>
+                    <Button
+                        id={`${id}-fullscreen`}
+                        type="button"
+                        variant={fullscreen ? "secondary" : "ghost"}
+                        size="icon-sm"
+                        aria-pressed={fullscreen}
+                        aria-label={fullscreen ? "退出画布全屏" : "全屏画布"}
+                        title={fullscreen ? "退出全屏 (Esc)" : "全屏画布"}
+                        onClick={() => setFullscreen((current) => !current)}
+                    >
+                        {fullscreen ? <Minimize2Icon /> : <Maximize2Icon />}
+                    </Button>
                     <DropdownMenu>
                         <DropdownMenuTrigger
                             id={`${id}-more`}
@@ -480,10 +524,24 @@ export function DefinitionFlowCanvas({
                     </DropdownMenu>
                 </div>
             </div>
-            <div className="flex flex-col lg:h-[clamp(440px,54vh,620px)] lg:flex-row">
+            <div
+                className={cn(
+                    "flex flex-col lg:flex-row",
+                    fullscreen
+                        ? "min-h-0 flex-1"
+                        : sidebar
+                          ? "lg:h-[clamp(480px,calc(100dvh-16rem),960px)]"
+                          : "h-[clamp(480px,calc(100dvh-16rem),960px)]",
+                )}
+            >
                 <div
                     ref={containerRef}
-                    className="relative h-[420px] min-h-0 w-full min-w-0 sm:h-[460px] lg:h-full lg:flex-1"
+                    className={cn(
+                        "relative min-h-0 w-full min-w-0 lg:h-full lg:flex-1",
+                        fullscreen
+                            ? "min-h-80 flex-1"
+                            : "h-[clamp(480px,calc(100dvh-16rem),960px)]",
+                    )}
                     style={canvasStyle}
                 >
                     {layout.ready && (
@@ -620,7 +678,12 @@ export function DefinitionFlowCanvas({
                     </aside>
                 ) : null}
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 py-2 text-xs text-muted-foreground">
+            <div
+                className={cn(
+                    "flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border/60 py-2 text-xs text-muted-foreground",
+                    fullscreen && "px-page-inline",
+                )}
+            >
                 <p role="status" aria-live="polite" className="min-w-0">
                     {layout.storageWarning
                         ? "浏览器未能保存画布布局，本次仍可编辑；审批配置请保存草稿。"

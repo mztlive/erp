@@ -3,6 +3,7 @@
 //! 已删除 start-processing / release-to-team / claim。通用写接口拒绝审批任务。
 
 use std::result::Result as StdResult;
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use axum::Extension;
@@ -227,6 +228,12 @@ impl HttpWorkItemConflict {
     }
 }
 
+fn work_item_read_service(state: &HttpState) -> WorkItemReadService {
+    let db = state.application().db();
+    WorkItemReadService::new(db.clone(), state.application().authorization())
+        .with_counterparty_port(Arc::new(WorkbenchReadService::new(db)))
+}
+
 /// 查询服务端责任过滤后的待办队列。
 /// 返回携带 `responsibility_kind` 的分页投影。
 /// 查询参数无效、授权版本变化或查询失败时返回错误。
@@ -236,7 +243,7 @@ pub async fn work_item_list(
     Query(params): Query<WorkItemListParams>,
     Query(search): Query<WorkItemSearchQuery>,
 ) -> Result<WorkItemHttpPageView> {
-    let page = WorkItemReadService::new(state.application().db(), state.application().authorization())
+    let page = work_item_read_service(&state)
         .work_item_search(WorkItemSearchParams { base: params, filters: search.filters }, actor)
         .await?;
     Ok(ApiResponse::ok_with_data(wrap_page(page)))
@@ -261,16 +268,14 @@ pub async fn fulfillment_queue_list(
 }
 
 /// 按请求条件查询与正式待办列表复用授权快照的统计。
-/// 返回个人、到期、超期、异常、任务族计数及服务端统计时点。
+/// 返回个人、当前范围总数、到期、超期、异常、任务族、审批单据拆解计数及服务端统计时点。
 /// 查询参数无效或授权统计失败时返回错误。
 pub async fn work_item_stats(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<WorkItemStatsParams>,
 ) -> Result<WorkItemStatsView> {
-    let stats = WorkItemReadService::new(state.application().db(), state.application().authorization())
-        .work_item_stats(params, actor)
-        .await?;
+    let stats = work_item_read_service(&state).work_item_stats(params, actor).await?;
     Ok(ApiResponse::ok_with_data(stats))
 }
 
@@ -455,7 +460,7 @@ mod tests {
 
     #[test]
     fn workspace_query_decodes_numeric_pagination_with_structured_filters() {
-        let uri = "/?scope=mine&page=2&page_size=50&filters=%7B%22handlers%22%3A%5B%22u-1%22%5D%7D"
+        let uri = "/?scope=mine&page=2&page_size=50&counterparty_ids=c-1,c-2&filters=%7B%22handlers%22%3A%5B%22u-1%22%5D%7D"
             .parse()
             .unwrap();
         let axum::extract::Query(base) =
@@ -464,9 +469,21 @@ mod tests {
             axum::extract::Query::<super::WorkItemSearchQuery>::try_from_uri(&uri).unwrap();
         assert_eq!(base.page, Some(2));
         assert_eq!(base.page_size, Some(50));
+        assert_eq!(base.counterparty_ids.as_deref(), Some("c-1,c-2"));
         assert_eq!(search.filters.as_deref(), Some(r#"{"handlers":["u-1"]}"#));
         let invalid = "/?scope=mine&page=not-a-number".parse().unwrap();
         assert!(axum::extract::Query::<super::WorkItemListParams>::try_from_uri(&invalid).is_err());
+
+        let stats_uri = "/?scope=managed&q=%E6%98%9F%E8%BE%B0&counterparty_ids=c-1&filters=%7B%22item_types%22%3A%5B%22approval%3Asales_order%22%5D%7D"
+            .parse()
+            .unwrap();
+        let axum::extract::Query(stats) =
+            axum::extract::Query::<super::WorkItemStatsParams>::try_from_uri(&stats_uri).unwrap();
+        assert_eq!(stats.q.as_deref(), Some("星辰"));
+        assert_eq!(stats.counterparty_ids.as_deref(), Some("c-1"));
+        assert_eq!(stats.filters.as_deref(), Some(r#"{"item_types":["approval:sales_order"]}"#));
+        let unknown_stats = "/?scope=managed&page=1".parse().unwrap();
+        assert!(axum::extract::Query::<super::WorkItemStatsParams>::try_from_uri(&unknown_stats).is_err());
     }
 
     #[test]

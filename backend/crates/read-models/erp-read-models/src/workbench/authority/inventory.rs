@@ -190,6 +190,7 @@ pub(in crate::workbench) fn settlement_fact(
         format!("供应商结算单 {}", statement.statement_no),
         statement.prepared_by.clone(),
     );
+    fact.push_counterparty_id(statement.supplier_id.to_string());
     fact.counterparty_label = supplier;
     fact.impact_summary = Some(settlement_review_instruction(difference_count, pending_count));
     fact

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/collapsible"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -336,11 +337,12 @@ function BatchItemEditor({
         >
             <DialogContent
                 id={`${prefix}-dialog`}
+                size="xl"
+                scroll="body"
                 closeButtonId={`${prefix}-close`}
                 showCloseButton={!busy}
-                className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
             >
-                <DialogHeader className="shrink-0 border-b border-grid px-6 py-5 pr-14">
+                <DialogHeader>
                     <DialogTitle>调整入库商品</DialogTitle>
                     <DialogDescription>
                         {item.name} · {item.specification}
@@ -348,7 +350,7 @@ function BatchItemEditor({
                 </DialogHeader>
                 <form
                     id={`${prefix}-form`}
-                    className="flex min-h-0 flex-1 flex-col"
+                    className="flex min-h-0 flex-1 flex-col overflow-hidden"
                     onSubmit={async (event) => {
                         event.preventDefault()
                         event.stopPropagation()
@@ -375,359 +377,423 @@ function BatchItemEditor({
                         }
                     }}
                 >
-                    <fieldset
-                        disabled={busy || readOnly}
-                        className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5"
-                    >
-                        <div className="flex flex-wrap items-center gap-3 text-body-compact">
-                            <span className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted">
-                                {item.images?.[0] ? (
-                                    <CatalogSourceImage
-                                        image={item.images[0]}
-                                        alt=""
-                                        width={64}
-                                        height={64}
-                                        compact
-                                        className="size-full object-cover"
-                                    />
-                                ) : (
-                                    <PackageIcon
-                                        className="size-6 text-muted-foreground"
-                                        aria-hidden="true"
-                                    />
-                                )}
-                            </span>
-                            <div className="min-w-0 flex-1 space-y-1">
-                                <p className="font-medium">
-                                    {item.name} · {item.specification}
-                                </p>
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <span className="num text-muted-foreground">
-                                        来源 SKU：{item.spec_id}
-                                    </span>
-                                    <BusinessStatusBadge
-                                        tone={
-                                            !resolution
-                                                ? "warning"
-                                                : existing
-                                                  ? "neutral"
-                                                  : "success"
-                                        }
-                                        label={
-                                            !resolution
-                                                ? "待自动核对"
-                                                : existing
-                                                  ? "关联已有 SKU · 保留原资料"
-                                                  : resolution === "CREATE_SKU"
-                                                    ? "已有商品新增规格"
-                                                    : "新建 SKU"
-                                        }
-                                    />
-                                    {manuallyAdjusted ? (
-                                        <BusinessStatusBadge
-                                            tone="warning"
-                                            label="已单独调整"
-                                        />
-                                    ) : null}
-                                </div>
-                            </div>
-                        </div>
-                        <dl className="grid grid-cols-1 gap-4 rounded-lg bg-muted/40 px-4 py-3 sm:grid-cols-3">
-                            <div>
-                                <dt className="text-xs text-muted-foreground">
-                                    接口采购报价
-                                </dt>
-                                <dd className="num mt-1 text-value-compact font-semibold tracking-tight">
-                                    {item.purchase_price !== null ? (
-                                        <MoneyValue
-                                            value={item.purchase_price}
+                    <DialogBody>
+                        <fieldset
+                            disabled={busy || readOnly}
+                            className="space-y-5"
+                        >
+                            <div className="flex flex-wrap items-center gap-3 text-body-compact">
+                                <span className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted">
+                                    {item.images?.[0] ? (
+                                        <CatalogSourceImage
+                                            image={item.images[0]}
+                                            alt=""
+                                            width={64}
+                                            height={64}
+                                            compact
+                                            className="size-full object-cover"
                                         />
                                     ) : (
-                                        "未提供"
+                                        <PackageIcon
+                                            className="size-6 text-muted-foreground"
+                                            aria-hidden="true"
+                                        />
                                     )}
-                                </dd>
+                                </span>
+                                <div className="min-w-0 flex-1 space-y-1">
+                                    <p className="font-medium">
+                                        {item.name} · {item.specification}
+                                    </p>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="num text-muted-foreground">
+                                            来源 SKU：{item.spec_id}
+                                        </span>
+                                        <BusinessStatusBadge
+                                            tone={
+                                                !resolution
+                                                    ? "warning"
+                                                    : existing
+                                                      ? "neutral"
+                                                      : "success"
+                                            }
+                                            label={
+                                                !resolution
+                                                    ? "待自动核对"
+                                                    : existing
+                                                      ? "关联已有 SKU · 保留原资料"
+                                                      : resolution ===
+                                                          "CREATE_SKU"
+                                                        ? "已有商品新增规格"
+                                                        : "新建 SKU"
+                                            }
+                                        />
+                                        {manuallyAdjusted ? (
+                                            <BusinessStatusBadge
+                                                tone="warning"
+                                                label="已单独调整"
+                                            />
+                                        ) : null}
+                                    </div>
+                                </div>
                             </div>
-                            <div>
-                                <dt className="text-xs text-muted-foreground">
-                                    来源规格
-                                </dt>
-                                <dd className="mt-1">
-                                    {item.specification || "未标注"}
-                                </dd>
-                            </div>
-                            <div>
-                                <dt className="text-xs text-muted-foreground">
-                                    来源单位
-                                </dt>
-                                <dd className="mt-1">
-                                    {catalogUnitLabel(item)}
-                                </dd>
-                            </div>
-                        </dl>
-                        <SourcePurchaseTerms
-                            terms={item.source_purchase_terms}
-                            unit={item.unit}
-                        />
-                        <section
-                            className="space-y-3"
-                            aria-labelledby={`${prefix}-prices-title`}
-                        >
-                            <h3
-                                id={`${prefix}-prices-title`}
-                                className="font-semibold"
+                            <dl className="grid grid-cols-1 gap-4 rounded-lg bg-muted/40 px-4 py-3 sm:grid-cols-3">
+                                <div>
+                                    <dt className="text-xs text-muted-foreground">
+                                        接口采购报价
+                                    </dt>
+                                    <dd className="num mt-1 text-value-compact font-semibold tracking-tight">
+                                        {item.purchase_price !== null ? (
+                                            <MoneyValue
+                                                value={item.purchase_price}
+                                            />
+                                        ) : (
+                                            "未提供"
+                                        )}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt className="text-xs text-muted-foreground">
+                                        来源规格
+                                    </dt>
+                                    <dd className="mt-1">
+                                        {item.specification || "未标注"}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt className="text-xs text-muted-foreground">
+                                        来源单位
+                                    </dt>
+                                    <dd className="mt-1">
+                                        {catalogUnitLabel(item)}
+                                    </dd>
+                                </div>
+                            </dl>
+                            <SourcePurchaseTerms
+                                terms={item.source_purchase_terms}
+                                unit={item.unit}
+                            />
+                            <section
+                                className="space-y-3"
+                                aria-labelledby={`${prefix}-prices-title`}
                             >
-                                公司销售参考价（含税）
-                            </h3>
-                            {existing ? (
-                                <p className="text-xs text-muted-foreground">
-                                    保留已有 SKU 的原价、上架状态与展示资料。
-                                </p>
-                            ) : null}
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                {(
-                                    Object.keys(priceLabels) as Array<
-                                        keyof typeof priceLabels
-                                    >
-                                ).map((name) => (
-                                    <form.AppField key={name} name={name}>
-                                        {(field) => {
-                                            const explicitlyCleared =
-                                                values.explicitClears.includes(
-                                                    name,
-                                                ) ||
-                                                (field.state.meta.isDirty &&
-                                                    !field.state.value.trim())
-                                            const linkedBulk =
-                                                bulkLinked &&
-                                                name === "bulk" &&
-                                                !values.bulkDetached &&
-                                                !explicitlyCleared
-                                            const displayedValue = linkedBulk
-                                                ? values.dropship
-                                                : field.state.value
-                                            return (
-                                                <Field>
-                                                    <div className="flex items-center justify-between gap-2">
-                                                        <FieldLabel
-                                                            htmlFor={`${prefix}-${name}`}
-                                                        >
-                                                            {priceLabels[name]}
-                                                        </FieldLabel>
-                                                        {!existing ? (
-                                                            <Button
-                                                                id={`${prefix}-${name}-clear`}
-                                                                type="button"
-                                                                variant="ghost"
-                                                                size="xs"
-                                                                onClick={() =>
-                                                                    clear(name)
-                                                                }
+                                <h3
+                                    id={`${prefix}-prices-title`}
+                                    className="font-semibold"
+                                >
+                                    公司销售参考价（含税）
+                                </h3>
+                                {existing ? (
+                                    <p className="text-xs text-muted-foreground">
+                                        保留已有 SKU
+                                        的原价、上架状态与展示资料。
+                                    </p>
+                                ) : null}
+                                <div className="grid gap-4 sm:grid-cols-2">
+                                    {(
+                                        Object.keys(priceLabels) as Array<
+                                            keyof typeof priceLabels
+                                        >
+                                    ).map((name) => (
+                                        <form.AppField key={name} name={name}>
+                                            {(field) => {
+                                                const explicitlyCleared =
+                                                    values.explicitClears.includes(
+                                                        name,
+                                                    ) ||
+                                                    (field.state.meta.isDirty &&
+                                                        !field.state.value.trim())
+                                                const linkedBulk =
+                                                    bulkLinked &&
+                                                    name === "bulk" &&
+                                                    !values.bulkDetached &&
+                                                    !explicitlyCleared
+                                                const displayedValue =
+                                                    linkedBulk
+                                                        ? values.dropship
+                                                        : field.state.value
+                                                return (
+                                                    <Field>
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <FieldLabel
+                                                                htmlFor={`${prefix}-${name}`}
                                                             >
-                                                                清空
-                                                            </Button>
-                                                        ) : null}
-                                                    </div>
-                                                    <Input
-                                                        id={`${prefix}-${name}`}
-                                                        inputMode="decimal"
-                                                        disabled={existing}
-                                                        value={displayedValue}
-                                                        onBlur={
-                                                            field.handleBlur
-                                                        }
-                                                        onChange={(event) => {
-                                                            field.handleChange(
-                                                                event.target
-                                                                    .value,
-                                                            )
-                                                            if (name === "bulk")
-                                                                form.setFieldValue(
-                                                                    "bulkDetached",
-                                                                    true,
-                                                                )
-                                                            form.setFieldValue(
-                                                                "explicitClears",
-                                                                (current) =>
-                                                                    current.filter(
-                                                                        (
-                                                                            fieldName,
-                                                                        ) =>
-                                                                            fieldName !==
+                                                                {
+                                                                    priceLabels[
+                                                                        name
+                                                                    ]
+                                                                }
+                                                            </FieldLabel>
+                                                            {!existing ? (
+                                                                <Button
+                                                                    id={`${prefix}-${name}-clear`}
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="xs"
+                                                                    onClick={() =>
+                                                                        clear(
                                                                             name,
-                                                                    ),
-                                                            )
-                                                        }}
-                                                        aria-invalid={
-                                                            field.state.meta
-                                                                .errors.length >
-                                                            0
-                                                        }
-                                                        aria-describedby={`${prefix}-${name}-description`}
-                                                    />
-                                                    <FieldDescription
-                                                        id={`${prefix}-${name}-description`}
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    清空
+                                                                </Button>
+                                                            ) : null}
+                                                        </div>
+                                                        <Input
+                                                            id={`${prefix}-${name}`}
+                                                            inputMode="decimal"
+                                                            disabled={existing}
+                                                            value={
+                                                                displayedValue
+                                                            }
+                                                            onBlur={
+                                                                field.handleBlur
+                                                            }
+                                                            onChange={(
+                                                                event,
+                                                            ) => {
+                                                                field.handleChange(
+                                                                    event.target
+                                                                        .value,
+                                                                )
+                                                                if (
+                                                                    name ===
+                                                                    "bulk"
+                                                                )
+                                                                    form.setFieldValue(
+                                                                        "bulkDetached",
+                                                                        true,
+                                                                    )
+                                                                form.setFieldValue(
+                                                                    "explicitClears",
+                                                                    (current) =>
+                                                                        current.filter(
+                                                                            (
+                                                                                fieldName,
+                                                                            ) =>
+                                                                                fieldName !==
+                                                                                name,
+                                                                        ),
+                                                                )
+                                                            }}
+                                                            aria-invalid={
+                                                                field.state.meta
+                                                                    .errors
+                                                                    .length > 0
+                                                            }
+                                                            aria-describedby={`${prefix}-${name}-description`}
+                                                        />
+                                                        <FieldDescription
+                                                            id={`${prefix}-${name}-description`}
+                                                        >
+                                                            {existing
+                                                                ? "保留原价"
+                                                                : explicitlyCleared
+                                                                  ? "明确清空，批量补值默认保留此选择。"
+                                                                  : linkedBulk
+                                                                    ? "与本行最终代发价联动；单独修改将解除联动。"
+                                                                    : field
+                                                                            .state
+                                                                            .meta
+                                                                            .isDirty
+                                                                      ? "已单独调整；批量重新计算默认保留。"
+                                                                      : name ===
+                                                                          "minimumQuantity"
+                                                                        ? `按本 SKU 的公司基础单位填写（${catalogUnitLabel(item)}）。`
+                                                                        : "留空不等于清空；可恢复批量规则。"}
+                                                        </FieldDescription>
+                                                        <FieldError
+                                                            errors={
+                                                                field.state.meta
+                                                                    .errors
+                                                            }
+                                                        />
+                                                    </Field>
+                                                )
+                                            }}
+                                        </form.AppField>
+                                    ))}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-3">
+                                    {!existing && !readOnly ? (
+                                        <LoadingButton
+                                            id={`${prefix}-restore-rules`}
+                                            type="button"
+                                            variant="outline"
+                                            loading={restoring}
+                                            disabled={submitting}
+                                            onClick={() => {
+                                                void restore()
+                                            }}
+                                        >
+                                            恢复批量规则
+                                        </LoadingButton>
+                                    ) : null}
+                                    {dropshipOnly ? (
+                                        <p className="text-xs text-warning-soft-foreground">
+                                            本供给仅支持代发；公司集采参考价不改变供应商采购条件。
+                                        </p>
+                                    ) : null}
+                                </div>
+                            </section>
+                            <section
+                                className="space-y-3 border-t border-grid pt-4"
+                                aria-labelledby={`${prefix}-details-title`}
+                            >
+                                <h3
+                                    id={`${prefix}-details-title`}
+                                    className="font-semibold"
+                                >
+                                    建档资料
+                                </h3>
+                                <div className="grid gap-4 sm:grid-cols-3">
+                                    <form.AppField name="name">
+                                        {(field) => (
+                                            <field.TextField
+                                                id={`${prefix}-name`}
+                                                label="公司展示名称"
+                                                disabled={productPreserved}
+                                            />
+                                        )}
+                                    </form.AppField>
+                                    <form.AppField name="unitId">
+                                        {(field) =>
+                                            sourceUnitKnown || existing ? (
+                                                <Field>
+                                                    <FieldLabel
+                                                        htmlFor={`${prefix}-unitId`}
                                                     >
-                                                        {existing
-                                                            ? "保留原价"
-                                                            : explicitlyCleared
-                                                              ? "明确清空，批量补值默认保留此选择。"
-                                                              : linkedBulk
-                                                                ? "与本行最终代发价联动；单独修改将解除联动。"
-                                                                : field.state
-                                                                        .meta
-                                                                        .isDirty
-                                                                  ? "已单独调整；批量重新计算默认保留。"
-                                                                  : name ===
-                                                                      "minimumQuantity"
-                                                                    ? `按本 SKU 的公司基础单位填写（${catalogUnitLabel(item)}）。`
-                                                                    : "留空不等于清空；可恢复批量规则。"}
-                                                    </FieldDescription>
-                                                    <FieldError
-                                                        errors={
-                                                            field.state.meta
-                                                                .errors
+                                                        公司计量单位
+                                                    </FieldLabel>
+                                                    <Input
+                                                        id={`${prefix}-unitId`}
+                                                        readOnly
+                                                        value={
+                                                            sourceUnitKnown
+                                                                ? catalogUnitLabel(
+                                                                      item,
+                                                                  )
+                                                                : (unitOptions.find(
+                                                                      (
+                                                                          option,
+                                                                      ) =>
+                                                                          option.value ===
+                                                                          field
+                                                                              .state
+                                                                              .value,
+                                                                  )?.label ??
+                                                                  "保留原单位")
                                                         }
                                                     />
                                                 </Field>
-                                            )
-                                        }}
-                                    </form.AppField>
-                                ))}
-                            </div>
-                            <div className="flex flex-wrap items-center gap-3">
-                                {!existing && !readOnly ? (
-                                    <LoadingButton
-                                        id={`${prefix}-restore-rules`}
-                                        type="button"
-                                        variant="outline"
-                                        loading={restoring}
-                                        disabled={submitting}
-                                        onClick={() => {
-                                            void restore()
-                                        }}
-                                    >
-                                        恢复批量规则
-                                    </LoadingButton>
-                                ) : null}
-                                {dropshipOnly ? (
-                                    <p className="text-xs text-warning-soft-foreground">
-                                        本供给仅支持代发；公司集采参考价不改变供应商采购条件。
-                                    </p>
-                                ) : null}
-                            </div>
-                        </section>
-                        <section
-                            className="space-y-3 border-t border-grid pt-4"
-                            aria-labelledby={`${prefix}-details-title`}
-                        >
-                            <h3
-                                id={`${prefix}-details-title`}
-                                className="font-semibold"
-                            >
-                                建档资料
-                            </h3>
-                            <div className="grid gap-4 sm:grid-cols-3">
-                                <form.AppField name="name">
-                                    {(field) => (
-                                        <field.TextField
-                                            id={`${prefix}-name`}
-                                            label="公司展示名称"
-                                            disabled={productPreserved}
-                                        />
-                                    )}
-                                </form.AppField>
-                                <form.AppField name="unitId">
-                                    {(field) =>
-                                        sourceUnitKnown || existing ? (
-                                            <Field>
-                                                <FieldLabel
-                                                    htmlFor={`${prefix}-unitId`}
-                                                >
-                                                    公司计量单位
-                                                </FieldLabel>
-                                                <Input
+                                            ) : (
+                                                <field.SelectField
                                                     id={`${prefix}-unitId`}
-                                                    readOnly
-                                                    value={
-                                                        sourceUnitKnown
-                                                            ? catalogUnitLabel(
-                                                                  item,
-                                                              )
-                                                            : (unitOptions.find(
-                                                                  (option) =>
-                                                                      option.value ===
-                                                                      field
-                                                                          .state
-                                                                          .value,
-                                                              )?.label ??
-                                                              "保留原单位")
-                                                    }
+                                                    label="公司计量单位"
+                                                    options={unitOptions}
                                                 />
-                                            </Field>
-                                        ) : (
+                                            )
+                                        }
+                                    </form.AppField>
+                                    <form.AppField name="categoryId">
+                                        {(field) => (
                                             <field.SelectField
-                                                id={`${prefix}-unitId`}
-                                                label="公司计量单位"
-                                                options={unitOptions}
+                                                id={`${prefix}-categoryId`}
+                                                label="公司分类"
+                                                options={categoryOptions}
+                                                disabled={productPreserved}
                                             />
-                                        )
-                                    }
-                                </form.AppField>
-                                <form.AppField name="categoryId">
-                                    {(field) => (
-                                        <field.SelectField
-                                            id={`${prefix}-categoryId`}
-                                            label="公司分类"
-                                            options={categoryOptions}
-                                            disabled={productPreserved}
-                                        />
-                                    )}
-                                </form.AppField>
-                            </div>
-                            <Collapsible
-                                open={moreOpen}
-                                onOpenChange={setMoreOpen}
-                                className="rounded-lg border border-grid"
-                            >
-                                <CollapsibleTrigger
-                                    id={`${prefix}-more-details`}
-                                    type="button"
-                                    className="flex w-full cursor-pointer items-center justify-between gap-2 px-4 py-3 text-left text-body-compact font-medium hover:bg-muted/40"
-                                >
-                                    <span className="flex flex-wrap items-center gap-2">
-                                        <span>更多资料与供给条件</span>
-                                        {moreErrorFields.length > 0 ? (
-                                            <BusinessStatusBadge
-                                                className="num"
-                                                tone="destructive"
-                                                label={`${moreErrorFields.length} 项待修正`}
-                                            />
-                                        ) : null}
-                                    </span>
-                                    <ChevronDownIcon
-                                        aria-hidden="true"
-                                        className={cn(
-                                            "size-4 shrink-0 text-muted-foreground transition-transform",
-                                            moreOpen && "rotate-180",
                                         )}
-                                    />
-                                </CollapsibleTrigger>
-                                <CollapsibleContent className="border-t border-grid px-4 py-4">
-                                    <div className="space-y-4">
-                                        <form.AppField name="description">
-                                            {(field) => (
-                                                <field.TextareaField
-                                                    id={`${prefix}-description`}
-                                                    label="公司商品介绍"
-                                                    disabled={productPreserved}
+                                    </form.AppField>
+                                </div>
+                                <Collapsible
+                                    open={moreOpen}
+                                    onOpenChange={setMoreOpen}
+                                    className="rounded-lg border border-grid"
+                                >
+                                    <CollapsibleTrigger
+                                        id={`${prefix}-more-details`}
+                                        type="button"
+                                        className="flex w-full cursor-pointer items-center justify-between gap-2 px-4 py-3 text-left text-body-compact font-medium hover:bg-muted/40"
+                                    >
+                                        <span className="flex flex-wrap items-center gap-2">
+                                            <span>更多资料与供给条件</span>
+                                            {moreErrorFields.length > 0 ? (
+                                                <BusinessStatusBadge
+                                                    className="num"
+                                                    tone="destructive"
+                                                    label={`${moreErrorFields.length} 项待修正`}
                                                 />
+                                            ) : null}
+                                        </span>
+                                        <ChevronDownIcon
+                                            aria-hidden="true"
+                                            className={cn(
+                                                "size-4 shrink-0 text-muted-foreground transition-transform",
+                                                moreOpen && "rotate-180",
                                             )}
-                                        </form.AppField>
-                                        <div className="grid gap-4 sm:grid-cols-3">
-                                            <form.AppField name="inputTaxPercentage">
+                                        />
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent className="border-t border-grid px-4 py-4">
+                                        <div className="space-y-4">
+                                            <form.AppField name="description">
                                                 {(field) => (
-                                                    <SupplierTaxRateField
-                                                        id={`${prefix}-tax`}
+                                                    <field.TextareaField
+                                                        id={`${prefix}-description`}
+                                                        label="公司商品介绍"
+                                                        disabled={
+                                                            productPreserved
+                                                        }
+                                                    />
+                                                )}
+                                            </form.AppField>
+                                            <div className="grid gap-4 sm:grid-cols-3">
+                                                <form.AppField name="inputTaxPercentage">
+                                                    {(field) => (
+                                                        <SupplierTaxRateField
+                                                            id={`${prefix}-tax`}
+                                                            supplierId={
+                                                                supplierId
+                                                            }
+                                                            value={
+                                                                field.state
+                                                                    .value
+                                                            }
+                                                            onChange={
+                                                                field.handleChange
+                                                            }
+                                                            onBlur={
+                                                                field.handleBlur
+                                                            }
+                                                            errors={
+                                                                field.state.meta
+                                                                    .errors
+                                                            }
+                                                        />
+                                                    )}
+                                                </form.AppField>
+                                                <form.AppField name="validFrom">
+                                                    {(field) => (
+                                                        <field.DateField
+                                                            id={`${prefix}-validFrom`}
+                                                            label="供给生效日期"
+                                                        />
+                                                    )}
+                                                </form.AppField>
+                                                <form.AppField name="validTo">
+                                                    {(field) => (
+                                                        <field.DateField
+                                                            id={`${prefix}-validTo`}
+                                                            label="供给失效日期"
+                                                            description="留空表示不设失效日期。"
+                                                        />
+                                                    )}
+                                                </form.AppField>
+                                            </div>
+                                            <form.AppField name="deliveryTemplateId">
+                                                {(field) => (
+                                                    <DeliveryTemplateField
+                                                        id={`${prefix}-delivery`}
                                                         supplierId={supplierId}
                                                         value={
                                                             field.state.value
@@ -735,53 +801,17 @@ function BatchItemEditor({
                                                         onChange={
                                                             field.handleChange
                                                         }
-                                                        onBlur={
-                                                            field.handleBlur
-                                                        }
-                                                        errors={
-                                                            field.state.meta
-                                                                .errors
-                                                        }
-                                                    />
-                                                )}
-                                            </form.AppField>
-                                            <form.AppField name="validFrom">
-                                                {(field) => (
-                                                    <field.DateField
-                                                        id={`${prefix}-validFrom`}
-                                                        label="供给生效日期"
-                                                    />
-                                                )}
-                                            </form.AppField>
-                                            <form.AppField name="validTo">
-                                                {(field) => (
-                                                    <field.DateField
-                                                        id={`${prefix}-validTo`}
-                                                        label="供给失效日期"
-                                                        description="留空表示不设失效日期。"
                                                     />
                                                 )}
                                             </form.AppField>
                                         </div>
-                                        <form.AppField name="deliveryTemplateId">
-                                            {(field) => (
-                                                <DeliveryTemplateField
-                                                    id={`${prefix}-delivery`}
-                                                    supplierId={supplierId}
-                                                    value={field.state.value}
-                                                    onChange={
-                                                        field.handleChange
-                                                    }
-                                                />
-                                            )}
-                                        </form.AppField>
-                                    </div>
-                                </CollapsibleContent>
-                            </Collapsible>
-                        </section>
-                    </fieldset>
+                                    </CollapsibleContent>
+                                </Collapsible>
+                            </section>
+                        </fieldset>
+                    </DialogBody>
                     {saveError ? (
-                        <div className="border-t border-grid px-6 py-3">
+                        <div className="shrink-0 border-t border-border/80 px-overlay-padding py-3">
                             <Alert variant="destructive">
                                 <AlertCircleIcon aria-hidden="true" />
                                 <AlertDescription>{saveError}</AlertDescription>
@@ -789,7 +819,7 @@ function BatchItemEditor({
                         </div>
                     ) : null}
                     {confirmDiscard ? (
-                        <div className="border-t border-grid px-6 py-3">
+                        <div className="shrink-0 border-t border-border/80 px-overlay-padding py-3">
                             <Alert variant="warning">
                                 <TriangleAlertIcon aria-hidden="true" />
                                 <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
@@ -822,7 +852,7 @@ function BatchItemEditor({
                             </Alert>
                         </div>
                     ) : null}
-                    <DialogFooter className="shrink-0 items-center border-t border-grid px-6 py-4 sm:justify-between">
+                    <DialogFooter className="items-center sm:justify-between">
                         <p className="text-xs text-muted-foreground">
                             保存后须重新核对，旧预览不可提交。
                         </p>

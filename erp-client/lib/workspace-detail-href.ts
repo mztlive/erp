@@ -12,7 +12,7 @@ export function workspaceQueueHref(
     if (
         url.origin !== "https://workspace.invalid" ||
         (!workspaceQueueView(url.pathname) &&
-            !/^\/workspace\/roles\/WB-(01|03|04)$/.test(url.pathname))
+            !/^\/workspace\/roles\/WB-(01|02|03|04|05)$/.test(url.pathname))
     )
         return fallback
     url.searchParams.delete("_workspace_frame")

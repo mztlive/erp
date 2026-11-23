@@ -33,6 +33,7 @@ import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { formatDateTimeInZone } from "@/lib/datetime"
 import { hasPermission } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 import type { ContractApplication, ContractTemplate } from "../api/templates"
@@ -326,10 +327,11 @@ export function ContractTemplatesPage() {
                     return <TableEmptyCell />
                 }
                 return (
-                    <time dateTime={createdAt.toISOString()}>
-                        {createdAt.toLocaleString("zh-CN", {
-                            timeZone: "Asia/Shanghai",
-                        })}
+                    <time className="num" dateTime={createdAt.toISOString()}>
+                        {formatDateTimeInZone(
+                            createdAt.toISOString(),
+                            "Asia/Shanghai",
+                        )}
                     </time>
                 )
             },

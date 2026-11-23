@@ -1,10 +1,6 @@
 "use client"
 
-import {
-    MoneyValue,
-    surfaceInsetClassName,
-    surfacePanelClassName,
-} from "@/components/business"
+import { MoneyValue, surfaceInsetClassName } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { MoneyInput } from "@/components/form/money-input"
@@ -53,7 +49,7 @@ export function AllocationPoolCard({
     return (
         <section
             id={poolId}
-            className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
+            className="erp-raised-surface min-w-0 overflow-hidden rounded-lg border border-border/60 bg-background"
             aria-label="待核销应付单据"
         >
             <div className="border-b border-border px-4 py-3">

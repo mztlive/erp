@@ -85,7 +85,7 @@ export function ArrangementDialog({
             }}
         >
             <DialogContent
-                className="max-h-[90vh] overflow-y-auto sm:max-w-5xl"
+                size="2xl"
                 closeButtonId={`${prefix}-close`}
                 showCloseButton={!busy}
             >

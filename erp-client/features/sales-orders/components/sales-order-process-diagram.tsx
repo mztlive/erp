@@ -31,6 +31,7 @@ import {
 import { MoneyValue, detailWorkspaceStyles } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { formatDate } from "@/lib/datetime"
 import { cn } from "@/lib/utils"
 import type { SalesOrderDetailView } from "../api/contracts"
 import {
@@ -211,10 +212,8 @@ function ProcessNode({ id, data }: NodeProps<DiagramNode>) {
                     </div>
                 </div>
                 {data.effectiveDate ? (
-                    <p className="text-center text-xs text-muted-foreground">
-                        {new Date(data.effectiveDate).toLocaleDateString(
-                            "zh-CN",
-                        )}
+                    <p className="num text-center text-xs text-muted-foreground">
+                        {formatDate(data.effectiveDate)}
                     </p>
                 ) : null}
                 {data.canOpen(root) ? (

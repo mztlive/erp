@@ -34,15 +34,33 @@ export function WorkspaceImportTask({
     item: WorkspaceWorkItem
     onTaskCompleted?: (workItemId: string) => void
 }) {
-    const [urlState, setUrlState] = React.useState<ImportOpeningUrlState>({
-        environment: "PRODUCTION",
-        batchId: item.businessObjectId,
-        workItemId: item.workItemId,
-        confirmationScope: confirmationScopeOf(item),
-        queueContextId: item.queueContextId,
-        section: "confirm",
-        page: 1,
-    })
+    return (
+        <WorkspaceImportTaskContent
+            key={item.workItemId}
+            item={item}
+            onTaskCompleted={onTaskCompleted}
+        />
+    )
+}
+
+function WorkspaceImportTaskContent({
+    item,
+    onTaskCompleted,
+}: {
+    item: WorkspaceWorkItem
+    onTaskCompleted?: (workItemId: string) => void
+}) {
+    const [urlState, setUrlState] = React.useState<ImportOpeningUrlState>(
+        () => ({
+            environment: "PRODUCTION",
+            batchId: item.businessObjectId,
+            workItemId: item.workItemId,
+            confirmationScope: confirmationScopeOf(item),
+            queueContextId: item.queueContextId,
+            section: "confirm",
+            page: 1,
+        }),
+    )
     const patchUrl = React.useCallback(
         (patch: Partial<ImportOpeningUrlState>) =>
             setUrlState((current) => ({ ...current, ...patch })),

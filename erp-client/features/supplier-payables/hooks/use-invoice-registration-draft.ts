@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { z } from "zod"
 import { invoiceFileReference } from "@/lib/invoice-files"
+import { formatTime } from "@/lib/datetime"
 import { toast } from "@/components/ui/toast"
 import type { AllocationSessionState } from "./use-allocation-session"
 import { useWorkspaceFormGuard } from "@/lib/workspace-form-guard"
@@ -136,7 +137,7 @@ export function useInvoiceRegistrationDraft(
             state.invoiceForm.reset(state.invoiceForm.state.values)
             setBaseline(signature)
             setHint(
-                `草稿已保存到本机 ${new Date(savedAt).toLocaleTimeString("zh-CN")}${invoiceFiles.length ? "；发票文件未保存，恢复时需重新选择" : ""}`,
+                `草稿已保存到本机 ${formatTime(savedAt)}${invoiceFiles.length ? "；发票文件未保存，恢复时需重新选择" : ""}`,
             )
         } catch {
             toast.add({

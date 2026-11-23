@@ -9,6 +9,7 @@ import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -1099,11 +1100,8 @@ export function PortalBatchDialog({
                     if (!open) requestClose()
                 }}
             >
-                <DialogContent
-                    showCloseButton={false}
-                    className="flex max-h-[90svh] flex-col gap-4 overflow-hidden sm:max-w-6xl"
-                >
-                    <DialogHeader className="shrink-0">
+                <DialogContent size="2xl" scroll="body" showCloseButton={false}>
+                    <DialogHeader>
                         <div className="flex items-center justify-between gap-3">
                             <DialogTitle>{batchModeLabels[mode]}</DialogTitle>
                             <Button
@@ -1126,13 +1124,13 @@ export function PortalBatchDialog({
                         </DialogDescription>
                     </DialogHeader>
                     <form
-                        className="flex min-h-0 flex-1 flex-col gap-4"
+                        className="flex min-h-0 flex-1 flex-col overflow-hidden"
                         onSubmit={(event) => {
                             event.preventDefault()
                             void form.handleSubmit()
                         }}
                     >
-                        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+                        <DialogBody className="space-y-4">
                             <form.Subscribe selector={(state) => state.values}>
                                 {(values) => {
                                     const unknown = values.rows.filter(
@@ -1387,7 +1385,7 @@ export function PortalBatchDialog({
                                     )
                                 }}
                             </form.Subscribe>
-                        </div>
+                        </DialogBody>
                         <form.Subscribe selector={(state) => state.values}>
                             {(values) => {
                                 const unknown = values.rows.some(
@@ -1402,7 +1400,7 @@ export function PortalBatchDialog({
                                     !values.hydrated ||
                                     values.recoveryBlocked
                                 return (
-                                    <DialogFooter className="shrink-0 flex-wrap border-t pt-4">
+                                    <DialogFooter className="flex-wrap">
                                         {values.rows.some(
                                             (row) =>
                                                 row.status === "INVALID" ||

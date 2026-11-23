@@ -301,7 +301,7 @@ function RuleDialog({
             }}
         >
             <DialogContent
-                className="sm:max-w-xl"
+                size="lg"
                 closeButtonId="finance-responsibilities-rule-dialog-close"
                 showCloseButton={!mutation.isPending}
                 finalFocus={finalFocus}

@@ -99,10 +99,10 @@ export const CompanyForm = ({
             }}
         >
             <DialogContent
+                size="lg"
                 finalFocus={finalFocus}
                 closeButtonId="company-form-dismiss"
                 id="company-form-dialog"
-                className="sm:max-w-xl"
             >
                 <DialogHeader>
                     <DialogTitle>

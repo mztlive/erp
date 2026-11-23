@@ -1,25 +1,50 @@
 "use client"
 
 import type { ReactNode } from "react"
+import type { TaskWorkbenchArchetype } from "@/components/business/unified-task-workbench"
 import {
     WorkspaceTaskPageProvider,
     WorkspaceTaskPane,
     type WorkspaceTaskPaneProps,
 } from "@/components/business/workspace-task-pane"
 import { NativeCheckbox } from "@/components/ui/checkbox"
-import { StatusBadge } from "@/components/ui/status-badge"
+import { AUTO_NEXT_LABEL } from "@/lib/task-status-dictionary"
 import type { WorkspaceWorkItem } from "../types"
 import { isApprovalWorkbenchTask } from "../lib/navigation-eligibility"
-import { WorkspaceApprovalProgress } from "./workspace-approval-progress"
-import { WorkspaceTaskInstructions } from "./workspace-task-instructions"
 import { WorkspaceMoney } from "./workspace-money"
 
-/** 完整办理页直接复用纯白通栏骨架，弹窗继续使用卡片布局。 */
+const ACTION_TASK_TYPES = new Set([
+    "PURCHASE_PAYMENT_ARRANGEMENT",
+    "PURCHASE_SOURCE_UPDATE",
+    "PURCHASE_RETURN_REFUND",
+    "PURCHASE_RETURN_INVOICE",
+    "CUSTOMER_ACCEPTANCE_REGISTRATION",
+    "SUPPLIER_PAYMENT_EXECUTION",
+    "SALES_INVOICE_EXECUTION",
+    "SUPPLIER_SETTLEMENT_REVIEW",
+    "SUPPLIER_PORTAL_REVIEW",
+    "IMPORT_BUSINESS_CONFIRMATION",
+    "FULFILLMENT_OPERATION",
+    "PROCUREMENT_ORDER_CREATION",
+    "SALES_INQUIRY_PROCESSING",
+])
+
+const INVESTIGATION_TASK_TYPES = new Set([
+    "INTEGRATION_RESULT_UNKNOWN",
+    "BUSINESS_EXCEPTION",
+])
+
+/** 完整办理页直接复用统一工作台骨架（UnifiedTaskWorkbench）。 */
 export function WorkspaceProcessingPane(props: WorkspaceTaskPaneProps) {
     return <WorkspaceTaskPane {...props} />
 }
 
-/** 所有审批、执行与只读跟踪入口共用纯白通栏办理页，动作仍由各业务模块提供。 */
+/**
+ * 所有审批、执行与只读跟踪入口共用纯白通栏工作台骨架：
+ * - Archetype 1 (`decision`)：全部 13 类审批单据与退回重办解锁 2 栏决策工作台（右轨挂载路线/审计轨迹/侧边附件对照）；
+ * - Archetype 2 (`action`)：全部执行类任务撤除冗余 376px 通用 metadata aside，释放 100% 通栏作业面；
+ * - Archetype 3 (`investigation`)：异常排查类任务保持单主壳，不重复堆砌 20rem 元数据侧栏。
+ */
 export function WorkspaceProcessingLayout({
     item,
     reworkTask,
@@ -60,23 +85,37 @@ export function WorkspaceProcessingLayout({
     const payment = item.businessObjectType === "purchase_payment_request"
     const paymentReview =
         payment && item.workItemType !== "SUPPLIER_PAYMENT_EXECUTION"
-    const paymentArrangement =
-        item.workItemType === "PURCHASE_PAYMENT_ARRANGEMENT"
     const inquiryProcessing =
         item.workItemType === "SALES_INQUIRY_PROCESSING" &&
         item.handlerKey === "sales_inquiry_processing" &&
         item.businessObjectType === "sales_inquiry"
+
+    const archetype: TaskWorkbenchArchetype =
+        approvalDocument || paymentReview
+            ? "decision"
+            : INVESTIGATION_TASK_TYPES.has(item.workItemType)
+              ? "investigation"
+              : ACTION_TASK_TYPES.has(item.workItemType)
+                ? "action"
+                : "action"
+
     const actionable = (reworkTask ?? item).allowedActions.some((action) =>
-        ["PROCESS", "APPROVE", "REJECT"].includes(action),
+        [
+            "PROCESS",
+            "APPROVE",
+            "REJECT",
+            "CANCEL",
+            "CANCEL_APPROVAL",
+            "RESUME_CURRENT_APPROVER",
+            "CANCEL_BLOCKED_APPROVAL",
+        ].includes(action),
     )
-    const showAutoNext =
-        allowAutoNext &&
-        actionable &&
-        (Boolean(reworkTask) || item.workItemType !== "APPROVAL_INSTANCE")
+    const showAutoNext = allowAutoNext && actionable
 
     return (
         <WorkspaceTaskPageProvider
             flat
+            archetype={archetype}
             navigation={{
                 back: {
                     id: "workspace-processing-back",
@@ -89,15 +128,11 @@ export function WorkspaceProcessingLayout({
                 refreshing,
             }}
             singleColumn={
-                fulfillment ||
-                approvalDocument ||
-                paymentReview ||
-                inquiryProcessing
+                archetype === "action" || archetype === "investigation"
             }
             summaryInHeader={fulfillment}
             denseHeader={fulfillment}
             fillBody={fulfillment && item.businessObjectType === "delivery"}
-            compact={paymentArrangement}
             fullWidth={
                 inquiryProcessing ||
                 (item.workItemType === "PROCUREMENT_ORDER_CREATION" &&
@@ -105,25 +140,15 @@ export function WorkspaceProcessingLayout({
                     item.allowedActions.includes("PROCESS"))
             }
             summary={
-                payment || paymentArrangement || approvalDocument ? null : (
+                fulfillment ? (
                     <div
                         data-slot="workspace-processing-summary"
-                        className={
-                            fulfillment
-                                ? "flex flex-wrap items-start justify-between gap-x-6 gap-y-2"
-                                : undefined
-                        }
+                        className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2"
                     >
-                        <dl
-                            className={
-                                fulfillment
-                                    ? "flex flex-wrap items-center gap-x-7 gap-y-2"
-                                    : "flex flex-wrap gap-x-8 gap-y-4"
-                            }
-                        >
+                        <dl className="flex flex-wrap items-center gap-x-7 gap-y-2">
                             {item.amountSummary && (
                                 <Fact
-                                    inline={fulfillment}
+                                    inline
                                     label={item.amountSummary.label}
                                     value={
                                         <WorkspaceMoney
@@ -133,104 +158,35 @@ export function WorkspaceProcessingLayout({
                                 />
                             )}
                             <Fact
-                                inline={fulfillment}
+                                inline
                                 label="当前处理人"
                                 value={
                                     reworkTask?.ownerUserLabel ||
                                     item.ownerUserLabel
                                 }
                             />
-                            {!fulfillment && (
+                            <Fact
+                                inline
+                                label="进入时间"
+                                value={item.enteredAtLabel}
+                            />
+                            {item.dueAt && (
                                 <Fact
-                                    inline={fulfillment}
-                                    label="任务类型"
-                                    value={item.workItemTypeLabel}
-                                />
-                            )}
-                            {fulfillment && (
-                                <Fact
-                                    inline={fulfillment}
-                                    label="进入时间"
-                                    value={item.enteredAtLabel}
-                                />
-                            )}
-                            {(!fulfillment || item.dueAt) && (
-                                <Fact
-                                    inline={fulfillment}
+                                    inline
                                     label="截止时间"
                                     value={item.dueAtLabel || "未设截止时间"}
                                 />
                             )}
                         </dl>
                     </div>
-                )
+                ) : null
             }
-            aside={
-                <>
-                    {approval ? (
-                        <WorkspaceApprovalProgress
-                            vertical
-                            instance={{
-                                id: approval.instanceId,
-                                status: approval.status,
-                                currentRoundNo: approval.currentRoundNo,
-                                currentNodeName: approval.currentNodeLabel,
-                                currentAssigneeName:
-                                    approval.currentAssigneeLabel,
-                                latestRejection: approval.lastRejectReason,
-                                latestRejectionByName:
-                                    approval.lastRejectorLabel,
-                                processName: approval.processName,
-                                processVersion: approval.processVersion,
-                            }}
-                        />
-                    ) : (
-                        <section className="space-y-4">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <h3 className="font-semibold">办理状态</h3>
-                                <StatusBadge
-                                    label={item.statusLabel}
-                                    tone={item.statusTone}
-                                />
-                            </div>
-                            <dl className="space-y-4">
-                                <Fact
-                                    label="当前责任"
-                                    value={[
-                                        item.ownerRoleLabel,
-                                        item.ownerUserLabel,
-                                    ]
-                                        .filter(Boolean)
-                                        .join(" · ")}
-                                />
-                                <Fact
-                                    label="进入时间"
-                                    value={item.enteredAtLabel}
-                                />
-                                {paymentArrangement && item.dueAt && (
-                                    <Fact
-                                        label="截止时间"
-                                        value={item.dueAtLabel}
-                                    />
-                                )}
-                            </dl>
-                        </section>
-                    )}
-                    {(item.nextActionHint ||
-                        item.impactSummary ||
-                        item.actionBlockers.length > 0) && (
-                        <section className="space-y-4 border-t border-border/60 pt-5 text-body-compact leading-6">
-                            <h3 className="font-semibold">处理说明</h3>
-                            <WorkspaceTaskInstructions item={item} />
-                        </section>
-                    )}
-                </>
-            }
+            aside={null}
             footerLeading={
                 showAutoNext ? (
                     <label
                         htmlFor="workspace-processing-auto-next"
-                        className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none hover:text-foreground"
+                        className="flex shrink-0 cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none hover:text-foreground"
                     >
                         <NativeCheckbox
                             id="workspace-processing-auto-next"
@@ -239,7 +195,7 @@ export function WorkspaceProcessingLayout({
                                 onAutoNextChange(value === true)
                             }
                         />
-                        {fulfillment ? "完成后下一项" : "处理后自动进入下一项"}
+                        {AUTO_NEXT_LABEL}
                     </label>
                 ) : null
             }

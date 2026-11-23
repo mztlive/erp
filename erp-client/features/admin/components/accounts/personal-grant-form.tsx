@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
     DialogDescription,
@@ -321,30 +323,31 @@ export function PersonalGrantForm({
         >
             <DialogContent
                 id="person-scope-dialog"
+                size="xl"
+                scroll="body"
                 closeButtonId="person-scope-dialog-close"
                 showCloseButton={!save.isPending}
-                className="flex max-h-[85dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
                 finalFocus={() =>
                     document.getElementById(
                         `person-scope-${toAutomationIdSegment(resource)}-edit`,
                     )
                 }
             >
-                <DialogHeader className="shrink-0 border-b border-grid px-5 py-4 pr-16">
+                <DialogHeader>
                     <DialogTitle>配置{resourceLabel(resource)}范围</DialogTitle>
                     <DialogDescription>
                         {name} · 设置可访问的数据及适用操作
                     </DialogDescription>
                 </DialogHeader>
                 <form
-                    className="flex min-h-0 flex-col text-body-compact"
+                    className="flex min-h-0 flex-1 flex-col overflow-hidden text-body-compact"
                     onSubmit={(event) => {
                         event.preventDefault()
                         event.stopPropagation()
                         void form.handleSubmit()
                     }}
                 >
-                    <div className="grid min-h-0 gap-5 overflow-y-auto p-5 md:grid-cols-[minmax(0,1fr)_16rem]">
+                    <DialogBody className="grid gap-5 md:grid-cols-[minmax(0,1fr)_16rem]">
                         <fieldset
                             disabled={save.isPending}
                             className="min-w-0 space-y-4"
@@ -413,8 +416,8 @@ export function PersonalGrantForm({
                                 />
                             </aside>
                         )}
-                    </div>
-                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-grid bg-popover px-5 py-3">
+                    </DialogBody>
+                    <DialogFooter className="flex-row flex-wrap items-center justify-end bg-popover">
                         <p
                             id="person-scope-save-hint"
                             role="status"
@@ -450,7 +453,7 @@ export function PersonalGrantForm({
                         >
                             {save.isPending ? "保存中…" : "保存"}
                         </LoadingButton>
-                    </div>
+                    </DialogFooter>
                 </form>
                 <AlertDialog open={discarding} onOpenChange={setDiscarding}>
                     <AlertDialogContent>

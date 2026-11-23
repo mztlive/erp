@@ -8,6 +8,7 @@ import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -314,93 +315,97 @@ export function TransferBatchResult({
             )}
             <Dialog open={open} onOpenChange={setOpen}>
                 <DialogContent
+                    size="xl"
+                    scroll="body"
                     closeButtonId={`${id}-dialog-close`}
-                    className="flex max-h-[85svh] flex-col overflow-hidden sm:max-w-3xl"
                 >
-                    <DialogHeader className="shrink-0">
+                    <DialogHeader>
                         <DialogTitle>逐行处理结果</DialogTitle>
                         <DialogDescription>
                             成功行已经完成；失败行回业务页面修正；待确认行先核对原结果，保留原内容。
                         </DialogDescription>
                     </DialogHeader>
-                    {result.isError && (
-                        <p role="alert" className="shrink-0 text-destructive">
-                            {getErrorMessage(
-                                result.error,
-                                "逐行结果读取失败，请关闭后重新读取",
-                            )}
-                        </p>
-                    )}
-                    <ul className="min-h-0 flex-1 space-y-3 overflow-y-auto">
-                        {rows.map((row, index) => {
-                            const state = outcome(row, context)
-                            const href =
-                                canOpenList &&
-                                (state === "succeeded" || state === "prepared")
-                                    ? rowDestination(row, context, portal)
-                                    : null
-                            const rowId = `${id}-row-${toAutomationIdSegment(row.row_id)}`
-                            const name = resultText(row, [
-                                "sku_name",
-                                "product_name",
-                                "name",
-                                "title",
-                            ])
-                            const code = resultText(row, [
-                                "sku_no",
-                                "sku_code",
-                                "supplier_sku_code",
-                            ])
-                            return (
-                                <li
-                                    key={row.row_id}
-                                    className="space-y-2 rounded-lg border p-3"
-                                >
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                        <p className="font-medium">
-                                            第 {index + 1} 行
-                                            {name ? ` · ${name}` : ""}
+                    <DialogBody className="space-y-3">
+                        {result.isError && (
+                            <p role="alert" className="text-destructive">
+                                {getErrorMessage(
+                                    result.error,
+                                    "逐行结果读取失败，请关闭后重新读取",
+                                )}
+                            </p>
+                        )}
+                        <ul className="space-y-3">
+                            {rows.map((row, index) => {
+                                const state = outcome(row, context)
+                                const href =
+                                    canOpenList &&
+                                    (state === "succeeded" ||
+                                        state === "prepared")
+                                        ? rowDestination(row, context, portal)
+                                        : null
+                                const rowId = `${id}-row-${toAutomationIdSegment(row.row_id)}`
+                                const name = resultText(row, [
+                                    "sku_name",
+                                    "product_name",
+                                    "name",
+                                    "title",
+                                ])
+                                const code = resultText(row, [
+                                    "sku_no",
+                                    "sku_code",
+                                    "supplier_sku_code",
+                                ])
+                                return (
+                                    <li
+                                        key={row.row_id}
+                                        className="space-y-2 rounded-lg border p-3"
+                                    >
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <p className="font-medium">
+                                                第 {index + 1} 行
+                                                {name ? ` · ${name}` : ""}
+                                            </p>
+                                            <StatusBadge
+                                                tone={
+                                                    state === "succeeded"
+                                                        ? "success"
+                                                        : state === "unknown" ||
+                                                            state === "prepared"
+                                                          ? "warning"
+                                                          : state === "failed"
+                                                            ? "destructive"
+                                                            : "neutral"
+                                                }
+                                                label={outcomeLabels[state]}
+                                            />
+                                        </div>
+                                        {code && (
+                                            <p className="text-xs text-muted-foreground">
+                                                商品编码：{code}
+                                            </p>
+                                        )}
+                                        <p className="text-body-compact">
+                                            {rowMessage(row, state)}
                                         </p>
-                                        <StatusBadge
-                                            tone={
-                                                state === "succeeded"
-                                                    ? "success"
-                                                    : state === "unknown" ||
-                                                        state === "prepared"
-                                                      ? "warning"
-                                                      : state === "failed"
-                                                        ? "destructive"
-                                                        : "neutral"
-                                            }
-                                            label={outcomeLabels[state]}
-                                        />
-                                    </div>
-                                    {code && (
-                                        <p className="text-xs text-muted-foreground">
-                                            商品编码：{code}
-                                        </p>
-                                    )}
-                                    <p className="text-body-compact">
-                                        {rowMessage(row, state)}
-                                    </p>
-                                    {href && (
-                                        <Button
-                                            id={`${rowId}-open`}
-                                            size="sm"
-                                            variant="outline"
-                                            render={<Link href={href} />}
-                                        >
-                                            {state === "prepared"
-                                                ? "打开新品申请"
-                                                : "查看业务结果"}
-                                            <ArrowUpRightIcon data-icon="inline-end" />
-                                        </Button>
-                                    )}
-                                </li>
-                            )
-                        })}
-                    </ul>
-                    <DialogFooter className="shrink-0">
+                                        {href && (
+                                            <Button
+                                                id={`${rowId}-open`}
+                                                size="sm"
+                                                variant="outline"
+                                                render={<Link href={href} />}
+                                            >
+                                                {state === "prepared"
+                                                    ? "打开新品申请"
+                                                    : "查看业务结果"}
+                                                <ArrowUpRightIcon data-icon="inline-end" />
+                                            </Button>
+                                        )}
+                                    </li>
+                                )
+                            })}
+                        </ul>
+                    </DialogBody>
+                    <DialogFooter>
                         <Button
                             id={`${id}-dialog-done`}
                             variant="outline"

@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -73,11 +74,12 @@ export function SalesChangeOrderEditDialog({
             onOpenChange={(next) => !busyRef.current && onOpenChange(next)}
         >
             <DialogContent
-                className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
+                size="2xl"
+                scroll="body"
                 showCloseButton={!busy}
                 closeButtonId={`${id}-close`}
             >
-                <DialogHeader className="shrink-0 border-b border-border bg-popover px-6 py-4 pr-14 text-left">
+                <DialogHeader className="bg-popover text-left">
                     <DialogTitle>销售改单</DialogTitle>
                     <DialogDescription>
                         修改后填写变更原因并提交审批。审批通过前仍按当前销售版本执行，已有回款、开票和交付记录保留。
@@ -85,11 +87,13 @@ export function SalesChangeOrderEditDialog({
                     </DialogDescription>
                 </DialogHeader>
                 {query.isPending ? (
-                    <p className="px-6 py-5 text-xs text-muted-foreground">
-                        正在读取原单…
-                    </p>
+                    <DialogBody>
+                        <p className="text-xs text-muted-foreground">
+                            正在读取原单…
+                        </p>
+                    </DialogBody>
                 ) : query.isError && !query.data ? (
-                    <div className="space-y-3 px-6 py-5">
+                    <DialogBody className="space-y-3">
                         <p
                             role="alert"
                             className="text-body-compact text-destructive"
@@ -104,7 +108,7 @@ export function SalesChangeOrderEditDialog({
                         >
                             重新读取
                         </Button>
-                    </div>
+                    </DialogBody>
                 ) : query.data ? (
                     <SalesChangeDraftForm
                         key={changeOrderId}
@@ -317,14 +321,14 @@ function SalesChangeDraftForm({
     const disabled = pending || uncertain
     return (
         <form
-            className="flex min-h-0 flex-1 flex-col"
+            className="flex min-h-0 flex-1 flex-col overflow-hidden"
             onSubmit={(event) => {
                 event.preventDefault()
                 shouldSubmit.current = true
                 void form.handleSubmit()
             }}
         >
-            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5">
+            <DialogBody className="space-y-6">
                 <SalesChangeDraftFields
                     form={form}
                     id={id}
@@ -350,8 +354,8 @@ function SalesChangeDraftForm({
                         {error}
                     </p>
                 ) : null}
-            </div>
-            <DialogFooter className="shrink-0 flex-col border-t border-border bg-popover px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+            </DialogBody>
+            <DialogFooter className="flex-col bg-popover sm:flex-row sm:items-center sm:justify-between">
                 <SalesChangeTotalSummary
                     form={form}
                     baseAmount={draft.base_gross_amount}

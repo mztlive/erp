@@ -11,7 +11,7 @@ import type { AccountProfile } from "@/features/auth/api"
 import { apiEventStream } from "@/lib/api/event-stream"
 import { createRefreshQueue, refreshFrameSchema } from "../lib/refresh"
 import type { InboxCursor } from "../api"
-import { getInbox, readNotification } from "../api"
+import { getInbox, readAllNotifications, readNotification } from "../api"
 
 const snapshotSchema = refreshFrameSchema.extend({
     unread_count: z.number().int().nonnegative(),
@@ -107,5 +107,24 @@ export function useReadNotification(userId?: string) {
             client.invalidateQueries({
                 queryKey: notificationKeys.inbox(userId),
             }),
+    })
+}
+
+export function useReadAllNotifications(profile?: AccountProfile) {
+    const client = useQueryClient()
+    return useMutation({
+        mutationFn: readAllNotifications,
+        onSuccess: () => {
+            if (profile) {
+                client.setQueryData<NotificationSnapshot>(
+                    notificationKeys.feed(profile),
+                    (current) =>
+                        current ? { ...current, unread_count: 0 } : current,
+                )
+            }
+            return client.invalidateQueries({
+                queryKey: notificationKeys.inbox(profile?.userid),
+            })
+        },
     })
 }

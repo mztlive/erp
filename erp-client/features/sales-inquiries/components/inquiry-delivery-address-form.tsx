@@ -82,8 +82,8 @@ export function InquiryDeliveryAddressDialog({
             }}
         >
             <DialogContent
+                size="lg"
                 closeButtonId={`${prefix}-address-dialog-close`}
-                className="max-h-[90vh] overflow-y-auto sm:max-w-xl"
                 finalFocus={() =>
                     document.getElementById(returnFocusId) ??
                     document.getElementById(`${prefix}-add-address`)

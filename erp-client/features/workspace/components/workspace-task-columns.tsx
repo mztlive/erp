@@ -1,10 +1,10 @@
 "use client"
 
 import type { ColumnDef } from "@tanstack/react-table"
+import { CalendarClockIcon, ClockAlertIcon } from "lucide-react"
 import {
     BusinessStatusBadge,
     TableEmptyCell,
-    TableIdentityCell,
     TableTextCell,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -12,15 +12,27 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { displayName } from "@/lib/display-name"
 import {
-    workspaceTaskSection,
+    getApprovalInstanceStatusMeta,
+    getWorkItemStatusMeta,
+} from "@/lib/task-status-dictionary"
+import { workspaceDocumentBadge } from "../api/work-item-meta"
+import {
     workspaceTaskPresentation,
+    workspaceTaskSection,
 } from "../lib/task-presentation"
 import { workspaceTaskRightContent } from "../lib/task-right-content"
 import { findSourceSalesOrder } from "../lib/source-sales-order"
 import { isBlockedWorkItem } from "../lib/work-item"
+import { workspaceFulfillmentDescriptor } from "../lib/workspace-fulfillment"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceMoney } from "./workspace-money"
-import { WorkspaceFulfillmentBadges } from "./workspace-fulfillment-badges"
+
+const PAYMENT_STATE_LABEL: Record<string, string> = {
+    UNPAID: "未付款",
+    PARTIAL: "部分付款",
+    PAID: "已付清",
+    NOT_REQUIRED: "无需付款",
+}
 
 /** 每行使用独立授权且版本匹配的材料；失败时保留任务与操作入口。 */
 export function queueTaskRow(
@@ -76,7 +88,9 @@ export function queueTaskRow(
 }
 export type QueueTaskRow = ReturnType<typeof queueTaskRow>
 
-/** 只显示任务截止时间；商品交期留在摘要，已完成事项不再标为超期。无截止时间时显示接收时间，避免空折号。 */
+/**
+ * 紧凑单行时限列（遵循 status-badge.tsx:17：图标 + 短文字，零裸圆点、零多行堆叠）。
+ */
 function TaskDeadline({ item }: { item: WorkspaceWorkItem }) {
     if (!item.dueAt || Number.isNaN(new Date(item.dueAt).getTime())) {
         if (item.enteredAtLabel && item.enteredAtLabel !== "—") {
@@ -101,72 +115,119 @@ function TaskDeadline({ item }: { item: WorkspaceWorkItem }) {
         hour12: false,
     }).format(date)
     const urgent = item.status === "OPEN" && item.dueBucket !== "later"
+    if (urgent) {
+        const overdue = item.dueBucket === "overdue"
+        return (
+            <time
+                dateTime={item.dueAt}
+                title={`待办截止：${label}`}
+                className="inline-flex items-center whitespace-nowrap"
+            >
+                <BusinessStatusBadge
+                    appearance="text"
+                    icon={overdue ? ClockAlertIcon : CalendarClockIcon}
+                    label={overdue ? "超期" : "今日"}
+                    tone={overdue ? "destructive" : "warning"}
+                />
+            </time>
+        )
+    }
     return (
         <time
             dateTime={item.dueAt}
             title={`待办截止：${label}`}
-            className="num whitespace-nowrap"
+            className="num whitespace-nowrap text-muted-foreground"
         >
-            {urgent ? (
-                <BusinessStatusBadge
-                    label={item.dueBucket === "overdue" ? "已超期" : "今日到期"}
-                    tone={
-                        item.dueBucket === "overdue" ? "destructive" : "warning"
-                    }
-                />
-            ) : (
-                label
-            )}
+            {label}
         </time>
     )
 }
 
-/** 待办展示对象与摘要，金额独立为指标列，保持主次层次分明。 */
-function TaskOverview({
+/** 单行紧凑状态提示：将履约付款状态/节点信息收入 tooltip，确保每行仅展示 1 枚主 StatusBadge。 */
+function buildStatusTooltip(
+    label: string,
+    node: string | undefined,
+    item: WorkspaceWorkItem,
+): string {
+    const parts = [label]
+    if (node && node !== label) parts.push(`当前节点：${node}`)
+    const descriptor = workspaceFulfillmentDescriptor(item)
+    if (descriptor && descriptor.operationTypes[0] !== "RECEIPT") {
+        const payment = item.fulfillmentStatus?.payment_state
+        if (descriptor.role === "procurement" && payment) {
+            parts.push(`付款状态：${PAYMENT_STATE_LABEL[payment] ?? "待核对"}`)
+        }
+        const blocker = item.actionBlockers.find(
+            (entry) => entry.action === "PROCESS" || entry.action === "POST",
+        )
+        if (blocker?.message) parts.push(blocker.message)
+    }
+    return parts.join(" · ")
+}
+
+/** 单行紧凑对象列：往来单位/标题 + 可选行内精简摘要，严控 36px 单行高度。 */
+function CompactTaskOverview({
     row,
-    showSummary,
+    inlineSummary,
 }: {
     row: QueueTaskRow
-    showSummary: boolean
+    inlineSummary: boolean
 }) {
+    const fullTitle = [row.presentation.title, row.presentation.summary]
+        .filter(Boolean)
+        .join(" — ")
+    if (row.retryMaterials) {
+        return (
+            <div className="flex max-w-table-column-reference min-w-0 items-center gap-2">
+                <span
+                    className="truncate font-medium text-foreground"
+                    title={row.presentation.title}
+                >
+                    {row.presentation.title}
+                </span>
+                <Button
+                    id={`workspace-materials-retry-${toAutomationIdSegment(row.item.workItemId)}`}
+                    variant="link"
+                    size="xs"
+                    className="h-auto shrink-0 p-0 text-xs"
+                    onClick={(event) => {
+                        event.stopPropagation()
+                        row.retryMaterials?.()
+                    }}
+                >
+                    重新加载
+                </Button>
+            </div>
+        )
+    }
     return (
-        <TableIdentityCell
-            className="max-w-table-column-reference"
-            primary={row.presentation.title}
-            primaryTitle={row.presentation.title}
-            secondaryTitle={row.presentation.summary}
-            secondary={
-                row.retryMaterials ? (
-                    <Button
-                        id={`workspace-materials-retry-${toAutomationIdSegment(row.item.workItemId)}`}
-                        variant="link"
-                        size="sm"
-                        className="h-auto p-0 text-xs"
-                        onClick={(event) => {
-                            event.stopPropagation()
-                            row.retryMaterials?.()
-                        }}
-                    >
-                        重新加载资料
-                    </Button>
-                ) : !showSummary ? undefined : row.summaryPreview ? (
-                    <span
-                        className={cn(
-                            row.presentation.attention &&
-                                "font-medium text-warning-soft-foreground",
-                        )}
-                    >
-                        {row.summaryPreview}
-                    </span>
-                ) : row.materialNotice ? undefined : (
-                    <TableEmptyCell />
-                )
-            }
-        />
+        <div
+            className="flex max-w-table-column-reference min-w-0 items-center gap-1.5"
+            title={fullTitle || undefined}
+        >
+            <span className="max-w-56 shrink-0 truncate font-medium text-foreground">
+                {row.presentation.title}
+            </span>
+            {inlineSummary && row.summaryPreview ? (
+                <span
+                    className={cn(
+                        "min-w-0 truncate text-xs text-muted-foreground",
+                        row.presentation.attention &&
+                            "font-medium text-warning-soft-foreground",
+                    )}
+                >
+                    {row.summaryPreview}
+                </span>
+            ) : null}
+        </div>
     )
 }
 
-/** 待办采用摘要布局，采购付款另列主体和金额；审批跟踪和处理记录保留独立指标。 */
+/**
+ * 紧凑单行任务列定义（36px 行高）：
+ * - 单号 / 类型 / 往来单位 / 金额 / 主状态（1 枚 StatusBadge）/ 期限（图标+短文字）/ 操作全部单行排列；
+ * - 彻底消除垂直多徽章堆叠导致的 60–84px 行高膨胀。
+ */
 export function workspaceTaskColumns({
     selectedTypes,
     tracking,
@@ -185,14 +246,15 @@ export function workspaceTaskColumns({
         selectedTypes.length === 1 &&
         selectedTypes[0] === "task:SUPPLIER_PAYMENT_EXECUTION"
     const compact = !tracking && !history
-    const numberLabel = purchase ? "采购单号" : "单号 / 事项"
+    const numberLabel = purchase ? "采购单号" : "单号"
     const partyLabel = compact
         ? purchase
             ? "供应商与摘要"
             : "客户/供应商与摘要"
         : purchase
           ? "供应商"
-          : "客户/供应商 / 关联单据"
+          : "客户/供应商"
+
     const columns: ColumnDef<QueueTaskRow, unknown>[] = [
         {
             id: "number",
@@ -204,38 +266,57 @@ export function workspaceTaskColumns({
                 label: numberLabel,
             },
             cell: ({ row: { original: row } }) => {
+                const { number, typeLabel } = row.presentation
+                const matches = row.item.searchMatches
+                const tooltip = [
+                    number !== "—" ? number : undefined,
+                    typeLabel,
+                    matches?.length ? `命中：${matches.join("；")}` : undefined,
+                ]
+                    .filter(Boolean)
+                    .join(" · ")
+                return number === "—" ? (
+                    <TableEmptyCell />
+                ) : (
+                    <span
+                        className="num block max-w-table-column-default truncate font-medium text-foreground"
+                        title={tooltip}
+                    >
+                        {number}
+                    </span>
+                )
+            },
+        },
+        {
+            id: "type",
+            header: "类型",
+            enableSorting: false,
+            meta: {
+                width: "status",
+                label: "类型",
+            },
+            cell: ({ row: { original: row } }) => {
                 const rework =
                     row.item.workItemType === "APPROVAL_REWORK" &&
                     row.item.status === "OPEN"
-                const searchMatches = row.item.searchMatches
-                const { number, typeLabel } = row.presentation
+                const badge = workspaceDocumentBadge(
+                    row.item.workItemType,
+                    row.item.businessObjectType,
+                    row.presentation.typeLabel,
+                )
+                const shortLabel = rework ? "退回重办" : badge.label
                 return (
-                    <TableIdentityCell
-                        className="max-w-table-column-default"
-                        primary={
-                            number === "—" ? (
-                                <TableEmptyCell />
-                            ) : (
-                                <span className="num">{number}</span>
-                            )
-                        }
-                        primaryTitle={number}
-                        secondary={
-                            rework ? (
-                                <BusinessStatusBadge
-                                    label={typeLabel}
-                                    tone="destructive"
-                                />
-                            ) : (
-                                searchMatches?.[0] || typeLabel
-                            )
-                        }
-                        secondaryTitle={
+                    <span
+                        className={cn(
+                            "block max-w-table-column-status truncate text-xs",
                             rework
-                                ? typeLabel
-                                : searchMatches?.join("；") || typeLabel
-                        }
-                    />
+                                ? "font-medium text-destructive"
+                                : "text-muted-foreground",
+                        )}
+                        title={row.presentation.typeLabel}
+                    >
+                        {shortLabel}
+                    </span>
                 )
             },
         },
@@ -248,7 +329,10 @@ export function workspaceTaskColumns({
                 label: partyLabel,
             },
             cell: ({ row }) => (
-                <TaskOverview row={row.original} showSummary={compact} />
+                <CompactTaskOverview
+                    row={row.original}
+                    inlineSummary={compact}
+                />
             ),
         },
         {
@@ -287,117 +371,90 @@ export function workspaceTaskColumns({
         },
         {
             id: "metric",
-            header: purchase ? "含税金额" : tracking ? "申请摘要" : "本次处理",
+            header: purchase ? "含税金额" : tracking ? "金额" : "本次金额",
             enableSorting: false,
             meta: {
                 width: "amount",
                 align: "end",
                 numeric: true,
-                label: purchase
-                    ? "含税金额"
-                    : tracking
-                      ? "申请摘要"
-                      : "本次处理",
+                label: purchase ? "含税金额" : tracking ? "金额" : "本次金额",
             },
-            cell: ({ row: { original: row } }) => (
-                <div
-                    className="ml-auto max-w-table-column-amount truncate whitespace-nowrap"
-                    title={
-                        row.materialNotice
-                            ? undefined
-                            : (row.content.metric.detail ??
-                              row.content.metric.value)
-                    }
-                >
-                    <div className="num truncate font-medium text-foreground">
-                        {row.materialNotice ||
-                        row.content.metric.value === "—" ? (
+            cell: ({ row: { original: row } }) => {
+                const metric = row.content.metric
+                const tooltip = row.materialNotice
+                    ? "业务资料"
+                    : `${metric.label}：${metric.detail ?? metric.value}`
+                return (
+                    <div
+                        className="num ml-auto max-w-table-column-amount truncate font-medium text-foreground whitespace-nowrap"
+                        title={tooltip}
+                    >
+                        {row.materialNotice || metric.value === "—" ? (
                             <TableEmptyCell />
                         ) : (
                             <WorkspaceMoney
-                                value={row.content.metric.value}
+                                value={metric.value}
                                 display="exact"
                             />
                         )}
-                    </div>
-                    {(!purchase ||
-                        !["含税金额", "含税总额"].includes(
-                            row.content.metric.label,
-                        )) && (
-                        <div className="text-xs text-muted-foreground">
-                            {row.materialNotice
-                                ? "业务资料"
-                                : row.content.metric.label}
-                        </div>
-                    )}
-                </div>
-            ),
-        },
-        {
-            id: "status",
-            header: history ? "处理结果" : tracking ? "审批进度" : "当前节点",
-            enableSorting: false,
-            meta: {
-                width: "status",
-                label: history
-                    ? "处理结果"
-                    : tracking
-                      ? "审批进度"
-                      : "当前节点",
-            },
-            cell: ({
-                row: {
-                    original: { item, content },
-                },
-            }) => {
-                const closed = item.status !== "OPEN"
-                const blocked = isBlockedWorkItem(item)
-                const node = displayName(item.approval?.currentNodeLabel)
-                const tone = closed
-                    ? item.statusTone
-                    : blocked
-                      ? "warning"
-                      : tracking
-                        ? content.status.tone
-                        : "info"
-                const label = closed
-                    ? item.statusLabel
-                    : tracking
-                      ? content.status.label
-                      : blocked
-                        ? "受阻"
-                        : node || item.statusLabel
-                return (
-                    <div className="flex flex-col items-start gap-1 whitespace-normal">
-                        <BusinessStatusBadge
-                            label={label}
-                            tone={tone}
-                            appearance={
-                                tone === "success" ||
-                                (!closed && !tracking && !blocked)
-                                    ? "quiet"
-                                    : "badge"
-                            }
-                            title={label}
-                            className="max-w-table-column-default [&>svg]:shrink-0"
-                        />
-                        {tracking && !closed && node && (
-                            <TableTextCell
-                                value={node}
-                                clamp={2}
-                                className="text-xs text-muted-foreground"
-                            />
-                        )}
-                        <WorkspaceFulfillmentBadges item={item} />
                     </div>
                 )
             },
         },
         {
-            id: "due",
-            header: "待办期限",
+            id: "status",
+            header: history ? "处理结果" : tracking ? "审批状态" : "状态",
             enableSorting: false,
-            meta: { width: "status", label: "待办期限" },
+            meta: {
+                width: "status",
+                label: history ? "处理结果" : tracking ? "审批状态" : "状态",
+            },
+            cell: ({
+                row: {
+                    original: { item },
+                },
+            }) => {
+                const closed = item.status !== "OPEN"
+                const blocked = isBlockedWorkItem(item)
+                const node = displayName(item.approval?.currentNodeLabel)
+                const approvalMeta = tracking
+                    ? getApprovalInstanceStatusMeta(item.approval?.status)
+                    : undefined
+                const workItemMeta = getWorkItemStatusMeta(
+                    item.status,
+                    blocked
+                        ? item.processingState === "READY"
+                            ? "APPROVAL_BLOCKED"
+                            : item.processingState
+                        : undefined,
+                )
+                const tone = tracking ? approvalMeta!.tone : workItemMeta.tone
+                const label = tracking
+                    ? approvalMeta!.label
+                    : closed || blocked
+                      ? workItemMeta.label
+                      : node || workItemMeta.label
+                return (
+                    <BusinessStatusBadge
+                        label={label}
+                        tone={tone}
+                        appearance={
+                            tone === "success" ||
+                            (!closed && !tracking && !blocked)
+                                ? "quiet"
+                                : "badge"
+                        }
+                        title={buildStatusTooltip(label, node, item)}
+                        className="max-w-table-column-status [&>svg]:shrink-0"
+                    />
+                )
+            },
+        },
+        {
+            id: "due",
+            header: "时限",
+            enableSorting: false,
+            meta: { width: "status", label: "时限" },
             cell: ({ row }) => <TaskDeadline item={row.original.item} />,
         },
         {
@@ -422,7 +479,7 @@ export function workspaceTaskColumns({
                         }
                         type="button"
                         variant="ghost"
-                        size="sm"
+                        size="xs"
                         className="h-control-sm px-2 text-body-compact font-normal text-muted-foreground group-hover/row:text-primary group-focus-within/row:text-primary hover:bg-sidebar-accent/70 hover:text-primary"
                         onClick={(event) => {
                             event.stopPropagation()
@@ -436,15 +493,16 @@ export function workspaceTaskColumns({
             },
         },
     ]
-    if (payment)
+
+    if (payment) {
         columns.splice(
-            2,
+            3,
             0,
             {
                 id: "payerCompany",
-                header: "付款主体公司名称",
+                header: "付款主体公司",
                 enableSorting: false,
-                meta: { width: "default", label: "付款主体公司名称" },
+                meta: { width: "default", label: "付款主体公司" },
                 cell: ({ row }) => (
                     <TableTextCell
                         value={
@@ -453,8 +511,7 @@ export function workspaceTaskColumns({
                                 "我方付款主体",
                             )?.value
                         }
-                        clamp={2}
-                        className="whitespace-normal"
+                        clamp={1}
                     />
                 ),
             },
@@ -483,6 +540,8 @@ export function workspaceTaskColumns({
                 },
             },
         )
+    }
+
     return compact
         ? columns.filter(
               (column) =>

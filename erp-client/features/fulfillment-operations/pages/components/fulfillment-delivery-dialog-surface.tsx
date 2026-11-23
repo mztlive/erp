@@ -212,9 +212,7 @@ export function FulfillmentDeliveryDialogSurface({
                                     <Link
                                         id="fulfillment-dialog-open-purchase-order"
                                         href={`/procurement/orders/${encodeURIComponent(operation.source.purchaseOrderId)}?${new URLSearchParams({ from: "workspace", returnTo: currentUrl })}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        title="在新标签页打开采购单详情"
+                                        title="打开采购单详情"
                                         className="inline-flex max-w-full items-start gap-1 text-primary underline underline-offset-4 hover:text-primary/80"
                                     >
                                         <span className="min-w-0">

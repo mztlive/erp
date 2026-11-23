@@ -1,4 +1,4 @@
-//! 本人发起审批按完整授权集检索，结果按页码返回，保留旧游标接口。
+//! 审批工作台（`started` / `mine` / `managed` / `blocked`）按完整授权集检索，结果按页码返回，保留旧游标接口。
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
@@ -16,7 +16,7 @@ use crate::ports::approval_instance::ApprovalInstanceReadPort;
 use crate::{Error, Result};
 
 impl WorkbenchReadService {
-    /// 准备本人发起的审批检索时，在同一快照内完成本人审批的完整检索、筛选和分页。
+    /// 准备审批工作台检索时，在同一快照内完成指定视图（`started` / `mine` / `managed` / `blocked`）的完整检索、筛选和分页。
     ///
     /// # 参数
     /// `runtime` 为审批授权服务，`actor` 为当前账号，`query` 为关键词查询；`filters` 为结构化筛选，`page` 从1开始。
@@ -42,10 +42,10 @@ impl WorkbenchReadService {
             if filters.date_field.as_deref().is_some_and(|v| v != "created")
                 && (filters.date_from.is_some() || filters.date_to.is_some() || filters.undated)
             {
-                return Err(Error::ValidationError("我发起的审批只支持按提交时间筛选".into()));
+                return Err(Error::ValidationError("审批列表只支持按提交时间筛选".into()));
             }
             if filters.due.is_some() {
-                return Err(Error::ValidationError("我发起的审批不支持截止快捷条件".into()));
+                return Err(Error::ValidationError("审批列表不支持截止快捷条件".into()));
             }
             if filters.date_field.is_none() {
                 filters.date_field = Some("created".into());
@@ -83,7 +83,7 @@ impl WorkbenchReadService {
         let mut counts = BTreeMap::new();
 
         loop {
-            let (batch, next_cursor) = runtime.started_instance_page(actor, &query, executor).await?;
+            let (batch, next_cursor) = runtime.workspace_instance_page(actor, &query, executor).await?;
             let items = self.approval_list_summaries(batch, executor).await?;
             let documents = self.approval_search_documents(&items, executor).await?;
 
@@ -205,4 +205,58 @@ fn enriched_document(
         }
     }
     doc
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_workflow::service::approval::execution::runtime_service::RuntimeInstanceListItem;
+
+    use super::*;
+    use crate::workbench::ApprovalDocumentSummary;
+
+    #[test]
+    fn approval_document_indexes_blocked_status_counterparty_and_handler_facets() {
+        let instance = RuntimeInstanceListItem {
+            instance_id: "inst-1".into(),
+            status: "BLOCKED".into(),
+            current_round_no: 1,
+            current_node_key: Some("finance".into()),
+            current_node_name: Some("财务复核".into()),
+            current_assignee_participant_id: Some("u-fin".into()),
+            current_assignee_name: Some("李财务".into()),
+            document_type: Some("sales_order".into()),
+            document_id: Some("so-1".into()),
+            document_label: Some("SO-2026-001".into()),
+            subject_version: Some(2),
+            total_amount: None,
+            process_version: Some(1),
+            started_at: Some(1_790_784_000),
+            latest_rejection_summary: None,
+        };
+        let item = ApprovalListItem {
+            search_matches: Vec::new(),
+            instance,
+            document_summary: Some(ApprovalDocumentSummary {
+                root_business_object_id: "so-1".into(),
+                counterparty_label: Some("星辰科技".into()),
+                impact_summary: None,
+                list_summary: "星辰科技".into(),
+                summary_sections: Vec::new(),
+                brief_lines: Vec::new(),
+                brief_more_count: 0,
+            }),
+        };
+
+        let doc = enriched_document(&item, &HashMap::new());
+        assert!(doc.blocked);
+        assert!(doc.matches(Some("星辰")).is_some());
+        assert!(doc.matches(Some("SO-2026-001")).is_some());
+        let filters = WorkspaceFilters::parse(Some(
+            r#"{"blocked":true,"item_types":["approval:sales_order"],"counterparties":["星辰科技"],"handlers":["u-fin"]}"#,
+        ))
+        .unwrap();
+        assert!(filters.matches(&doc));
+        let other = WorkspaceFilters::parse(Some(r#"{"item_types":["approval:purchase_order"]}"#)).unwrap();
+        assert!(!other.matches(&doc));
+    }
 }

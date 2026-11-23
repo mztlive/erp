@@ -68,7 +68,7 @@ function ReturnForFixDialog({
             }}
         >
             <DialogContent
-                className="sm:max-w-lg"
+                size="md"
                 closeButtonId="operations-import-batch-detail-confirm-return-dialog-close"
             >
                 <DialogHeader>

@@ -25,6 +25,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -635,6 +636,8 @@ export function InquiryInternalQuotesDialog({
         >
             <DialogContent
                 id="procurement-inquiry-quotes-dialog"
+                size="xl"
+                scroll="body"
                 closeButtonId="procurement-inquiry-quote-dialog-close"
                 showCloseButton={!editorPending}
                 finalFocus={() => {
@@ -646,11 +649,10 @@ export function InquiryInternalQuotesDialog({
                         ) ?? true
                     )
                 }}
-                className="flex max-h-[88svh] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
             >
                 {line && (
                     <>
-                        <DialogHeader className="shrink-0 gap-1 border-b px-6 py-4 pr-14">
+                        <DialogHeader className="gap-1">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                                 {view.mode === "edit" ? (
                                     <Button
@@ -783,7 +785,7 @@ export function InquiryInternalQuotesDialog({
                             />
                         ) : (
                             <>
-                                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+                                <DialogBody className="space-y-4">
                                     <div className="flex flex-wrap items-center justify-between gap-2">
                                         <div className="flex flex-wrap items-center gap-2">
                                             <h3 className="text-section-title font-semibold tracking-tight">
@@ -986,9 +988,9 @@ export function InquiryInternalQuotesDialog({
                                             )}
                                         </div>
                                     )}
-                                </div>
+                                </DialogBody>
 
-                                <DialogFooter className="shrink-0 items-center border-t px-6 py-3.5">
+                                <DialogFooter className="items-center">
                                     <p className="mr-auto text-xs text-muted-foreground">
                                         {lineUnavailableInFeedback
                                             ? "主表当前行已设为「不供应」，如需采用报价请先调整供给结论。"
@@ -1715,356 +1717,372 @@ function QuoteEditorPanel({
 
     return (
         <form
-            className="flex min-h-0 flex-1 flex-col"
+            className="flex min-h-0 flex-1 flex-col overflow-hidden"
             onSubmit={(event) => {
                 event.preventDefault()
                 void form.handleSubmit()
             }}
         >
-            <fieldset
-                disabled={command.isPending}
-                className="min-h-0 min-w-0 flex-1 space-y-5 overflow-y-auto px-6 py-5"
-            >
-                {error && (
-                    <Alert variant="destructive">
-                        <AlertDescription>{error}</AlertDescription>
-                    </Alert>
-                )}
-                {offeringError != null && (
-                    <Alert variant="warning">
-                        <AlertDescription>
-                            {getErrorMessage(
-                                offeringError,
-                                "供应商读取失败，请返回重试。",
-                            )}
-                        </AlertDescription>
-                    </Alert>
-                )}
+            <DialogBody>
+                <fieldset
+                    disabled={command.isPending}
+                    className="min-w-0 space-y-5"
+                >
+                    {error && (
+                        <Alert variant="destructive">
+                            <AlertDescription>{error}</AlertDescription>
+                        </Alert>
+                    )}
+                    {offeringError != null && (
+                        <Alert variant="warning">
+                            <AlertDescription>
+                                {getErrorMessage(
+                                    offeringError,
+                                    "供应商读取失败，请返回重试。",
+                                )}
+                            </AlertDescription>
+                        </Alert>
+                    )}
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                    <form.Field
-                        name="supplier_offering_id"
-                        children={(field) => (
-                            <Field className="gap-2">
-                                <FieldLabel htmlFor="procurement-inquiry-quote-offering">
-                                    供应商
-                                    <span className="text-destructive">*</span>
-                                </FieldLabel>
-                                <OptionCombobox
-                                    id="procurement-inquiry-quote-offering"
-                                    aria-label="供应商"
-                                    allowClear={false}
-                                    value={field.state.value}
-                                    disabled={lockSupplier}
-                                    options={offerings.map((item) => ({
-                                        value: item.id,
-                                        label:
-                                            item.supplier_name ??
-                                            "供应商名称未匹配",
-                                    }))}
-                                    onValueChange={(id) => {
-                                        field.handleChange(id ?? "")
-                                        const offering = offerings.find(
-                                            (item) => item.id === id,
-                                        )
-                                        form.setFieldValue(
-                                            "supplier_id",
-                                            offering?.supplier_id ?? "",
-                                        )
-                                        if (offering?.input_tax_rate) {
-                                            form.setFieldValue(
-                                                "terms.input_tax_rate",
-                                                offering.input_tax_rate,
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <form.Field
+                            name="supplier_offering_id"
+                            children={(field) => (
+                                <Field className="gap-2">
+                                    <FieldLabel htmlFor="procurement-inquiry-quote-offering">
+                                        供应商
+                                        <span className="text-destructive">
+                                            *
+                                        </span>
+                                    </FieldLabel>
+                                    <OptionCombobox
+                                        id="procurement-inquiry-quote-offering"
+                                        aria-label="供应商"
+                                        allowClear={false}
+                                        value={field.state.value}
+                                        disabled={lockSupplier}
+                                        options={offerings.map((item) => ({
+                                            value: item.id,
+                                            label:
+                                                item.supplier_name ??
+                                                "供应商名称未匹配",
+                                        }))}
+                                        onValueChange={(id) => {
+                                            field.handleChange(id ?? "")
+                                            const offering = offerings.find(
+                                                (item) => item.id === id,
                                             )
+                                            form.setFieldValue(
+                                                "supplier_id",
+                                                offering?.supplier_id ?? "",
+                                            )
+                                            if (offering?.input_tax_rate) {
+                                                form.setFieldValue(
+                                                    "terms.input_tax_rate",
+                                                    offering.input_tax_rate,
+                                                )
+                                            }
+                                        }}
+                                    />
+                                </Field>
+                            )}
+                        />
+
+                        <Field className="gap-2">
+                            <FieldLabel>供货状态</FieldLabel>
+                            <div
+                                role="radiogroup"
+                                aria-label="供货状态"
+                                className={cn(
+                                    detailWorkspaceStyles.subTabs,
+                                    "h-control w-full p-1",
+                                )}
+                            >
+                                <button
+                                    id="procurement-inquiry-quote-availability-available"
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={!unavailable}
+                                    data-active={
+                                        !unavailable ? "true" : undefined
+                                    }
+                                    className={cn(
+                                        detailWorkspaceStyles.subTab,
+                                        "flex-1",
+                                    )}
+                                    onClick={() => {
+                                        if (!unavailable) return
+                                        form.setFieldValue(
+                                            "terms.unavailable",
+                                            false,
+                                        )
+                                        if (
+                                            !values.terms.available_quantity ||
+                                            values.terms.available_quantity ===
+                                                "0"
+                                        ) {
+                                            form.setFieldValue(
+                                                "terms.available_quantity",
+                                                line.quantity,
+                                            )
+                                        }
+                                        if (
+                                            values.terms.unit_cost_gross === "0"
+                                        ) {
+                                            form.setFieldValue(
+                                                "terms.unit_cost_gross",
+                                                "",
+                                            )
+                                        }
+                                        if (
+                                            !values.terms.expected_delivery_date
+                                        ) {
+                                            form.setFieldValue(
+                                                "terms.expected_delivery_date",
+                                                inquiryDateInput(
+                                                    line.delivery_due_at,
+                                                ),
+                                            )
+                                        }
+                                        if (!values.terms.input_tax_rate) {
+                                            const offering = offerings.find(
+                                                (item) =>
+                                                    item.id ===
+                                                    values.supplier_offering_id,
+                                            )
+                                            if (offering?.input_tax_rate) {
+                                                form.setFieldValue(
+                                                    "terms.input_tax_rate",
+                                                    offering.input_tax_rate,
+                                                )
+                                            }
                                         }
                                     }}
-                                />
-                            </Field>
-                        )}
-                    />
-
-                    <Field className="gap-2">
-                        <FieldLabel>供货状态</FieldLabel>
-                        <div
-                            role="radiogroup"
-                            aria-label="供货状态"
-                            className={cn(
-                                detailWorkspaceStyles.subTabs,
-                                "h-control w-full p-1",
-                            )}
-                        >
-                            <button
-                                id="procurement-inquiry-quote-availability-available"
-                                type="button"
-                                role="radio"
-                                aria-checked={!unavailable}
-                                data-active={!unavailable ? "true" : undefined}
-                                className={cn(
-                                    detailWorkspaceStyles.subTab,
-                                    "flex-1",
-                                )}
-                                onClick={() => {
-                                    if (!unavailable) return
-                                    form.setFieldValue(
-                                        "terms.unavailable",
-                                        false,
-                                    )
-                                    if (
-                                        !values.terms.available_quantity ||
-                                        values.terms.available_quantity === "0"
-                                    ) {
+                                >
+                                    正常供货
+                                </button>
+                                <button
+                                    id="procurement-inquiry-quote-availability-unavailable"
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={unavailable}
+                                    data-active={
+                                        unavailable ? "true" : undefined
+                                    }
+                                    className={cn(
+                                        detailWorkspaceStyles.subTab,
+                                        "flex-1",
+                                    )}
+                                    onClick={() => {
+                                        if (unavailable) return
                                         form.setFieldValue(
-                                            "terms.available_quantity",
-                                            line.quantity,
+                                            "terms.unavailable",
+                                            true,
                                         )
-                                    }
-                                    if (values.terms.unit_cost_gross === "0") {
-                                        form.setFieldValue(
-                                            "terms.unit_cost_gross",
-                                            "",
-                                        )
-                                    }
-                                    if (!values.terms.expected_delivery_date) {
-                                        form.setFieldValue(
-                                            "terms.expected_delivery_date",
-                                            inquiryDateInput(
-                                                line.delivery_due_at,
-                                            ),
-                                        )
-                                    }
-                                    if (!values.terms.input_tax_rate) {
-                                        const offering = offerings.find(
-                                            (item) =>
-                                                item.id ===
-                                                values.supplier_offering_id,
-                                        )
-                                        if (offering?.input_tax_rate) {
-                                            form.setFieldValue(
-                                                "terms.input_tax_rate",
-                                                offering.input_tax_rate,
-                                            )
-                                        }
-                                    }
-                                }}
-                            >
-                                正常供货
-                            </button>
-                            <button
-                                id="procurement-inquiry-quote-availability-unavailable"
-                                type="button"
-                                role="radio"
-                                aria-checked={unavailable}
-                                data-active={unavailable ? "true" : undefined}
-                                className={cn(
-                                    detailWorkspaceStyles.subTab,
-                                    "flex-1",
-                                )}
-                                onClick={() => {
-                                    if (unavailable) return
-                                    form.setFieldValue(
-                                        "terms.unavailable",
-                                        true,
-                                    )
-                                }}
-                            >
-                                无法供货
-                            </button>
-                        </div>
-                    </Field>
-                </div>
+                                    }}
+                                >
+                                    无法供货
+                                </button>
+                            </div>
+                        </Field>
+                    </div>
 
-                {unavailable ? (
-                    <Alert>
-                        <AlertDescription>
-                            登记为「无法供货」后将保留该供应商回复记录，但不可用于报价采用。建议在下方备注中注明原因（如缺货、停产、起订量不符等）。
-                        </AlertDescription>
-                    </Alert>
-                ) : (
-                    <>
-                        <div className="grid gap-4 sm:grid-cols-2">
-                            <form.AppField
-                                name="terms.unit_cost_gross"
-                                children={(field) => (
-                                    <field.TextField
-                                        id="procurement-inquiry-quote-cost"
-                                        label={
-                                            unit
-                                                ? `含税商品单价（元 / ${unit}）`
-                                                : "含税商品单价（元）"
-                                        }
-                                        placeholder="填写不含分摊运费的含税单价"
-                                        inputMode="decimal"
-                                        inputClassName="num"
-                                        required
-                                    />
-                                )}
-                            />
-
-                            <div className="space-y-1.5">
-                                <div className="flex items-center justify-between gap-2">
-                                    <FieldLabel htmlFor="procurement-inquiry-quote-freight">
-                                        本行总运费（元）
-                                    </FieldLabel>
-                                    <button
-                                        id="procurement-inquiry-quote-freight-free"
-                                        type="button"
-                                        className="text-xs text-primary underline-offset-4 hover:underline"
-                                        onClick={() =>
-                                            form.setFieldValue(
-                                                "terms.freight_gross",
-                                                "0",
-                                            )
-                                        }
-                                    >
-                                        已含/免运费填 0
-                                    </button>
-                                </div>
+                    {unavailable ? (
+                        <Alert>
+                            <AlertDescription>
+                                登记为「无法供货」后将保留该供应商回复记录，但不可用于报价采用。建议在下方备注中注明原因（如缺货、停产、起订量不符等）。
+                            </AlertDescription>
+                        </Alert>
+                    ) : (
+                        <>
+                            <div className="grid gap-4 sm:grid-cols-2">
                                 <form.AppField
-                                    name="terms.freight_gross"
+                                    name="terms.unit_cost_gross"
                                     children={(field) => (
                                         <field.TextField
-                                            id="procurement-inquiry-quote-freight"
-                                            label="本行总运费（元）"
-                                            hideLabel
-                                            placeholder="已含运费填 0，未确认可留空"
+                                            id="procurement-inquiry-quote-cost"
+                                            label={
+                                                unit
+                                                    ? `含税商品单价（元 / ${unit}）`
+                                                    : "含税商品单价（元）"
+                                            }
+                                            placeholder="填写不含分摊运费的含税单价"
                                             inputMode="decimal"
                                             inputClassName="num"
+                                            required
+                                        />
+                                    )}
+                                />
+
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <FieldLabel htmlFor="procurement-inquiry-quote-freight">
+                                            本行总运费（元）
+                                        </FieldLabel>
+                                        <button
+                                            id="procurement-inquiry-quote-freight-free"
+                                            type="button"
+                                            className="text-xs text-primary underline-offset-4 hover:underline"
+                                            onClick={() =>
+                                                form.setFieldValue(
+                                                    "terms.freight_gross",
+                                                    "0",
+                                                )
+                                            }
+                                        >
+                                            已含/免运费填 0
+                                        </button>
+                                    </div>
+                                    <form.AppField
+                                        name="terms.freight_gross"
+                                        children={(field) => (
+                                            <field.TextField
+                                                id="procurement-inquiry-quote-freight"
+                                                label="本行总运费（元）"
+                                                hideLabel
+                                                placeholder="已含运费填 0，未确认可留空"
+                                                inputMode="decimal"
+                                                inputClassName="num"
+                                            />
+                                        )}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-surface-sunken/70 px-3.5 py-2.5 text-xs">
+                                <div className="flex flex-wrap items-baseline gap-2">
+                                    <span className="text-muted-foreground">
+                                        含运费参考单价
+                                    </span>
+                                    {livePreview?.refPrice ? (
+                                        <>
+                                            <MoneyValue
+                                                value={livePreview.refPrice}
+                                                display="exact"
+                                                showHint={false}
+                                                className="text-body-compact font-semibold text-foreground"
+                                            />
+                                            <span className="text-muted-foreground">
+                                                （按需求 {line.quantity} {unit}{" "}
+                                                分摊本行运费）
+                                            </span>
+                                        </>
+                                    ) : (
+                                        <span className="text-muted-foreground">
+                                            {values.terms.unit_cost_gross.trim() &&
+                                            !values.terms.freight_gross.trim()
+                                                ? "运费留空表示「未确认」，保存后暂不可直接采用"
+                                                : "填写单价与运费后自动试算"}
+                                        </span>
+                                    )}
+                                </div>
+                                {livePreview?.exclusion &&
+                                    values.terms.unit_cost_gross.trim() && (
+                                        <span className="text-warning-soft-foreground">
+                                            {livePreview.exclusion}
+                                        </span>
+                                    )}
+                            </div>
+
+                            <div className="grid gap-4 sm:grid-cols-3">
+                                <form.Field
+                                    name="terms.input_tax_rate"
+                                    children={(field) => {
+                                        const invalid =
+                                            field.state.meta.isTouched &&
+                                            !field.state.meta.isValid
+                                        return (
+                                            <Field
+                                                data-invalid={
+                                                    invalid || undefined
+                                                }
+                                                className="gap-2"
+                                            >
+                                                <FieldLabel htmlFor="procurement-inquiry-quote-tax">
+                                                    进项税率
+                                                    <span className="text-destructive">
+                                                        *
+                                                    </span>
+                                                </FieldLabel>
+                                                <InquiryTaxRateInput
+                                                    id="procurement-inquiry-quote-tax"
+                                                    value={field.state.value}
+                                                    onValueChange={(rate) =>
+                                                        field.handleChange(rate)
+                                                    }
+                                                    onBlur={field.handleBlur}
+                                                    placeholder="如 13"
+                                                    aria-invalid={
+                                                        invalid || undefined
+                                                    }
+                                                />
+                                                <FieldDescription>
+                                                    输入 13 表示 13%
+                                                </FieldDescription>
+                                                {invalid && (
+                                                    <FieldError
+                                                        errors={toFieldErrors(
+                                                            field.state.meta
+                                                                .errors,
+                                                        )}
+                                                    />
+                                                )}
+                                            </Field>
+                                        )
+                                    }}
+                                />
+
+                                <form.AppField
+                                    name="terms.available_quantity"
+                                    children={(field) => (
+                                        <field.TextField
+                                            id="procurement-inquiry-quote-available"
+                                            label={`可供数量${unit ? `（${unit}）` : ""}`}
+                                            inputMode="decimal"
+                                            inputClassName="num"
+                                            required
+                                        />
+                                    )}
+                                />
+
+                                <form.AppField
+                                    name="terms.expected_delivery_date"
+                                    children={(field) => (
+                                        <field.DateField
+                                            id="procurement-inquiry-quote-delivery"
+                                            label="承诺交付日期"
+                                            required
                                         />
                                     )}
                                 />
                             </div>
-                        </div>
-
-                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-surface-sunken/70 px-3.5 py-2.5 text-xs">
-                            <div className="flex flex-wrap items-baseline gap-2">
-                                <span className="text-muted-foreground">
-                                    含运费参考单价
-                                </span>
-                                {livePreview?.refPrice ? (
-                                    <>
-                                        <MoneyValue
-                                            value={livePreview.refPrice}
-                                            display="exact"
-                                            showHint={false}
-                                            className="text-body-compact font-semibold text-foreground"
-                                        />
-                                        <span className="text-muted-foreground">
-                                            （按需求 {line.quantity} {unit}{" "}
-                                            分摊本行运费）
-                                        </span>
-                                    </>
-                                ) : (
-                                    <span className="text-muted-foreground">
-                                        {values.terms.unit_cost_gross.trim() &&
-                                        !values.terms.freight_gross.trim()
-                                            ? "运费留空表示「未确认」，保存后暂不可直接采用"
-                                            : "填写单价与运费后自动试算"}
-                                    </span>
-                                )}
-                            </div>
-                            {livePreview?.exclusion &&
-                                values.terms.unit_cost_gross.trim() && (
-                                    <span className="text-warning-soft-foreground">
-                                        {livePreview.exclusion}
-                                    </span>
-                                )}
-                        </div>
-
-                        <div className="grid gap-4 sm:grid-cols-3">
-                            <form.Field
-                                name="terms.input_tax_rate"
-                                children={(field) => {
-                                    const invalid =
-                                        field.state.meta.isTouched &&
-                                        !field.state.meta.isValid
-                                    return (
-                                        <Field
-                                            data-invalid={invalid || undefined}
-                                            className="gap-2"
-                                        >
-                                            <FieldLabel htmlFor="procurement-inquiry-quote-tax">
-                                                进项税率
-                                                <span className="text-destructive">
-                                                    *
-                                                </span>
-                                            </FieldLabel>
-                                            <InquiryTaxRateInput
-                                                id="procurement-inquiry-quote-tax"
-                                                value={field.state.value}
-                                                onValueChange={(rate) =>
-                                                    field.handleChange(rate)
-                                                }
-                                                onBlur={field.handleBlur}
-                                                placeholder="如 13"
-                                                aria-invalid={
-                                                    invalid || undefined
-                                                }
-                                            />
-                                            <FieldDescription>
-                                                输入 13 表示 13%
-                                            </FieldDescription>
-                                            {invalid && (
-                                                <FieldError
-                                                    errors={toFieldErrors(
-                                                        field.state.meta.errors,
-                                                    )}
-                                                />
-                                            )}
-                                        </Field>
-                                    )
-                                }}
-                            />
-
-                            <form.AppField
-                                name="terms.available_quantity"
-                                children={(field) => (
-                                    <field.TextField
-                                        id="procurement-inquiry-quote-available"
-                                        label={`可供数量${unit ? `（${unit}）` : ""}`}
-                                        inputMode="decimal"
-                                        inputClassName="num"
-                                        required
-                                    />
-                                )}
-                            />
-
-                            <form.AppField
-                                name="terms.expected_delivery_date"
-                                children={(field) => (
-                                    <field.DateField
-                                        id="procurement-inquiry-quote-delivery"
-                                        label="承诺交付日期"
-                                        required
-                                    />
-                                )}
-                            />
-                        </div>
-                    </>
-                )}
-
-                <form.AppField
-                    name="internal_note"
-                    children={(field) => (
-                        <field.TextareaField
-                            id="procurement-inquiry-quote-note"
-                            label={
-                                unavailable
-                                    ? "无法供货原因 / 备注（建议填写）"
-                                    : "内部备注（选填）"
-                            }
-                            placeholder={
-                                unavailable
-                                    ? "例如：工厂停产、交期无法满足、未达起订量等"
-                                    : "有需要说明的报价条件、账期或包装要求时填写"
-                            }
-                            rows={2}
-                            textareaClassName="min-h-20 resize-y"
-                        />
+                        </>
                     )}
-                />
-            </fieldset>
 
-            <DialogFooter className="shrink-0 flex-wrap items-center gap-2 border-t px-6 py-3.5">
+                    <form.AppField
+                        name="internal_note"
+                        children={(field) => (
+                            <field.TextareaField
+                                id="procurement-inquiry-quote-note"
+                                label={
+                                    unavailable
+                                        ? "无法供货原因 / 备注（建议填写）"
+                                        : "内部备注（选填）"
+                                }
+                                placeholder={
+                                    unavailable
+                                        ? "例如：工厂停产、交期无法满足、未达起订量等"
+                                        : "有需要说明的报价条件、账期或包装要求时填写"
+                                }
+                                rows={2}
+                                textareaClassName="min-h-20 resize-y"
+                            />
+                        )}
+                    />
+                </fieldset>
+            </DialogBody>
+
+            <DialogFooter className="flex-wrap items-center gap-2">
                 <Button
                     id="procurement-inquiry-quote-cancel"
                     type="button"
