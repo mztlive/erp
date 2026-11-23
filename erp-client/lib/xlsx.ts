@@ -12,10 +12,14 @@ import { downloadBlob } from "./download-blob"
 const XLSX_MIME =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
+export async function createWorkbook(): Promise<Workbook> {
+    const excel = await import("exceljs")
+    return new (excel.default ?? excel).Workbook()
+}
+
 /** 读取浏览器选择的 .xlsx 文件。 */
 export async function loadWorkbookFromFile(file: File): Promise<Workbook> {
-    const { Workbook } = await import("exceljs")
-    const workbook = new Workbook()
+    const workbook = await createWorkbook()
     await workbook.xlsx.load(await file.arrayBuffer())
     return workbook
 }

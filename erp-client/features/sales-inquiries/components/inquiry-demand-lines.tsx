@@ -51,7 +51,6 @@ import { demandFormDefaults } from "../lib/demand-form"
 import {
     isLineQuantityValid,
     isLineReferencePriceValid,
-    lineReferenceSubtotal,
     summarizeDemand,
 } from "../lib/demand-summary"
 import { inquiryDateInput, inquiryDateSeconds } from "../lib/format"
@@ -350,7 +349,7 @@ export const InquiryDemandLines = withForm({
                                     data-slot="detail-inline-table"
                                     className="min-w-0 border-t border-border/70"
                                 >
-                                    <Table className="min-w-[980px] table-fixed">
+                                    <Table className="min-w-[1000px] table-fixed">
                                         <TableHeader>
                                             <TableRow>
                                                 <TableHead className="w-10">
@@ -390,7 +389,7 @@ export const InquiryDemandLines = withForm({
                                                 </TableHead>
                                                 <TableHead
                                                     data-align="end"
-                                                    className="w-36"
+                                                    className="w-32"
                                                 >
                                                     需求数量
                                                     <RequiredMark />
@@ -401,13 +400,13 @@ export const InquiryDemandLines = withForm({
                                                 >
                                                     销售价（选填）
                                                 </TableHead>
-                                                <TableHead className="w-40">
+                                                <TableHead className="w-48">
                                                     要求交付日
                                                 </TableHead>
-                                                <TableHead className="w-48">
+                                                <TableHead className="w-44">
                                                     配送 / 交付
                                                 </TableHead>
-                                                <TableHead className="sticky right-0 z-20 w-40 text-right">
+                                                <TableHead className="sticky right-0 z-20 w-36 text-right">
                                                     操作
                                                 </TableHead>
                                             </TableRow>
@@ -429,8 +428,6 @@ export const InquiryDemandLines = withForm({
                                                     isLineReferencePriceValid(
                                                         line,
                                                     )
-                                                const subtotal =
-                                                    lineReferenceSubtotal(line)
                                                 const specLine = [
                                                     line.specification &&
                                                     line.specification !==
@@ -601,69 +598,52 @@ export const InquiryDemandLines = withForm({
                                                                 {(
                                                                     priceField,
                                                                 ) => (
-                                                                    <div className="min-w-0">
-                                                                        <div className="relative">
-                                                                            <span
-                                                                                aria-hidden="true"
-                                                                                className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-xs text-muted-foreground/70"
-                                                                            >
-                                                                                ¥
-                                                                            </span>
-                                                                            <Input
-                                                                                id={`${prefix}-reference-price`}
-                                                                                aria-label={`${line.product_name}销售价（元）`}
-                                                                                aria-invalid={
-                                                                                    !priceValid ||
-                                                                                    undefined
-                                                                                }
-                                                                                title={
-                                                                                    priceValid
-                                                                                        ? undefined
-                                                                                        : "请输入非负金额（最多 4 位小数）"
-                                                                                }
-                                                                                className="h-control-sm num pl-6 text-right"
-                                                                                inputMode="decimal"
-                                                                                placeholder="选填"
-                                                                                disabled={
-                                                                                    disabled
-                                                                                }
-                                                                                value={
-                                                                                    priceField
-                                                                                        .state
-                                                                                        .value ??
-                                                                                    ""
-                                                                                }
-                                                                                onBlur={
-                                                                                    priceField.handleBlur
-                                                                                }
-                                                                                onChange={(
-                                                                                    event,
-                                                                                ) =>
-                                                                                    priceField.handleChange(
-                                                                                        event.target.value.replaceAll(
-                                                                                            "¥",
-                                                                                            "",
-                                                                                        ) ||
-                                                                                            null,
-                                                                                    )
-                                                                                }
-                                                                            />
-                                                                        </div>
-                                                                        {subtotal !==
-                                                                        null ? (
-                                                                            <p className="num mt-1 text-right text-tiny text-muted-foreground">
-                                                                                小计{" "}
-                                                                                <MoneyValue
-                                                                                    value={
-                                                                                        subtotal
-                                                                                    }
-                                                                                    display="exact"
-                                                                                    showHint={
-                                                                                        false
-                                                                                    }
-                                                                                />
-                                                                            </p>
-                                                                        ) : null}
+                                                                    <div className="relative min-w-0">
+                                                                        <span
+                                                                            aria-hidden="true"
+                                                                            className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-xs text-muted-foreground/70"
+                                                                        >
+                                                                            ¥
+                                                                        </span>
+                                                                        <Input
+                                                                            id={`${prefix}-reference-price`}
+                                                                            aria-label={`${line.product_name}销售价（元）`}
+                                                                            aria-invalid={
+                                                                                !priceValid ||
+                                                                                undefined
+                                                                            }
+                                                                            title={
+                                                                                priceValid
+                                                                                    ? undefined
+                                                                                    : "请输入非负金额（最多 4 位小数）"
+                                                                            }
+                                                                            className="h-control-sm num pl-6 text-right"
+                                                                            inputMode="decimal"
+                                                                            placeholder="选填"
+                                                                            disabled={
+                                                                                disabled
+                                                                            }
+                                                                            value={
+                                                                                priceField
+                                                                                    .state
+                                                                                    .value ??
+                                                                                ""
+                                                                            }
+                                                                            onBlur={
+                                                                                priceField.handleBlur
+                                                                            }
+                                                                            onChange={(
+                                                                                event,
+                                                                            ) =>
+                                                                                priceField.handleChange(
+                                                                                    event.target.value.replaceAll(
+                                                                                        "¥",
+                                                                                        "",
+                                                                                    ) ||
+                                                                                        null,
+                                                                                )
+                                                                            }
+                                                                        />
                                                                     </div>
                                                                 )}
                                                             </form.Field>
@@ -685,11 +665,14 @@ export const InquiryDemandLines = withForm({
                                                                         className={
                                                                             INLINE_DATE_PICKER_CLASS
                                                                         }
-                                                                        value={inquiryDateInput(
-                                                                            dateField
-                                                                                .state
-                                                                                .value,
-                                                                        )}
+                                                                        value={
+                                                                            inquiryDateInput(
+                                                                                dateField
+                                                                                    .state
+                                                                                    .value,
+                                                                            ) ||
+                                                                            undefined
+                                                                        }
                                                                         onValueChange={(
                                                                             value,
                                                                         ) =>

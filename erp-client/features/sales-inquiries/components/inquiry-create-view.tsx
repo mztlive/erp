@@ -60,6 +60,7 @@ export function InquiryCreateView({
             pendingDeliveryCount: 0,
             canSave: true,
             customerId: "",
+            deadlineAt: 0,
             pricedLineCount: 0,
             referenceTotal: null,
         })

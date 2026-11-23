@@ -5,7 +5,7 @@ import { useStore } from "@tanstack/react-form"
 import { DetailWorkspaceSection, MoneyValue } from "@/components/business"
 import { toFieldErrors, withForm } from "@/components/form"
 import { DatePicker } from "@/components/ui/date-picker"
-import { FieldError } from "@/components/ui/field"
+import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Label } from "@/components/ui/label"
 import { RequiredMark } from "@/components/ui/required-mark"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -101,9 +101,11 @@ export const InquiryDemandDetails = withForm({
                                             size="default"
                                             placeholder="选择截止日期"
                                             className={FORM_DATE_PICKER_CLASS}
-                                            value={inquiryDateInput(
-                                                field.state.value,
-                                            )}
+                                            value={
+                                                inquiryDateInput(
+                                                    field.state.value,
+                                                ) || undefined
+                                            }
                                             onValueChange={(value) =>
                                                 field.handleChange(
                                                     inquiryDateSeconds(
@@ -122,6 +124,7 @@ export const InquiryDemandDetails = withForm({
                                         <field.TextareaField
                                             id="sales-inquiry-demand-note"
                                             label="需求说明（选填）"
+                                            className="gap-1.5"
                                             rows={2}
                                             maxLength={4000}
                                             textareaClassName="min-h-16"
@@ -285,50 +288,53 @@ export const InquiryDemandDetails = withForm({
         return (
             <DetailWorkspaceSection
                 title="基本信息"
-                width="form"
+                width="full"
                 divider={false}
                 className="py-2 first:pt-0 last:pb-0"
             >
-                <div className="space-y-4">
+                <div className="space-y-3">
                     <div
                         data-slot="detail-form-grid"
-                        className="grid gap-x-5 gap-y-4 sm:grid-cols-12"
+                        className="grid items-start gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4"
                     >
                         <form.Field
                             name="deadline_at"
                             children={(field) => (
-                                <div className="space-y-1.5 sm:col-span-4">
-                                    <Label htmlFor="sales-inquiry-deadline">
+                                <Field className="gap-1.5 lg:col-span-1">
+                                    <FieldLabel htmlFor="sales-inquiry-deadline">
                                         询价截止日期
-                                    </Label>
+                                    </FieldLabel>
                                     <DatePicker
                                         id="sales-inquiry-deadline"
                                         size="default"
                                         placeholder="选择截止日期"
                                         className={FORM_DATE_PICKER_CLASS}
-                                        value={inquiryDateInput(
-                                            field.state.value,
-                                        )}
+                                        value={
+                                            inquiryDateInput(
+                                                field.state.value,
+                                            ) || undefined
+                                        }
                                         onValueChange={(value) =>
                                             field.handleChange(
                                                 inquiryDateSeconds(value ?? ""),
                                             )
                                         }
                                     />
-                                </div>
+                                </Field>
                             )}
                         />
-                        <div className="sm:col-span-8">
+                        <div className="min-w-0 sm:col-span-1 lg:col-span-3">
                             <form.AppField
                                 name="draft.note"
                                 children={(field) => (
                                     <field.TextareaField
                                         id="sales-inquiry-demand-note"
                                         label="需求说明（选填）"
-                                        rows={2}
+                                        className="gap-1.5"
+                                        rows={1}
                                         maxLength={4000}
-                                        textareaClassName="min-h-16"
-                                        placeholder="客户交付要求及需要采购确认的事项"
+                                        textareaClassName="min-h-control py-1.5 leading-snug"
+                                        placeholder="客户交付要求、包装或需要采购确认的事项"
                                     />
                                 )}
                             />

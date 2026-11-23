@@ -922,6 +922,7 @@ export function SalesOrderCreateForm({
                                 <SalesOrderCreateLineItemsSection
                                     inquirySource={inquirySource}
                                     inquiryLocked={Boolean(inquirySource)}
+                                    draftId={initialDraft?.salesOrderId}
                                     compact={embeddedDraft}
                                     form={form}
                                     procurementOwners={

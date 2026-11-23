@@ -109,6 +109,7 @@ export function InquirySalesView({
                 pendingDeliveryCount: initialSummary.pendingDeliveryCount,
                 canSave: false,
                 customerId: inquiry.customer_id,
+                deadlineAt: inquiry.deadline_at,
                 pricedLineCount: initialSummary.pricedLineCount,
                 referenceTotal: initialSummary.referenceTotal,
             }
@@ -273,6 +274,25 @@ export function InquirySalesView({
 
     const saveDockOpen = canEdit && dirty && demandStatus.canSave
     const deadlineText = inquiryDateInput(inquiry.deadline_at) || "未设置"
+    const editingDeadlineText =
+        inquiryDateInput(demandStatus.deadlineAt) || "未设置"
+    const headerMetaItems = [
+        inquiry.requirement_version > 0 && (
+            <span key="req" className="num">
+                需求第 {inquiry.requirement_version} 版
+            </span>
+        ),
+        inquiry.feedback_round > 0 && (
+            <span key="round" className="num">
+                反馈第 {inquiry.feedback_round} 轮
+            </span>
+        ),
+        inquiry.deadline_at > 0 && (
+            <span key="deadline">
+                截止：<span className="num">{deadlineText}</span>
+            </span>
+        ),
+    ].filter(Boolean)
     const feeCount = selectedFeedback?.data.fees.length ?? 0
     const feeTotal = sumFeesGross(selectedFeedback?.data.fees ?? [])
 
@@ -331,7 +351,7 @@ export function InquirySalesView({
             />
             <DetailWorkspaceMetricItem
                 label="询价截止"
-                value={deadlineText}
+                value={editingDeadlineText}
                 detail={
                     inquiry.requirement_version > 0
                         ? `需求第 ${inquiry.requirement_version} 版`
@@ -565,47 +585,11 @@ export function InquirySalesView({
                                                 ) : undefined
                                             }
                                             meta={
-                                                <DetailWorkspaceMeta
-                                                    items={[
-                                                        inquiry.requirement_version >
-                                                            0 && (
-                                                            <span
-                                                                key="req"
-                                                                className="num"
-                                                            >
-                                                                需求第{" "}
-                                                                {
-                                                                    inquiry.requirement_version
-                                                                }{" "}
-                                                                版
-                                                            </span>
-                                                        ),
-                                                        inquiry.feedback_round >
-                                                            0 && (
-                                                            <span
-                                                                key="round"
-                                                                className="num"
-                                                            >
-                                                                反馈第{" "}
-                                                                {
-                                                                    inquiry.feedback_round
-                                                                }{" "}
-                                                                轮
-                                                            </span>
-                                                        ),
-                                                        inquiry.deadline_at >
-                                                            0 && (
-                                                            <span key="deadline">
-                                                                截止：
-                                                                <span className="num">
-                                                                    {
-                                                                        deadlineText
-                                                                    }
-                                                                </span>
-                                                            </span>
-                                                        ),
-                                                    ]}
-                                                />
+                                                headerMetaItems.length > 0 ? (
+                                                    <DetailWorkspaceMeta
+                                                        items={headerMetaItems}
+                                                    />
+                                                ) : undefined
                                             }
                                             back={back}
                                             secondaryActions={

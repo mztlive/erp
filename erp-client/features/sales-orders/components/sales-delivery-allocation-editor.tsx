@@ -28,6 +28,7 @@ import {
 } from "../lib/sales-order-create-model"
 import { DeliveryCoverageHint } from "./delivery-coverage-hint"
 import { SalesDeliveryAllocationDialog } from "./sales-delivery-allocation-dialog"
+import { SalesDeliveryWorkbookActions } from "./sales-delivery-workbook-actions"
 import { SalesOrderCreateUnifiedAddressDialog } from "./sales-order-create-unified-address-dialog"
 
 // 改单页面继续复用相同的数量与完整性摘要。
@@ -157,8 +158,10 @@ function DeliveryLineRow({
 /** 地址为空时显示入口，统一地址显示摘要，复杂安排按商品展开。 */
 export function SalesDeliveryAllocationEditor({
     form,
+    draftId,
 }: {
     form: SalesOrderCreateFormApi
+    draftId?: string
 }) {
     return (
         <form.Subscribe
@@ -169,7 +172,11 @@ export function SalesDeliveryAllocationEditor({
         >
             {({ nature, lines }) =>
                 nature !== "physical_service" || !lines.length ? null : (
-                    <DeliveryAllocationSection form={form} lines={lines} />
+                    <DeliveryAllocationSection
+                        form={form}
+                        lines={lines}
+                        draftId={draftId}
+                    />
                 )
             }
         </form.Subscribe>
@@ -179,9 +186,11 @@ export function SalesDeliveryAllocationEditor({
 function DeliveryAllocationSection({
     form,
     lines,
+    draftId,
 }: {
     form: SalesOrderCreateFormApi
     lines: DeliveryLine[]
+    draftId?: string
 }) {
     const [expanded, setExpanded] = useState(false)
     const coverageHint = useDeliveryCoverage(lines)
@@ -248,6 +257,12 @@ function DeliveryAllocationSection({
                     </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                    <SalesDeliveryWorkbookActions
+                        form={form}
+                        lines={lines}
+                        draftId={draftId}
+                        onApplied={() => setExpanded(true)}
+                    />
                     <SalesOrderCreateUnifiedAddressDialog
                         lineCount={lines.length}
                         allocatedLineCount={allocatedCount}

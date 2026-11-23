@@ -287,26 +287,28 @@ export function InquiryProcurementView({
                 assignmentActions,
                 alerts: actionAlerts,
             }) => {
-                const headerMeta = (
-                    <DetailWorkspaceMeta
-                        items={[
-                            <span key="req" className="num">
-                                需求第 {inquiry.requirement_version} 版
-                            </span>,
-                            inquiry.feedback_round > 0 && (
-                                <span key="round" className="num">
-                                    反馈第 {inquiry.feedback_round} 轮
-                                </span>
-                            ),
-                            inquiry.deadline_at > 0 && (
-                                <span key="deadline">
-                                    截止：
-                                    <span className="num">{deadlineText}</span>
-                                </span>
-                            ),
-                        ]}
-                    />
-                )
+                const headerMetaItems = [
+                    inquiry.requirement_version > 0 && (
+                        <span key="req" className="num">
+                            需求第 {inquiry.requirement_version} 版
+                        </span>
+                    ),
+                    inquiry.feedback_round > 0 && (
+                        <span key="round" className="num">
+                            反馈第 {inquiry.feedback_round} 轮
+                        </span>
+                    ),
+                    inquiry.deadline_at > 0 && (
+                        <span key="deadline">
+                            截止：
+                            <span className="num">{deadlineText}</span>
+                        </span>
+                    ),
+                ].filter(Boolean)
+                const headerMeta =
+                    headerMetaItems.length > 0 ? (
+                        <DetailWorkspaceMeta items={headerMetaItems} />
+                    ) : undefined
                 const headerSecondary = (
                     <>
                         <InquiryHistoryButton

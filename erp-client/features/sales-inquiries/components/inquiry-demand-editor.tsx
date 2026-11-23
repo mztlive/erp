@@ -49,6 +49,7 @@ export type InquiryDemandEditorStatus = {
     pendingDeliveryCount: number
     canSave: boolean
     customerId: string
+    deadlineAt: number
     pricedLineCount: number
     referenceTotal: string | null
 }
@@ -300,6 +301,7 @@ function DemandEditorContent({
             lineCount: summary.lineCount,
             pendingDeliveryCount: summary.pendingDeliveryCount,
             customerId: initial.customer_id,
+            deadlineAt: initial.deadline_at,
             pricedLineCount: summary.pricedLineCount,
             referenceTotal: summary.referenceTotal,
         }
@@ -315,8 +317,9 @@ function DemandEditorContent({
                   : "sales_inquiry:create",
         )
     const [editVersion, setEditVersion] = React.useState(baseVersion)
+    const [formDefaults, setFormDefaults] = React.useState(initial)
     const form = useAppForm({
-        defaultValues: initial,
+        defaultValues: formDefaults,
         listeners: {
             onChange: ({ formApi }) => {
                 setSaved(false)
@@ -328,6 +331,7 @@ function DemandEditorContent({
                     lineCount: summary.lineCount,
                     pendingDeliveryCount: summary.pendingDeliveryCount,
                     customerId: values.customer_id,
+                    deadlineAt: values.deadline_at,
                     pricedLineCount: summary.pricedLineCount,
                     referenceTotal: summary.referenceTotal,
                 })
@@ -381,6 +385,18 @@ function DemandEditorContent({
                         )
                     }
                 }
+                const normalizedDraft = {
+                    ...value.draft,
+                    lines: value.draft.lines.map((line) => ({
+                        ...line,
+                        sales_reference_price_gross:
+                            line.sales_reference_price_gross?.trim() || null,
+                    })),
+                }
+                const normalizedValue: DemandFormValues = {
+                    ...value,
+                    draft: normalizedDraft,
+                }
                 if (revision && inquiry) {
                     if (!canSave) throw new Error("当前账号没有修改需求权限。")
                     if (inquiry.version !== editVersion)
@@ -407,7 +423,7 @@ function DemandEditorContent({
                                 line_ids: [],
                                 fee_ids: [],
                                 concerns: "",
-                                requirement: value.draft,
+                                requirement: normalizedDraft,
                             },
                         },
                     )
@@ -438,7 +454,7 @@ function DemandEditorContent({
                         ? {
                               expected_version: editVersion,
                               deadline_at: value.deadline_at,
-                              data: value.draft,
+                              data: normalizedDraft,
                           }
                         : {
                               data: {
@@ -451,7 +467,7 @@ function DemandEditorContent({
                                   deadline_at: value.deadline_at,
                                   copied_from_inquiry_id:
                                       value.copied_from_inquiry_id,
-                                  draft: value.draft,
+                                  draft: normalizedDraft,
                               },
                           },
                     inquiry ? "PUT" : "POST",
@@ -460,7 +476,19 @@ function DemandEditorContent({
                 if (result.version != null) setEditVersion(result.version)
                 setSaved(true)
                 setDirty(false)
-                if (formApi.state.values === value) formApi.reset(value)
+                if (formApi.state.values === value) {
+                    setFormDefaults(normalizedValue)
+                    formApi.reset(normalizedValue)
+                    const savedSummary = summarizeDemand(normalizedValue)
+                    setEditorMeta({
+                        lineCount: savedSummary.lineCount,
+                        pendingDeliveryCount: savedSummary.pendingDeliveryCount,
+                        customerId: normalizedValue.customer_id,
+                        deadlineAt: normalizedValue.deadline_at,
+                        pricedLineCount: savedSummary.pricedLineCount,
+                        referenceTotal: savedSummary.referenceTotal,
+                    })
+                }
                 onDirtyChange?.(false)
                 toast.add({
                     title: inquiry ? "需求已保存" : "询价草稿已创建",
@@ -497,6 +525,7 @@ function DemandEditorContent({
             // 忽略本地清理异常，仍重置内存态表单。
         }
         const fresh = buildBaseValues(inquiry, copyFrom, userId)
+        setFormDefaults(fresh)
         form.reset(fresh)
         setSelectedIds(new Set())
         setFailure(null)
@@ -509,6 +538,7 @@ function DemandEditorContent({
             lineCount: freshSummary.lineCount,
             pendingDeliveryCount: freshSummary.pendingDeliveryCount,
             customerId: fresh.customer_id,
+            deadlineAt: fresh.deadline_at,
             pricedLineCount: freshSummary.pricedLineCount,
             referenceTotal: freshSummary.referenceTotal,
         })
@@ -538,6 +568,7 @@ function DemandEditorContent({
             pendingDeliveryCount: editorMeta.pendingDeliveryCount,
             canSave,
             customerId: editorMeta.customerId,
+            deadlineAt: editorMeta.deadlineAt,
             pricedLineCount: editorMeta.pricedLineCount,
             referenceTotal: editorMeta.referenceTotal,
         })
@@ -546,6 +577,7 @@ function DemandEditorContent({
         command.isPending,
         dirty,
         editorMeta.customerId,
+        editorMeta.deadlineAt,
         editorMeta.lineCount,
         editorMeta.pendingDeliveryCount,
         editorMeta.pricedLineCount,
@@ -653,7 +685,19 @@ function DemandEditorContent({
                                     ...form.state.values,
                                     draft: inquiry.draft,
                                 }
+                                setFormDefaults(values)
                                 form.reset(values)
+                                const nextSummary = summarizeDemand(values)
+                                setEditorMeta({
+                                    lineCount: nextSummary.lineCount,
+                                    pendingDeliveryCount:
+                                        nextSummary.pendingDeliveryCount,
+                                    customerId: values.customer_id,
+                                    deadlineAt: values.deadline_at,
+                                    pricedLineCount:
+                                        nextSummary.pricedLineCount,
+                                    referenceTotal: nextSummary.referenceTotal,
+                                })
                                 try {
                                     writeInquiryLocalValue(storageKey, {
                                         base_version: inquiry.version,

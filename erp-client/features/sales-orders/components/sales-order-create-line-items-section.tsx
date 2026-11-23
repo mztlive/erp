@@ -33,6 +33,7 @@ import { supplyReferencePrice } from "../lib/sales-procurement-price"
 
 export type SalesOrderCreateLineItemsSectionProps = {
     form: SalesOrderCreateFormApi
+    draftId?: string
     inquirySource?: InquirySalesBasis | InquirySalesSourceSnapshot
     inquiryLocked?: boolean
     compact?: boolean
@@ -45,6 +46,7 @@ type SkuPickerState = { mode: "add" } | { mode: "replace"; rowIndex: number }
 
 export function SalesOrderCreateLineItemsSection({
     form,
+    draftId,
     compact = false,
     inquirySource,
     inquiryLocked = false,
@@ -274,7 +276,7 @@ export function SalesOrderCreateLineItemsSection({
                     source={inquirySource}
                 />
             ) : (
-                <SalesDeliveryAllocationEditor form={form} />
+                <SalesDeliveryAllocationEditor form={form} draftId={draftId} />
             )}
             <form.AppField name="remark">
                 {(field) => (
