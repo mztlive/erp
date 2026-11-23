@@ -15,8 +15,12 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { RegionName } from "@/features/regions"
 import type { UnifiedDeliveryAddress } from "@/features/sales-orders/lib/sales-order-create-model"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import type { DeliveryAddressGroup } from "../lib/sales-delivery-pool"
 import { DeliveryRegionField } from "./delivery-region-field"
+import { SalesDeliverySmartPaste } from "./sales-delivery-smart-paste"
 
 const unifiedAddressSchema = z.object({
     recipient: z
@@ -45,24 +49,44 @@ const EMPTY_ADDRESS: UnifiedDeliveryAddress = {
 }
 
 export type SalesOrderCreateUnifiedAddressDialogProps = {
+    /** all：应用到全部商品（默认，保留原有自动化 ID）；selected：应用到已勾选商品。 */
+    mode?: "all" | "selected"
     lineCount: number
     /** 已有地址的商品数，用于提示覆盖范围。 */
     allocatedLineCount: number
     /** 打开时带入的地址，通常取第一个已填写的地址。 */
     initialAddress?: UnifiedDeliveryAddress
+    /** 本单已有地址池，支持一键复用免重填。 */
+    existingAddresses?: readonly DeliveryAddressGroup[]
     triggerLabel?: string
+    /** 受控打开状态（用于从批量勾选栏直接打开）。 */
+    open?: boolean
+    onOpenChange?: (open: boolean) => void
+    hideTrigger?: boolean
     onApply: (address: UnifiedDeliveryAddress) => void
 }
 
-/** 一次填写收货资料，应用到全部商品；之后仍可逐个商品改为分地址。 */
+/** 一次填写收货资料，应用到全部或已勾选商品；内置智能粘贴识别与本单已有地址快捷复用。 */
 export function SalesOrderCreateUnifiedAddressDialog({
+    mode = "all",
     lineCount,
     allocatedLineCount,
     initialAddress,
+    existingAddresses = [],
     triggerLabel = "设置统一地址",
+    open: controlledOpen,
+    onOpenChange,
+    hideTrigger = false,
     onApply,
 }: SalesOrderCreateUnifiedAddressDialogProps) {
-    const [open, setOpen] = React.useState(false)
+    const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false)
+    const open = controlledOpen ?? uncontrolledOpen
+    const setOpen = onOpenChange ?? setUncontrolledOpen
+    const idPrefix =
+        mode === "selected"
+            ? "sales-orders-create-batch-address"
+            : "sales-orders-create-unified-address"
+
     const form = useAppForm({
         defaultValues: EMPTY_ADDRESS,
         validators: { onChange: unifiedAddressSchema },
@@ -72,53 +96,95 @@ export function SalesOrderCreateUnifiedAddressDialog({
         },
     })
 
+    // 受控模式打开时同步带入初始地址。
+    const prevOpenRef = React.useRef(false)
+    React.useEffect(() => {
+        if (open && !prevOpenRef.current) {
+            form.reset({
+                ...EMPTY_ADDRESS,
+                ...(initialAddress
+                    ? {
+                          recipient: initialAddress.recipient,
+                          phone: initialAddress.phone,
+                          region_code: initialAddress.region_code,
+                          address: initialAddress.address,
+                      }
+                    : {}),
+            })
+        }
+        prevOpenRef.current = open
+    }, [form, initialAddress, open])
+
+    const fillFromAddress = (address: Partial<UnifiedDeliveryAddress>) => {
+        if (address.recipient !== undefined) {
+            form.setFieldValue("recipient", address.recipient)
+        }
+        if (address.phone !== undefined) {
+            form.setFieldValue("phone", address.phone)
+        }
+        if (address.region_code !== undefined) {
+            form.setFieldValue("region_code", address.region_code)
+        }
+        if (address.address !== undefined) {
+            form.setFieldValue("address", address.address)
+        }
+    }
+
+    const title = mode === "selected" ? "批量设置收货地址" : "设置统一收货地址"
+    const submitLabel =
+        mode === "selected"
+            ? `应用到已选 ${lineCount} 项商品`
+            : "应用到全部商品"
+
     return (
         <>
-            <Button
-                id="sales-orders-create-unified-address-open"
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={detailWorkspaceStyles.subtleButton}
-                disabled={lineCount === 0}
-                onClick={() => {
-                    form.reset({ ...EMPTY_ADDRESS, ...initialAddress })
-                    setOpen(true)
-                }}
-            >
-                <MapPinIcon
-                    data-icon="inline-start"
-                    className="size-3.5"
-                    aria-hidden="true"
-                />
-                {triggerLabel}
-            </Button>
+            {!hideTrigger ? (
+                <Button
+                    id={`${idPrefix}-open`}
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className={detailWorkspaceStyles.subtleButton}
+                    disabled={lineCount === 0}
+                    onClick={() => setOpen(true)}
+                >
+                    <MapPinIcon
+                        data-icon="inline-start"
+                        className="size-3.5"
+                        aria-hidden="true"
+                    />
+                    {triggerLabel}
+                </Button>
+            ) : null}
             <Dialog open={open} onOpenChange={setOpen}>
                 <DialogContent
-                    className="sm:max-w-xl"
-                    closeButtonId="sales-orders-create-unified-address-close"
+                    className="flex max-h-[88dvh] flex-col overflow-hidden sm:max-w-xl"
+                    closeButtonId={`${idPrefix}-close`}
                 >
-                    <DialogHeader>
-                        <DialogTitle>设置统一收货地址</DialogTitle>
+                    <DialogHeader className="shrink-0">
+                        <DialogTitle>{title}</DialogTitle>
                         <DialogDescription>
-                            全部{" "}
-                            <QuantityValue unit="" value={String(lineCount)} />{" "}
-                            个商品按各自数量送到这个地址。
+                            {mode === "selected" ? "已选 " : "全部 "}
+                            <QuantityValue
+                                unit=""
+                                value={String(lineCount)}
+                            />{" "}
+                            项商品将按各自销售数量送到这个地址。
                             {allocatedLineCount > 0 ? (
                                 <>
-                                    将覆盖{" "}
+                                    将覆盖其中{" "}
                                     <QuantityValue
                                         unit=""
                                         value={String(allocatedLineCount)}
                                     />{" "}
-                                    个商品已填写的地址。
+                                    项商品已填写的地址。
                                 </>
                             ) : null}
-                            应用后仍可逐个商品添加地址、改为分地址交付。
+                            应用后仍可针对单个商品拆分为多个地址。
                         </DialogDescription>
                     </DialogHeader>
                     <form
-                        className="flex flex-col gap-4"
+                        className="flex min-h-0 flex-1 flex-col gap-4"
                         noValidate
                         onSubmit={(event) => {
                             // 弹窗渲染在开单表单之外的节点，但 React 事件仍会冒泡到开单表单。
@@ -127,60 +193,132 @@ export function SalesOrderCreateUnifiedAddressDialog({
                             void form.handleSubmit()
                         }}
                     >
-                        <div className="grid gap-4 sm:grid-cols-2">
-                            <form.AppField name="recipient">
+                        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+                            {existingAddresses.length > 0 ? (
+                                <div className="space-y-1.5">
+                                    <p className="text-xs font-medium text-foreground/75">
+                                        复用本单已有地址
+                                    </p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {existingAddresses
+                                            .slice(0, 6)
+                                            .map((group) => (
+                                                <Button
+                                                    key={group.key}
+                                                    id={`${idPrefix}-reuse-${toAutomationIdSegment(group.key).slice(0, 32)}`}
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="xs"
+                                                    className="h-auto max-w-full py-1 text-left font-normal"
+                                                    onClick={() =>
+                                                        fillFromAddress({
+                                                            recipient:
+                                                                group.recipient,
+                                                            phone: group.phone,
+                                                            region_code:
+                                                                group.region_code,
+                                                            address:
+                                                                group.address,
+                                                        })
+                                                    }
+                                                >
+                                                    <MapPinIcon
+                                                        aria-hidden="true"
+                                                        className="size-3 shrink-0 text-muted-foreground"
+                                                    />
+                                                    <span className="truncate">
+                                                        {group.recipient} ·{" "}
+                                                        <RegionName
+                                                            code={
+                                                                group.region_code
+                                                            }
+                                                        />
+                                                        {group.address}
+                                                    </span>
+                                                </Button>
+                                            ))}
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            <SalesDeliverySmartPaste
+                                idPrefix={idPrefix}
+                                onParsed={(parsed) => {
+                                    fillFromAddress({
+                                        ...(parsed.recipient
+                                            ? { recipient: parsed.recipient }
+                                            : {}),
+                                        ...(parsed.phone
+                                            ? { phone: parsed.phone }
+                                            : {}),
+                                        ...(parsed.region_code
+                                            ? {
+                                                  region_code:
+                                                      parsed.region_code,
+                                              }
+                                            : {}),
+                                        ...(parsed.address
+                                            ? { address: parsed.address }
+                                            : {}),
+                                    })
+                                }}
+                            />
+
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                <form.AppField name="recipient">
+                                    {(field) => (
+                                        <field.TextField
+                                            id={`${idPrefix}-recipient`}
+                                            label="收货人"
+                                            required
+                                        />
+                                    )}
+                                </form.AppField>
+                                <form.AppField name="phone">
+                                    {(field) => (
+                                        <field.TextField
+                                            id={`${idPrefix}-phone`}
+                                            label="联系电话"
+                                            type="tel"
+                                            required
+                                        />
+                                    )}
+                                </form.AppField>
+                            </div>
+                            <form.AppField name="region_code">
                                 {(field) => (
-                                    <field.TextField
-                                        id="sales-orders-create-unified-address-recipient"
-                                        label="收货人"
+                                    <DeliveryRegionField
+                                        id={`${idPrefix}-region`}
                                         required
+                                        value={field.state.value}
+                                        onValueChange={(code) =>
+                                            field.handleChange(code)
+                                        }
+                                        onBlur={field.handleBlur}
+                                        invalid={
+                                            field.state.meta.isTouched &&
+                                            !field.state.meta.isValid
+                                        }
+                                        errors={toFieldErrors(
+                                            field.state.meta.errors,
+                                        )}
                                     />
                                 )}
                             </form.AppField>
-                            <form.AppField name="phone">
+                            <form.AppField name="address">
                                 {(field) => (
                                     <field.TextField
-                                        id="sales-orders-create-unified-address-phone"
-                                        label="联系电话"
-                                        type="tel"
+                                        id={`${idPrefix}-detail`}
+                                        label="详细地址"
                                         required
+                                        placeholder="街道、门牌号"
                                     />
                                 )}
                             </form.AppField>
                         </div>
-                        <form.AppField name="region_code">
-                            {(field) => (
-                                <DeliveryRegionField
-                                    id="sales-orders-create-unified-address-region"
-                                    required
-                                    value={field.state.value}
-                                    onValueChange={(code) =>
-                                        field.handleChange(code)
-                                    }
-                                    onBlur={field.handleBlur}
-                                    invalid={
-                                        field.state.meta.isTouched &&
-                                        !field.state.meta.isValid
-                                    }
-                                    errors={toFieldErrors(
-                                        field.state.meta.errors,
-                                    )}
-                                />
-                            )}
-                        </form.AppField>
-                        <form.AppField name="address">
-                            {(field) => (
-                                <field.TextField
-                                    id="sales-orders-create-unified-address-detail"
-                                    label="详细地址"
-                                    required
-                                    placeholder="街道、门牌号"
-                                />
-                            )}
-                        </form.AppField>
-                        <DialogFooter>
+                        <DialogFooter className="shrink-0">
                             <Button
-                                id="sales-orders-create-unified-address-cancel"
+                                id={`${idPrefix}-cancel`}
                                 type="button"
                                 variant="outline"
                                 onClick={() => setOpen(false)}
@@ -189,8 +327,8 @@ export function SalesOrderCreateUnifiedAddressDialog({
                             </Button>
                             <form.AppForm>
                                 <form.SubmitButton
-                                    id="sales-orders-create-unified-address-apply"
-                                    label="应用到全部商品"
+                                    id={`${idPrefix}-apply`}
+                                    label={submitLabel}
                                 />
                             </form.AppForm>
                         </DialogFooter>

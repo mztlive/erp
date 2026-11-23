@@ -14,7 +14,13 @@ import { useRouter } from "@/lib/navigation"
 
 import { revalidateLogic, useSelector } from "@tanstack/react-form"
 import { useQueryClient } from "@tanstack/react-query"
-import { ArrowLeftRightIcon, ClipboardListIcon } from "lucide-react"
+import {
+    ArrowLeftRightIcon,
+    ChevronDownIcon,
+    ChevronUpIcon,
+    ClipboardListIcon,
+    MessageSquareTextIcon,
+} from "lucide-react"
 
 import {
     DetailWorkspaceBody,
@@ -22,17 +28,20 @@ import {
     DetailWorkspaceDirtyBadge,
     DetailWorkspaceMeta,
     DetailWorkspacePage,
-    DetailWorkspaceSection,
     DiscardConfirmDialog,
     detailWorkspaceStyles,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { toast } from "@/components/ui/toast"
 import { SalesOrderCreateContractLoading } from "./sales-order-create-contract-loading"
 import { SalesOrderCreateContractSummary } from "./sales-order-create-contract-summary"
-import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
+import {
+    PAYMENT_TERM_OPTIONS,
+    welfareScenarioLabel,
+} from "@/lib/business-options"
 import { getErrorMessage } from "@/lib/api/errors"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import type { FormalCommandKeyLedger } from "@/lib/formal-command"
@@ -63,6 +72,8 @@ import { SalesOrderCreateEntry } from "@/features/sales-orders/components/sales-
 import { SalesOrderCreateHeaderFields } from "@/features/sales-orders/components/sales-order-create-header-fields"
 import { SalesOrderCreateLineItemsSection } from "@/features/sales-orders/components/sales-order-create-line-items-section"
 import { SalesOrderCreateTotalBar } from "@/features/sales-orders/components/sales-order-create-total-bar"
+import type { DeliveryWorkspaceTab } from "./sales-delivery-workspace-sheet"
+import type { SalesLineFilterKey } from "../lib/sales-order-create-line-health"
 import { SalesOrderNegativeProfitConfirmDialog } from "@/features/sales-orders/components/sales-order-negative-profit-confirm-dialog"
 import { SalesOrderApprovalArea } from "@/features/sales-orders/components/sales-order-approval-area"
 import { SalesOrderSubmitConfirmDialog } from "@/features/sales-orders/components/sales-order-submit-confirm-dialog"
@@ -119,6 +130,18 @@ export function SalesOrderCreateForm({
     const [negativeProfit, setNegativeProfit] = React.useState<string | null>(
         null,
     )
+    const [headerCollapsed, setHeaderCollapsed] = React.useState(false)
+    const expandHeader = React.useCallback(() => setHeaderCollapsed(false), [])
+    const [remarkOpen, setRemarkOpen] = React.useState(
+        Boolean(initialDraft?.remark || initialInquiryValues?.remark),
+    )
+    const [lineFilter, setLineFilter] =
+        React.useState<SalesLineFilterKey>("all")
+    const [deliverySheetRequest, setDeliverySheetRequest] = React.useState<{
+        nonce: number
+        tab: DeliveryWorkspaceTab
+        rowKey?: string | null
+    } | null>(null)
     const queryClient = useQueryClient()
     const profileQuery = useAccountProfileQuery()
     const [selectedContractId, setSelectedContractId] = React.useState(
@@ -832,126 +855,385 @@ export function SalesOrderCreateForm({
                             }
                             className="min-w-0 flex-1"
                         >
-                            {orderBasis === "contract" ? (
-                                <DetailWorkspaceSection
-                                    width="form"
-                                    title={
-                                        showContractSummary
-                                            ? "合同信息"
-                                            : "客户与合同"
-                                    }
-                                    headingId="sales-create-contract-title"
-                                    headingTabIndex={-1}
-                                    badge={
-                                        showContractSummary ? (
-                                            <StatusBadge
-                                                tone="success"
-                                                appearance="quiet"
-                                                label={
-                                                    importedContractId ===
-                                                    selectedContractId
-                                                        ? "已归档并带入"
-                                                        : "已关联合同"
-                                                }
-                                            />
-                                        ) : undefined
-                                    }
-                                    actions={
-                                        chrome === "none" ? owner : undefined
-                                    }
-                                >
-                                    <div data-slot="detail-form-grid">
-                                        {showContractSummary &&
-                                        contractQuery.data ? (
-                                            <SalesOrderCreateContractSummary
-                                                form={form}
-                                                contract={contractQuery.data}
-                                                canChange={
-                                                    !submission.draftIdentity &&
-                                                    !submission.isSubmitting
-                                                }
-                                                onChange={() =>
-                                                    setContractPickerOpen(true)
-                                                }
-                                            />
-                                        ) : (
-                                            <SalesOrderCreateContractSection
-                                                form={form}
-                                                sourceCustomerLocked={Boolean(
-                                                    source,
-                                                )}
-                                                customerLocked={
-                                                    submission.draftIdentity !=
-                                                    null
-                                                }
-                                                onContractChange={
-                                                    handleContractChange
-                                                }
-                                                onOrderBasisChange={
-                                                    handleOrderBasisChange
-                                                }
-                                                onUploadClick={
-                                                    picker.selectFile
-                                                }
-                                            />
+                            {/* 顶部双栏紧凑工作头：左侧合同/客户依据，右侧本次销售信息与内部说明，桌面端满宽利用零死白 */}
+                            <div className="border-b border-border/60">
+                                {headerCollapsed ? (
+                                    <form.Subscribe
+                                        selector={(state) => ({
+                                            customerName:
+                                                state.values.customerName,
+                                            contractRevisionLabel:
+                                                state.values
+                                                    .contractRevisionLabel,
+                                            nature: state.values.nature,
+                                            welfareScene:
+                                                state.values.welfareScene,
+                                            settlementEntity:
+                                                state.values.settlementEntity,
+                                            taxRatePercent:
+                                                state.values.taxRatePercent,
+                                            remark: state.values.remark,
+                                        })}
+                                    >
+                                        {(summary) => (
+                                            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 py-2.5">
+                                                <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
+                                                    <span className="text-body-compact font-semibold text-foreground">
+                                                        {summary.customerName ||
+                                                            "未选择客户"}
+                                                    </span>
+                                                    {summary.contractRevisionLabel ? (
+                                                        <span className="num">
+                                                            {
+                                                                summary.contractRevisionLabel
+                                                            }
+                                                        </span>
+                                                    ) : (
+                                                        <span>
+                                                            先开单，后补合同
+                                                        </span>
+                                                    )}
+                                                    <span
+                                                        aria-hidden="true"
+                                                        className="text-muted-foreground/40"
+                                                    >
+                                                        ·
+                                                    </span>
+                                                    <span>
+                                                        {summary.nature ===
+                                                        "card_voucher"
+                                                            ? "卡券"
+                                                            : "实物与服务"}
+                                                    </span>
+                                                    {summary.welfareScene ? (
+                                                        <>
+                                                            <span
+                                                                aria-hidden="true"
+                                                                className="text-muted-foreground/40"
+                                                            >
+                                                                ·
+                                                            </span>
+                                                            <span>
+                                                                {welfareScenarioLabel(
+                                                                    summary.welfareScene,
+                                                                )}
+                                                            </span>
+                                                        </>
+                                                    ) : null}
+                                                    {summary.settlementEntity ? (
+                                                        <>
+                                                            <span
+                                                                aria-hidden="true"
+                                                                className="text-muted-foreground/40"
+                                                            >
+                                                                ·
+                                                            </span>
+                                                            <span>
+                                                                结算：
+                                                                {
+                                                                    summary.settlementEntity
+                                                                }
+                                                            </span>
+                                                        </>
+                                                    ) : null}
+                                                    {summary.taxRatePercent ? (
+                                                        <>
+                                                            <span
+                                                                aria-hidden="true"
+                                                                className="text-muted-foreground/40"
+                                                            >
+                                                                ·
+                                                            </span>
+                                                            <span className="num">
+                                                                税率{" "}
+                                                                {
+                                                                    summary.taxRatePercent
+                                                                }
+                                                                %
+                                                            </span>
+                                                        </>
+                                                    ) : null}
+                                                    {summary.remark ? (
+                                                        <span className="rounded-sm bg-muted px-1.5 py-0.5 text-tiny text-muted-foreground">
+                                                            已填说明
+                                                        </span>
+                                                    ) : null}
+                                                </div>
+                                                <Button
+                                                    id="sales-orders-create-header-expand"
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="xs"
+                                                    className={
+                                                        detailWorkspaceStyles.subtleButton
+                                                    }
+                                                    onClick={() =>
+                                                        setHeaderCollapsed(
+                                                            false,
+                                                        )
+                                                    }
+                                                >
+                                                    <ChevronDownIcon
+                                                        data-icon="inline-start"
+                                                        className="size-3.5"
+                                                        aria-hidden="true"
+                                                    />
+                                                    展开基本资料
+                                                </Button>
+                                            </div>
                                         )}
-                                    </div>
-                                </DetailWorkspaceSection>
-                            ) : (
-                                <DetailWorkspaceSection
-                                    width="form"
-                                    title="客户与开单材料"
-                                    headingId="sales-create-evidence-title"
-                                    headingTabIndex={-1}
-                                    badge={
-                                        <StatusBadge
-                                            tone="warning"
-                                            appearance="quiet"
-                                            label="先开单，后补合同"
-                                        />
-                                    }
-                                    actions={
-                                        chrome === "none" ? owner : undefined
+                                    </form.Subscribe>
+                                ) : null}
+
+                                <div
+                                    className={
+                                        headerCollapsed
+                                            ? "hidden"
+                                            : "grid min-w-0 grid-cols-1 gap-y-4 py-4 lg:grid-cols-12 lg:gap-y-0"
                                     }
                                 >
-                                    <div data-slot="detail-form-grid">
-                                        <SalesOrderCreateContractSection
-                                            form={form}
-                                            sourceCustomerLocked={Boolean(
-                                                source,
-                                            )}
-                                            customerLocked={
-                                                submission.draftIdentity != null
-                                            }
-                                            onContractChange={
-                                                handleContractChange
-                                            }
-                                            onOrderBasisChange={
-                                                handleOrderBasisChange
-                                            }
-                                            onUploadClick={picker.selectFile}
-                                        />
-                                    </div>
-                                </DetailWorkspaceSection>
-                            )}
+                                    {orderBasis === "contract" ? (
+                                        <section
+                                            aria-labelledby="sales-create-contract-title"
+                                            className="min-w-0 space-y-3 lg:col-span-5 lg:pr-6"
+                                        >
+                                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                                    <h2
+                                                        id="sales-create-contract-title"
+                                                        tabIndex={-1}
+                                                        className={`${detailWorkspaceStyles.sectionTitle} outline-none`}
+                                                    >
+                                                        {showContractSummary
+                                                            ? "合同信息"
+                                                            : "客户与合同"}
+                                                    </h2>
+                                                    {showContractSummary ? (
+                                                        <StatusBadge
+                                                            tone="success"
+                                                            appearance="quiet"
+                                                            label={
+                                                                importedContractId ===
+                                                                selectedContractId
+                                                                    ? "已归档并带入"
+                                                                    : "已关联合同"
+                                                            }
+                                                        />
+                                                    ) : null}
+                                                </div>
+                                                {chrome === "none"
+                                                    ? owner
+                                                    : null}
+                                            </div>
+                                            <div data-slot="detail-form-grid">
+                                                {showContractSummary &&
+                                                contractQuery.data ? (
+                                                    <SalesOrderCreateContractSummary
+                                                        form={form}
+                                                        contract={
+                                                            contractQuery.data
+                                                        }
+                                                        canChange={
+                                                            !submission.draftIdentity &&
+                                                            !submission.isSubmitting
+                                                        }
+                                                        onChange={() =>
+                                                            setContractPickerOpen(
+                                                                true,
+                                                            )
+                                                        }
+                                                    />
+                                                ) : (
+                                                    <SalesOrderCreateContractSection
+                                                        form={form}
+                                                        sourceCustomerLocked={Boolean(
+                                                            source,
+                                                        )}
+                                                        customerLocked={
+                                                            submission.draftIdentity !=
+                                                            null
+                                                        }
+                                                        onContractChange={
+                                                            handleContractChange
+                                                        }
+                                                        onOrderBasisChange={
+                                                            handleOrderBasisChange
+                                                        }
+                                                        onUploadClick={
+                                                            picker.selectFile
+                                                        }
+                                                    />
+                                                )}
+                                            </div>
+                                        </section>
+                                    ) : (
+                                        <section
+                                            aria-labelledby="sales-create-evidence-title"
+                                            className="min-w-0 space-y-3 lg:col-span-5 lg:pr-6"
+                                        >
+                                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                                    <h2
+                                                        id="sales-create-evidence-title"
+                                                        tabIndex={-1}
+                                                        className={`${detailWorkspaceStyles.sectionTitle} outline-none`}
+                                                    >
+                                                        客户与开单材料
+                                                    </h2>
+                                                    <StatusBadge
+                                                        tone="warning"
+                                                        appearance="quiet"
+                                                        label="先开单，后补合同"
+                                                    />
+                                                </div>
+                                                {chrome === "none"
+                                                    ? owner
+                                                    : null}
+                                            </div>
+                                            <div data-slot="detail-form-grid">
+                                                <SalesOrderCreateContractSection
+                                                    form={form}
+                                                    sourceCustomerLocked={Boolean(
+                                                        source,
+                                                    )}
+                                                    customerLocked={
+                                                        submission.draftIdentity !=
+                                                        null
+                                                    }
+                                                    onContractChange={
+                                                        handleContractChange
+                                                    }
+                                                    onOrderBasisChange={
+                                                        handleOrderBasisChange
+                                                    }
+                                                    onUploadClick={
+                                                        picker.selectFile
+                                                    }
+                                                />
+                                            </div>
+                                        </section>
+                                    )}
 
-                            <DetailWorkspaceSection
-                                width="form"
-                                title="本次销售信息"
-                                headingId="sales-create-settlement-title"
-                            >
-                                <div data-slot="detail-form-grid">
-                                    <SalesOrderCreateHeaderFields
-                                        compact={false}
-                                        form={form}
-                                        natureLocked={natureLocked}
-                                        contractResolved={showContractSummary}
-                                        settlementSnapshot={settlementSnapshot}
-                                        applyNature={applyNature}
-                                        onNatureChangeRequest={setPendingNature}
-                                    />
+                                    <section
+                                        aria-labelledby="sales-create-settlement-title"
+                                        className="min-w-0 space-y-3 border-t border-border/60 pt-4 lg:col-span-7 lg:border-t-0 lg:border-l lg:border-border/60 lg:pt-0 lg:pl-6"
+                                    >
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <h2
+                                                id="sales-create-settlement-title"
+                                                className={
+                                                    detailWorkspaceStyles.sectionTitle
+                                                }
+                                            >
+                                                本次销售信息
+                                            </h2>
+                                            <div className="flex shrink-0 items-center gap-1">
+                                                <form.AppField name="remark">
+                                                    {(field) => (
+                                                        <Button
+                                                            id="sales-orders-create-remark-toggle"
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="xs"
+                                                            aria-expanded={
+                                                                remarkOpen ||
+                                                                field.state.meta
+                                                                    .errors
+                                                                    .length > 0
+                                                            }
+                                                            className={
+                                                                detailWorkspaceStyles.quietButton
+                                                            }
+                                                            onClick={() =>
+                                                                setRemarkOpen(
+                                                                    (v) => !v,
+                                                                )
+                                                            }
+                                                        >
+                                                            <MessageSquareTextIcon
+                                                                data-icon="inline-start"
+                                                                className="size-3.5"
+                                                                aria-hidden="true"
+                                                            />
+                                                            {field.state.value
+                                                                ? "内部说明（已填）"
+                                                                : "添加内部说明"}
+                                                        </Button>
+                                                    )}
+                                                </form.AppField>
+                                                <Button
+                                                    id="sales-orders-create-header-collapse"
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="xs"
+                                                    className={
+                                                        detailWorkspaceStyles.quietButton
+                                                    }
+                                                    onClick={() =>
+                                                        setHeaderCollapsed(true)
+                                                    }
+                                                >
+                                                    <ChevronUpIcon
+                                                        data-icon="inline-start"
+                                                        className="size-3.5"
+                                                        aria-hidden="true"
+                                                    />
+                                                    收起
+                                                </Button>
+                                            </div>
+                                        </div>
+
+                                        <div
+                                            data-slot="detail-form-grid"
+                                            className="space-y-3"
+                                        >
+                                            <SalesOrderCreateHeaderFields
+                                                compact={false}
+                                                form={form}
+                                                natureLocked={natureLocked}
+                                                contractResolved={
+                                                    showContractSummary
+                                                }
+                                                settlementSnapshot={
+                                                    settlementSnapshot
+                                                }
+                                                applyNature={applyNature}
+                                                onNatureChangeRequest={
+                                                    setPendingNature
+                                                }
+                                            />
+                                            <form.AppField name="remark">
+                                                {(field) => (
+                                                    <Collapsible
+                                                        open={
+                                                            remarkOpen ||
+                                                            field.state.meta
+                                                                .errors.length >
+                                                                0
+                                                        }
+                                                        onOpenChange={
+                                                            setRemarkOpen
+                                                        }
+                                                    >
+                                                        <CollapsibleContent
+                                                            keepMounted
+                                                        >
+                                                            <div className="border-t border-border/50 pt-3">
+                                                                <field.TextareaField
+                                                                    id="sales-orders-create-remark"
+                                                                    label="内部说明（选填）"
+                                                                    placeholder="补充客户确认、交付或内部协同说明"
+                                                                    rows={2}
+                                                                />
+                                                            </div>
+                                                        </CollapsibleContent>
+                                                    </Collapsible>
+                                                )}
+                                            </form.AppField>
+                                        </div>
+                                    </section>
                                 </div>
-                            </DetailWorkspaceSection>
+                            </div>
 
                             <SalesOrderCreateLineItemsSection
                                 inquirySource={inquirySource}
@@ -968,6 +1250,9 @@ export function SalesOrderCreateForm({
                                     procurementResponsibilityQuery.isError &&
                                     !procurementResponsibilityQuery.data
                                 }
+                                activeFilter={lineFilter}
+                                onActiveFilterChange={setLineFilter}
+                                deliverySheetRequest={deliverySheetRequest}
                             />
                         </div>
 
@@ -980,6 +1265,22 @@ export function SalesOrderCreateForm({
                             }}
                             onSubmitClick={() => {
                                 submission.submitIntentRef.current = "SUBMIT"
+                            }}
+                            onExpandHeader={expandHeader}
+                            onOpenDeliveryOverview={() =>
+                                setDeliverySheetRequest({
+                                    nonce: Date.now(),
+                                    tab: inquirySource ? "product" : "overview",
+                                })
+                            }
+                            onLocateIncompleteLines={() => {
+                                setLineFilter("incomplete")
+                                document
+                                    .getElementById("sales-line-items-section")
+                                    ?.scrollIntoView({
+                                        behavior: "smooth",
+                                        block: "start",
+                                    })
                             }}
                         />
                     </form>

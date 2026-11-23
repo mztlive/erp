@@ -1,19 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon, PackageSearchIcon, PlusIcon } from "lucide-react"
+import { PackageSearchIcon, PlusIcon } from "lucide-react"
 
-import {
-    DetailWorkspaceSection,
-    QuantityValue,
-    detailWorkspaceStyles,
-} from "@/components/business"
+import { DetailWorkspaceSection, QuantityValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import {
-    Collapsible,
-    CollapsibleContent,
-    CollapsibleTrigger,
-} from "@/components/ui/collapsible"
 import { toast } from "@/components/ui/toast"
 import { SalesOrderCreateDueDateBatchBar } from "@/features/sales-orders/components/sales-order-create-due-date-batch-bar"
 import { SalesOrderCreateLineItemTable } from "@/features/sales-orders/components/sales-order-create-line-item-table"
@@ -30,9 +21,14 @@ import type {
     InquirySalesBasis,
     InquirySalesSourceSnapshot,
 } from "../api/inquiry-basis"
+import { useDeliveryCoverage } from "../hooks/use-delivery-coverage"
+import type { SalesLineFilterKey } from "../lib/sales-order-create-line-health"
 import { supplyReferencePrice } from "../lib/sales-procurement-price"
-import { InquiryDeliveryAllocationEditor } from "./inquiry-delivery-allocation-editor"
-import { SalesDeliveryAllocationEditor } from "./sales-delivery-allocation-editor"
+import { SalesDeliverySummaryBar } from "./sales-delivery-allocation-editor"
+import {
+    SalesDeliveryWorkspaceSheet,
+    type DeliveryWorkspaceTab,
+} from "./sales-delivery-workspace-sheet"
 import { SalesOrderCreatePriceBasisBatchMenu } from "./sales-order-create-price-basis-batch-menu"
 
 export type SalesOrderCreateLineItemsSectionProps = {
@@ -43,6 +39,14 @@ export type SalesOrderCreateLineItemsSectionProps = {
     procurementOwners?: ReadonlyMap<string, SalesLineProcurementResponsibility>
     procurementFetching?: boolean
     procurementError?: boolean
+    activeFilter?: SalesLineFilterKey
+    onActiveFilterChange?: (filter: SalesLineFilterKey) => void
+    /** 从底部汇总栏触发打开收货地址总览工作台。 */
+    deliverySheetRequest?: {
+        nonce: number
+        tab: DeliveryWorkspaceTab
+        rowKey?: string | null
+    } | null
 }
 
 type SkuPickerState = { mode: "add" } | { mode: "replace"; rowIndex: number }
@@ -55,11 +59,31 @@ export function SalesOrderCreateLineItemsSection({
     procurementOwners,
     procurementFetching = false,
     procurementError = false,
+    activeFilter: controlledFilter,
+    onActiveFilterChange,
+    deliverySheetRequest,
 }: SalesOrderCreateLineItemsSectionProps) {
-    const [remarkOpen, setRemarkOpen] = React.useState(
-        Boolean(form.getFieldValue("remark")),
-    )
     const [picker, setPicker] = React.useState<SkuPickerState | null>(null)
+    const [uncontrolledFilter, setUncontrolledFilter] =
+        React.useState<SalesLineFilterKey>("all")
+    const activeFilter = controlledFilter ?? uncontrolledFilter
+    const setActiveFilter = onActiveFilterChange ?? setUncontrolledFilter
+
+    const [deliveryOpen, setDeliveryOpen] = React.useState(false)
+    const [deliveryTab, setDeliveryTab] =
+        React.useState<DeliveryWorkspaceTab>("product")
+    const [activeDeliveryRowKey, setActiveDeliveryRowKey] = React.useState<
+        string | null
+    >(null)
+
+    React.useEffect(() => {
+        if (!deliverySheetRequest) return
+        setDeliveryTab(deliverySheetRequest.tab)
+        if (deliverySheetRequest.rowKey !== undefined) {
+            setActiveDeliveryRowKey(deliverySheetRequest.rowKey)
+        }
+        setDeliveryOpen(true)
+    }, [deliverySheetRequest])
 
     const handleConfirmPicks = React.useCallback(
         (picks: readonly SellableSkuPick[]) => {
@@ -75,8 +99,15 @@ export function SalesOrderCreateLineItemsSection({
                     picker?.mode === "replace" ? picker.rowIndex : undefined,
                 ),
             )
+            if (
+                picker?.mode === "add" &&
+                (activeFilter === "negative_profit" ||
+                    activeFilter === "address_issue")
+            ) {
+                setActiveFilter("all")
+            }
         },
-        [form, picker],
+        [activeFilter, form, picker, setActiveFilter],
     )
 
     const handleApplyDueDate = React.useCallback(
@@ -126,203 +157,267 @@ export function SalesOrderCreateLineItemsSection({
         [form, inquiryLocked],
     )
 
+    const openProductDelivery = React.useCallback((rowKey: string) => {
+        setActiveDeliveryRowKey(rowKey)
+        setDeliveryTab("product")
+        setDeliveryOpen(true)
+    }, [])
+
+    const openOverviewDelivery = React.useCallback(() => {
+        setDeliveryTab(inquirySource ? "product" : "overview")
+        setDeliveryOpen(true)
+    }, [inquirySource])
+
+    return (
+        <form.Subscribe
+            selector={(state) => ({
+                nature: state.values.nature,
+                lines: state.values.lineItems,
+            })}
+        >
+            {({ nature, lines }) => (
+                <LineItemsSectionInner
+                    form={form}
+                    nature={nature}
+                    lines={lines}
+                    draftId={draftId}
+                    inquirySource={inquirySource}
+                    inquiryLocked={inquiryLocked}
+                    procurementOwners={procurementOwners}
+                    procurementFetching={procurementFetching}
+                    procurementError={procurementError}
+                    activeFilter={activeFilter}
+                    onActiveFilterChange={setActiveFilter}
+                    picker={picker}
+                    onPickerChange={setPicker}
+                    deliveryOpen={deliveryOpen}
+                    onDeliveryOpenChange={setDeliveryOpen}
+                    deliveryTab={deliveryTab}
+                    onDeliveryTabChange={setDeliveryTab}
+                    activeDeliveryRowKey={activeDeliveryRowKey}
+                    onActiveDeliveryRowKeyChange={setActiveDeliveryRowKey}
+                    onConfirmPicks={handleConfirmPicks}
+                    onApplyDueDate={handleApplyDueDate}
+                    onApplyPriceBasis={handleApplyPriceBasis}
+                    onOpenProductDelivery={openProductDelivery}
+                    onOpenOverviewDelivery={openOverviewDelivery}
+                />
+            )}
+        </form.Subscribe>
+    )
+}
+
+function LineItemsSectionInner({
+    form,
+    nature,
+    lines,
+    draftId,
+    inquirySource,
+    inquiryLocked,
+    procurementOwners,
+    procurementFetching,
+    procurementError,
+    activeFilter,
+    onActiveFilterChange,
+    picker,
+    onPickerChange,
+    deliveryOpen,
+    onDeliveryOpenChange,
+    deliveryTab,
+    onDeliveryTabChange,
+    activeDeliveryRowKey,
+    onActiveDeliveryRowKeyChange,
+    onConfirmPicks,
+    onApplyDueDate,
+    onApplyPriceBasis,
+    onOpenProductDelivery,
+    onOpenOverviewDelivery,
+}: {
+    form: SalesOrderCreateFormApi
+    nature: "physical_service" | "card_voucher"
+    lines: ReturnType<SalesOrderCreateFormApi["getFieldValue"]> extends never
+        ? never
+        : Parameters<typeof applyDueDateToLines>[0] extends readonly (infer T)[]
+          ? T[]
+          : never
+    draftId?: string
+    inquirySource?: InquirySalesBasis | InquirySalesSourceSnapshot
+    inquiryLocked: boolean
+    procurementOwners?: ReadonlyMap<string, SalesLineProcurementResponsibility>
+    procurementFetching: boolean
+    procurementError: boolean
+    activeFilter: SalesLineFilterKey
+    onActiveFilterChange: (filter: SalesLineFilterKey) => void
+    picker: SkuPickerState | null
+    onPickerChange: (state: SkuPickerState | null) => void
+    deliveryOpen: boolean
+    onDeliveryOpenChange: (open: boolean) => void
+    deliveryTab: DeliveryWorkspaceTab
+    onDeliveryTabChange: (tab: DeliveryWorkspaceTab) => void
+    activeDeliveryRowKey: string | null
+    onActiveDeliveryRowKeyChange: (key: string | null) => void
+    onConfirmPicks: (picks: readonly SellableSkuPick[]) => void
+    onApplyDueDate: (dueDate: string) => void
+    onApplyPriceBasis: (basis: SalesProcurementPriceBasis) => void
+    onOpenProductDelivery: (rowKey: string) => void
+    onOpenOverviewDelivery: () => void
+}) {
+    const coverageHint = useDeliveryCoverage(
+        nature === "physical_service" && !inquiryLocked ? lines : [],
+    )
+    const skuCount = lines.filter((line) => line.sku.trim()).length
+
     return (
         <>
-            <form.Subscribe
-                selector={(state) => ({
-                    nature: state.values.nature,
-                    lines: state.values.lineItems,
-                })}
-            >
-                {({ nature, lines }) => {
-                    const skuCount = lines.filter((line) =>
-                        line.sku.trim(),
-                    ).length
-                    return (
-                        <DetailWorkspaceSection
-                            id="sales-line-items-section"
-                            tabIndex={-1}
-                            title="销售明细"
-                            headingId="sales-create-lines-title"
-                            width="full"
-                            badge={
-                                <span className="num rounded-sm bg-muted/80 px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
-                                    {nature === "card_voucher" ? (
-                                        "卡券 · 单行明细"
-                                    ) : (
-                                        <>
-                                            <QuantityValue
-                                                unit=""
-                                                value={String(skuCount)}
-                                            />{" "}
-                                            项商品
-                                        </>
-                                    )}
-                                </span>
-                            }
-                            actions={
-                                nature === "physical_service" &&
-                                !inquiryLocked ? (
-                                    <div
-                                        role="group"
-                                        aria-label="销售明细操作"
-                                        className="flex flex-wrap items-center gap-1.5"
-                                    >
-                                        {lines.length > 0 ? (
-                                            <>
-                                                <SalesOrderCreateDueDateBatchBar
-                                                    lineCount={lines.length}
-                                                    onApply={handleApplyDueDate}
-                                                />
-                                                <SalesOrderCreatePriceBasisBatchMenu
-                                                    lineCount={lines.length}
-                                                    onApply={
-                                                        handleApplyPriceBasis
-                                                    }
-                                                />
-                                            </>
-                                        ) : null}
-                                        <Button
-                                            id="sales-orders-create-line-items-add"
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() =>
-                                                setPicker({ mode: "add" })
-                                            }
-                                        >
-                                            <PlusIcon
-                                                data-icon="inline-start"
-                                                aria-hidden="true"
-                                            />
-                                            添加商品
-                                        </Button>
-                                    </div>
-                                ) : undefined
-                            }
+            <DetailWorkspaceSection
+                id="sales-line-items-section"
+                tabIndex={-1}
+                title="销售明细"
+                headingId="sales-create-lines-title"
+                width="full"
+                className="py-4 last:pb-6"
+                contentClassName="space-y-3"
+                badge={
+                    <span className="num rounded-sm bg-muted/80 px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+                        {nature === "card_voucher" ? (
+                            "卡券 · 单行明细"
+                        ) : (
+                            <>
+                                <QuantityValue
+                                    unit=""
+                                    value={String(skuCount)}
+                                />{" "}
+                                项商品
+                            </>
+                        )}
+                    </span>
+                }
+                actions={
+                    nature === "physical_service" && !inquiryLocked ? (
+                        <div
+                            role="group"
+                            aria-label="销售明细操作"
+                            className="flex flex-wrap items-center gap-1.5"
                         >
-                            {nature === "physical_service" &&
-                            lines.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center gap-3 border-y border-border/70 py-10 text-center">
-                                    <div className="flex size-10 items-center justify-center rounded-full bg-muted/70 text-muted-foreground">
-                                        <PackageSearchIcon
-                                            className="size-5"
-                                            aria-hidden="true"
-                                        />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="font-medium text-foreground">
-                                            尚未添加销售商品
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">
-                                            从公司商品池选择商品后，填写数量、含税成交单价与期望交付日
-                                        </p>
-                                    </div>
-                                    {!inquiryLocked ? (
-                                        <Button
-                                            id="sales-orders-create-line-items-empty-add"
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() =>
-                                                setPicker({ mode: "add" })
-                                            }
-                                        >
-                                            <PlusIcon
-                                                data-icon="inline-start"
-                                                aria-hidden="true"
-                                            />
-                                            添加商品
-                                        </Button>
-                                    ) : null}
-                                </div>
-                            ) : null}
-
-                            <SalesOrderCreateLineItemTable
-                                form={form}
-                                inquiryLocked={inquiryLocked}
-                                procurementOwners={procurementOwners}
-                                procurementFetching={procurementFetching}
-                                procurementError={procurementError}
-                                onPickSku={(rowIndex) =>
-                                    setPicker({ mode: "replace", rowIndex })
-                                }
-                            />
-
-                            <SellableSkuSelectDialog
-                                open={picker != null}
-                                onOpenChange={(open) => {
-                                    if (!open) setPicker(null)
-                                }}
-                                multiple={picker?.mode !== "replace"}
-                                excludeProductKind="VOUCHER"
-                                title={
-                                    picker?.mode === "replace"
-                                        ? "更换销售商品"
-                                        : "添加商品"
-                                }
-                                onConfirm={handleConfirmPicks}
-                            />
-                        </DetailWorkspaceSection>
-                    )
-                }}
-            </form.Subscribe>
-
-            {inquirySource ? (
-                <InquiryDeliveryAllocationEditor
-                    form={form}
-                    source={inquirySource}
-                />
-            ) : (
-                <SalesDeliveryAllocationEditor form={form} draftId={draftId} />
-            )}
-
-            <form.AppField name="remark">
-                {(field) => (
-                    <DetailWorkspaceSection width="form" className="py-4!">
-                        <Collapsible
-                            open={
-                                remarkOpen || field.state.meta.errors.length > 0
-                            }
-                            onOpenChange={setRemarkOpen}
-                        >
-                            <CollapsibleTrigger
-                                id="sales-orders-create-remark-toggle"
-                                render={
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        className={`-ml-2.5 ${detailWorkspaceStyles.quietButton}`}
+                            {lines.length > 0 ? (
+                                <>
+                                    <SalesOrderCreateDueDateBatchBar
+                                        lineCount={lines.length}
+                                        onApply={onApplyDueDate}
                                     />
-                                }
+                                    <SalesOrderCreatePriceBasisBatchMenu
+                                        lineCount={lines.length}
+                                        onApply={onApplyPriceBasis}
+                                    />
+                                </>
+                            ) : null}
+                            <Button
+                                id="sales-orders-create-line-items-add"
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => onPickerChange({ mode: "add" })}
                             >
-                                <ChevronDownIcon
-                                    className="size-4 transition-transform in-data-[panel-open]:rotate-180"
+                                <PlusIcon
+                                    data-icon="inline-start"
                                     aria-hidden="true"
                                 />
-                                {field.state.value
-                                    ? "内部说明（已填写）"
-                                    : "添加内部说明（选填）"}
-                            </CollapsibleTrigger>
-                            <CollapsibleContent keepMounted>
-                                <div
-                                    data-slot="detail-form-grid"
-                                    className="pt-2.5"
-                                >
-                                    <field.TextareaField
-                                        id="sales-orders-create-remark"
-                                        label="内部说明（选填）"
-                                        hideLabel
-                                        placeholder="补充客户确认、交付或内部协同说明"
-                                        rows={2}
-                                    />
-                                </div>
-                            </CollapsibleContent>
-                        </Collapsible>
-                    </DetailWorkspaceSection>
-                )}
-            </form.AppField>
+                                添加商品
+                            </Button>
+                        </div>
+                    ) : undefined
+                }
+            >
+                {nature === "physical_service" && lines.length > 0 ? (
+                    <SalesDeliverySummaryBar
+                        form={form}
+                        lines={lines}
+                        draftId={draftId}
+                        inquiryLocked={inquiryLocked}
+                        coverageHint={coverageHint}
+                        onOpenOverview={onOpenOverviewDelivery}
+                        onFilterLines={onActiveFilterChange}
+                    />
+                ) : null}
+
+                {nature === "physical_service" && lines.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center gap-3 border-y border-border/70 py-10 text-center">
+                        <div className="flex size-10 items-center justify-center rounded-full bg-muted/70 text-muted-foreground">
+                            <PackageSearchIcon
+                                className="size-5"
+                                aria-hidden="true"
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <p className="font-medium text-foreground">
+                                尚未添加销售商品
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                                从公司商品池批量选择商品，填写数量、含税成交单价、期望交付日与收货地址
+                            </p>
+                        </div>
+                        {!inquiryLocked ? (
+                            <Button
+                                id="sales-orders-create-line-items-empty-add"
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => onPickerChange({ mode: "add" })}
+                            >
+                                <PlusIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                                添加商品
+                            </Button>
+                        ) : null}
+                    </div>
+                ) : null}
+
+                <SalesOrderCreateLineItemTable
+                    form={form}
+                    inquiryLocked={inquiryLocked}
+                    procurementOwners={procurementOwners}
+                    procurementFetching={procurementFetching}
+                    procurementError={procurementError}
+                    coverageHint={coverageHint}
+                    activeFilter={activeFilter}
+                    onActiveFilterChange={onActiveFilterChange}
+                    onAddProducts={() => onPickerChange({ mode: "add" })}
+                    onOpenDelivery={onOpenProductDelivery}
+                    onPickSku={(rowIndex) =>
+                        onPickerChange({ mode: "replace", rowIndex })
+                    }
+                />
+
+                <SellableSkuSelectDialog
+                    open={picker != null}
+                    onOpenChange={(open) => {
+                        if (!open) onPickerChange(null)
+                    }}
+                    multiple={picker?.mode !== "replace"}
+                    excludeProductKind="VOUCHER"
+                    title={
+                        picker?.mode === "replace" ? "更换销售商品" : "添加商品"
+                    }
+                    onConfirm={onConfirmPicks}
+                />
+            </DetailWorkspaceSection>
+
+            {nature === "physical_service" ? (
+                <SalesDeliveryWorkspaceSheet
+                    open={deliveryOpen}
+                    onOpenChange={onDeliveryOpenChange}
+                    tab={deliveryTab}
+                    onTabChange={onDeliveryTabChange}
+                    activeRowKey={activeDeliveryRowKey}
+                    onActiveRowKeyChange={onActiveDeliveryRowKeyChange}
+                    form={form}
+                    lines={lines}
+                    inquirySource={inquirySource}
+                    onJumpToTableFilter={onActiveFilterChange}
+                />
+            ) : null}
         </>
     )
 }

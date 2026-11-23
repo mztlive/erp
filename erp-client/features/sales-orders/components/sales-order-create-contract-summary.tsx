@@ -48,9 +48,9 @@ export function SalesOrderCreateContractSummary({
         revision?.revisionNo ?? contract.currentRevision.revisionNo
 
     return (
-        <div className="space-y-4">
-            <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2.5">
-                <div className="min-w-0 space-y-1">
+        <div className="space-y-3">
+            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+                <div className="min-w-0 space-y-0.5">
                     <form.AppField name="customerId">
                         {(field) => (
                             <div
@@ -90,13 +90,13 @@ export function SalesOrderCreateContractSummary({
                     </form.AppField>
                 </div>
                 {file || canChange ? (
-                    <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                    <div className="flex shrink-0 flex-wrap items-center gap-1">
                         {file ? (
                             <Button
                                 id="sales-orders-create-contract-original"
                                 type="button"
                                 variant="ghost"
-                                size="sm"
+                                size="xs"
                                 className={detailWorkspaceStyles.subtleButton}
                                 onClick={() => setPreviewOpen(true)}
                             >
@@ -113,7 +113,7 @@ export function SalesOrderCreateContractSummary({
                                 id="sales-orders-create-contract-change"
                                 type="button"
                                 variant="ghost"
-                                size="sm"
+                                size="xs"
                                 className={detailWorkspaceStyles.quietButton}
                                 onClick={onChange}
                             >
@@ -124,13 +124,13 @@ export function SalesOrderCreateContractSummary({
                 ) : null}
             </div>
 
-            <dl className="grid grid-cols-1 gap-x-8 gap-y-3 border-t border-border/50 pt-3.5 sm:grid-cols-3">
+            <dl className="grid grid-cols-2 gap-x-5 gap-y-2 border-t border-border/50 pt-2.5 sm:grid-cols-3">
                 <form.AppField name="paymentTerms">
                     {(field) => (
                         <div
                             id="sales-orders-create-header-payment-terms"
                             tabIndex={-1}
-                            className="min-w-0 space-y-1 outline-none"
+                            className="min-w-0 space-y-0.5 outline-none"
                         >
                             <dt className="text-xs font-medium text-muted-foreground">
                                 付款条件
@@ -149,7 +149,7 @@ export function SalesOrderCreateContractSummary({
                         <div
                             id="sales-orders-create-header-invoice-type"
                             tabIndex={-1}
-                            className="min-w-0 space-y-1 outline-none"
+                            className="min-w-0 space-y-0.5 outline-none"
                         >
                             <dt className="text-xs font-medium text-muted-foreground">
                                 开票要求
@@ -168,7 +168,7 @@ export function SalesOrderCreateContractSummary({
                         <div
                             id="sales-orders-create-header-tax-rate"
                             tabIndex={-1}
-                            className="min-w-0 space-y-1 outline-none"
+                            className="min-w-0 space-y-0.5 outline-none"
                         >
                             <dt className="text-xs font-medium text-muted-foreground">
                                 税率

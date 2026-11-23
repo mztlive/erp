@@ -1,9 +1,16 @@
 "use client"
 
+import * as React from "react"
 import { useSelector } from "@tanstack/react-form"
+import { MapPinIcon, TriangleAlertIcon } from "lucide-react"
 
-import { MoneyValue, ValidationSummary } from "@/components/business"
+import {
+    MoneyValue,
+    ValidationSummary,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { FormError, toFieldErrors } from "@/components/form"
+import { Button } from "@/components/ui/button"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
 import {
     calculateGrossProfit,
@@ -11,6 +18,7 @@ import {
 } from "@/features/sales-orders/lib/sales-order-create-model"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
+import { summarizeOrderDelivery } from "../lib/sales-delivery-pool"
 
 const HEADER_VALIDATION_FIELDS = [
     { name: "contractId", label: "有效合同", targetId: "contractId" },
@@ -72,6 +80,9 @@ export type SalesOrderCreateTotalBarProps = {
     isSubmitting: boolean
     onSaveDraftClick: () => void
     onSubmitClick: () => void
+    onOpenDeliveryOverview?: () => void
+    onLocateIncompleteLines?: () => void
+    onExpandHeader?: () => void
 }
 
 export function SalesOrderCreateTotalBar({
@@ -79,6 +90,9 @@ export function SalesOrderCreateTotalBar({
     isSubmitting,
     onSaveDraftClick,
     onSubmitClick,
+    onOpenDeliveryOverview,
+    onLocateIncompleteLines,
+    onExpandHeader,
 }: SalesOrderCreateTotalBarProps) {
     /** 提交失败后汇总单据头错误，避免只拦提交却看不到原因。 */
     const headerIssues = useSelector(form.store, (state) => {
@@ -96,14 +110,71 @@ export function SalesOrderCreateTotalBar({
         })
     })
 
+    /** 提交失败后汇总跨页商品明细错误数量，支持一键切到待完善筛选视图。 */
+    const invalidLineCount = useSelector(form.store, (state) => {
+        if (state.submissionAttempts === 0) return 0
+        const invalidIndexes = new Set<string>()
+        for (const [key, meta] of Object.entries(state.fieldMeta)) {
+            const match = key.match(/^lineItems\[(\d+)\]\./)
+            if (!match) continue
+            const errors = toFieldErrors(meta?.errors ?? []).filter((error) =>
+                Boolean(error?.message),
+            )
+            if (errors.length > 0) {
+                invalidIndexes.add(match[1]!)
+            }
+        }
+        return invalidIndexes.size
+    })
+
+    // 若头部被收起且提交触发了基本信息校验错误，自动展开便于直接修正。
+    React.useEffect(() => {
+        if (headerIssues.length > 0) {
+            onExpandHeader?.()
+        }
+    }, [headerIssues.length, onExpandHeader])
+
     return (
         <>
             {headerIssues.length > 0 ? (
-                <div className="border-t border-border/60 py-4">
+                <div
+                    className="border-t border-border/60 py-3"
+                    onClickCapture={() => onExpandHeader?.()}
+                >
                     <ValidationSummary
                         issues={headerIssues}
                         title={`基本信息共 ${headerIssues.length} 项待处理`}
                     />
+                </div>
+            ) : null}
+
+            {invalidLineCount > 0 && onLocateIncompleteLines ? (
+                <div
+                    role="alert"
+                    className="flex flex-wrap items-center justify-between gap-2 border-t border-destructive-border/70 bg-destructive-soft/60 px-3.5 py-2 text-body-compact text-destructive-soft-foreground"
+                >
+                    <span className="inline-flex items-center gap-1.5">
+                        <TriangleAlertIcon
+                            className="size-4 shrink-0"
+                            aria-hidden="true"
+                        />
+                        <span>
+                            销售明细共有{" "}
+                            <span className="num font-semibold">
+                                {invalidLineCount}
+                            </span>{" "}
+                            项商品存在未填写或待修正字段（含当前分页以外的商品）。
+                        </span>
+                    </span>
+                    <Button
+                        id="sales-orders-create-locate-incomplete-lines"
+                        type="button"
+                        variant="outline"
+                        size="xs"
+                        onClick={onLocateIncompleteLines}
+                    >
+                        定位待完善商品
+                    </Button>
                 </div>
             ) : null}
 
@@ -124,6 +195,11 @@ export function SalesOrderCreateTotalBar({
                     const skuCount = values.lineItems.filter((line) =>
                         line.sku.trim(),
                     ).length
+                    const delivery =
+                        values.nature === "physical_service" &&
+                        values.lineItems.length > 0
+                            ? summarizeOrderDelivery(values.lineItems)
+                            : null
                     const grossProfit = calculateGrossProfit(values.lineItems)
                     const grossProfitSign =
                         grossProfit === null
@@ -147,6 +223,34 @@ export function SalesOrderCreateTotalBar({
                                     <span className="num text-body-compact font-medium text-foreground">
                                         共 {skuCount} 项商品
                                     </span>
+                                    {delivery && onOpenDeliveryOverview ? (
+                                        <Button
+                                            id="sales-orders-create-total-bar-delivery"
+                                            type="button"
+                                            variant="ghost"
+                                            size="xs"
+                                            className={cn(
+                                                "h-6 gap-1 px-1.5 text-xs",
+                                                delivery.incompleteLineCount > 0
+                                                    ? "text-warning-soft-foreground hover:bg-warning-soft/70"
+                                                    : detailWorkspaceStyles.quietButton,
+                                            )}
+                                            onClick={onOpenDeliveryOverview}
+                                        >
+                                            <MapPinIcon
+                                                className="size-3"
+                                                aria-hidden="true"
+                                            />
+                                            <span className="num">
+                                                收货{" "}
+                                                {delivery.completeLineCount}/
+                                                {delivery.totalLines}
+                                                {delivery.uniqueAddressCount > 0
+                                                    ? `（${delivery.uniqueAddressCount} 地址）`
+                                                    : ""}
+                                            </span>
+                                        </Button>
+                                    ) : null}
                                     <span
                                         aria-hidden="true"
                                         className="hidden h-3.5 w-px bg-border sm:inline-block"

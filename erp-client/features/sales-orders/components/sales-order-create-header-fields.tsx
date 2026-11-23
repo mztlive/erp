@@ -47,8 +47,8 @@ export function SalesOrderCreateHeaderFields({
         <div
             className={
                 compact
-                    ? "grid min-w-0 grid-cols-1 items-start gap-4 sm:grid-cols-2"
-                    : "grid min-w-0 grid-cols-1 items-start gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-3"
+                    ? "grid min-w-0 grid-cols-1 items-start gap-3 sm:grid-cols-2"
+                    : "grid min-w-0 grid-cols-1 items-start gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3"
             }
         >
             <form.AppField name="nature">
@@ -185,8 +185,8 @@ export function SalesOrderCreateHeaderFields({
                         <div
                             className={
                                 compact
-                                    ? "grid grid-cols-1 gap-4 border-t border-border/60 pt-4 sm:col-span-2 sm:grid-cols-2"
-                                    : "grid grid-cols-1 gap-x-5 gap-y-4 border-t border-border/60 pt-4 sm:col-span-2 sm:grid-cols-2 lg:col-span-3 lg:grid-cols-3"
+                                    ? "grid grid-cols-1 gap-3 border-t border-border/60 pt-3 sm:col-span-2 sm:grid-cols-2"
+                                    : "grid grid-cols-1 gap-x-4 gap-y-3 border-t border-border/60 pt-3 sm:col-span-2 sm:grid-cols-2 lg:col-span-3 lg:grid-cols-3"
                             }
                         >
                             <form.AppField
