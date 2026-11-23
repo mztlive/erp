@@ -58,9 +58,4 @@ type BackendAuditEvent = {
     created_at: number
 }
 
-export type {
-    BackendAdmin,
-    BackendAuditEvent,
-    BackendDataScope,
-    BackendRole,
-}
+export type { BackendAdmin, BackendAuditEvent, BackendDataScope, BackendRole }

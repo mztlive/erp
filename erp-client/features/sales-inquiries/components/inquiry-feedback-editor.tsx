@@ -1,10 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { CheckIcon, PlusIcon, ReceiptTextIcon, Trash2Icon } from "lucide-react"
+import { PlusIcon, ReceiptTextIcon } from "lucide-react"
 import { useStore } from "@tanstack/react-form"
 import { useQueryClient } from "@tanstack/react-query"
-import { InquiryFeeSummary } from "./inquiry-fee-summary"
+import { InquiryExtraCostsDialog } from "./inquiry-extra-costs-dialog"
 import { InquiryRatioPricing } from "./inquiry-ratio-pricing"
 import { InquiryFeedbackTable } from "./inquiry-feedback-table"
 import {
@@ -24,13 +24,6 @@ import { MoneyValue, detailWorkspaceStyles } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogFooter,
-} from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -66,6 +59,8 @@ export type InquiryPublishContext = {
 export type InquiryFeedbackEditorHandle = {
     save: () => void
     openFees: () => void
+    focusFirstIncomplete: () => void
+    validateBeforePublish: () => boolean
     saveForPublish: () => Promise<InquiryPublishContext | null>
     adoptQuote: (quote: InternalQuote) => boolean
 }
@@ -86,17 +81,6 @@ export type InquiryFeedbackEditorStatus = {
     grandTotal: string | null
     saved: boolean
 }
-function newFee(): InquiryFee {
-    return {
-        fee_id: crypto.randomUUID(),
-        name: "",
-        amount_gross: "",
-        tax_rate: "0",
-        line_ids: [],
-        public_note: "",
-    }
-}
-
 type FeedbackBaseline = { scope: string; work: string }
 function feedbackBaseline(
     inquiry: ProcurementInquiry,
@@ -262,7 +246,6 @@ function FeedbackEditorContent({
         )
     })
     const [feesOpen, setFeesOpen] = React.useState(false)
-    const [editingFeeId, setEditingFeeId] = React.useState<string | null>(null)
     const feesTrigger = React.useRef<HTMLButtonElement>(null)
     const feeFocus = React.useRef<string | null>(null)
     const [feeValidationRequest, setFeeValidationRequest] = React.useState(0)
@@ -295,7 +278,6 @@ function FeedbackEditorContent({
                         isTouched: true,
                     }),
                 )
-            setEditingFeeId(value.fees[first.index].fee_id)
             const suffix = {
                 name: "name",
                 amount_gross: "gross",
@@ -353,7 +335,6 @@ function FeedbackEditorContent({
                 setSaved(true)
                 setDirty(false)
                 setFeesOpen(false)
-                setEditingFeeId(null)
                 onDirtyChange(false)
                 if (!publishSave.current) {
                     toast.add({ title: "处理进度已保存", type: "success" })
@@ -369,41 +350,16 @@ function FeedbackEditorContent({
             }
         },
     })
-    function editFee(fee: InquiryFee, field = "name") {
-        setEditingFeeId(fee.fee_id)
-        feeFocus.current = `procurement-inquiry-fee-${toAutomationIdSegment(fee.fee_id)}-${field}`
+    function focusFee(fee: InquiryFee, field?: "name" | "gross" | "tax") {
+        const target =
+            field ??
+            (!fee.name.trim()
+                ? "name"
+                : !fee.amount_gross.trim()
+                  ? "gross"
+                  : "name")
+        feeFocus.current = `procurement-inquiry-fee-${toAutomationIdSegment(fee.fee_id)}-${target}`
         setFeeValidationRequest((request) => request + 1)
-    }
-    function finishFee(index: number) {
-        const fee = form.state.values.fees[index]
-        const issues = feedbackFeeIssues([fee])
-        if (issues.length) {
-            for (const issue of issues) {
-                form.setFieldMeta(`fees[${index}].${issue.field}`, (meta) => ({
-                    ...meta,
-                    isTouched: true,
-                }))
-            }
-            void form.validate("change")
-            setError(issues[0].message)
-            editFee(
-                fee,
-                { name: "name", amount_gross: "gross", tax_rate: "tax" }[
-                    issues[0].field
-                ],
-            )
-            return
-        }
-        setError(null)
-        setEditingFeeId(null)
-        feeFocus.current = null
-        requestAnimationFrame(() =>
-            document
-                .getElementById(
-                    `procurement-inquiry-fee-${toAutomationIdSegment(fee.fee_id)}-edit`,
-                )
-                ?.focus(),
-        )
     }
     React.useEffect(() => {
         if (!feesOpen || !feeFocus.current) return
@@ -524,9 +480,53 @@ function FeedbackEditorContent({
         },
         openFees() {
             if (command.isPending || !command.ready) return
-            setEditingFeeId(null)
             feeFocus.current = null
             setFeesOpen(true)
+        },
+        focusFirstIncomplete() {
+            setValidationRequest((value) => value + 1)
+        },
+        validateBeforePublish() {
+            const incompleteLines = form.state.values.lines.filter((line) => {
+                const demand = inquiry.draft.lines.find(
+                    (item) => item.line_id === line.line_id,
+                )
+                return !demand || feedbackIssues(line, demand).length > 0
+            })
+            if (incompleteLines.length > 0) {
+                setValidationRequest((value) => value + 1)
+                setError(null)
+                toast.add({
+                    title: `还有 ${incompleteLines.length} 项商品待完善`,
+                    description: "已为您定位到首处缺漏字段，补齐后即可发布。",
+                    type: "warning",
+                })
+                return false
+            }
+            const feeIssues = feedbackFeeIssues(form.state.values.fees)
+            if (feeIssues.length > 0) {
+                const first = feeIssues[0]
+                for (const issue of feeIssues) {
+                    form.setFieldMeta(
+                        `fees[${issue.index}].${issue.field}`,
+                        (meta) => ({ ...meta, isTouched: true }),
+                    )
+                }
+                const fee = form.state.values.fees[first.index]
+                const suffix = {
+                    name: "name",
+                    amount_gross: "gross",
+                    tax_rate: "tax",
+                }[first.field]
+                feeFocus.current = `procurement-inquiry-fee-${toAutomationIdSegment(fee.fee_id)}-${suffix}`
+                setError(
+                    `第 ${first.index + 1} 项额外成本未填写完整或格式有误，请补齐标记字段，或移除该费用。`,
+                )
+                setFeesOpen(true)
+                setFeeValidationRequest((request) => request + 1)
+                return false
+            }
+            return true
         },
         adoptQuote(quote) {
             if (disabled || publishSave.current) return false
@@ -791,311 +791,181 @@ function FeedbackEditorContent({
                             validationRequest={validationRequest}
                             onInternalQuote={onInternalQuote}
                             disabled={disabled}
-                            feesTotal={summary.feesTotal}
-                            feeCount={summary.feeCount}
-                            toolbarSummary={
-                                <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                                    <span
-                                        aria-hidden="true"
-                                        className={cn(
-                                            "size-1.5 shrink-0 rounded-full",
-                                            saved
-                                                ? "bg-success"
-                                                : dirty
-                                                  ? "bg-warning"
-                                                  : "bg-muted-foreground/40",
-                                        )}
-                                    />
-                                    {saved
-                                        ? "已保存"
-                                        : dirty
-                                          ? "尚未保存"
-                                          : "发布时自动保存"}
-                                </span>
-                            }
                             toolbarActions={
-                                <>
-                                    <Button
-                                        id="procurement-feedback-fees-open"
-                                        ref={feesTrigger}
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        className={cn(
-                                            detailWorkspaceStyles.subtleButton,
-                                            values.fees.length > 0 &&
-                                                "border-primary/25 bg-sidebar-accent/70 text-sidebar-accent-foreground hover:bg-sidebar-accent",
-                                        )}
-                                        disabled={
-                                            command.isPending || !command.ready
+                                onInternalQuote ? (
+                                    <InquiryRatioPricing
+                                        inquiryId={inquiry.id}
+                                        taskId={task.id}
+                                        round={inquiry.feedback_round + 1}
+                                        demand={inquiry.draft.lines}
+                                        lines={values.lines}
+                                        disabled={disabled}
+                                        onChange={(lines) =>
+                                            form.setFieldValue("lines", lines)
                                         }
-                                        onClick={() => {
-                                            setEditingFeeId(null)
-                                            feeFocus.current = null
-                                            setFeesOpen(true)
-                                        }}
-                                    >
-                                        <ReceiptTextIcon
-                                            aria-hidden="true"
-                                            data-icon="inline-start"
-                                        />
-                                        额外成本（
-                                        <span className="num">
-                                            {values.fees.length}
-                                        </span>
-                                        ）
-                                    </Button>
-                                    {onInternalQuote && (
-                                        <InquiryRatioPricing
-                                            inquiryId={inquiry.id}
-                                            taskId={task.id}
-                                            round={inquiry.feedback_round + 1}
-                                            demand={inquiry.draft.lines}
-                                            lines={values.lines}
-                                            disabled={disabled}
-                                            onChange={(lines) =>
-                                                form.setFieldValue(
-                                                    "lines",
-                                                    lines,
-                                                )
-                                            }
-                                        />
-                                    )}
-                                </>
+                                    />
+                                ) : undefined
                             }
                             quoteWorkbookActions={quoteWorkbookActions}
+                            extraCostsFooter={
+                                <div className="space-y-2 border-b border-border/70 py-3">
+                                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                                            <span className="inline-flex items-center gap-1.5 text-body-compact font-medium text-foreground">
+                                                <ReceiptTextIcon
+                                                    aria-hidden="true"
+                                                    className="size-3.5 text-muted-foreground"
+                                                />
+                                                额外成本
+                                            </span>
+                                            {values.fees.length === 0 ? (
+                                                <span className="text-xs text-muted-foreground">
+                                                    暂无运费、包装、打样等整单费用
+                                                </span>
+                                            ) : (
+                                                <div className="flex flex-wrap items-center gap-1.5">
+                                                    {values.fees.map((fee) => {
+                                                        const hasFeeIssue =
+                                                            feedbackFeeIssues([
+                                                                fee,
+                                                            ]).length > 0
+                                                        return (
+                                                            <button
+                                                                key={fee.fee_id}
+                                                                id={`procurement-feedback-fee-chip-${toAutomationIdSegment(fee.fee_id)}`}
+                                                                type="button"
+                                                                disabled={
+                                                                    command.isPending ||
+                                                                    !command.ready
+                                                                }
+                                                                className={cn(
+                                                                    "inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-xs transition-colors",
+                                                                    hasFeeIssue
+                                                                        ? "border-warning-border bg-warning-soft text-warning-soft-foreground hover:bg-warning-soft/80"
+                                                                        : "border-border/70 bg-muted/50 text-foreground/85 hover:border-primary/35 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
+                                                                )}
+                                                                onClick={() => {
+                                                                    focusFee(
+                                                                        fee,
+                                                                    )
+                                                                    setFeesOpen(
+                                                                        true,
+                                                                    )
+                                                                }}
+                                                            >
+                                                                <span className="max-w-36 truncate font-medium">
+                                                                    {fee.name.trim() ||
+                                                                        "未命名费用"}
+                                                                </span>
+                                                                {fee.amount_gross.trim() ? (
+                                                                    <MoneyValue
+                                                                        value={fee.amount_gross.trim()}
+                                                                        display="exact"
+                                                                        showHint={
+                                                                            false
+                                                                        }
+                                                                        className="text-muted-foreground"
+                                                                    />
+                                                                ) : (
+                                                                    <span className="text-warning-soft-foreground">
+                                                                        待填金额
+                                                                    </span>
+                                                                )}
+                                                            </button>
+                                                        )
+                                                    })}
+                                                </div>
+                                            )}
+                                            <Button
+                                                id="procurement-feedback-fees-open"
+                                                ref={feesTrigger}
+                                                type="button"
+                                                variant="ghost"
+                                                size="xs"
+                                                className={cn(
+                                                    detailWorkspaceStyles.inlineLinkButton,
+                                                    "h-6 px-1.5 text-xs",
+                                                )}
+                                                disabled={
+                                                    command.isPending ||
+                                                    !command.ready
+                                                }
+                                                onClick={() => {
+                                                    feeFocus.current = null
+                                                    setFeesOpen(true)
+                                                }}
+                                            >
+                                                <PlusIcon
+                                                    aria-hidden="true"
+                                                    className="size-3"
+                                                />
+                                                {values.fees.length > 0
+                                                    ? `管理费用 (${values.fees.length})`
+                                                    : "登记额外成本"}
+                                            </Button>
+                                        </div>
+
+                                        <div className="flex shrink-0 items-baseline gap-6 text-right">
+                                            <div className="flex items-baseline gap-2">
+                                                <span className="text-xs text-muted-foreground">
+                                                    额外成本合计
+                                                </span>
+                                                <span className="num min-w-24 font-medium text-foreground">
+                                                    {summary.feesTotal !==
+                                                    null ? (
+                                                        <MoneyValue
+                                                            value={
+                                                                summary.feesTotal
+                                                            }
+                                                            display="exact"
+                                                            showHint={false}
+                                                        />
+                                                    ) : (
+                                                        <span className="font-normal text-muted-foreground/60">
+                                                            —
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </div>
+                                            {summary.feesTotal !== null &&
+                                            summary.grandTotal !== null ? (
+                                                <div className="flex items-baseline gap-2 border-l border-border/60 pl-5">
+                                                    <span className="text-xs text-muted-foreground">
+                                                        含税总计
+                                                    </span>
+                                                    <span className="num min-w-24 font-semibold text-foreground">
+                                                        <MoneyValue
+                                                            value={
+                                                                summary.grandTotal
+                                                            }
+                                                            display="exact"
+                                                            showHint={false}
+                                                        />
+                                                    </span>
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                </div>
+                            }
                         />
                     )}
                 />
-                <Dialog open={feesOpen} onOpenChange={setFeesOpen}>
-                    <DialogContent
-                        id="procurement-feedback-fees-dialog"
-                        closeButtonId="procurement-feedback-fees-close"
-                        finalFocus={feesTrigger}
-                        initialFocus={() =>
-                            feeFocus.current
-                                ? (document.getElementById(feeFocus.current) ??
-                                  true)
-                                : true
-                        }
-                        className="flex max-h-[85svh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
-                    >
-                        <DialogHeader className="shrink-0 border-b px-6 py-4 pr-14">
-                            <DialogTitle>登记额外成本</DialogTitle>
-                        </DialogHeader>
-                        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-surface-sunken/50 px-6 py-5">
-                            {error && (
-                                <Alert variant="destructive">
-                                    <AlertDescription>{error}</AlertDescription>
-                                </Alert>
-                            )}
-                            {(conflict || command.unresolved) && (
-                                <Alert variant="warning">
-                                    <AlertDescription>
-                                        请先关闭弹窗，在采购反馈中核对
-                                        {conflict
-                                            ? "已保存内容的变化"
-                                            : "上次提交结果"}
-                                        ，再继续保存。
-                                    </AlertDescription>
-                                </Alert>
-                            )}
-                            <fieldset
-                                disabled={disabled}
-                                className="min-w-0 space-y-4"
-                            >
-                                <div className="flex items-center justify-between">
-                                    <p className="text-xs text-muted-foreground">
-                                        共 {values.fees.length} 项费用
-                                    </p>
-                                    <Button
-                                        id="procurement-inquiry-add-fee"
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => {
-                                            const fee = newFee()
-                                            form.pushFieldValue("fees", fee)
-                                            editFee(fee)
-                                        }}
-                                    >
-                                        <PlusIcon aria-hidden="true" />
-                                        添加费用
-                                    </Button>
-                                </div>
-                                {values.fees.length === 0 && (
-                                    <p className="rounded-lg border border-dashed px-4 py-8 text-center text-xs text-muted-foreground">
-                                        暂无额外成本，点击“添加费用”登记。
-                                    </p>
-                                )}
-                                <form.Field
-                                    name="fees"
-                                    mode="array"
-                                    children={(feesField) => (
-                                        <div className="space-y-3">
-                                            {feesField.state.value.map(
-                                                (fee, index) => {
-                                                    const prefix = `procurement-inquiry-fee-${toAutomationIdSegment(fee.fee_id)}`
-                                                    if (
-                                                        editingFeeId !==
-                                                        fee.fee_id
-                                                    )
-                                                        return (
-                                                            <InquiryFeeSummary
-                                                                key={fee.fee_id}
-                                                                fee={fee}
-                                                                idPrefix={
-                                                                    prefix
-                                                                }
-                                                                disabled={
-                                                                    disabled
-                                                                }
-                                                                onEdit={() =>
-                                                                    editFee(fee)
-                                                                }
-                                                                onRemove={() =>
-                                                                    feesField.removeValue(
-                                                                        index,
-                                                                    )
-                                                                }
-                                                            />
-                                                        )
-                                                    return (
-                                                        <div
-                                                            key={fee.fee_id}
-                                                            className="space-y-4 rounded-xl border bg-background p-4 sm:p-5"
-                                                        >
-                                                            <div className="flex items-center justify-between gap-3 border-b pb-3">
-                                                                <p className="text-body-compact font-medium">
-                                                                    费用{" "}
-                                                                    {index + 1}
-                                                                </p>
-                                                                <Button
-                                                                    id={`${prefix}-remove`}
-                                                                    type="button"
-                                                                    size="sm"
-                                                                    variant="ghost"
-                                                                    className="text-muted-foreground hover:text-destructive"
-                                                                    onClick={() =>
-                                                                        feesField.removeValue(
-                                                                            index,
-                                                                        )
-                                                                    }
-                                                                >
-                                                                    <Trash2Icon aria-hidden="true" />
-                                                                    移除
-                                                                </Button>
-                                                            </div>
-                                                            <form.AppField
-                                                                name={`fees[${index}].name`}
-                                                                children={(
-                                                                    field,
-                                                                ) => (
-                                                                    <field.TextField
-                                                                        id={`${prefix}-name`}
-                                                                        label="费用名称"
-                                                                        placeholder="例如：运费、包装费、印刷费"
-                                                                        required
-                                                                    />
-                                                                )}
-                                                            />
-                                                            <div className="grid gap-4 sm:grid-cols-2">
-                                                                <form.AppField
-                                                                    name={`fees[${index}].amount_gross`}
-                                                                    children={(
-                                                                        field,
-                                                                    ) => (
-                                                                        <field.TextField
-                                                                            id={`${prefix}-gross`}
-                                                                            label="含税金额（元）"
-                                                                            placeholder="填写金额"
-                                                                            required
-                                                                            inputMode="decimal"
-                                                                            money
-                                                                        />
-                                                                    )}
-                                                                />
-                                                                <form.AppField
-                                                                    name={`fees[${index}].tax_rate`}
-                                                                    children={(
-                                                                        field,
-                                                                    ) => (
-                                                                        <field.TextField
-                                                                            id={`${prefix}-tax`}
-                                                                            label="税率"
-                                                                            description="0.13 表示 13%，无税额填 0"
-                                                                            required
-                                                                            inputMode="decimal"
-                                                                        />
-                                                                    )}
-                                                                />
-                                                            </div>
-                                                            <form.AppField
-                                                                name={`fees[${index}].public_note`}
-                                                                children={(
-                                                                    field,
-                                                                ) => (
-                                                                    <field.TextareaField
-                                                                        id={`${prefix}-note`}
-                                                                        label="备注（选填）"
-                                                                        placeholder="补充费用说明，销售可见"
-                                                                        rows={2}
-                                                                    />
-                                                                )}
-                                                            />
-                                                            <div className="flex justify-end">
-                                                                <Button
-                                                                    id={`${prefix}-done`}
-                                                                    type="button"
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    onClick={() =>
-                                                                        finishFee(
-                                                                            index,
-                                                                        )
-                                                                    }
-                                                                >
-                                                                    <CheckIcon
-                                                                        data-icon="inline-start"
-                                                                        aria-hidden="true"
-                                                                    />
-                                                                    完成编辑
-                                                                </Button>
-                                                            </div>
-                                                        </div>
-                                                    )
-                                                },
-                                            )}
-                                        </div>
-                                    )}
-                                />
-                            </fieldset>
-                        </div>
-                        <DialogFooter className="shrink-0 flex-wrap items-center gap-3 border-t px-6 py-4">
-                            <p className="mr-auto text-xs text-muted-foreground">
-                                随商品反馈一起保存；关闭保留输入。
-                            </p>
-                            <Button
-                                id="procurement-feedback-fees-dismiss"
-                                type="button"
-                                variant="outline"
-                                onClick={() => setFeesOpen(false)}
-                            >
-                                关闭
-                            </Button>
-                            <Button
-                                id="procurement-feedback-fees-save"
-                                type="button"
-                                disabled={disabled}
-                                onClick={() => void form.handleSubmit()}
-                            >
-                                {command.isPending
-                                    ? "正在保存…"
-                                    : "保存处理进度"}
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                <InquiryExtraCostsDialog
+                    form={form}
+                    open={feesOpen}
+                    onOpenChange={setFeesOpen}
+                    triggerRef={feesTrigger}
+                    feeFocusRef={feeFocus}
+                    summary={summary}
+                    error={error}
+                    conflict={conflict}
+                    commandUnresolved={command.unresolved}
+                    disabled={disabled}
+                    saving={command.isPending}
+                    onSave={() => void form.handleSubmit()}
+                    onClearFeeError={() => setError(null)}
+                />
             </fieldset>
         </form>
     )

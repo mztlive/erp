@@ -27,27 +27,27 @@ export function RoleWorkbenchBalances({
     }, "0")
     return (
         <section
-            className="min-w-0 rounded-lg border border-border/90 bg-card shadow-2xs"
+            className="min-w-0 py-5"
             aria-labelledby="cashier-workbench-balances-title"
         >
-            <div className="flex items-center justify-between border-b border-grid/70 px-4 py-3">
-                <div className="flex items-center gap-2.5">
+            <div className="flex items-center justify-between gap-2 pb-3.5">
+                <div className="flex items-center gap-2">
                     <span
-                        className="flex size-7 shrink-0 items-center justify-center rounded-md bg-info-soft text-info-soft-foreground"
+                        className="flex size-6 shrink-0 items-center justify-center rounded-md bg-info-soft text-info-soft-foreground"
                         aria-hidden="true"
                     >
                         <WalletCardsIcon className="size-3.5" />
                     </span>
-                    <div>
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                         <h2
                             id="cashier-workbench-balances-title"
-                            className="text-section-title font-semibold text-foreground tracking-tight"
+                            className="text-section-title font-semibold tracking-tight text-foreground"
                         >
                             待分配资金
                         </h2>
-                        <p className="text-xs text-muted-foreground">
+                        <span className="text-xs text-muted-foreground">
                             当前未分配余额 · 含税
-                        </p>
+                        </span>
                     </div>
                 </div>
                 <WorkbenchDataInfo
@@ -91,25 +91,26 @@ export function RoleWorkbenchBalances({
                     })}
                 </WorkbenchDataInfo>
             </div>
-            <div className="space-y-2 p-3">
-                {role.metrics.map((item, index) => {
-                    const query = role.stages[index]!
-                    const value = query.isError
-                        ? undefined
-                        : overviewValue(item, query.data)
-                    const ratio =
-                        value != null &&
-                        compareDecimal(maximum, "0", 2) > 0 &&
-                        compareDecimal(String(value), "0", 2) > 0
-                            ? divideFixed(String(value), maximum, {
-                                  numeratorMaxScale: 2,
-                                  denominatorMaxScale: 2,
-                                  outputScale: 4,
-                              })
-                            : "0"
-                    return (
-                        <div key={item.key}>
+            <div className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                    {role.metrics.map((item, index) => {
+                        const query = role.stages[index]!
+                        const value = query.isError
+                            ? undefined
+                            : overviewValue(item, query.data)
+                        const ratio =
+                            value != null &&
+                            compareDecimal(maximum, "0", 2) > 0 &&
+                            compareDecimal(String(value), "0", 2) > 0
+                                ? divideFixed(String(value), maximum, {
+                                      numeratorMaxScale: 2,
+                                      denominatorMaxScale: 2,
+                                      outputScale: 4,
+                                  })
+                                : "0"
+                        return (
                             <button
+                                key={item.key}
                                 id={`role-stage-${item.key.toLowerCase()}`}
                                 type="button"
                                 onClick={() =>
@@ -117,7 +118,7 @@ export function RoleWorkbenchBalances({
                                         ? void query.refetch()
                                         : onSelect(item)
                                 }
-                                className="group w-full rounded-md px-2.5 py-3 text-left transition-colors hover:bg-row-hover focus-visible:outline-2 focus-visible:outline-primary"
+                                className="group w-full rounded-md bg-muted/35 px-3.5 py-3 text-left transition-colors hover:bg-muted/70 focus-visible:outline-2 focus-visible:outline-primary"
                             >
                                 <span className="flex items-center justify-between text-xs font-medium text-muted-foreground group-hover:text-primary">
                                     {item.label}
@@ -154,7 +155,7 @@ export function RoleWorkbenchBalances({
                                 </span>
                                 {value != null && (
                                     <span
-                                        className="mt-2 block h-2 overflow-hidden rounded-full bg-muted"
+                                        className="mt-2 block h-1.5 overflow-hidden rounded-full bg-muted"
                                         aria-hidden="true"
                                     >
                                         <span
@@ -171,10 +172,10 @@ export function RoleWorkbenchBalances({
                                     </span>
                                 )}
                             </button>
-                        </div>
-                    )
-                })}
-                <p className="border-t border-grid px-1 pt-2 text-xs text-muted-foreground">
+                        )
+                    })}
+                </div>
+                <p className="text-xs text-muted-foreground">
                     {role.stages.some((query) => query.isFetching)
                         ? "更新中…"
                         : workbenchUpdatedAt(

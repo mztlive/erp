@@ -82,6 +82,7 @@ export function InquiryActions({
     fillHeight = false,
     feedbackRound,
     feedbackDirty = false,
+    validateBeforePublish,
     beforePublish,
     onPublishingChange,
 }: {
@@ -95,6 +96,7 @@ export function InquiryActions({
     disabledReason?: string
     feedbackRound?: number
     feedbackDirty?: boolean
+    validateBeforePublish?: () => boolean
     beforePublish?: () => Promise<InquiryPublishContext | null>
     onPublishingChange?: (publishing: boolean) => void
     workspace?: boolean
@@ -301,9 +303,7 @@ export function InquiryActions({
     const renderButton = (item: InquiryAction) => {
         const isPrimary = isPrimaryWorkflowAction(item)
         const submitDirectly = item === "submit" && !submitRequiresReason
-        const quiet = ["close", "reassign", "supplement", "reinquire"].includes(
-            item,
-        )
+        const quiet = item === "close" || item === "reinquire"
         const actionDisabled =
             disabled ||
             (feedbackDirty && item !== "publish") ||
@@ -341,7 +341,9 @@ export function InquiryActions({
                                 : detailWorkspaceStyles.quietButton
                             : isPrimary && !demoteSubmitWhileDirty
                               ? "px-3.5"
-                              : undefined
+                              : item === "supplement" || item === "reassign"
+                                ? "cursor-pointer"
+                                : undefined
                     }
                     disabled={actionDisabled}
                     loading={submitDirectly && action === null && isSubmitting}
@@ -356,6 +358,13 @@ export function InquiryActions({
                     }
                     onClick={() => {
                         setError(null)
+                        if (
+                            item === "publish" &&
+                            validateBeforePublish &&
+                            !validateBeforePublish()
+                        ) {
+                            return
+                        }
                         if (submitDirectly) {
                             void form.handleSubmit(item)
                             return

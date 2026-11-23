@@ -34,13 +34,21 @@ export function SupplierQuoteImportButton({
     task,
     userId,
     onSaved,
+    open: controlledOpen,
+    onOpenChange: controlledOnOpenChange,
+    hideTrigger = false,
 }: {
     inquiry: ProcurementInquiry
     task: InquiryTask
     userId: string
     onSaved: () => void
+    open?: boolean
+    onOpenChange?: (open: boolean) => void
+    hideTrigger?: boolean
 }) {
-    const [open, setOpen] = React.useState(false)
+    const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false)
+    const open = controlledOpen ?? uncontrolledOpen
+    const setOpen = controlledOnOpenChange ?? setUncontrolledOpen
     const [message, setMessage] = React.useState("")
     const quotes = useInternalQuotes(inquiry.id, task.id, open)
     const offerings = useSupplierOfferingsForSkusQuery(
@@ -116,17 +124,19 @@ export function SupplierQuoteImportButton({
     }
     return (
         <>
-            <Button
-                id="procurement-inquiry-import-quotes"
-                variant="ghost"
-                size="sm"
-                className={detailWorkspaceStyles.subtleButton}
-                type="button"
-                onClick={() => setOpen(true)}
-            >
-                <UploadIcon aria-hidden="true" data-icon="inline-start" />
-                导入供应商报价
-            </Button>
+            {!hideTrigger && (
+                <Button
+                    id="procurement-inquiry-import-quotes"
+                    variant="ghost"
+                    size="sm"
+                    className={detailWorkspaceStyles.subtleButton}
+                    type="button"
+                    onClick={() => setOpen(true)}
+                >
+                    <UploadIcon aria-hidden="true" data-icon="inline-start" />
+                    导入供应商报价
+                </Button>
+            )}
             <Dialog
                 open={open}
                 onOpenChange={(next) => {

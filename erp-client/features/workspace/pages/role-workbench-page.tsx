@@ -8,6 +8,7 @@ import {
     BusinessFailureState,
     PageHeader,
     PageScaffold,
+    detailWorkspaceStyles,
 } from "@/components/business"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 import { useRouter } from "@/lib/navigation"
@@ -27,6 +28,10 @@ import {
 } from "../components/role-workbench-header"
 import { RoleWorkbenchMetrics } from "../components/role-workbench-metrics"
 import { RoleWorkbenchBody } from "../components/role-workbench-body"
+import {
+    RoleWorkbenchShortcuts,
+    SalesWorkbenchShortcuts,
+} from "../components/sales-workbench-shortcuts"
 import {
     WorkbenchDataInfo,
     workbenchUpdatedAt,
@@ -53,7 +58,7 @@ export function RoleWorkbenchPage({ id }: { id: string }) {
             }))
     if (invalid)
         return (
-            <PageScaffold>
+            <PageScaffold className="bg-card">
                 <PageHeader title="统计期间无效" />
                 <Link id="role-period-reset" href={`/workspace/roles/${id}`}>
                     清除期间筛选
@@ -62,7 +67,7 @@ export function RoleWorkbenchPage({ id }: { id: string }) {
         )
     if (query.isError)
         return (
-            <PageScaffold>
+            <PageScaffold className="bg-card">
                 <BusinessFailureState
                     error={query.error}
                     onRetry={() => void query.refetch()}
@@ -71,13 +76,15 @@ export function RoleWorkbenchPage({ id }: { id: string }) {
         )
     if (!query.data)
         return (
-            <PageScaffold>
-                <p role="status">正在读取岗位配置…</p>
+            <PageScaffold className="bg-card">
+                <p role="status" className="text-xs text-muted-foreground">
+                    正在读取岗位配置…
+                </p>
             </PageScaffold>
         )
     if (!roleWorkbench(id) || !query.data.workbenches?.includes(id))
         return (
-            <PageScaffold>
+            <PageScaffold className="bg-card">
                 <PageHeader title="无权访问此工作台" />
                 <p>岗位未配置或核心权限已变更。</p>
                 <Link id="workbench-denied-return" href="/workspace">
@@ -164,13 +171,14 @@ function RoleWorkbenchContent({
     return (
         <PageScaffold
             density="compact"
-            className="gap-5 overflow-auto bg-background"
+            className={`${detailWorkspaceStyles.page} min-h-0 overflow-auto`}
         >
             <RoleWorkbenchHeader
                 template={role.template}
                 profile={profile}
                 periodQuery={periodQuery}
                 onRefresh={refresh}
+                urgentCount={role.urgent.items.length}
                 refreshing={
                     overview.queries.some((query) => query.isFetching) ||
                     role.stages.some((query) => query.isFetching) ||
@@ -178,7 +186,21 @@ function RoleWorkbenchContent({
                     role.tasks.some((query) => query.statsFetching)
                 }
             />
-            <section aria-label="岗位业务概览" className="space-y-3">
+            {role.template.id === "WB-01" ? (
+                <SalesWorkbenchShortcuts
+                    permissions={profile.permissions}
+                    listOperations={role.template.operations}
+                />
+            ) : (
+                <RoleWorkbenchShortcuts
+                    permissions={profile.permissions}
+                    listOperations={role.template.operations}
+                />
+            )}
+            <section
+                aria-label="岗位业务概览"
+                className="space-y-3 border-b border-border/60 py-4"
+            >
                 {id === "WB-01" ? (
                     <SalesWorkbenchPeriod overview={overview} custom={custom} />
                 ) : (

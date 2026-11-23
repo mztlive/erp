@@ -132,13 +132,14 @@ export function InquiryRatioPricing({
                 size="sm"
                 className={detailWorkspaceStyles.subtleButton}
                 disabled={disabled}
+                title="按供应商报价比例批量设置供给价"
                 onClick={() => setOpen(true)}
             >
                 <SlidersHorizontalIcon
                     aria-hidden="true"
                     data-icon="inline-start"
                 />
-                按供应商比例定价
+                按比例定价
             </Button>
             <Dialog open={open} onOpenChange={setOpen}>
                 <DialogContent

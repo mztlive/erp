@@ -7,10 +7,11 @@ import {
     CalendarDaysIcon,
     CheckIcon,
     EllipsisIcon,
+    PlusIcon,
     RefreshCwIcon,
 } from "lucide-react"
 import { z } from "zod"
-import { PageHeader } from "@/components/business"
+import { detailWorkspaceStyles } from "@/components/business"
 import { useAppFilterForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -29,6 +30,7 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover"
 import type { AccountProfile } from "@/features/auth/api"
+import { hasPermission } from "@/lib/permissions"
 import { ROLE_WORKBENCHES, type roleWorkbench } from "@/lib/role-workbenches"
 import { useRouter } from "@/lib/navigation"
 import { savePreference } from "../pages/role-workbench-entry"
@@ -50,110 +52,150 @@ export function RoleWorkbenchHeader({
     periodQuery,
     onRefresh,
     refreshing,
+    urgentCount = 0,
 }: {
     template: NonNullable<ReturnType<typeof roleWorkbench>>
     profile: AccountProfile
     periodQuery: string
     onRefresh: () => void
     refreshing: boolean
+    urgentCount?: number
 }) {
     const router = useRouter()
     const [saved, setSaved] = useState<boolean | null>(null)
     const workbenches = ROLE_WORKBENCHES.filter((item) =>
         profile.workbenches?.includes(item.id),
     )
+    const showSalesPrimaryCreate =
+        template.id === "WB-01" &&
+        hasPermission(profile.permissions, "sales_order:create")
+
     return (
-        <PageHeader
-            className="static bg-transparent"
-            title={template.name}
-            description={WORKBENCH_PRESENTATION[template.id].description}
-            actions={
-                <div className="flex flex-wrap items-center gap-2">
-                    {workbenches.length > 1 && (
-                        <NativeSelect
-                            id="role-workbench-switch"
-                            aria-label="切换岗位"
-                            value={template.id}
-                            onChange={(event) =>
-                                router.push(
-                                    `/workspace/roles/${event.target.value}?${periodQuery}`,
+        <header className="sticky top-0 z-20 flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2.5 border-b border-border/60 bg-card py-3">
+            <div className="min-w-0">
+                <h1 className={detailWorkspaceStyles.title}>{template.name}</h1>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                    {WORKBENCH_PRESENTATION[template.id].description}
+                </p>
+            </div>
+            <div className={detailWorkspaceStyles.headerActions}>
+                {workbenches.length > 1 && (
+                    <NativeSelect
+                        id="role-workbench-switch"
+                        aria-label="切换岗位"
+                        value={template.id}
+                        onChange={(event) =>
+                            router.push(
+                                `/workspace/roles/${event.target.value}?${periodQuery}`,
+                            )
+                        }
+                    >
+                        {workbenches.map((item) => (
+                            <NativeSelectOption key={item.id} value={item.id}>
+                                {item.name}
+                            </NativeSelectOption>
+                        ))}
+                    </NativeSelect>
+                )}
+                <Button
+                    id="role-workbench-refresh"
+                    variant="ghost"
+                    size="sm"
+                    className={detailWorkspaceStyles.quietButton}
+                    onClick={onRefresh}
+                    disabled={refreshing}
+                >
+                    <RefreshCwIcon
+                        data-icon="inline-start"
+                        aria-hidden="true"
+                        className={refreshing ? "animate-spin" : undefined}
+                    />
+                    {refreshing ? "更新中" : "刷新"}
+                </Button>
+                <Button
+                    id="role-workbench-all-todos"
+                    variant={showSalesPrimaryCreate ? "ghost" : "default"}
+                    size="sm"
+                    className={
+                        showSalesPrimaryCreate
+                            ? detailWorkspaceStyles.subtleButton
+                            : "px-3.5 shadow-none"
+                    }
+                    render={<Link href="/workspace/tasks" />}
+                >
+                    待我处理
+                    {urgentCount > 0 ? (
+                        <span className="num rounded-full bg-destructive-soft px-1.5 text-tiny font-semibold leading-4 text-destructive-soft-foreground">
+                            {urgentCount}
+                        </span>
+                    ) : null}
+                    <ArrowUpRightIcon
+                        data-icon="inline-end"
+                        aria-hidden="true"
+                    />
+                </Button>
+                {showSalesPrimaryCreate && (
+                    <Button
+                        id="sales-workbench-new-order"
+                        size="sm"
+                        className="px-3.5 shadow-none"
+                        render={
+                            <Link
+                                href="/sales/orders?mode=create"
+                                prefetch={false}
+                            />
+                        }
+                    >
+                        <PlusIcon data-icon="inline-start" aria-hidden="true" />
+                        新建销售单
+                    </Button>
+                )}
+                <DropdownMenu>
+                    <DropdownMenuTrigger
+                        id="role-workbench-more"
+                        aria-label="更多工作台设置"
+                        render={
+                            <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                className={detailWorkspaceStyles.quietButton}
+                            />
+                        }
+                    >
+                        <EllipsisIcon aria-hidden="true" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuItem
+                            id="role-workbench-default"
+                            onClick={() =>
+                                setSaved(
+                                    savePreference(
+                                        profile.userid,
+                                        template.id,
+                                        true,
+                                    ),
                                 )
                             }
                         >
-                            {workbenches.map((item) => (
-                                <NativeSelectOption
-                                    key={item.id}
-                                    value={item.id}
-                                >
-                                    {item.name}
-                                </NativeSelectOption>
-                            ))}
-                        </NativeSelect>
-                    )}
-                    <Button
-                        id="role-workbench-refresh"
-                        variant="outline"
-                        size="sm"
-                        onClick={onRefresh}
-                        disabled={refreshing}
+                            {saved === true && <CheckIcon aria-hidden="true" />}
+                            设为默认首页
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+                {saved !== null && (
+                    <span
+                        role="status"
+                        className={
+                            saved
+                                ? "text-xs text-muted-foreground"
+                                : "text-xs text-destructive"
+                        }
                     >
-                        <RefreshCwIcon
-                            aria-hidden="true"
-                            className={refreshing ? "animate-spin" : undefined}
-                        />
-                        {refreshing ? "更新中" : "刷新"}
-                    </Button>
-                    <Button
-                        id="role-workbench-all-todos"
-                        size="sm"
-                        render={<Link href="/workspace/tasks" />}
-                    >
-                        待我处理
-                        <ArrowUpRightIcon aria-hidden="true" />
-                    </Button>
-                    <DropdownMenu>
-                        <DropdownMenuTrigger
-                            id="role-workbench-more"
-                            aria-label="更多工作台设置"
-                            render={<Button variant="ghost" size="icon-sm" />}
-                        >
-                            <EllipsisIcon aria-hidden="true" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-44">
-                            <DropdownMenuItem
-                                id="role-workbench-default"
-                                onClick={() =>
-                                    setSaved(
-                                        savePreference(
-                                            profile.userid,
-                                            template.id,
-                                            true,
-                                        ),
-                                    )
-                                }
-                            >
-                                {saved === true && (
-                                    <CheckIcon aria-hidden="true" />
-                                )}
-                                设为默认首页
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                    {saved !== null && (
-                        <span
-                            role="status"
-                            className={
-                                saved
-                                    ? "text-xs text-muted-foreground"
-                                    : "text-xs text-destructive"
-                            }
-                        >
-                            {saved ? "已设为默认首页" : "保存失败，请重试"}
-                        </span>
-                    )}
-                </div>
-            }
-        />
+                        {saved ? "已设为默认首页" : "保存失败，请重试"}
+                    </span>
+                )}
+            </div>
+        </header>
     )
 }
 
@@ -246,9 +288,19 @@ export function SalesWorkbenchPeriod({
                     <PopoverTrigger
                         id="sales-workbench-custom-period"
                         aria-label="设置自定义统计期间"
-                        render={<Button variant="ghost" size="sm" />}
+                        render={
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className={`num ${detailWorkspaceStyles.subtleButton}`}
+                            />
+                        }
                     >
-                        <CalendarDaysIcon aria-hidden="true" />
+                        <CalendarDaysIcon
+                            data-icon="inline-start"
+                            className="text-muted-foreground"
+                            aria-hidden="true"
+                        />
                         {overview.period.from} 至 {overview.period.to}
                     </PopoverTrigger>
                     <PopoverContent

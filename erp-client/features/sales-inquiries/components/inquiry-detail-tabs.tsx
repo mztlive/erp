@@ -16,12 +16,14 @@ import { InquiryHistory } from "./inquiry-history"
 
 type InquiryTab = "demand" | "feedback" | "published" | "fees"
 
-/** 操作记录入口与抽屉：直接渲染于页头次要操作区，采用无框轻按钮语言。 */
+/** 询价页头的操作记录入口与抽屉。 */
 export function InquiryHistoryButton({
     inquiry,
+    variant = "ghost",
 }: {
     inquiry: SalesInquiry | ProcurementInquiry
     workspace?: boolean
+    variant?: "ghost" | "outline"
 }) {
     const [historyOpen, setHistoryOpen] = React.useState(false)
     const historyTrigger = React.useRef<HTMLButtonElement>(null)
@@ -31,8 +33,12 @@ export function InquiryHistoryButton({
                 id="sales-inquiry-history-open"
                 ref={historyTrigger}
                 type="button"
-                variant="ghost"
-                className={detailWorkspaceStyles.quietButton}
+                variant={variant}
+                className={
+                    variant === "outline"
+                        ? "cursor-pointer"
+                        : detailWorkspaceStyles.quietButton
+                }
                 size="sm"
                 onClick={() => setHistoryOpen(true)}
             >

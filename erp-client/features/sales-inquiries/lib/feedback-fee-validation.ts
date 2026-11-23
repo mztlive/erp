@@ -24,9 +24,9 @@ export function feedbackFeeIssues(fees: InquiryFee[]): FeeIssue[] {
                 compareDecimal(fee.tax_rate, "0", 6) < 0 ||
                 compareDecimal(fee.tax_rate, "1", 6) > 0
             )
-                add("tax_rate", "税率须在 0 至 1 之间")
+                add("tax_rate", "税率须在 0% 至 100% 之间")
         } catch {
-            add("tax_rate", "请填写有效税率，最多保留 6 位小数")
+            add("tax_rate", "请填写有效税率")
         }
     })
     return issues

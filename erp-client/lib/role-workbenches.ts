@@ -8,14 +8,14 @@ export const ROLE_WORKBENCHES = [
         tasks: ["SALES_INQUIRY_PROCESSING", "CUSTOMER_ACCEPTANCE_REGISTRATION"],
         operations: [
             {
-                label: "销售询价",
-                href: "/sales/inquiries",
-                permission: "sales_inquiry:list",
-            },
-            {
-                label: "销售订单",
+                label: "查看销售单",
                 href: "/sales/orders",
                 permission: "sales_order:list",
+            },
+            {
+                label: "查看销售询价",
+                href: "/sales/inquiries",
+                permission: "sales_inquiry:list",
             },
         ],
     },

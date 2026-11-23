@@ -24,14 +24,14 @@ export function RoleWorkbenchUrgent({
 }) {
     return (
         <aside
-            className="min-w-0 rounded-lg border border-border/90 bg-card shadow-2xs"
+            className="min-w-0 py-5"
             aria-labelledby="role-workbench-urgent-title"
         >
-            <div className="flex items-center justify-between gap-2 border-b border-grid/70 px-4 py-3">
-                <div className="flex items-center gap-2.5">
+            <div className="flex items-center justify-between gap-2 pb-3">
+                <div className="flex items-center gap-2">
                     <span
                         className={cn(
-                            "flex size-7 shrink-0 items-center justify-center rounded-md",
+                            "flex size-6 shrink-0 items-center justify-center rounded-md",
                             urgent.items.length > 0
                                 ? "bg-destructive-soft text-destructive-soft-foreground"
                                 : "bg-success-soft text-success-soft-foreground",
@@ -47,7 +47,7 @@ export function RoleWorkbenchUrgent({
                     <div>
                         <h2
                             id="role-workbench-urgent-title"
-                            className="flex items-center gap-2 text-section-title font-semibold text-foreground tracking-tight"
+                            className="flex items-center gap-2 text-section-title font-semibold tracking-tight text-foreground"
                         >
                             需优先处理
                             {urgent.items.length > 0 ? (
@@ -86,7 +86,7 @@ export function RoleWorkbenchUrgent({
             {urgent.isError && (
                 <div
                     role="status"
-                    className="mx-4 mt-3 rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning-soft-foreground"
+                    className="mb-3 rounded-md bg-warning-soft px-3 py-2 text-xs text-warning-soft-foreground"
                 >
                     <p>
                         {urgent.items.length
@@ -108,7 +108,7 @@ export function RoleWorkbenchUrgent({
                 <div
                     role="status"
                     aria-label="正在读取紧要事项"
-                    className="space-y-2 px-4 py-3"
+                    className="space-y-2 py-2"
                 >
                     {urgent.items.length ? (
                         <p className="text-xs text-muted-foreground">
@@ -125,29 +125,31 @@ export function RoleWorkbenchUrgent({
             {!urgent.isPending &&
                 !urgent.isError &&
                 urgent.items.length === 0 && (
-                    <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+                    <div className="flex items-center gap-3 rounded-md bg-muted/35 px-3.5 py-3.5">
                         <span
-                            className="flex size-9 items-center justify-center rounded-full bg-success-soft text-success-soft-foreground"
+                            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-success-soft text-success-soft-foreground"
                             aria-hidden="true"
                         >
-                            <CircleCheckIcon className="size-4.5" />
+                            <CircleCheckIcon className="size-4" />
                         </span>
-                        <p className="text-body-compact font-medium text-foreground">
-                            当前无紧急待办
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                            超期或高优先级事项将自动置顶显示
-                        </p>
+                        <div className="min-w-0">
+                            <p className="text-body-compact font-medium text-foreground">
+                                当前无紧急待办
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                                超期或高优先级事项将自动置顶显示
+                            </p>
+                        </div>
                     </div>
                 )}
             {urgent.items.length > 0 && (
-                <ul className="divide-y divide-grid">
+                <ul className="divide-y divide-border/60 border-y border-border/60">
                     {urgent.items.map(({ item, reason, rank }) => {
                         const task = mapWorkspaceWorkItem(item, "Asia/Shanghai")
                         return (
                             <li
                                 key={item.id}
-                                className="px-4 py-3 transition-colors hover:bg-row-hover"
+                                className="-mx-2 rounded-md px-2 py-3 transition-colors hover:bg-row-hover"
                             >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <span
@@ -204,7 +206,7 @@ export function RoleWorkbenchUrgent({
                     })}
                 </ul>
             )}
-            <div className="border-t border-grid px-4 py-2.5">
+            <div className="pt-3">
                 <Link
                     id="role-workbench-urgent-all"
                     href="/workspace/tasks"

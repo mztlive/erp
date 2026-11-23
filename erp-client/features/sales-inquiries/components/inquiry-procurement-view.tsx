@@ -2,6 +2,12 @@
 
 import * as React from "react"
 import {
+    ChevronDownIcon,
+    DownloadIcon,
+    FileSpreadsheetIcon,
+    UploadIcon,
+} from "lucide-react"
+import {
     DetailWorkspaceBody,
     DetailWorkspaceChrome,
     DetailWorkspaceDirtyBadge,
@@ -11,6 +17,7 @@ import {
     DetailWorkspacePage,
     DetailWorkspaceSaveDock,
     MoneyValue,
+    detailWorkspaceStyles,
 } from "@/components/business"
 import {
     WorkspaceTaskFooter,
@@ -19,6 +26,12 @@ import {
 } from "@/components/business/workspace-task-pane"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { hasPermission } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
@@ -101,6 +114,8 @@ export function InquiryProcurementView({
 }) {
     const [feedbackDirty, setFeedbackDirty] = React.useState(false)
     const [publishing, setPublishing] = React.useState(false)
+    const [exportQuotesOpen, setExportQuotesOpen] = React.useState(false)
+    const [importQuotesOpen, setImportQuotesOpen] = React.useState(false)
     const feedbackEditor = React.useRef<InquiryFeedbackEditorHandle>(null)
     const [quoteLineId, setQuoteLineId] = React.useState<string | null>(null)
     const [feedbackLines, setFeedbackLines] = React.useState<
@@ -208,11 +223,108 @@ export function InquiryProcurementView({
         returnTo,
     })
 
+    const canExportQuotes =
+        hasPermission(permissions, "supplier_offering:list") &&
+        hasPermission(permissions, "sellable_sku:list")
+    const canImportQuotes =
+        hasPermission(permissions, "procurement_inquiry:internal_quote") &&
+        hasPermission(permissions, "supplier_offering:list") &&
+        hasPermission(permissions, "sellable_sku:list")
+
     const quoteWorkbookActions =
-        canProcess && task ? (
-            <>
-                {hasPermission(permissions, "supplier_offering:list") &&
-                    hasPermission(permissions, "sellable_sku:list") && (
+        canProcess && task && (canExportQuotes || canImportQuotes) ? (
+            canExportQuotes && canImportQuotes ? (
+                <>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger
+                            render={
+                                <Button
+                                    id="procurement-inquiry-quote-workbook-menu"
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className={cn(
+                                        detailWorkspaceStyles.subtleButton,
+                                        "gap-1.5",
+                                    )}
+                                />
+                            }
+                        >
+                            <FileSpreadsheetIcon
+                                aria-hidden="true"
+                                className="size-3.5 text-muted-foreground"
+                            />
+                            <span>报价表</span>
+                            <ChevronDownIcon
+                                aria-hidden="true"
+                                className="size-3.5 text-muted-foreground/80"
+                            />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56 p-1.5">
+                            <DropdownMenuItem
+                                id="procurement-inquiry-export-supplier-quotes"
+                                className="items-start gap-2.5 py-2"
+                                onClick={() => setExportQuotesOpen(true)}
+                            >
+                                <DownloadIcon
+                                    aria-hidden="true"
+                                    className="mt-0.5 size-4 text-muted-foreground"
+                                />
+                                <div className="min-w-0">
+                                    <p className="font-medium">
+                                        生成供应商报价表
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        按供给关系导出发给供应商
+                                    </p>
+                                </div>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                id="procurement-inquiry-import-quotes"
+                                className="items-start gap-2.5 py-2"
+                                onClick={() => setImportQuotesOpen(true)}
+                            >
+                                <UploadIcon
+                                    aria-hidden="true"
+                                    className="mt-0.5 size-4 text-muted-foreground"
+                                />
+                                <div className="min-w-0">
+                                    <p className="font-medium">
+                                        导入供应商报价
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        上传供应商回填表格登记报价
+                                    </p>
+                                </div>
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                    <SupplierQuoteExportButton
+                        hideTrigger
+                        open={exportQuotesOpen}
+                        onOpenChange={setExportQuotesOpen}
+                        request={{
+                            inquiryId: inquiry.id,
+                            taskId: task.id,
+                            version: inquiry.version,
+                            taskVersion: task.version,
+                        }}
+                        userId={userId}
+                        onRefresh={onSaved}
+                    />
+                    <SupplierQuoteImportButton
+                        hideTrigger
+                        open={importQuotesOpen}
+                        onOpenChange={setImportQuotesOpen}
+                        inquiry={inquiry}
+                        task={task}
+                        userId={userId}
+                        onSaved={onSaved}
+                    />
+                </>
+            ) : (
+                <>
+                    {canExportQuotes && (
                         <SupplierQuoteExportButton
                             request={{
                                 inquiryId: inquiry.id,
@@ -224,12 +336,7 @@ export function InquiryProcurementView({
                             onRefresh={onSaved}
                         />
                     )}
-                {hasPermission(
-                    permissions,
-                    "procurement_inquiry:internal_quote",
-                ) &&
-                    hasPermission(permissions, "supplier_offering:list") &&
-                    hasPermission(permissions, "sellable_sku:list") && (
+                    {canImportQuotes && (
                         <SupplierQuoteImportButton
                             inquiry={inquiry}
                             task={task}
@@ -237,7 +344,8 @@ export function InquiryProcurementView({
                             onSaved={onSaved}
                         />
                     )}
-            </>
+                </>
+            )
         ) : undefined
 
     const saveDockOpen = !embedded && canProcess && feedbackDirty
@@ -465,6 +573,13 @@ export function InquiryProcurementView({
             permissions={permissions}
             onSaved={onSaved}
             feedbackDirty={feedbackDirty}
+            validateBeforePublish={
+                canProcess
+                    ? () =>
+                          feedbackEditor.current?.validateBeforePublish() ??
+                          true
+                    : undefined
+            }
             beforePublish={
                 canProcess
                     ? async () => {
@@ -531,7 +646,10 @@ export function InquiryProcurementView({
 
                 const headerSecondary = (
                     <>
-                        <InquiryHistoryButton inquiry={inquiry} />
+                        <InquiryHistoryButton
+                            inquiry={inquiry}
+                            variant="outline"
+                        />
                         {assignmentActions}
                         {secondaryActions}
                         {embedded ? taskHeaderActions : null}
@@ -644,6 +762,16 @@ export function InquiryProcurementView({
                         />
                     ) : undefined
 
+                const footerTotal =
+                    feedbackStatus.feeCount > 0 &&
+                    feedbackStatus.grandTotal !== null
+                        ? feedbackStatus.grandTotal
+                        : feedbackStatus.goodsTotal
+                const remainingCount = Math.max(
+                    0,
+                    feedbackStatus.totalCount - feedbackStatus.completeCount,
+                )
+
                 const taskFooterSummary = canProcess ? (
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                         <span className="inline-flex items-center gap-2">
@@ -652,35 +780,62 @@ export function InquiryProcurementView({
                                 total={feedbackStatus.totalCount}
                                 className="w-16"
                             />
-                            <span className="num font-medium text-foreground">
-                                {feedbackStatus.completeCount} /{" "}
-                                {feedbackStatus.totalCount}
-                            </span>
-                            <span>项完整</span>
+                            {remainingCount === 0 &&
+                            feedbackStatus.totalCount > 0 ? (
+                                <span className="font-medium text-success-soft-foreground">
+                                    全部{" "}
+                                    <span className="num">
+                                        {feedbackStatus.totalCount}
+                                    </span>{" "}
+                                    项已完善
+                                </span>
+                            ) : (
+                                <>
+                                    <span className="num font-medium text-foreground">
+                                        {feedbackStatus.completeCount} /{" "}
+                                        {feedbackStatus.totalCount}
+                                    </span>
+                                    <span>项完整</span>
+                                    {remainingCount > 0 ? (
+                                        <button
+                                            id="procurement-inquiry-focus-incomplete"
+                                            type="button"
+                                            className="cursor-pointer font-medium text-warning-soft-foreground underline-offset-4 hover:underline"
+                                            onClick={() =>
+                                                feedbackEditor.current?.focusFirstIncomplete()
+                                            }
+                                        >
+                                            定位缺漏
+                                        </button>
+                                    ) : null}
+                                </>
+                            )}
                         </span>
-                        {feedbackStatus.goodsTotal !== null && (
+                        {footerTotal !== null && (
                             <span className="border-l border-border/75 pl-3">
-                                含税合计{" "}
+                                {feedbackStatus.feeCount > 0
+                                    ? "含税总计 "
+                                    : "含税合计 "}
                                 <MoneyValue
-                                    value={feedbackStatus.goodsTotal}
+                                    value={footerTotal}
                                     display="exact"
                                     showHint={false}
                                     className="font-semibold text-foreground"
                                 />
+                                {feedbackStatus.feeCount > 0 &&
+                                feedbackStatus.feesTotal !== null ? (
+                                    <span className="ml-1.5 text-muted-foreground">
+                                        （含额外成本{" "}
+                                        <MoneyValue
+                                            value={feedbackStatus.feesTotal}
+                                            display="exact"
+                                            showHint={false}
+                                        />
+                                        ）
+                                    </span>
+                                ) : null}
                             </span>
                         )}
-                        {feedbackStatus.feeCount > 0 &&
-                            feedbackStatus.feesTotal !== null && (
-                                <span className="border-l border-border/75 pl-3">
-                                    额外成本{" "}
-                                    <MoneyValue
-                                        value={feedbackStatus.feesTotal}
-                                        display="exact"
-                                        showHint={false}
-                                        className="font-medium text-foreground"
-                                    />
-                                </span>
-                            )}
                     </div>
                 ) : publishedSummary ? (
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -711,7 +866,12 @@ export function InquiryProcurementView({
                             id="procurement-inquiry-save-feedback"
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant={feedbackDirty ? "outline" : "ghost"}
+                            className={
+                                feedbackDirty
+                                    ? undefined
+                                    : detailWorkspaceStyles.quietButton
+                            }
                             disabled={feedbackStatus.disabled}
                             onClick={() => feedbackEditor.current?.save()}
                         >

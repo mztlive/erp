@@ -28,26 +28,36 @@ export function SupplierQuoteExportButton({
     request,
     userId,
     onRefresh,
+    open: controlledOpen,
+    onOpenChange: controlledOnOpenChange,
+    hideTrigger = false,
 }: {
     request: SupplierQuoteRequest
     userId: string
     onRefresh: () => void
+    open?: boolean
+    onOpenChange?: (open: boolean) => void
+    hideTrigger?: boolean
 }) {
-    const [open, setOpen] = React.useState(false)
+    const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false)
+    const open = controlledOpen ?? uncontrolledOpen
+    const setOpen = controlledOnOpenChange ?? setUncontrolledOpen
     const [busy, setBusy] = React.useState(false)
     return (
         <>
-            <Button
-                id="procurement-inquiry-export-supplier-quotes"
-                variant="ghost"
-                size="sm"
-                className={detailWorkspaceStyles.subtleButton}
-                type="button"
-                onClick={() => setOpen(true)}
-            >
-                <DownloadIcon aria-hidden="true" data-icon="inline-start" />
-                生成供应商报价表
-            </Button>
+            {!hideTrigger && (
+                <Button
+                    id="procurement-inquiry-export-supplier-quotes"
+                    variant="ghost"
+                    size="sm"
+                    className={detailWorkspaceStyles.subtleButton}
+                    type="button"
+                    onClick={() => setOpen(true)}
+                >
+                    <DownloadIcon aria-hidden="true" data-icon="inline-start" />
+                    生成供应商报价表
+                </Button>
+            )}
             <Dialog
                 open={open}
                 onOpenChange={(value) => {

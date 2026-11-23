@@ -238,7 +238,7 @@ type SalesOrderSelectorDto = Readonly<{
     id: string
     order_no: string
     business_type: string
-    customer_id: string
+    customer_name?: string | null
     commercial_status: string
     stage: { label: string; tone: string }
     current_revision_id?: string | null
@@ -247,6 +247,8 @@ type SalesOrderSelectorDto = Readonly<{
         customer_name?: string
         gross_amount: string
     }>
+    working_copy?: { customer_name?: string } | null
+    submissions?: ReadonlyArray<{ customer_name?: string }>
 }>
 
 function salesOrderTone(tone: string): SalesOrderComboboxItem["statusTone"] {
@@ -265,10 +267,17 @@ function salesOrderItem(row: SalesOrderSelectorDto): SalesOrderComboboxItem {
     const revision = row.current_revision_id
         ? row.revisions?.find((item) => item.id === row.current_revision_id)
         : undefined
+    const snapshotCustomerName = row.current_revision_id
+        ? revision?.customer_name?.trim()
+        : row.working_copy?.customer_name?.trim() ||
+          row.submissions?.[0]?.customer_name?.trim()
     return {
         id: row.id,
         documentNumber: row.order_no,
-        customerName: revision?.customer_name?.trim() || row.customer_id,
+        customerName:
+            row.customer_name?.trim() ||
+            snapshotCustomerName ||
+            "客户资料未标注",
         statusLabel: row.stage.label || row.commercial_status,
         statusTone: salesOrderTone(row.stage.tone),
         amountGross: revision?.gross_amount,

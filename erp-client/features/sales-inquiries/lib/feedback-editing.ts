@@ -24,6 +24,22 @@ export function changeFeedbackConclusion(
 ): InquiryFeedbackLine {
     if (conclusion === "unavailable")
         return { ...value, conclusion, available_quantity: "0", prices: [] }
+    if (conclusion === "partially_available") {
+        // 切换为部分可供时清空默认 0 或全量需求，避免未输入前就误以为可供 0 并立即报错。
+        const trimmed = value.available_quantity.trim()
+        const hasPartialQuantity =
+            trimmed !== "" && trimmed !== "0" && trimmed !== demand.quantity
+        return {
+            ...value,
+            conclusion,
+            available_quantity: hasPartialQuantity
+                ? value.available_quantity
+                : "",
+            prices: value.prices.length
+                ? value.prices
+                : [newFeedbackPrice(terms)],
+        }
+    }
     return {
         ...value,
         conclusion,
@@ -92,6 +108,31 @@ export function feedbackFieldTarget(value: InquiryFeedbackLine, field: string) {
         ? field.replace(`price-${toAutomationIdSegment(price.price_id)}-`, "")
         : field
 }
+export type FeedbackTargetField =
+    | "conclusion"
+    | "available-quantity"
+    | "public-note"
+    | "gross-price"
+    | "tax-rate"
+
+/** 将单行全部校验问题按控件目标聚合，供单元格就地报错展示。 */
+export function groupFeedbackIssuesByTarget(
+    value: InquiryFeedbackLine,
+    issues: readonly FeedbackIssue[],
+): Partial<Record<FeedbackTargetField, string>> {
+    const grouped: Partial<Record<FeedbackTargetField, string>> = {}
+    for (const issue of issues) {
+        const target = feedbackFieldTarget(
+            value,
+            issue.field,
+        ) as FeedbackTargetField
+        grouped[target] = grouped[target]
+            ? `${grouped[target]}；${issue.message}`
+            : issue.message
+    }
+    return grouped
+}
+
 /** 发布前定位常见缺项；最终权限、跨商品及费用校验仍由发布接口执行。 */
 export function feedbackIssues(
     value: InquiryFeedbackLine,
@@ -101,47 +142,55 @@ export function feedbackIssues(
     const add = (message: string, field: string) =>
         issues.push({ message, field })
     if (value.conclusion === "pending") add("请选择最终供给结论", "conclusion")
+    if (value.conclusion === "unavailable" && !value.public_note.trim())
+        add("请填写不可供原因", "public-note")
+    if (value.conclusion === "partially_available" && !value.public_note.trim())
+        add("请填写缺货原因", "public-note")
     if (
-        ["unavailable", "partially_available"].includes(value.conclusion) &&
-        !value.public_note.trim()
-    )
-        add("请填写缺货或不可供原因", "public-note")
-    try {
-        const qty = compareDecimal(
-            value.available_quantity,
-            "0",
-            demand.quantity_scale,
-        )
-        const wanted = compareDecimal(
-            value.available_quantity,
-            demand.quantity,
-            demand.quantity_scale,
-        )
-        if (value.conclusion === "available" && wanted !== 0)
-            add(
-                "可供数量须等于需求；不足时请选择部分可供",
-                "available-quantity",
+        value.conclusion === "partially_available" &&
+        !value.available_quantity.trim()
+    ) {
+        add("请填写部分可供数量", "available-quantity")
+    } else if (
+        value.conclusion === "available" &&
+        !value.available_quantity.trim()
+    ) {
+        add("可供数量须等于需求；不足时请选择部分可供", "available-quantity")
+    } else {
+        try {
+            const qty = compareDecimal(
+                value.available_quantity,
+                "0",
+                demand.quantity_scale,
             )
-        if (
-            value.conclusion === "partially_available" &&
-            (qty <= 0 || wanted >= 0)
-        )
-            add("部分可供数量须大于零且少于需求", "available-quantity")
-        if (
-            value.conclusion === "unavailable" &&
-            (qty !== 0 || value.prices.length > 0)
-        )
-            add("不可供商品不能保留数量或报价", "conclusion")
-        if (
-            value.conclusion !== "unavailable" &&
-            value.conclusion !== "pending"
-        ) {
-            if (!value.prices.length) add("请填写供给单价", "gross-price")
-            if (value.prices.length > 1)
-                add("每件商品仅支持一条报价，请重新填写", "gross-price")
+            const wanted = compareDecimal(
+                value.available_quantity,
+                demand.quantity,
+                demand.quantity_scale,
+            )
+            if (value.conclusion === "available" && wanted !== 0)
+                add(
+                    "可供数量须等于需求；不足时请选择部分可供",
+                    "available-quantity",
+                )
+            if (
+                value.conclusion === "partially_available" &&
+                (qty <= 0 || wanted >= 0)
+            )
+                add("部分可供数量须大于零且少于需求", "available-quantity")
+            if (
+                value.conclusion === "unavailable" &&
+                (qty !== 0 || value.prices.length > 0)
+            )
+                add("不可供商品不能保留数量或报价", "conclusion")
+        } catch {
+            add("请检查可供数量的格式和精度", "available-quantity")
         }
-    } catch {
-        add("请检查可供数量的格式和精度", "available-quantity")
+    }
+    if (value.conclusion !== "unavailable" && value.conclusion !== "pending") {
+        if (!value.prices.length) add("请填写供给单价", "gross-price")
+        if (value.prices.length > 1)
+            add("每件商品仅支持一条报价，请重新填写", "gross-price")
     }
     if (value.conclusion === "unavailable") return issues
     for (const price of value.prices) {
@@ -181,6 +230,7 @@ export function feedbackRequestData(
         })),
         lines: value.lines.map((line) => ({
             ...line,
+            available_quantity: line.available_quantity.trim() || "0",
             prices: line.prices.map((price) => ({
                 price_id: price.price_id,
                 unit_price_gross: price.unit_price_gross?.trim() || null,

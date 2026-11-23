@@ -11,7 +11,8 @@ function submissionBlockerFor(command: AccessChangeCommand) {
         return {
             action: command.action,
             code: "USER_ROLE_TIME_POLICY_MISSING",
-            message: "暂不支持设置角色生效或到期时间；请使用「调整角色」立即变更角色。",
+            message:
+                "暂不支持设置角色生效或到期时间；请使用「调整角色」立即变更角色。",
         } as const
     }
 

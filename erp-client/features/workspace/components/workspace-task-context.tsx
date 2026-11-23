@@ -102,9 +102,11 @@ export function workspaceTaskHasInlineContextHelp(
 export function WorkspaceTaskContextHelp({
     item,
     label,
+    variant = "ghost",
 }: {
     item: WorkspaceWorkItem
     label?: string
+    variant?: "ghost" | "outline"
 }) {
     const blocked = isBlockedWorkItem(item)
     const overdue = item.dueBucket === "overdue"
@@ -118,7 +120,10 @@ export function WorkspaceTaskContextHelp({
                     <Button
                         id={`workspace-task-context-help-trigger-${toAutomationIdSegment(item.workItemId)}`}
                         type="button"
-                        variant="ghost"
+                        variant={variant}
+                        className={
+                            variant === "outline" ? "cursor-pointer" : undefined
+                        }
                         size={label ? "sm" : "icon-sm"}
                         aria-label={label || "任务说明"}
                         data-testid={`work-item-task-context-${item.workItemId}`}
@@ -214,11 +219,13 @@ export function WorkspaceTaskContextHelp({
 export function WorkspaceTaskHeaderActions({
     item,
     contextLabel,
+    contextVariant,
     children,
 }: {
     item: WorkspaceWorkItem
     children?: ReactNode
     contextLabel?: string
+    contextVariant?: "ghost" | "outline"
 }) {
     const fullPage = useWorkspaceTaskPage()
     return (
@@ -238,7 +245,11 @@ export function WorkspaceTaskHeaderActions({
                     }}
                 />
             )}
-            <WorkspaceTaskContextHelp item={item} label={contextLabel} />
+            <WorkspaceTaskContextHelp
+                item={item}
+                label={contextLabel}
+                variant={contextVariant}
+            />
             <WorkspacePaneActions />
         </div>
     )

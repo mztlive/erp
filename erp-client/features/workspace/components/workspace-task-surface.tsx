@@ -76,6 +76,7 @@ export function WorkspaceTaskSurface({
                     <WorkspaceTaskHeaderActions
                         item={item}
                         contextLabel="任务说明"
+                        contextVariant="outline"
                     />
                 }
                 onTaskCompleted={() => onTaskCompleted?.(item.workItemId)}

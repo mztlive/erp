@@ -101,10 +101,14 @@ export function RoleWorkbenchMetrics({
     return (
         <div
             className={cn(
-                "grid gap-3 sm:grid-cols-2",
+                "grid gap-x-5 gap-y-3 sm:grid-cols-2",
                 overview.metrics.length > 4
                     ? "xl:grid-cols-3 2xl:grid-cols-5"
                     : "xl:grid-cols-4",
+                "sm:max-xl:[&>*:nth-child(even)]:border-l sm:max-xl:[&>*:nth-child(even)]:border-border/60 sm:max-xl:[&>*:nth-child(even)]:pl-5",
+                overview.metrics.length > 4
+                    ? "xl:max-2xl:[&>*:not(:nth-child(3n+1))]:border-l xl:max-2xl:[&>*:not(:nth-child(3n+1))]:border-border/60 xl:max-2xl:[&>*:not(:nth-child(3n+1))]:pl-5 2xl:[&>*:not(:nth-child(5n+1))]:border-l 2xl:[&>*:not(:nth-child(5n+1))]:border-border/60 2xl:[&>*:not(:nth-child(5n+1))]:pl-5"
+                    : "xl:[&>*:not(:nth-child(4n+1))]:border-l xl:[&>*:not(:nth-child(4n+1))]:border-border/60 xl:[&>*:not(:nth-child(4n+1))]:pl-5",
             )}
         >
             {overview.metrics.map((metric, index) => {
@@ -122,11 +126,7 @@ export function RoleWorkbenchMetrics({
                 return (
                     <article
                         key={metric.key}
-                        className={cn(
-                            "group/kpi relative min-w-0 rounded-lg border border-border/90 bg-card shadow-2xs transition-[border-color,box-shadow] duration-150 hover:border-primary/45 hover:shadow-xs",
-                            warning &&
-                                "border-destructive-border hover:border-destructive/60",
-                        )}
+                        className="group/kpi relative min-w-0"
                     >
                         <button
                             id={`workspace-overview-${metric.key}`}
@@ -136,12 +136,16 @@ export function RoleWorkbenchMetrics({
                                     ? void query.refetch()
                                     : onSelect(metric)
                             }
-                            className="flex h-full w-full flex-col rounded-lg p-4 text-left focus-visible:outline-2 focus-visible:outline-primary"
+                            className={cn(
+                                "-mx-2 flex h-full w-[calc(100%+1rem)] flex-col rounded-md px-2 py-2 text-left transition-colors hover:bg-muted/45 focus-visible:outline-2 focus-visible:outline-primary",
+                                warning &&
+                                    "bg-destructive-soft/35 hover:bg-destructive-soft/60",
+                            )}
                         >
-                            <div className="flex w-full items-center gap-2 pr-7">
+                            <div className="flex w-full items-center gap-2 pr-6">
                                 <span
                                     className={cn(
-                                        "flex size-6.5 shrink-0 items-center justify-center rounded-md",
+                                        "flex size-6 shrink-0 items-center justify-center rounded-md",
                                         visual.badgeClass,
                                     )}
                                     aria-hidden="true"
@@ -150,7 +154,7 @@ export function RoleWorkbenchMetrics({
                                 </span>
                                 <span
                                     className={cn(
-                                        "truncate text-body-compact font-medium text-muted-foreground",
+                                        "truncate text-xs font-medium text-muted-foreground",
                                         warning &&
                                             "text-destructive-soft-foreground",
                                     )}
@@ -160,13 +164,13 @@ export function RoleWorkbenchMetrics({
                             </div>
                             <div
                                 className={cn(
-                                    "mt-3 flex min-h-9 items-baseline gap-1.5 text-value-summary font-semibold num tracking-tight text-foreground",
+                                    "mt-2 flex min-h-8 items-baseline gap-1.5 text-value-section font-semibold num tracking-tight text-foreground",
                                     warning &&
                                         "text-destructive-soft-foreground",
                                 )}
                             >
                                 {query.isPending ? (
-                                    <Skeleton className="h-8 w-24" />
+                                    <Skeleton className="h-7 w-24" />
                                 ) : query.isError ? (
                                     <span className="text-body-compact font-normal text-destructive">
                                         读取失败，点击重试
@@ -194,12 +198,12 @@ export function RoleWorkbenchMetrics({
                                     <MoneyValue
                                         value={String(value)}
                                         display="compact"
-                                        size="summary"
+                                        size="section"
                                         showHint={false}
                                     />
                                 )}
                             </div>
-                            <div className="mt-auto flex w-full items-center justify-between gap-2 pt-3 text-xs text-muted-foreground">
+                            <div className="mt-1.5 flex w-full items-center justify-between gap-2 text-xs text-muted-foreground">
                                 <span className="truncate">
                                     {period
                                         ? "所选期间 · 含草稿"
@@ -210,7 +214,10 @@ export function RoleWorkbenchMetrics({
                                             : "截至当前"}
                                     {data?.limited ? " · 部分范围" : ""}
                                 </span>
-                                <span className="inline-flex shrink-0 items-center gap-0.5 text-muted-foreground/70 transition-colors group-hover/kpi:text-primary">
+                                <span className="inline-flex shrink-0 items-center gap-0.5 text-muted-foreground/55 transition-colors group-hover/kpi:text-primary">
+                                    <span className="hidden group-hover/kpi:inline">
+                                        明细
+                                    </span>
                                     <ArrowUpRightIcon
                                         className="size-3.5 transition-transform duration-150 group-hover/kpi:translate-x-0.5 group-hover/kpi:-translate-y-0.5"
                                         aria-hidden="true"
@@ -218,10 +225,11 @@ export function RoleWorkbenchMetrics({
                                 </span>
                             </div>
                         </button>
-                        <div className="absolute top-2.5 right-2.5">
+                        <div className="absolute top-1.5 right-0">
                             <WorkbenchDataInfo
                                 id={`${idPrefix}-metric-info-${metric.key}`}
                                 title={metric.label}
+                                triggerClassName="opacity-35 transition-opacity group-hover/kpi:opacity-100 focus-visible:opacity-100"
                             >
                                 <p>{metric.detail}</p>
                                 <p>

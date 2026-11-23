@@ -42,13 +42,17 @@ export function workbenchUpdatedAt(values: (string | number | undefined)[]) {
     return `${earliest === Math.max(...valid) ? "更新于" : "最早更新于"} ${workbenchTime(new Date(earliest).toISOString())}`
 }
 
+import { cn } from "@/lib/utils"
+
 export function WorkbenchDataInfo({
     id,
     title,
+    triggerClassName,
     children,
 }: {
     id: string
     title: string
+    triggerClassName?: string
     children: ReactNode
 }) {
     return (
@@ -59,8 +63,11 @@ export function WorkbenchDataInfo({
                 render={
                     <Button
                         variant="ghost"
-                        size="icon-sm"
-                        className="text-muted-foreground"
+                        size="icon-xs"
+                        className={cn(
+                            "text-muted-foreground/70 hover:text-foreground",
+                            triggerClassName,
+                        )}
                     />
                 }
             >
