@@ -1,4 +1,4 @@
-//! 密码维护、个人提货码与公开访问凭证的 HTTP 适配。
+//! 密码维护与公开访问凭证的 HTTP 适配。
 
 use std::net::SocketAddr;
 
@@ -7,8 +7,8 @@ use axum::Extension;
 use axum::extract::{ConnectInfo, Path, State};
 use axum::http::HeaderMap;
 use erp_sales::dto::sales_selection::{
-    PublicSelectionAccessView, SalesSelectionBookletView, SalesSelectionPasswordRequest, SelectionDetailView,
-    SelectionVoucherView, UnlockSelectionRequest,
+    PublicSelectionAccessView, SalesSelectionBookletView, SalesSelectionPasswordRequest,
+    UnlockSelectionRequest,
 };
 use serde::Deserialize;
 
@@ -30,32 +30,10 @@ pub async fn booklet_password(
     Ok(ApiResponse::ok_with_data(process(&state).set_access_password(id, req, actor).await?))
 }
 
-/// 读取仅供销售发放的个人提货码。
-/// 返回该册提货码及办理状态。
-/// 无复制链接权限或无客户访问资格时拒绝。
-pub async fn booklet_vouchers(
-    State(state): State<HttpState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-) -> Result<Vec<SelectionVoucherView>> {
-    Ok(ApiResponse::ok_with_data(process(&state).vouchers(&id, &actor).await?))
-}
-
-/// 读取该册所有已提交人的选品和收件明细。
-/// 返回完整方案明细，供详情展示和表格导出。
-/// 无册读取权限或无客户访问资格时拒绝。
-pub async fn booklet_selection_details(
-    State(state): State<HttpState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-) -> Result<Vec<SelectionDetailView>> {
-    Ok(ApiResponse::ok_with_data(process(&state).selection_details(&id, &actor).await?))
-}
-
-/// 验证密码和个人提货码，签发限于当前册与个人的访问凭证。
-/// `req` 为密码和可选提货码。
-/// 返回访问凭证与当前个人公开页。
-/// 密码错误、提货码不属于该册、链接失效或超过限流时拒绝。
+/// 验证访问密码，签发限于当前选品册的访问凭证。
+/// `req` 为访问密码。
+/// 返回访问凭证与当前公开页。
+/// 密码错误、链接失效或超过限流时拒绝。
 pub async fn public_unlock(
     State(state): State<HttpState>,
     Path(token): Path<String>,
@@ -86,8 +64,8 @@ mod tests {
     fn reads_access_header_case_insensitively_and_rejects_empty_or_oversized_values() {
         let mut headers = HeaderMap::new();
         assert_eq!(selection_access(&headers), None);
-        headers.insert("X-Selection-Access", HeaderValue::from_static("current-person-grant"));
-        assert_eq!(selection_access(&headers), Some("current-person-grant"));
+        headers.insert("X-Selection-Access", HeaderValue::from_static("current-session-grant"));
+        assert_eq!(selection_access(&headers), Some("current-session-grant"));
         headers.insert("X-Selection-Access", HeaderValue::from_static(""));
         assert_eq!(selection_access(&headers), None);
         headers.insert("X-Selection-Access", HeaderValue::from_str(&"a".repeat(4097)).unwrap());
@@ -99,7 +77,7 @@ mod tests {
         let anonymous: ImageAccessQuery = serde_json::from_str("{}").unwrap();
         assert_eq!(anonymous.access_token, None);
         let authorized: ImageAccessQuery =
-            serde_json::from_str(r#"{"access_token":"personal-grant"}"#).unwrap();
-        assert_eq!(authorized.access_token.as_deref(), Some("personal-grant"));
+            serde_json::from_str(r#"{"access_token":"session-grant"}"#).unwrap();
+        assert_eq!(authorized.access_token.as_deref(), Some("session-grant"));
     }
 }

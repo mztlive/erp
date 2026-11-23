@@ -33,7 +33,6 @@ const EMPTY_BOOKS: SelectionBook[] = []
 
 function queryFromSearchParams(searchParams: URLSearchParams): BookListQuery {
     const selectionForm = searchParams.get("selection_form")
-    const submitMode = searchParams.get("submit_mode")
     const status = searchParams.get("status")
     const page = Number(searchParams.get("page") ?? "1")
     const pageSize = Number(searchParams.get("page_size") ?? "")
@@ -42,12 +41,6 @@ function queryFromSearchParams(searchParams: URLSearchParams): BookListQuery {
         selection_form:
             selectionForm === "SINGLE_SKU" || selectionForm === "PACKAGE"
                 ? selectionForm
-                : "ALL",
-        submit_mode:
-            submitMode === "BY_QUANTITY" ||
-            submitMode === "MALL_REDEEM" ||
-            submitMode === "PICKUP_VOUCHER"
-                ? submitMode
                 : "ALL",
         status: status || "ALL",
         owner_user_ids: searchParams.get("owner_user_ids") || undefined,
@@ -66,7 +59,6 @@ function hasActiveQueryFilters(query: BookListQuery): boolean {
     return Boolean(
         query.q ||
         (query.selection_form && query.selection_form !== "ALL") ||
-        (query.submit_mode && query.submit_mode !== "ALL") ||
         query.owner_user_ids ||
         query.org_unit_ids,
     )
@@ -160,10 +152,6 @@ export const BooksListPage = () => {
                     next.selection_form && next.selection_form !== "ALL"
                         ? next.selection_form
                         : null,
-                submit_mode:
-                    next.submit_mode && next.submit_mode !== "ALL"
-                        ? next.submit_mode
-                        : null,
                 owner_user_ids: canFilterOwners
                     ? (next.owner_user_ids ?? null)
                     : null,
@@ -186,7 +174,6 @@ export const BooksListPage = () => {
         patchUrl({
             q: null,
             selection_form: null,
-            submit_mode: null,
             owner_user_ids: null,
             org_unit_ids: null,
             include_descendants: null,

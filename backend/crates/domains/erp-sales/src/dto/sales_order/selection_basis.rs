@@ -109,8 +109,6 @@ mod tests {
                 batch_id: "batch".into(),
                 form: SelectionForm::Package,
                 submit_mode: SubmitMode::ByQuantity,
-                participant_id: String::new(),
-                recipient: None,
                 session_version: 1,
                 submitted_at: Instant::now(),
                 total_amount: Some("576.00".parse().unwrap()),
@@ -150,8 +148,8 @@ mod tests {
     }
 
     #[test]
-    fn rejects_other_modes_customer_and_business_type() {
-        let mut proposal = proposal();
+    fn rejects_mismatched_customer_and_business_type() {
+        let proposal = proposal();
         assert!(
             SalesSelectionSource::from_proposal(
                 &proposal,
@@ -164,10 +162,6 @@ mod tests {
             SalesSelectionSource::from_proposal(&proposal, &proposal.customer_id, BusinessType::Voucher)
                 .is_err()
         );
-        for mode in [SubmitMode::MallRedeem, SubmitMode::PickupVoucher] {
-            proposal.submit_mode = mode;
-            assert!(SelectionOrderBasis::from_proposal(&proposal, vec![line("line")]).is_err());
-        }
     }
 
     #[test]

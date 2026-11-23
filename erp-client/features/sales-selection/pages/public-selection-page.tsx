@@ -65,13 +65,7 @@ export const PublicSelectionPage = ({ token }: { token: string }) => {
             </main>
         )
 
-    if (page.kind === "LOCKED")
-        return (
-            <PublicSelectionAccess
-                voucherRequired={page.voucher_required}
-                access={access}
-            />
-        )
+    if (page.kind === "LOCKED") return <PublicSelectionAccess access={access} />
     if (page.kind === "ENDED") return <PublicSelectionEnded />
     if (page.kind === "RECEIPT" && page.receipt)
         return (

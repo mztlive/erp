@@ -31,11 +31,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { subtractFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 import { publicImageUrl, savePublicSession, submitPublicSession } from "../api"
 import { salesSelectionKeys } from "../queries"
-import { compareMoney, lineAmount, sumAmounts } from "../lib/money"
 import {
     picksFromChoices,
     readPendingRequest,
@@ -44,18 +42,13 @@ import {
     type Pick,
 } from "../lib/public-flow"
 import { quantityStringSchema } from "../lib/validation"
-import type {
-    PublicDisplayItemView,
-    PublicPageView,
-    SelectionRecipient,
-} from "../types"
+import type { PublicDisplayItemView, PublicPageView } from "../types"
 import { PublicSelectionEnded } from "./public-selection-ended"
 import {
     SelectionReviewCenter,
     type FloorSection,
 } from "./public-selection-review-center"
 import { ChoiceSummary, inferItemCategory } from "./public-selection-summary"
-import { useSelectionRecipientForm } from "./selection-recipient-fields"
 
 /** 方案 2：经典双栏联动楼层系统（固定视口高，右侧瀑布流滚动实时带动左侧菜单更新位置）。 */
 export const SelectionForm = ({
@@ -88,47 +81,12 @@ export const SelectionForm = ({
     const [confirmed, setConfirmed] = React.useState<PublicPageView | null>(
         request?.kind === "submit" ? page : null,
     )
-    const recipientForm = useSelectionRecipientForm(
-        (recipient) => submit(recipient),
-        request?.kind === "submit"
-            ? request.input.recipient
-            : (page.recipient ?? undefined),
-    )
     const [latest, setLatest] = React.useState<PublicPageView | null>(null)
     const [conflict, setConflict] = React.useState(false)
     const [ended, setEnded] = React.useState(false)
     const [dirty, setDirty] = React.useState(false)
     const [message, setMessage] = React.useState("")
     const [reconciling, setReconciling] = React.useState(false)
-    const mall = page.submit_mode === "MALL_REDEEM"
-    const voucher = page.submit_mode === "PICKUP_VOUCHER"
-    const selectionTotal = React.useMemo(() => {
-        if (mall) return null
-        try {
-            return sumAmounts(
-                page.items.flatMap((item) =>
-                    picks[item.item_id]?.selected
-                        ? [lineAmount(item.price, picks[item.item_id].quantity)]
-                        : [],
-                ),
-            )
-        } catch {
-            return null
-        }
-    }, [mall, page.items, picks])
-    const overBudget = Boolean(
-        voucher &&
-        page.per_person_budget &&
-        selectionTotal &&
-        compareMoney(selectionTotal, page.per_person_budget) > 0,
-    )
-    const remainingBudget =
-        voucher && page.per_person_budget && selectionTotal
-            ? subtractFixed(page.per_person_budget, selectionTotal, {
-                  maxScale: 2,
-                  outputScale: 2,
-              })
-            : null
 
     // 交互状态
     const [searchQuery, setSearchQuery] = React.useState("")
@@ -358,29 +316,18 @@ export const SelectionForm = ({
 
     const persist = (confirm: boolean) => {
         if (locked || conflict) return
-        const choices: { item_id: string; quantity?: number }[] = []
+        const choices: { item_id: string; quantity: number }[] = []
         for (const item of page.items) {
             const pick = picks[item.item_id]
             if (!pick?.selected) continue
-            if (
-                !mall &&
-                !quantityStringSchema.safeParse(pick.quantity).success
-            ) {
+            if (!quantityStringSchema.safeParse(pick.quantity).success) {
                 setMessage("每项份数必须为 1 到 100000 的整数。")
                 return
             }
             choices.push({
                 item_id: item.item_id,
-                ...(mall
-                    ? {}
-                    : { quantity: Number.parseInt(pick.quantity, 10) }),
+                quantity: Number.parseInt(pick.quantity, 10),
             })
-        }
-        if (overBudget) {
-            setMessage(
-                `已选金额超过每人额度 ¥${page.per_person_budget}，请调整商品或份数。`,
-            )
-            return
         }
         if (confirm && !choices.length) {
             setMessage("请至少选择一项商品。")
@@ -410,16 +357,14 @@ export const SelectionForm = ({
         }
         form.setFieldValue("picks", updatedPicks)
 
-        const choices: { item_id: string; quantity?: number }[] = []
+        const choices: { item_id: string; quantity: number }[] = []
         for (const item of page.items) {
             if (item.item_id === itemId) continue
             const pick = updatedPicks[item.item_id]
             if (!pick?.selected) continue
             choices.push({
                 item_id: item.item_id,
-                ...(mall
-                    ? {}
-                    : { quantity: Number.parseInt(pick.quantity, 10) }),
+                quantity: Number.parseInt(pick.quantity, 10),
             })
         }
 
@@ -443,14 +388,13 @@ export const SelectionForm = ({
         mutation.mutate(next)
     }
 
-    function submit(recipient?: SelectionRecipient) {
+    function submit() {
         if (!confirmed || locked || conflict || dirty) return
         const next: PendingSelectionRequest = {
             kind: "submit",
             input: {
                 idempotencyKey: crypto.randomUUID(),
                 expectedSessionVersion: confirmed.session_version!,
-                recipient,
             },
         }
         keepRequest(next)
@@ -564,7 +508,7 @@ export const SelectionForm = ({
 
                         {/* 选品或步进器 */}
                         <div className="flex items-center gap-1.5">
-                            {isSelected && !mall ? (
+                            {isSelected ? (
                                 <div className="flex items-center gap-0.5 rounded-lg bg-muted/80 p-0.5 border border-border/80">
                                     <button
                                         id={`sales-selection-public-decrease-${toAutomationIdSegment(item.item_id)}`}
@@ -697,44 +641,16 @@ export const SelectionForm = ({
                                     <span className="text-muted-foreground">
                                         |
                                     </span>
-                                    <span>
-                                        {mall
-                                            ? "商城兑换"
-                                            : voucher
-                                              ? "提货券"
-                                              : "按份采购"}
-                                    </span>
+                                    <span>按份采购</span>
                                 </p>
                             </div>
                         </div>
                         <Badge variant="info" className="shrink-0 rounded-full">
-                            {mall
-                                ? "意向可选库"
-                                : voucher
-                                  ? "个人提货"
-                                  : "批量采购"}
+                            批量采购
                         </Badge>
                     </div>
 
                     <div className="mt-2 flex items-center justify-between gap-2">
-                        {voucher && (
-                            <p
-                                id="sales-selection-public-budget"
-                                className={cn(
-                                    "text-xs",
-                                    overBudget
-                                        ? "text-destructive"
-                                        : "text-muted-foreground",
-                                )}
-                            >
-                                每人额度 ¥{page.per_person_budget} · 已选 ¥
-                                {selectionTotal ?? "—"} ·{" "}
-                                <span id="sales-selection-public-budget-remaining">
-                                    剩余额度 ¥{remainingBudget ?? "—"}
-                                </span>
-                                {overBudget ? " · 已超额" : ""}
-                            </p>
-                        )}
                         <Button
                             id="sales-selection-public-lock"
                             type="button"
@@ -744,7 +660,7 @@ export const SelectionForm = ({
                             onClick={onLock}
                             className="ml-auto"
                         >
-                            {voucher ? "更换提货码" : "退出选品"}
+                            退出选品
                         </Button>
                     </div>
                     {/* 搜索框 */}
@@ -1009,33 +925,14 @@ export const SelectionForm = ({
                                 )}
                             </div>
                             <div>
-                                {mall ? (
-                                    <div>
-                                        <p className="text-xs sm:text-sm font-bold text-foreground">
-                                            已选{" "}
-                                            <span className="text-primary">
-                                                {selectedCount}
-                                            </span>{" "}
-                                            款
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">
-                                            {dirty
-                                                ? "修改待保存"
-                                                : "点击查看清单"}
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <div>
-                                        <p className="text-sm sm:text-base font-bold text-primary leading-none">
-                                            已选 {selectedCount} 项
-                                        </p>
-                                        <p className="text-xs text-muted-foreground mt-0.5">
-                                            {dirty
-                                                ? "尚有修改未保存"
-                                                : "已选内容已同步"}
-                                        </p>
-                                    </div>
-                                )}
+                                <p className="text-sm sm:text-base font-bold text-primary leading-none">
+                                    已选 {selectedCount} 项
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                    {dirty
+                                        ? "尚有修改未保存"
+                                        : "已选内容已同步"}
+                                </p>
                             </div>
                         </button>
 
@@ -1051,7 +948,7 @@ export const SelectionForm = ({
                                 }
                                 variant="outline"
                                 className="rounded-full"
-                                disabled={locked || conflict || overBudget}
+                                disabled={locked || conflict}
                                 onClick={() => persist(false)}
                             >
                                 保存选择
@@ -1066,7 +963,7 @@ export const SelectionForm = ({
                                         mutation.variables.confirm
                                     }
                                     className="rounded-full"
-                                    disabled={locked || conflict || overBudget}
+                                    disabled={locked || conflict}
                                     onClick={() => persist(true)}
                                 >
                                     核对并提交
@@ -1097,7 +994,6 @@ export const SelectionForm = ({
                     message={message}
                     request={request}
                     reconciling={reconciling}
-                    recipientForm={recipientForm}
                     onRecover={() => {
                         if (request) {
                             setReconciling(true)
@@ -1166,11 +1062,6 @@ export const SelectionForm = ({
                                     <span className="text-2xl">
                                         {detailItem.price}
                                     </span>
-                                    {mall && (
-                                        <span className="ml-2 text-xs text-muted-foreground font-normal">
-                                            商城兑换参考价值
-                                        </span>
-                                    )}
                                 </div>
                                 {detailItem.tier_name && (
                                     <Badge>{detailItem.tier_name}</Badge>
@@ -1288,11 +1179,9 @@ export const SelectionForm = ({
                                             </p>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            {!mall && (
-                                                <span className="text-xs font-semibold text-foreground bg-muted px-2 py-0.5 rounded-md">
-                                                    {pick?.quantity} 份
-                                                </span>
-                                            )}
+                                            <span className="text-xs font-semibold text-foreground bg-muted px-2 py-0.5 rounded-md">
+                                                {pick?.quantity} 份
+                                            </span>
                                             <Button
                                                 id={`sales-selection-public-cart-remove-${toAutomationIdSegment(item.item_id)}`}
                                                 variant="ghost"

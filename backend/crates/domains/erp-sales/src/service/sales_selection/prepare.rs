@@ -36,7 +36,7 @@ impl SalesSelectionService {
         let published = self
             .db
             .sales_selection_booklets()
-            .list_filtered(None, None, Some("PUBLISHED"), None, &mut executor)
+            .list_filtered(None, None, Some("PUBLISHED"), &mut executor)
             .await?;
 
         let mut handled = 0_u32;

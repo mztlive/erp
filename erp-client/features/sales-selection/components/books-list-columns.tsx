@@ -20,7 +20,6 @@ import type { SelectionBook } from "@/features/sales-selection/types"
 import {
     BOOKLET_STATUS_LABEL,
     SELECTION_FORM_LABEL,
-    SUBMIT_MODE_LABEL,
 } from "@/features/sales-selection/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
@@ -93,16 +92,6 @@ export function buildBooksListColumns({
                     value={
                         SELECTION_FORM_LABEL[book.selection_form ?? book.form]
                     }
-                />
-            ),
-        },
-        {
-            id: "submitMode",
-            header: "提交方式",
-            meta: { label: "提交方式", width: "status" },
-            cell: ({ row }) => (
-                <TableTextCell
-                    value={SUBMIT_MODE_LABEL[row.original.submit_mode]}
                 />
             ),
         },

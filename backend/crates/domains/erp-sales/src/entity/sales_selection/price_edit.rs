@@ -122,8 +122,7 @@ mod tests {
 
     use super::*;
     use crate::entity::sales_selection::{
-        PackageCoverRef, SelectionReferencePrices, SessionChoice, SkuSnapshot, SubmitMode,
-        build_proposal_lines,
+        PackageCoverRef, SelectionReferencePrices, SessionChoice, SkuSnapshot, build_proposal_lines,
     };
 
     fn amount(value: &str) -> Amount {
@@ -307,20 +306,15 @@ mod tests {
             display_item_id: SalesSelectionDisplayItemId::new("package"),
             quantity: Some(2),
         }];
-        for mode in [SubmitMode::ByQuantity, SubmitMode::PickupVoucher] {
-            let (display, sku, total) = build_proposal_lines(
-                &SalesSelectionProposalId::new("proposal"),
-                mode,
-                &choices,
-                &items,
-                || "line".into(),
-            )
+        let (display, sku, total) =
+            build_proposal_lines(&SalesSelectionProposalId::new("proposal"), &choices, &items, || {
+                "line".into()
+            })
             .unwrap();
-            assert_eq!(total, Some(amount("70.30")));
-            assert_eq!(display[0].unit_price, amount("35.15"));
-            assert_eq!(sku[0].unit_price, amount("15"));
-            assert_eq!(sku[0].line_amount, Some(amount("30")));
-        }
+        assert_eq!(total, amount("70.30"));
+        assert_eq!(display[0].unit_price, amount("35.15"));
+        assert_eq!(sku[0].unit_price, amount("15"));
+        assert_eq!(sku[0].line_amount, Some(amount("30")));
     }
 
     #[test]

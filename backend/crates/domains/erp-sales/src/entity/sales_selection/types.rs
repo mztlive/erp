@@ -37,16 +37,13 @@ impl SelectionForm {
     }
 }
 
-/// 提交方式：创建时选定，之后不可改。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// 提交方式：当前仅支持按份采购。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum SubmitMode {
     /// 按份采购：客户填写每个已选项的份数。
+    #[default]
     ByQuantity,
-    /// 商城兑换：客户只勾选范围，不填份数。
-    MallRedeem,
-    /// 提货券：每人独立选择，按个人额度生成方案。
-    PickupVoucher,
 }
 
 impl SubmitMode {
@@ -54,8 +51,6 @@ impl SubmitMode {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ByQuantity => "BY_QUANTITY",
-            Self::MallRedeem => "MALL_REDEEM",
-            Self::PickupVoucher => "PICKUP_VOUCHER",
         }
     }
 
@@ -63,15 +58,7 @@ impl SubmitMode {
     pub fn label(self) -> &'static str {
         match self {
             Self::ByQuantity => "按份采购",
-            Self::MallRedeem => "商城兑换",
-            Self::PickupVoucher => "提货券",
         }
-    }
-
-    /// 判断是否要求份数。
-    /// 结果：按份采购返回 `true`。
-    pub fn requires_quantity(self) -> bool {
-        matches!(self, Self::ByQuantity | Self::PickupVoucher)
     }
 }
 
@@ -257,11 +244,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn voucher_requires_quantity_and_has_stable_code() {
-        assert!(SubmitMode::PickupVoucher.requires_quantity());
-        assert_eq!(SubmitMode::PickupVoucher.as_str(), "PICKUP_VOUCHER");
-        assert_eq!(SubmitMode::PickupVoucher.label(), "提货券");
-        assert!(!SubmitMode::MallRedeem.requires_quantity());
+    fn by_quantity_is_the_only_supported_submit_mode() {
+        assert_eq!(SubmitMode::default(), SubmitMode::ByQuantity);
+        assert_eq!(SubmitMode::ByQuantity.as_str(), "BY_QUANTITY");
+        assert_eq!(SubmitMode::ByQuantity.label(), "按份采购");
+        assert!(serde_json::from_str::<SubmitMode>(r#""BY_QUANTITY""#).is_ok());
+        assert!(serde_json::from_str::<SubmitMode>(r#""MALL_REDEEM""#).is_err());
+        assert!(serde_json::from_str::<SubmitMode>(r#""PICKUP_VOUCHER""#).is_err());
     }
 
     #[test]

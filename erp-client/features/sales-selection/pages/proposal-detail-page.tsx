@@ -24,7 +24,7 @@ import { isNotFoundError } from "@/lib/api/errors"
 import { ProposalItems } from "@/features/sales-selection/components/proposal-items"
 import { ProposalSummary } from "@/features/sales-selection/components/proposal-summary"
 import { useProposalQuery } from "@/features/sales-selection/queries"
-import { FORM_LABEL, SUBMIT_MODE_LABEL } from "@/features/sales-selection/types"
+import { FORM_LABEL } from "@/features/sales-selection/types"
 
 async function copyProposalNumber(proposalNo: string) {
     try {
@@ -145,7 +145,6 @@ export function ProposalDetailPage({
         account.data?.permissions,
         "sales_order:create",
     )
-    const isQuantitySubmit = proposal.submit_mode === "BY_QUANTITY"
     const hasLines = proposal.display_lines.length > 0
 
     return (
@@ -169,7 +168,7 @@ export function ProposalDetailPage({
                     </Button>
                 }
                 primaryAction={
-                    isQuantitySubmit && canCreateOrderPermission ? (
+                    canCreateOrderPermission ? (
                         <GuardedBusinessAction
                             id="selection-proposal-create-order"
                             size="sm"
@@ -195,9 +194,6 @@ export function ProposalDetailPage({
                     <span className="inline-flex flex-wrap items-center gap-1.5">
                         <Badge variant="secondary">
                             {FORM_LABEL[proposal.form]}
-                        </Badge>
-                        <Badge variant="secondary">
-                            {SUBMIT_MODE_LABEL[proposal.submit_mode]}
                         </Badge>
                     </span>
                 }

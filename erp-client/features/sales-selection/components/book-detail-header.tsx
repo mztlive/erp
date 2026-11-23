@@ -41,7 +41,6 @@ import {
     BOOKLET_STATUS_LABEL,
     POOL_SOURCE_LABEL,
     SELECTION_FORM_LABEL,
-    SUBMIT_MODE_LABEL,
 } from "@/features/sales-selection/types"
 
 type Operations = ReturnType<typeof useBookOperations>
@@ -55,7 +54,6 @@ export function BookDetailHeader({
     pending,
     permissions,
     operations,
-    tabs,
     onEdit,
     onCopy,
     onOpenInfo,
@@ -71,7 +69,6 @@ export function BookDetailHeader({
     pending: boolean
     permissions: readonly string[] | undefined
     operations: Operations
-    tabs?: React.ReactNode
     onEdit: () => void
     onCopy?: () => void
     onOpenInfo: () => void
@@ -86,7 +83,6 @@ export function BookDetailHeader({
     const [moreOpen, setMoreOpen] = React.useState(false)
     const bookId = bookIdentity(detail)
     const formLabel = SELECTION_FORM_LABEL[detail.selection_form]
-    const modeLabel = SUBMIT_MODE_LABEL[detail.submit_mode]
     const failure = prepareFailure(detail)
 
     const can = (action: string) =>
@@ -439,7 +435,6 @@ export function BookDetailHeader({
             titleExtra={
                 <span className="inline-flex flex-wrap items-center gap-1.5">
                     <Badge variant="secondary">{formLabel}</Badge>
-                    <Badge variant="secondary">{modeLabel}</Badge>
                 </span>
             }
             meta={
@@ -470,7 +465,6 @@ export function BookDetailHeader({
                     ]}
                 />
             }
-            tabs={tabs}
             primaryAction={primaryAction}
             secondaryActions={secondaryActions}
         />

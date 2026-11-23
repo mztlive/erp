@@ -15,7 +15,8 @@ export async function downloadReceipt(
         { width: 30 },
         { width: 34 },
         { width: 46 },
-        ...(content.byQuantity ? [{ width: 16 }, { width: 20 }] : []),
+        { width: 16 },
+        { width: 20 },
     ]
     const columnCount = sheet.columns.length
     const addHeading = (text: string, size = 12) => {
@@ -30,25 +31,13 @@ export async function downloadReceipt(
     sheet.addRow(["方案编号", receipt.proposal_no])
     sheet.addRow(["提交时间", content.submittedAt])
     sheet.addRow(["状态", "选品已提交"])
-    if (receipt.recipient) {
-        sheet.addRow(["收件人", receipt.recipient.name])
-        sheet.addRow(["联系电话", receipt.recipient.phone])
-        sheet.addRow([
-            "收件地址",
-            [
-                receipt.recipient.province,
-                receipt.recipient.city,
-                receipt.recipient.district,
-                receipt.recipient.address,
-            ].join(" "),
-        ])
-    }
     sheet.addRow([])
     const header = sheet.addRow([
         "商品名称",
         "规格",
         "套餐明细",
-        ...(content.byQuantity ? ["数量（份）", "金额（含税，元）"] : []),
+        "数量（份）",
+        "金额（含税，元）",
     ])
     header.font = { name: "微软雅黑", bold: true }
     header.height = 28
@@ -71,22 +60,19 @@ export async function downloadReceipt(
                         .join(" · "),
                 )
                 .join("\n"),
-            ...(content.byQuantity
-                ? [item.quantity ?? "—", item.amount ?? "—"]
-                : []),
+            item.quantity ?? "—",
+            item.amount ?? "—",
         ])
     }
-    if (content.byQuantity) {
-        const total = sheet.addRow([
-            "合计（含税）",
-            "",
-            "",
-            content.quantity ?? "—",
-            content.total ?? "—",
-        ])
-        total.font = { name: "微软雅黑", bold: true }
-        total.height = 28
-    }
+    const total = sheet.addRow([
+        "合计（含税）",
+        "",
+        "",
+        content.quantity ?? "—",
+        content.total ?? "—",
+    ])
+    total.font = { name: "微软雅黑", bold: true }
+    total.height = 28
     sheet.addRow([])
     sheet.addRow(["选品结果已保存。如需调整，请联系销售。"])
     sheet.mergeCells(sheet.rowCount, 1, sheet.rowCount, columnCount)

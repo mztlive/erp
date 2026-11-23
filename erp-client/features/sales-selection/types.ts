@@ -2,7 +2,7 @@ import type { PriceFilterKind } from "@/lib/price-filter"
 import type { DeliveryExtent } from "@/lib/delivery-coverage"
 
 export type SelectionForm = "SINGLE_SKU" | "PACKAGE"
-export type SubmitMode = "BY_QUANTITY" | "MALL_REDEEM" | "PICKUP_VOUCHER"
+export type SubmitMode = "BY_QUANTITY"
 export type PoolSourceKind = "FILTER" | "SELECTION"
 export type BookletStatus =
     | "DRAFT"
@@ -90,17 +90,7 @@ export type PublicDisplayItemView = {
     >[]
 }
 
-export type SelectionRecipient = {
-    name: string
-    phone: string
-    province: string
-    city: string
-    district: string
-    address: string
-}
-
 export type PublicReceiptView = {
-    recipient?: SelectionRecipient | null
     proposal_no: string
     submitted_at: number
     customer_name: string
@@ -111,8 +101,6 @@ export type PublicReceiptView = {
 export type BookletView = {
     source_skus?: SourceSku[]
     access_password_set: boolean
-    per_person_budget?: string | null
-    voucher_count?: number | null
     pool_filter?: PoolFilterSnapshot | null
     sku_ids?: string[]
     id: string
@@ -170,10 +158,6 @@ export type PublicChoiceView = {
 }
 
 export type PublicPageView = {
-    participant_id?: string | null
-    recipient?: SelectionRecipient | null
-    voucher_required: boolean
-    per_person_budget?: string | null
     kind: PublicPageKind
     customer_name?: string | null
     form?: SelectionForm | null
@@ -187,8 +171,6 @@ export type PublicPageView = {
 }
 
 export type ProposalView = {
-    participant_id?: string | null
-    recipient?: SelectionRecipient | null
     id: string
     proposal_no: string
     customer_id: string
@@ -239,8 +221,6 @@ export const FORM_LABEL: Record<SelectionForm, string> = {
 
 export const SUBMIT_MODE_LABEL: Record<SubmitMode, string> = {
     BY_QUANTITY: "按份采购",
-    MALL_REDEEM: "商城兑换",
-    PICKUP_VOUCHER: "提货券",
 }
 
 export const SELECTION_FORM_LABEL = FORM_LABEL
@@ -253,7 +233,6 @@ export type BookListQuery = {
     q?: string
     customer_id?: string
     selection_form?: SelectionForm | "ALL"
-    submit_mode?: SubmitMode | "ALL"
     status?: BookletStatus | "ALL"
     page?: number
     page_size?: number
@@ -294,8 +273,6 @@ export type SelectionBookDetail = BookletView & {
 
 export type CreateBookInput = {
     access_password: string
-    per_person_budget?: string
-    voucher_count?: number
     customer_id: string
     selection_form: SelectionForm
     submit_mode: SubmitMode
@@ -330,23 +307,6 @@ export type DisplayItem = {
     unit?: string | null
     members: DisplayMemberView[]
     missing_image: boolean
-}
-
-export type BookVoucherView = {
-    voucher_code: string
-    submitted: boolean
-    proposal_id?: string | null
-}
-
-export type BookSelectionDetailView = {
-    participant_id: string
-    voucher_code: string | null
-    proposal_id: string
-    proposal_no: string
-    submitted_at: number
-    recipient: SelectionRecipient | null
-    total_amount?: string | null
-    items: ProposalView["sku_lines"]
 }
 
 export type PublicUnlockView = {

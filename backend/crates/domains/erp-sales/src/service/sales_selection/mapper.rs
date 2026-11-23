@@ -88,8 +88,6 @@ impl SalesSelectionService {
             form: head.form,
             submit_mode: head.submit_mode,
             access_password_set: booklet.access_password_hash.is_some(),
-            per_person_budget: booklet.per_person_budget,
-            voucher_count: booklet.voucher_count,
             status: head.status,
             proposal_id: booklet.proposal_id.as_ref().map(ToString::to_string),
             created_at: booklet.base.created_at,
@@ -128,8 +126,6 @@ impl SalesSelectionService {
             form: head.form,
             submit_mode: head.submit_mode,
             access_password_set: booklet.access_password_hash.is_some(),
-            per_person_budget: booklet.per_person_budget,
-            voucher_count: booklet.voucher_count,
             status: head.status,
             pool_source_kind: booklet.pool_source.kind,
             source_kind: booklet.pool_source.kind,
@@ -179,8 +175,6 @@ impl SalesSelectionService {
             business_org_unit_id: proposal.business_org_unit_id.clone(),
             form: proposal.form,
             submit_mode: proposal.submit_mode,
-            participant_id: proposal.participant_id.clone(),
-            recipient: proposal.recipient.clone(),
             submitted_at: proposal.submitted_at,
             source: proposal.source,
             total_amount: proposal.total_amount,
@@ -189,8 +183,8 @@ impl SalesSelectionService {
         }
     }
 
-    /// 方案列表仅装配表头和汇总字段，不提供详细个人收件信息。
-    /// 返回不含个人收件信息的列表行。
+    /// 方案列表仅装配表头和汇总字段。
+    /// 返回方案列表行。
     ///
     /// 输入约定：
     /// - `proposal`：表头
@@ -204,12 +198,11 @@ impl SalesSelectionService {
             business_org_unit_id: proposal.business_org_unit_id.clone(),
             form: proposal.form,
             submit_mode: proposal.submit_mode,
-            participant_id: proposal.participant_id.clone(),
             submitted_at: proposal.submitted_at,
         }
     }
 
-    /// 按公开页状态组装客户可见内容，结束或锁定时不展开个人选择与收件信息。
+    /// 按公开页状态组装客户可见内容，结束或锁定时不展开选择与回执。
     /// 返回不含内部字段的公开视图。
     ///
     /// 输入约定：
@@ -236,11 +229,6 @@ impl SalesSelectionService {
                 choices: Vec::new(),
                 total_amount: None,
                 receipt: None,
-                voucher_required: kind == PublicSelectionPageKind::Locked
-                    && booklet.submit_mode == SubmitMode::PickupVoucher,
-                per_person_budget: None,
-                participant_id: None,
-                recipient: None,
             };
         }
 
@@ -265,10 +253,6 @@ impl SalesSelectionService {
                 .unwrap_or_default(),
             total_amount: None,
             receipt,
-            voucher_required: booklet.submit_mode == SubmitMode::PickupVoucher,
-            per_person_budget: booklet.per_person_budget,
-            participant_id: session.map(|item| item.participant_id.clone()),
-            recipient: session.and_then(|item| item.recipient.clone()),
         }
     }
 }
@@ -497,7 +481,7 @@ mod tests {
     use super::*;
     use crate::entity::sales_selection::{
         PoolFilterSnapshot, PoolSource, PoolSourceKind, SalesSelectionBookletData,
-        SalesSelectionProposalData, SelectionRecipient, SessionChoice,
+        SalesSelectionProposalData, SessionChoice,
     };
 
     fn published_booklet() -> SalesSelectionBooklet {
@@ -510,10 +494,8 @@ mod tests {
                 sales_owner_user_id: "sales".into(),
                 business_org_unit_id: "org".into(),
                 form: SelectionForm::SingleSku,
-                submit_mode: SubmitMode::PickupVoucher,
+                submit_mode: SubmitMode::ByQuantity,
                 access_password_hash: Some("password-hash".into()),
-                per_person_budget: Some("50.00".parse().unwrap()),
-                voucher_count: Some(2),
                 pool_source: PoolSource::new(
                     PoolSourceKind::Filter,
                     Some(PoolFilterSnapshot::default()),
@@ -587,25 +569,16 @@ mod tests {
     }
 
     #[test]
-    fn locked_and_ended_views_redact_session_receipt_and_address() {
+    fn locked_and_ended_views_redact_session_and_receipt() {
         let book = published_booklet();
         let mut session = SalesSelectionSession::new(
             SalesSelectionSessionId::new("session"),
             SalesSelectionBookletId::new("book"),
         );
-        session.participant_id = "person".into();
         session.choices = vec![SessionChoice {
             display_item_id: SalesSelectionDisplayItemId::new("item"),
             quantity: Some(2),
         }];
-        session.recipient = Some(SelectionRecipient {
-            name: "张三".into(),
-            phone: "13800138000".into(),
-            province: "浙江省".into(),
-            city: "杭州市".into(),
-            district: "西湖区".into(),
-            address: "文三路1号".into(),
-        });
         let receipt = PublicReceiptView {
             proposal_no: "XP1".into(),
             submitted_at: Instant::from_unix_secs(100),
@@ -622,8 +595,7 @@ mod tests {
                 SalesSelectionService::public_page(kind, &book, &[], Some(&session), Some(receipt.clone()));
             assert!(view.items.is_empty() && view.choices.is_empty());
             assert!(view.customer_name.is_none() && view.submit_mode.is_none());
-            assert!(view.participant_id.is_none() && view.recipient.is_none() && view.receipt.is_none());
-            assert!(view.total_amount.is_none() && view.per_person_budget.is_none());
+            assert!(view.receipt.is_none() && view.total_amount.is_none());
         }
     }
 
@@ -640,15 +612,7 @@ mod tests {
     }
 
     #[test]
-    fn proposal_list_omits_recipient_while_detail_preserves_snapshot() {
-        let recipient = SelectionRecipient {
-            name: "张三".into(),
-            phone: "13800138000".into(),
-            province: "浙江省".into(),
-            city: "杭州市".into(),
-            district: "西湖区".into(),
-            address: "文三路1号".into(),
-        };
+    fn proposal_views_project_header_and_total() {
         let proposal = SalesSelectionProposal::new(
             SalesSelectionProposalId::new("proposal-1"),
             SalesSelectionProposalData {
@@ -660,9 +624,7 @@ mod tests {
                 business_org_unit_id: "org-1".into(),
                 batch_id: "batch-1".into(),
                 form: SelectionForm::SingleSku,
-                submit_mode: SubmitMode::PickupVoucher,
-                participant_id: "person-1".into(),
-                recipient: Some(recipient.clone()),
+                submit_mode: SubmitMode::ByQuantity,
                 session_version: 2,
                 submitted_at: Instant::from_unix_secs(100),
                 total_amount: Some("50.00".parse().unwrap()),
@@ -671,15 +633,10 @@ mod tests {
         .unwrap();
 
         let list = serde_json::to_value(SalesSelectionService::proposal_list_item(&proposal)).unwrap();
-        assert!(list.get("recipient").is_none());
-        assert_eq!(list["participant_id"], "person-1");
-        let list_json = serde_json::to_string(&list).unwrap();
-        let recipient_json = serde_json::to_value(&recipient).unwrap();
-        for value in recipient_json.as_object().unwrap().values() {
-            assert!(!list_json.contains(value.as_str().unwrap()));
-        }
+        assert_eq!(list["proposal_no"], "XP1");
+        assert_eq!(list["submit_mode"], "BY_QUANTITY");
 
         let detail = serde_json::to_value(SalesSelectionService::proposal_view(&proposal, &[], &[])).unwrap();
-        assert_eq!(detail["recipient"], recipient_json);
+        assert_eq!(detail["total_amount"], "50.00");
     }
 }

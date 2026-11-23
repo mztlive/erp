@@ -43,8 +43,6 @@ impl SalesSelectionBooklet {
                 form: self.form,
                 submit_mode: self.submit_mode,
                 access_password_hash: self.access_password_hash.clone(),
-                per_person_budget: self.per_person_budget,
-                voucher_count: self.voucher_count,
                 pool_source: self.pool_source.clone(),
                 tiers: self.tiers.clone(),
                 created_by: actor_id.to_owned(),
@@ -108,10 +106,8 @@ mod tests {
                 sales_owner_user_id: "sales-owner".into(),
                 business_org_unit_id: "sales-org".into(),
                 form: SelectionForm::Package,
-                submit_mode: SubmitMode::PickupVoucher,
+                submit_mode: SubmitMode::ByQuantity,
                 access_password_hash: Some("existing-slow-password-hash".into()),
-                per_person_budget: Some("100.00".parse().unwrap()),
-                voucher_count: Some(20),
                 pool_source: PoolSource::new(
                     PoolSourceKind::Filter,
                     Some(PoolFilterSnapshot { q: Some("保温杯".into()), ..Default::default() }),
@@ -186,8 +182,6 @@ mod tests {
             assert_eq!(copied.form, original.form);
             assert_eq!(copied.submit_mode, original.submit_mode);
             assert_eq!(copied.access_password_hash, original.access_password_hash);
-            assert_eq!(copied.per_person_budget, original.per_person_budget);
-            assert_eq!(copied.voucher_count, original.voucher_count);
             assert_eq!(copied.pool_source, original.pool_source);
             assert_eq!(copied.tiers, original.tiers);
             assert_eq!(copied.eligibility_as_of, original.eligibility_as_of);
@@ -221,8 +215,6 @@ mod tests {
         let mut original = source();
         original.form = SelectionForm::SingleSku;
         original.submit_mode = SubmitMode::ByQuantity;
-        original.per_person_budget = None;
-        original.voucher_count = None;
         original.tiers.clear();
         original.status = BookletStatus::Draft;
         original.current_batch_id = None;

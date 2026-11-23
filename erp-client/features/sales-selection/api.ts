@@ -1,10 +1,5 @@
 import { apiGet, apiPost, getApiBaseUrl } from "@/lib/api"
-import type {
-    ProposalView,
-    PublicPageView,
-    PublicUnlockView,
-    SelectionRecipient,
-} from "./types"
+import type { ProposalView, PublicPageView, PublicUnlockView } from "./types"
 const proposals = "/admin/sales-selection-proposals"
 const publicBase = "/public/selection"
 
@@ -49,7 +44,7 @@ export async function savePublicSession(
     input: {
         idempotencyKey: string
         expectedSessionVersion: number
-        choices: Array<{ item_id: string; quantity?: number }>
+        choices: Array<{ item_id: string; quantity: number }>
     },
 ): Promise<PublicPageView> {
     return publicPageView(
@@ -71,7 +66,6 @@ export async function submitPublicSession(
     input: {
         idempotencyKey: string
         expectedSessionVersion: number
-        recipient?: SelectionRecipient
     },
 ): Promise<PublicPageView> {
     return publicPageView(
@@ -80,7 +74,6 @@ export async function submitPublicSession(
             {
                 idempotency_key: input.idempotencyKey,
                 expected_session_version: input.expectedSessionVersion,
-                recipient: input.recipient,
             },
             { session: "none", headers: selectionHeaders(accessToken) },
         ),
@@ -92,7 +85,7 @@ const selectionHeaders = (accessToken?: string): Record<string, string> =>
 
 export async function unlockPublicSelection(
     token: string,
-    input: { password: string; voucher_code?: string },
+    input: { password: string },
 ): Promise<PublicUnlockView> {
     const result = await apiPost<PublicUnlockView>(
         `${publicBase}/${encodeURIComponent(token)}/unlock`,

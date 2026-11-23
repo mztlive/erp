@@ -15,8 +15,6 @@ import {
     deleteDisplayItem,
     fetchBookDetail,
     setBookAccessPassword,
-    fetchBookVouchers,
-    fetchBookSelectionDetails,
     fetchBooks,
     publishBook,
     replaceBookLink,
@@ -42,10 +40,6 @@ export const salesSelectionKeys = {
         [...salesSelectionKeys.all, "list", query] as const,
     detail: (bookId: string) =>
         [...salesSelectionKeys.all, "detail", bookId] as const,
-    vouchers: (bookId: string) =>
-        [...salesSelectionKeys.all, "vouchers", bookId] as const,
-    selectionDetails: (bookId: string) =>
-        [...salesSelectionKeys.all, "selection-details", bookId] as const,
     preview: (token: string) =>
         [...salesSelectionKeys.all, "preview", token] as const,
     proposal: (proposalId: string) =>
@@ -462,16 +456,3 @@ export const useBookOperations = () => {
         copyLink,
     }
 }
-
-export const useBookVouchers = (bookId: string, enabled = true) =>
-    useQuery({
-        queryKey: salesSelectionKeys.vouchers(bookId),
-        queryFn: () => fetchBookVouchers(bookId),
-        enabled: Boolean(bookId) && enabled,
-    })
-export const useBookSelectionDetails = (bookId: string, enabled = true) =>
-    useQuery({
-        queryKey: salesSelectionKeys.selectionDetails(bookId),
-        queryFn: () => fetchBookSelectionDetails(bookId),
-        enabled: Boolean(bookId) && enabled,
-    })

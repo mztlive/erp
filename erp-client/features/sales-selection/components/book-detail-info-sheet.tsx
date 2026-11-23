@@ -30,7 +30,6 @@ import {
     BOOKLET_STATUS_LABEL,
     POOL_SOURCE_LABEL,
     SELECTION_FORM_LABEL,
-    SUBMIT_MODE_LABEL,
 } from "@/features/sales-selection/types"
 
 type Operations = ReturnType<typeof useBookOperations>
@@ -85,7 +84,7 @@ export function BookDetailInfoSheet({
             onOpenChange={onOpenChange}
             size="preview"
             title={detail.customer_name}
-            description={`选品册资料 · ${SELECTION_FORM_LABEL[detail.selection_form]} · ${SUBMIT_MODE_LABEL[detail.submit_mode]}`}
+            description={`选品册资料 · ${SELECTION_FORM_LABEL[detail.selection_form]}`}
             summary={
                 <div className="flex flex-wrap items-center gap-2">
                     <BusinessStatusBadge

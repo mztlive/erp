@@ -109,31 +109,20 @@ fn task_indexes() -> Vec<IndexModel> {
     ]
 }
 
-// 按册及参与人确保独立会话唯一，并为提货码查询维持全局唯一约束。
+// 确保每本选品册至多一个会话。
 fn session_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_selection_sessions_id", doc! { "id": 1 }),
-        unique_index(
-            "uk_sales_selection_sessions_participant",
-            doc! { "booklet_id": 1, "participant_id": 1 },
-        ),
-        unique_partial_index(
-            "uk_sales_selection_sessions_voucher_hash",
-            doc! { "voucher_code_hash": 1 },
-            doc! { "voucher_code_hash": { "$type": "string" } },
-        ),
+        unique_index("uk_sales_selection_sessions_booklet", doc! { "booklet_id": 1 }),
     ]
 }
 
-// 为按客户或责任范围读取提交方案建立索引，并约束方案编号与册内参与人组合唯一。
+// 为按客户或责任范围读取提交方案建立索引，并约束方案编号与选品册唯一。
 fn proposal_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_selection_proposals_id", doc! { "id": 1 }),
         unique_index("uk_sales_selection_proposals_no", doc! { "proposal_no": 1 }),
-        unique_index(
-            "uk_sales_selection_proposals_participant",
-            doc! { "booklet_id": 1, "participant_id": 1 },
-        ),
+        unique_index("uk_sales_selection_proposals_booklet", doc! { "booklet_id": 1 }),
         named_index("idx_sales_selection_proposals_customer", doc! { "customer_id": 1, "submitted_at": -1 }),
         named_index(
             "idx_sales_selection_proposals_owner_org",
@@ -232,23 +221,11 @@ mod tests {
         assert_ne!(options.unique, Some(true));
     }
     #[test]
-    fn participant_indexes_allow_independent_voucher_sessions_and_proposals() {
+    fn booklet_indexes_enforce_single_session_and_proposal_per_booklet() {
         for indexes in [session_indexes(), proposal_indexes()] {
-            let participant = indexes
-                .iter()
-                .find(|index| index.keys == doc! { "booklet_id": 1, "participant_id": 1 })
-                .unwrap();
-            assert_eq!(participant.options.as_ref().unwrap().unique, Some(true));
-            assert!(!indexes.iter().any(|index| index.keys == doc! { "booklet_id": 1 }));
+            let booklet = indexes.iter().find(|index| index.keys == doc! { "booklet_id": 1 }).unwrap();
+            assert_eq!(booklet.options.as_ref().unwrap().unique, Some(true));
         }
-
-        let sessions = session_indexes();
-        let code = sessions.iter().find(|index| index.keys == doc! { "voucher_code_hash": 1 }).unwrap();
-        let options = code.options.as_ref().unwrap();
-        assert_eq!(options.unique, Some(true));
-        assert_eq!(
-            options.partial_filter_expression,
-            Some(doc! { "voucher_code_hash": { "$type": "string" } })
-        );
+        assert!(!session_indexes().iter().any(|index| index.keys == doc! { "voucher_code_hash": 1 }));
     }
 }

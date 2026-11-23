@@ -23,7 +23,7 @@ pub trait SalesSelectionBookletRepositoryExt {
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Option<SalesSelectionBooklet>>;
 
-    /// 按客户、形态、状态、提交方式列表查询。
+    /// 按客户、形态、状态列表查询。
     /// 返回匹配选品册。
     /// 查询失败。
     ///
@@ -31,13 +31,11 @@ pub trait SalesSelectionBookletRepositoryExt {
     /// - `customer_id`：客户
     /// - `form`：形态代码
     /// - `status`：状态代码
-    /// - `submit_mode`：提交方式代码
     async fn list_filtered(
         &self,
         customer_id: Option<&str>,
         form: Option<&str>,
         status: Option<&str>,
-        submit_mode: Option<&str>,
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Vec<SalesSelectionBooklet>>;
 }
@@ -56,7 +54,6 @@ impl SalesSelectionBookletRepositoryExt for Repository<'_, SalesSelectionBooklet
         customer_id: Option<&str>,
         form: Option<&str>,
         status: Option<&str>,
-        submit_mode: Option<&str>,
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Vec<SalesSelectionBooklet>> {
         let mut filter = mongodb::bson::Document::new();
@@ -68,9 +65,6 @@ impl SalesSelectionBookletRepositoryExt for Repository<'_, SalesSelectionBooklet
         }
         if let Some(status) = status {
             filter.insert("status", status);
-        }
-        if let Some(submit_mode) = submit_mode {
-            filter.insert("submit_mode", submit_mode);
         }
         self.find_many(filter, executor).await
     }
@@ -241,11 +235,7 @@ impl SalesSelectionSessionRepositoryExt for Repository<'_, SalesSelectionSession
         booklet_id: &str,
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Option<SalesSelectionSession>> {
-        self.find_one(
-            mongodb::bson::doc! { "booklet_id": booklet_id, "participant_id": { "$in": ["", null] } },
-            executor,
-        )
-        .await
+        self.find_one(mongodb::bson::doc! { "booklet_id": booklet_id }, executor).await
     }
 }
 
@@ -317,11 +307,7 @@ impl SalesSelectionProposalRepositoryExt for Repository<'_, SalesSelectionPropos
         booklet_id: &str,
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Option<SalesSelectionProposal>> {
-        self.find_one(
-            mongodb::bson::doc! { "booklet_id": booklet_id, "participant_id": { "$in": ["", null] } },
-            executor,
-        )
-        .await
+        self.find_one(mongodb::bson::doc! { "booklet_id": booklet_id }, executor).await
     }
 
     async fn list_by_customer(

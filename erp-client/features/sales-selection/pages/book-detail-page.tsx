@@ -16,7 +16,6 @@ import {
     DetailWorkspacePage,
     DetailWorkspaceSection,
     DetailWorkspaceSkeleton,
-    DetailWorkspaceTabs,
     GuardedBusinessAction,
     detailWorkspaceStyles,
 } from "@/components/business"
@@ -40,7 +39,6 @@ import {
 import { useRouter } from "@/lib/navigation"
 import { hasPermission } from "@/lib/permissions"
 import { AccessPasswordDialog } from "@/features/sales-selection/components/access-password-dialog"
-import { BookDetailVoucherPanel } from "@/features/sales-selection/components/book-detail-voucher-panel"
 import { BookDetailHeader } from "@/features/sales-selection/components/book-detail-header"
 import { BookCopyDialog } from "@/features/sales-selection/components/book-copy-dialog"
 import { BookDetailInfoSheet } from "@/features/sales-selection/components/book-detail-info-sheet"
@@ -123,9 +121,6 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
         }
     }
 
-    const [activeTab, setActiveTab] = React.useState<"display" | "vouchers">(
-        "display",
-    )
     const [infoOpen, setInfoOpen] = React.useState(false)
     const [editing, setEditing] = React.useState(false)
     const [copying, setCopying] = React.useState(false)
@@ -253,7 +248,6 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
     const visibleItems = detail.items.filter((item) => !item.removed)
     const failure = prepareFailure(detail)
     const isTerminal = detail.status === "CLOSED" || detail.status === "VOIDED"
-    const isVoucherMode = detail.submit_mode === "PICKUP_VOUCHER"
     const emptyState =
         detail.status === "PREPARING"
             ? {
@@ -546,26 +540,6 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                 pending={pending}
                 permissions={permissions}
                 operations={operations}
-                tabs={
-                    isVoucherMode ? (
-                        <DetailWorkspaceTabs
-                            value={activeTab}
-                            onValueChange={(next) =>
-                                setActiveTab(
-                                    next === "vouchers"
-                                        ? "vouchers"
-                                        : "display",
-                                )
-                            }
-                            ariaLabel="选品册分区"
-                            tabIdPrefix="sales-selection-detail-tab"
-                            items={[
-                                { id: "display", label: "陈列与定价" },
-                                { id: "vouchers", label: "提货券结果" },
-                            ]}
-                        />
-                    ) : undefined
-                }
                 onOpenInfo={() => setInfoOpen(true)}
                 onEdit={() => setEditing(true)}
                 onCopy={canCopy ? () => setCopying(true) : undefined}
@@ -595,191 +569,170 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                     ) : undefined
                 }
             >
-                {!isVoucherMode || activeTab === "display" ? (
-                    <>
-                        <DetailWorkspaceSection ariaLabel="选品流程">
-                            <BookWorkflowBanner
-                                detail={detail}
-                                pending={pending}
-                                operations={operations}
-                                canPrepare={canPrepare}
-                                canCopyLink={canCopyLink}
-                                canOpenProposal={canOpenProposal}
-                                onRetryPrepare={executePrepare}
-                                onEdit={
-                                    canPrepare
-                                        ? () => setEditing(true)
-                                        : undefined
+                <DetailWorkspaceSection ariaLabel="选品流程">
+                    <BookWorkflowBanner
+                        detail={detail}
+                        pending={pending}
+                        operations={operations}
+                        canPrepare={canPrepare}
+                        canCopyLink={canCopyLink}
+                        canOpenProposal={canOpenProposal}
+                        onRetryPrepare={executePrepare}
+                        onEdit={canPrepare ? () => setEditing(true) : undefined}
+                        showFailureAlert={false}
+                    />
+                </DetailWorkspaceSection>
+                <DetailWorkspaceSection title="陈列预览">
+                    <PreviewGrid
+                        summary={
+                            <dl
+                                aria-label="陈列指标"
+                                className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
+                            >
+                                <div className="flex gap-1">
+                                    <dt>有效陈列</dt>
+                                    <dd className="num font-medium text-foreground">
+                                        {detail.display_count}
+                                    </dd>
+                                </div>
+                                <div className="flex gap-1">
+                                    <dt>已剔除</dt>
+                                    <dd className="num">
+                                        {detail.removed_count}
+                                    </dd>
+                                </div>
+                                <div
+                                    className={cn(
+                                        "flex gap-1",
+                                        detail.missing_image_count > 0 &&
+                                            "font-medium text-warning-soft-foreground",
+                                    )}
+                                >
+                                    <dt>缺少图片</dt>
+                                    <dd className="num">
+                                        {detail.missing_image_count}
+                                    </dd>
+                                </div>
+                                {detail.selection_form === "PACKAGE" ? (
+                                    <div className="flex gap-1">
+                                        <dt>选品档位</dt>
+                                        <dd className="num">
+                                            {detail.tiers.length} 档
+                                        </dd>
+                                    </div>
+                                ) : null}
+                            </dl>
+                        }
+                        actions={
+                            detail.status === "PENDING_PUBLISH" &&
+                            canMaintain &&
+                            visibleItems.length > 0 ? (
+                                <Button
+                                    id="selection-prices-markup"
+                                    variant="ghost"
+                                    className={
+                                        detailWorkspaceStyles.subtleButton
+                                    }
+                                    size="sm"
+                                    disabled={pending || !detail.batch_id}
+                                    onClick={() => setPriceEditing({})}
+                                >
+                                    统一加价
+                                </Button>
+                            ) : null
+                        }
+                        emptyState={emptyState}
+                        items={visibleItems.map((item) => ({
+                            ...item,
+                            item_id: item.item_id || item.id || "",
+                            kind: item.kind ?? "SINGLE_SKU",
+                            price_gross: item.price_gross || item.price || "0",
+                        }))}
+                        priceEditor={
+                            detail.status === "PENDING_PUBLISH" &&
+                            canMaintain &&
+                            detail.batch_id
+                                ? {
+                                      batchId: detail.batch_id,
+                                      version: detail.version,
+                                      onSubmit: handleInlinePriceSubmit,
+                                  }
+                                : undefined
+                        }
+                        selectionForm={detail.selection_form}
+                        tiers={detail.tiers}
+                        pending={pending}
+                        savingSkuIds={savingSkuIds}
+                        onEditPrice={
+                            detail.status === "PENDING_PUBLISH" &&
+                            canMaintain &&
+                            detail.batch_id
+                                ? (item) => setPriceEditing({ item })
+                                : undefined
+                        }
+                        deletingItemId={
+                            operations.deleteItem.isPending
+                                ? operations.deleteItem.variables?.itemId
+                                : undefined
+                        }
+                        regeneratingTierIds={
+                            operations.regenerate.isPending
+                                ? operations.regenerate.variables?.tier_ids
+                                : undefined
+                        }
+                        onRegenerateTier={
+                            canPrepare && detail.status === "PENDING_PUBLISH"
+                                ? (tierId, tierName) =>
+                                      setConfirmAction({
+                                          kind: "regenerateTier",
+                                          tierId,
+                                          tierName,
+                                      })
+                                : undefined
+                        }
+                        onDelete={
+                            canMaintain && detail.status === "PENDING_PUBLISH"
+                                ? (item) =>
+                                      setConfirmAction({
+                                          kind: "deleteItem",
+                                          itemId: item.item_id,
+                                          itemName: item.name,
+                                      })
+                                : undefined
+                        }
+                    />
+                </DetailWorkspaceSection>
+                <DetailWorkspaceSection
+                    title="访问密码"
+                    ariaLabel="选品册访问密码"
+                    width="form"
+                    actions={
+                        canMaintain ? (
+                            <GuardedBusinessAction
+                                id="sales-selection-detail-access-password"
+                                variant="ghost"
+                                className={detailWorkspaceStyles.subtleButton}
+                                size="sm"
+                                disabled={
+                                    pending || Boolean(passwordDisabledReason)
                                 }
-                                showFailureAlert={false}
-                            />
-                        </DetailWorkspaceSection>
-                        <DetailWorkspaceSection title="陈列预览">
-                            <PreviewGrid
-                                summary={
-                                    <dl
-                                        aria-label="陈列指标"
-                                        className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
-                                    >
-                                        <div className="flex gap-1">
-                                            <dt>有效陈列</dt>
-                                            <dd className="num font-medium text-foreground">
-                                                {detail.display_count}
-                                            </dd>
-                                        </div>
-                                        <div className="flex gap-1">
-                                            <dt>已剔除</dt>
-                                            <dd className="num">
-                                                {detail.removed_count}
-                                            </dd>
-                                        </div>
-                                        <div
-                                            className={cn(
-                                                "flex gap-1",
-                                                detail.missing_image_count >
-                                                    0 &&
-                                                    "font-medium text-warning-soft-foreground",
-                                            )}
-                                        >
-                                            <dt>缺少图片</dt>
-                                            <dd className="num">
-                                                {detail.missing_image_count}
-                                            </dd>
-                                        </div>
-                                        {detail.selection_form === "PACKAGE" ? (
-                                            <div className="flex gap-1">
-                                                <dt>选品档位</dt>
-                                                <dd className="num">
-                                                    {detail.tiers.length} 档
-                                                </dd>
-                                            </div>
-                                        ) : null}
-                                    </dl>
-                                }
-                                actions={
-                                    detail.status === "PENDING_PUBLISH" &&
-                                    canMaintain &&
-                                    visibleItems.length > 0 ? (
-                                        <Button
-                                            id="selection-prices-markup"
-                                            variant="ghost"
-                                            className={
-                                                detailWorkspaceStyles.subtleButton
-                                            }
-                                            size="sm"
-                                            disabled={
-                                                pending || !detail.batch_id
-                                            }
-                                            onClick={() => setPriceEditing({})}
-                                        >
-                                            统一加价
-                                        </Button>
-                                    ) : null
-                                }
-                                emptyState={emptyState}
-                                items={visibleItems.map((item) => ({
-                                    ...item,
-                                    item_id: item.item_id || item.id || "",
-                                    kind: item.kind ?? "SINGLE_SKU",
-                                    price_gross:
-                                        item.price_gross || item.price || "0",
-                                }))}
-                                priceEditor={
-                                    detail.status === "PENDING_PUBLISH" &&
-                                    canMaintain &&
-                                    detail.batch_id
-                                        ? {
-                                              batchId: detail.batch_id,
-                                              version: detail.version,
-                                              onSubmit: handleInlinePriceSubmit,
-                                          }
-                                        : undefined
-                                }
-                                selectionForm={detail.selection_form}
-                                tiers={detail.tiers}
-                                pending={pending}
-                                savingSkuIds={savingSkuIds}
-                                onEditPrice={
-                                    detail.status === "PENDING_PUBLISH" &&
-                                    canMaintain &&
-                                    detail.batch_id
-                                        ? (item) => setPriceEditing({ item })
-                                        : undefined
-                                }
-                                deletingItemId={
-                                    operations.deleteItem.isPending
-                                        ? operations.deleteItem.variables
-                                              ?.itemId
-                                        : undefined
-                                }
-                                regeneratingTierIds={
-                                    operations.regenerate.isPending
-                                        ? operations.regenerate.variables
-                                              ?.tier_ids
-                                        : undefined
-                                }
-                                onRegenerateTier={
-                                    canPrepare &&
-                                    detail.status === "PENDING_PUBLISH"
-                                        ? (tierId, tierName) =>
-                                              setConfirmAction({
-                                                  kind: "regenerateTier",
-                                                  tierId,
-                                                  tierName,
-                                              })
-                                        : undefined
-                                }
-                                onDelete={
-                                    canMaintain &&
-                                    detail.status === "PENDING_PUBLISH"
-                                        ? (item) =>
-                                              setConfirmAction({
-                                                  kind: "deleteItem",
-                                                  itemId: item.item_id,
-                                                  itemName: item.name,
-                                              })
-                                        : undefined
-                                }
-                            />
-                        </DetailWorkspaceSection>
-                        <DetailWorkspaceSection
-                            title="访问密码"
-                            ariaLabel="选品册访问密码"
-                            width="form"
-                            actions={
-                                canMaintain ? (
-                                    <GuardedBusinessAction
-                                        id="sales-selection-detail-access-password"
-                                        variant="ghost"
-                                        className={
-                                            detailWorkspaceStyles.subtleButton
-                                        }
-                                        size="sm"
-                                        disabled={
-                                            pending ||
-                                            Boolean(passwordDisabledReason)
-                                        }
-                                        reason={passwordDisabledReason}
-                                        onClick={() => setPasswordEditing(true)}
-                                    >
-                                        {detail.access_password_set
-                                            ? "修改密码"
-                                            : "设置密码"}
-                                    </GuardedBusinessAction>
-                                ) : null
-                            }
-                            contentClassName="space-y-2"
-                        >
-                            <p className="text-body-compact text-muted-foreground">
+                                reason={passwordDisabledReason}
+                                onClick={() => setPasswordEditing(true)}
+                            >
                                 {detail.access_password_set
-                                    ? "客户需验证访问密码后查看选品册。"
-                                    : "该选品册尚未设置密码，客户无法查看商品。请设置密码后发给客户。"}
-                            </p>
-                        </DetailWorkspaceSection>
-                    </>
-                ) : (
-                    <BookDetailVoucherPanel detail={detail} />
-                )}
+                                    ? "修改密码"
+                                    : "设置密码"}
+                            </GuardedBusinessAction>
+                        ) : null
+                    }
+                    contentClassName="space-y-2"
+                >
+                    <p className="text-body-compact text-muted-foreground">
+                        {detail.access_password_set
+                            ? "客户需验证访问密码后查看选品册。"
+                            : "该选品册尚未设置密码，客户无法查看商品。请设置密码后发给客户。"}
+                    </p>
+                </DetailWorkspaceSection>
             </DetailWorkspaceBody>
 
             <AlertDialog

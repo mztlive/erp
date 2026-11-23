@@ -7,7 +7,6 @@ use entity_macros::Entity;
 use erp_core::common::state::ensure_transition;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{CustomerAccountId, SalesSelectionBookletId, SalesSelectionProposalId};
-use erp_core::money::Amount;
 use erp_core::validation::{normalize_required_text, normalize_required_text_ref};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -34,16 +33,11 @@ pub struct SalesSelectionBookletData {
     /// 选品形态。
     pub form: SelectionForm,
     /// 提交方式。
+    #[serde(default)]
     pub submit_mode: SubmitMode,
     /// 访问密码哈希；历史选品册缺省为未设置。
     #[serde(default)]
     pub access_password_hash: Option<String>,
-    /// 提货券每人额度。
-    #[serde(default)]
-    pub per_person_budget: Option<Amount>,
-    /// 提货券发行人数。
-    #[serde(default)]
-    pub voucher_count: Option<u32>,
     /// 商品池来源。
     pub pool_source: PoolSource,
     /// 套餐档位；单品必须为空。
@@ -74,16 +68,11 @@ pub struct SalesSelectionBooklet {
     /// 选品形态。
     pub form: SelectionForm,
     /// 提交方式。
+    #[serde(default)]
     pub submit_mode: SubmitMode,
     /// 访问密码哈希；历史选品册缺省为未设置。
     #[serde(default)]
     pub access_password_hash: Option<String>,
-    /// 提货券每人额度。
-    #[serde(default)]
-    pub per_person_budget: Option<Amount>,
-    /// 提货券发行人数。
-    #[serde(default)]
-    pub voucher_count: Option<u32>,
     /// 商品池来源。
     pub pool_source: PoolSource,
     /// 档位规则。
@@ -167,7 +156,6 @@ impl SalesSelectionBooklet {
             normalize_required_text(data.sales_owner_user_id, "销售负责人不能为空", 64, "销售负责人过长")?;
         let org = normalize_required_text(data.business_org_unit_id, "业务组织不能为空", 64, "业务组织过长")?;
 
-        validate_voucher_settings(data.submit_mode, data.per_person_budget, data.voucher_count)?;
         validate_password_hash(data.access_password_hash.as_deref())?;
         let tiers = normalize_form_tiers(data.form, data.tiers)?;
 
@@ -181,8 +169,6 @@ impl SalesSelectionBooklet {
             form: data.form,
             submit_mode: data.submit_mode,
             access_password_hash: data.access_password_hash,
-            per_person_budget: data.per_person_budget,
-            voucher_count: data.voucher_count,
             pool_source: data.pool_source,
             tiers,
             status: BookletStatus::Draft,
@@ -430,13 +416,6 @@ impl SalesSelectionBooklet {
     /// - `proposal_id`：方案身份
     /// - `now`：提交时间
     pub fn mark_submitted(&mut self, proposal_id: SalesSelectionProposalId, now: Instant) -> Result<()> {
-        if self.submit_mode == SubmitMode::PickupVoucher {
-            if self.status != BookletStatus::Published {
-                return Err(Error::from("只有已发布的提货券选品册可以提交"));
-            }
-            return Ok(());
-        }
-
         if self.proposal_id.is_some() {
             return Err(Error::from("一本选品册只能有一份销售方案"));
         }
@@ -463,23 +442,6 @@ impl SalesSelectionBooklet {
 
         self.access_password_hash = Some(hash);
         self.updated_by = actor;
-        Ok(())
-    }
-
-    /// 验证服务端重算的个人选品合计。
-    /// 结果：普通模式或提货券合计不超过个人额度时通过。
-    /// 提货券缺额度、合计为负或超额度时拒绝。
-    ///
-    /// 输入约定：
-    /// - `total`：根据冻结商品价格及份数计算的合计
-    pub fn ensure_participant_total(&self, total: Amount) -> Result<()> {
-        if self.submit_mode != SubmitMode::PickupVoucher {
-            return Ok(());
-        }
-        let budget = self.per_person_budget.ok_or_else(|| Error::from("提货券每人额度未配置"))?;
-        if total < Amount::zero() || total > budget {
-            return Err(Error::from("选品金额不能超过每人额度"));
-        }
         Ok(())
     }
 
@@ -577,23 +539,6 @@ impl SalesSelectionBooklet {
     }
 }
 
-// 核对提货券固定配置。
-fn validate_voucher_settings(mode: SubmitMode, budget: Option<Amount>, count: Option<u32>) -> Result<()> {
-    if mode != SubmitMode::PickupVoucher {
-        if budget.is_some() || count.is_some() {
-            return Err(Error::from("只有提货券模式可以设置每人额度和人数"));
-        }
-        return Ok(());
-    }
-    if !budget.is_some_and(|amount| amount > Amount::zero()) {
-        return Err(Error::from("提货券每人额度必须大于零"));
-    }
-    if !count.is_some_and(|value| (1..=1000).contains(&value)) {
-        return Err(Error::from("提货券人数必须是 1 到 1000 的整数"));
-    }
-    Ok(())
-}
-
 // 保存选品册密码哈希时拒绝空字符串；仅为历史文档读取及领域构造保留 `None`。
 fn validate_password_hash(hash: Option<&str>) -> Result<()> {
     if hash.is_some_and(|value| value.trim().is_empty()) {
@@ -661,8 +606,6 @@ mod tests {
                 form: SelectionForm::SingleSku,
                 submit_mode: SubmitMode::ByQuantity,
                 access_password_hash: Some("password-hash".into()),
-                per_person_budget: None,
-                voucher_count: None,
                 pool_source: PoolSource::new(
                     PoolSourceKind::Filter,
                     Some(PoolFilterSnapshot::default()),
@@ -735,14 +678,12 @@ mod tests {
         object.remove("sales_owner_user_id");
         object.remove("business_org_unit_id");
         object.remove("access_password_hash");
-        object.remove("per_person_budget");
-        object.remove("voucher_count");
+        object.insert("per_person_budget".into(), serde_json::Value::Null);
+        object.insert("voucher_count".into(), serde_json::Value::Null);
 
         let restored: SalesSelectionBooklet =
             serde_json::from_value(value).expect("legacy booklet deserializes");
         assert!(restored.access_password_hash.is_none());
-        assert!(restored.per_person_budget.is_none());
-        assert!(restored.voucher_count.is_none());
         assert!(!restored.has_persisted_scope());
         assert!(restored.sales_owner_user_id.is_empty());
         assert!(restored.business_org_unit_id.is_empty());
@@ -760,40 +701,7 @@ mod tests {
         assert!(booklet.close(Instant::now(), "u1").is_err());
         assert!(booklet.revoke_access("u1").is_ok());
         assert_eq!(booklet.status, BookletStatus::Submitted);
-    }
-    #[test]
-    fn voucher_configuration_rejects_invalid_budgets_and_counts() {
-        let positive = "100.00".parse().unwrap();
-        assert!(validate_voucher_settings(SubmitMode::PickupVoucher, Some(positive), Some(1)).is_ok());
-        assert!(validate_voucher_settings(SubmitMode::PickupVoucher, Some(positive), Some(1000)).is_ok());
-
-        for budget in [None, Some(Amount::zero()), Some("-1.00".parse().unwrap())] {
-            assert!(validate_voucher_settings(SubmitMode::PickupVoucher, budget, Some(1)).is_err());
-        }
-
-        for count in [None, Some(0), Some(1001)] {
-            assert!(validate_voucher_settings(SubmitMode::PickupVoucher, Some(positive), count).is_err());
-        }
-        assert!(validate_voucher_settings(SubmitMode::ByQuantity, Some(positive), None).is_err());
-    }
-
-    #[test]
-    fn voucher_submission_keeps_booklet_open_and_enforces_personal_budget() {
-        let mut booklet = draft();
-        booklet.submit_mode = SubmitMode::PickupVoucher;
-        booklet.per_person_budget = Some("100.00".parse().unwrap());
-        booklet.voucher_count = Some(2);
-        assert!(booklet.mark_submitted(SalesSelectionProposalId::new("p1"), Instant::now()).is_err());
-        booklet.status = BookletStatus::Published;
-        booklet.mark_submitted(SalesSelectionProposalId::new("p1"), Instant::now()).unwrap();
-        booklet.mark_submitted(SalesSelectionProposalId::new("p2"), Instant::now()).unwrap();
-        assert_eq!(booklet.status, BookletStatus::Published);
-        assert!(booklet.proposal_id.is_none());
-        assert!(booklet.submitted_at.is_none());
-
-        assert!(booklet.ensure_participant_total("100.00".parse().unwrap()).is_ok());
-        assert!(booklet.ensure_participant_total("100.01".parse().unwrap()).is_err());
-        assert!(booklet.ensure_participant_total("-0.01".parse().unwrap()).is_err());
+        assert!(booklet.mark_submitted(SalesSelectionProposalId::new("p2"), Instant::now()).is_err());
     }
 
     #[test]
@@ -870,7 +778,9 @@ mod tests {
         assert!(!debug.contains("secret"));
     }
     #[test]
-    fn package_voucher_booklet_accepts_valid_tiers_and_personal_budget() {
+    fn package_booklet_requires_tiers() {
+        use erp_core::money::Amount;
+
         let source = draft();
         let data = SalesSelectionBookletData {
             customer_id: source.customer_id,
@@ -879,10 +789,8 @@ mod tests {
             sales_owner_user_id: source.sales_owner_user_id,
             business_org_unit_id: source.business_org_unit_id,
             form: SelectionForm::Package,
-            submit_mode: SubmitMode::PickupVoucher,
+            submit_mode: SubmitMode::ByQuantity,
             access_password_hash: source.access_password_hash,
-            per_person_budget: Some("100.00".parse().unwrap()),
-            voucher_count: Some(2),
             pool_source: source.pool_source,
             tiers: vec![TierRule {
                 tier_id: "tier-1".into(),
@@ -897,10 +805,8 @@ mod tests {
         let booklet =
             SalesSelectionBooklet::new(SalesSelectionBookletId::new("package-book"), data.clone()).unwrap();
         assert_eq!(booklet.form, SelectionForm::Package);
-        assert_eq!(booklet.submit_mode, SubmitMode::PickupVoucher);
+        assert_eq!(booklet.submit_mode, SubmitMode::ByQuantity);
         assert_eq!(booklet.tiers.len(), 1);
-        assert!(booklet.ensure_participant_total("100.00".parse().unwrap()).is_ok());
-        assert!(booklet.ensure_participant_total("100.01".parse().unwrap()).is_err());
 
         let mut no_tiers = data;
         no_tiers.tiers.clear();

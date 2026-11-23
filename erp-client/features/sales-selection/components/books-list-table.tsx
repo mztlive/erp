@@ -22,7 +22,6 @@ const DEFAULT_ORDER = [
     "customer",
     "owner",
     "form",
-    "submitMode",
     "status",
     "display",
     "proposal",

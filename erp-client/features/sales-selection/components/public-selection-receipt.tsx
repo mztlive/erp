@@ -26,11 +26,10 @@ export function PublicSelectionReceipt({
     receipt: PublicReceiptView
 }) {
     const content = receiptContent(page, receipt)
-    const recipient = page.recipient ?? receipt.recipient
     const download = useMutation({
         mutationFn: async () => {
             const { downloadReceipt } = await import("../lib/export-receipt")
-            await downloadReceipt({ ...receipt, recipient }, content)
+            await downloadReceipt(receipt, content)
         },
     })
 
@@ -106,7 +105,6 @@ export function PublicSelectionReceipt({
                                     item={item}
                                     token={token}
                                     accessToken={accessToken}
-                                    byQuantity={content.byQuantity}
                                 />
                             ))}
                         </ul>
@@ -115,41 +113,18 @@ export function PublicSelectionReceipt({
                                 暂无已提交商品，请联系销售核对。
                             </p>
                         )}
-                        {content.byQuantity && (
-                            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 border-t border-grid py-4">
-                                <span className="text-sm text-muted-foreground">
-                                    合计（含税）
-                                </span>
-                                <MoneyValue
-                                    value={content.total}
-                                    size="summary"
-                                    className="max-w-full break-all"
-                                />
-                            </div>
-                        )}
+                        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 border-t border-grid py-4">
+                            <span className="text-sm text-muted-foreground">
+                                合计（含税）
+                            </span>
+                            <MoneyValue
+                                value={content.total}
+                                size="summary"
+                                className="max-w-full break-all"
+                            />
+                        </div>
                     </section>
 
-                    {recipient && (
-                        <section
-                            className="space-y-2 border-t border-grid py-4"
-                            aria-label="收件信息"
-                        >
-                            <h3 className="text-base font-semibold">
-                                收件信息
-                            </h3>
-                            <p className="text-sm">
-                                {recipient.name} · {recipient.phone}
-                            </p>
-                            <p className="break-words text-sm text-muted-foreground">
-                                {[
-                                    recipient.province,
-                                    recipient.city,
-                                    recipient.district,
-                                    recipient.address,
-                                ].join(" ")}
-                            </p>
-                        </section>
-                    )}
                     <footer className="flex items-center gap-2 border-t border-grid py-3 text-xs text-muted-foreground">
                         <CheckCircle2
                             className="size-4 shrink-0 text-success"
@@ -178,9 +153,7 @@ export function PublicSelectionReceipt({
                         className="w-full"
                         onClick={onLock}
                     >
-                        {page.submit_mode === "PICKUP_VOUCHER"
-                            ? "更换提货码"
-                            : "退出选品"}
+                        退出选品
                     </Button>
                     <LoadingButton
                         id="sales-selection-receipt-download"
@@ -221,12 +194,10 @@ function ReceiptItem({
     item,
     token,
     accessToken,
-    byQuantity,
 }: {
     item: ReceiptContent["items"][number]
     token: string
     accessToken: string
-    byQuantity: boolean
 }) {
     const src = publicImageUrl(token, item.coverPath, accessToken)
     const [failedSrc, setFailedSrc] = React.useState<string>()
@@ -257,12 +228,10 @@ function ReceiptItem({
                     <p className="min-w-0 break-words text-sm leading-snug font-medium">
                         {item.name}
                     </p>
-                    {byQuantity && (
-                        <MoneyValue
-                            value={item.amount}
-                            className="ml-auto max-w-full break-all text-sm font-semibold"
-                        />
-                    )}
+                    <MoneyValue
+                        value={item.amount}
+                        className="ml-auto max-w-full break-all text-sm font-semibold"
+                    />
                 </div>
                 {item.quantity != null && (
                     <p className="mt-1.5 text-xs text-muted-foreground">

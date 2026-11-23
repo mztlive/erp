@@ -1,4 +1,4 @@
-//! 密码验证与绑定个人会话的公开访问凭证。
+//! 密码验证与绑定会话的公开访问凭证。
 
 use argon2::Argon2;
 use argon2::password_hash::rand_core::OsRng;
@@ -23,13 +23,13 @@ pub struct SelectionGrant {
 }
 
 impl SelectionGrant {
-    /// 在已通过密码验证后签发个人访问凭证。
+    /// 在已通过密码验证后签发公开访问凭证。
     /// 返回不可篡改的密文访问凭证。
     /// 未设置密码、会话不属于本册或加密失败时拒绝。
     ///
     /// 输入约定：
     /// - `book`：当前有效册
-    /// - `session`：经提货码确认的个人会话或共享会话
+    /// - `session`：当前选品册的会话
     /// - `now`：服务端时间
     /// - `crypto`：应用密钥派生的编解码器
     pub fn issue(
@@ -167,8 +167,6 @@ mod tests {
                 form: SelectionForm::SingleSku,
                 submit_mode: SubmitMode::ByQuantity,
                 access_password_hash: Some("salted-password-hash".into()),
-                per_person_budget: None,
-                voucher_count: None,
                 pool_source: PoolSource::new(
                     PoolSourceKind::Filter,
                     Some(PoolFilterSnapshot::default()),

@@ -5,10 +5,7 @@ mod copy;
 mod display;
 mod pricing;
 
-pub use access::{
-    ProposalItem, PublicSelectionAccessView, SalesSelectionPasswordRequest, SelectionDetailView,
-    SelectionVoucherView, UnlockSelectionRequest,
-};
+pub use access::{PublicSelectionAccessView, SalesSelectionPasswordRequest, UnlockSelectionRequest};
 use application_core::PageView;
 pub use application_core::PageView as SelectionPageView;
 pub use copy::CopySalesSelectionBookletRequest;
@@ -21,7 +18,7 @@ use validator::Validate;
 
 use crate::entity::sales_selection::{
     BookletStatus, PoolFilterSnapshot, PoolSourceKind, PrepareKind, PrepareStage, SearchStopReason,
-    SelectionForm, SelectionRecipient, SubmitMode, TierRule,
+    SelectionForm, SubmitMode, TierRule,
 };
 
 /// 创建选品册。
@@ -34,15 +31,12 @@ pub struct CreateSalesSelectionBookletRequest {
     /// 选品形态。
     #[serde(alias = "selection_form")]
     pub form: SelectionForm,
-    /// 提交方式。
+    /// 提交方式；缺省为按份采购。
+    #[serde(default)]
     pub submit_mode: SubmitMode,
     /// 所有公开选品访问必须提供的密码。
     #[validate(length(min = 8, max = 64))]
     pub access_password: String,
-    /// 提货券每人额度；其它模式禁止填写。
-    pub per_person_budget: Option<Amount>,
-    /// 提货券人数，范围 1 到 1000；其它模式禁止填写。
-    pub voucher_count: Option<u32>,
     /// 商品池来源类型。
     #[serde(alias = "source_kind", alias = "pool_source_kind")]
     pub pool_source_kind: PoolSourceKind,
@@ -185,8 +179,6 @@ pub struct SalesSelectionBookletListParams {
     pub form: Option<SelectionForm>,
     /// 状态。
     pub status: Option<BookletStatus>,
-    /// 提交方式。
-    pub submit_mode: Option<SubmitMode>,
     /// 客户名称关键字。
     pub q: Option<String>,
     /// 页码。
@@ -244,8 +236,6 @@ pub struct SubmitSelectionSessionRequest {
     pub idempotency_key: String,
     /// 预期会话版本。
     pub expected_session_version: u64,
-    /// 提货券模式必填个人收件信息，其它模式禁止提供。
-    pub recipient: Option<SelectionRecipient>,
 }
 
 /// 公开选择项。
@@ -263,7 +253,7 @@ pub struct PublicChoiceRequest {
 pub struct SalesSelectionBookletListItemView {
     /// 当前有效且未移除的陈列数量。
     pub display_count: u32,
-    /// 已关联方案的业务编号；尚未提交或个人提货模式为空。
+    /// 已关联方案的业务编号；尚未提交时为空。
     pub proposal_no: Option<String>,
     /// 身份。
     pub id: String,
@@ -287,10 +277,6 @@ pub struct SalesSelectionBookletListItemView {
     pub submit_mode: SubmitMode,
     /// 是否已设置访问密码。
     pub access_password_set: bool,
-    /// 提货券每人额度。
-    pub per_person_budget: Option<Amount>,
-    /// 提货券人数。
-    pub voucher_count: Option<u32>,
     /// 状态。
     pub status: BookletStatus,
     /// 方案身份。
@@ -345,10 +331,6 @@ pub struct SalesSelectionBookletView {
     pub submit_mode: SubmitMode,
     /// 是否已设置访问密码。
     pub access_password_set: bool,
-    /// 提货券每人额度。
-    pub per_person_budget: Option<Amount>,
-    /// 提货券人数。
-    pub voucher_count: Option<u32>,
     /// 状态。
     pub status: BookletStatus,
     /// 来源类型。
@@ -412,7 +394,7 @@ pub struct TierReportView {
     pub image_failures: u32,
 }
 
-/// 方案列表行，不包含个人收件信息。
+/// 方案列表行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SalesSelectionProposalListItemView {
     /// 身份。
@@ -431,8 +413,6 @@ pub struct SalesSelectionProposalListItemView {
     pub form: SelectionForm,
     /// 提交方式。
     pub submit_mode: SubmitMode,
-    /// 参与人身份；普通模式为空。
-    pub participant_id: String,
     /// 提交时间。
     pub submitted_at: Instant,
 }
@@ -458,10 +438,6 @@ pub struct SalesSelectionProposalView {
     pub form: SelectionForm,
     /// 提交方式。
     pub submit_mode: SubmitMode,
-    /// 参与人身份；普通模式为空。
-    pub participant_id: String,
-    /// 提货券个人收件信息。
-    pub recipient: Option<SelectionRecipient>,
     /// 提交时间。
     pub submitted_at: Instant,
     /// 提交来源。
@@ -516,7 +492,7 @@ pub struct ProposalSkuLineView {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum PublicSelectionPageKind {
-    /// 未解锁，仅返回密码与券码输入要求。
+    /// 未解锁，仅返回密码输入要求。
     Locked,
     /// 可选择。
     Selecting,
@@ -531,14 +507,6 @@ pub enum PublicSelectionPageKind {
 pub struct PublicSelectionPageView {
     /// 页面种类。
     pub kind: PublicSelectionPageKind,
-    /// 是否必须提供提货券码，未解锁时仅公开此输入要求。
-    pub voucher_required: bool,
-    /// 已解锁参与人身份；普通模式为空。
-    pub participant_id: Option<String>,
-    /// 已解锁提货券的每人额度。
-    pub per_person_budget: Option<Amount>,
-    /// 本人提交后的收件信息；未解锁时为空。
-    pub recipient: Option<SelectionRecipient>,
     /// 客户展示名称。
     pub customer_name: Option<String>,
     /// 形态。

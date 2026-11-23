@@ -1,5 +1,5 @@
 import type { ApiError } from "@/lib/api"
-import type { PublicChoiceView, SelectionRecipient } from "../types"
+import type { PublicChoiceView } from "../types"
 
 export type Pick = { selected: boolean; quantity: string }
 export type Picks = Record<string, Pick>
@@ -10,7 +10,7 @@ export type PendingSelectionRequest =
           input: {
               idempotencyKey: string
               expectedSessionVersion: number
-              choices: { item_id: string; quantity?: number }[]
+              choices: { item_id: string; quantity: number }[]
           }
       }
     | {
@@ -18,7 +18,6 @@ export type PendingSelectionRequest =
           input: {
               idempotencyKey: string
               expectedSessionVersion: number
-              recipient?: SelectionRecipient
           }
       }
 

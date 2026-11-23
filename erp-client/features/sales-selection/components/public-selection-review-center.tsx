@@ -19,18 +19,10 @@ import { LoadingButton } from "@/components/ui/loading-button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { publicImageUrl } from "../api"
-import {
-    SelectionRecipientFields,
-    useSelectionRecipientForm,
-} from "./selection-recipient-fields"
 import { compareMoney, sumAmounts } from "../lib/money"
 import type { PendingSelectionRequest } from "../lib/public-flow"
 import { inferItemCategory } from "./public-selection-summary"
-import type {
-    PublicDisplayItemView,
-    PublicPageView,
-    SelectionRecipient,
-} from "../types"
+import type { PublicDisplayItemView, PublicPageView } from "../types"
 
 export interface FloorSection {
     id: string
@@ -51,9 +43,8 @@ interface SelectionReviewCenterProps {
     request: PendingSelectionRequest | null
     reconciling: boolean
     onRecover: () => void
-    recipientForm: ReturnType<typeof useSelectionRecipientForm>
     onBack: () => void
-    onSubmit: (recipient?: SelectionRecipient) => void
+    onSubmit: () => void
     onRemoveItem: (itemId: string) => void
 }
 
@@ -71,19 +62,10 @@ export const SelectionReviewCenter = ({
     request,
     reconciling,
     onRecover,
-    recipientForm,
     onBack,
     onSubmit,
     onRemoveItem,
 }: SelectionReviewCenterProps) => {
-    const voucher = page.submit_mode === "PICKUP_VOUCHER"
-    const overBudget = Boolean(
-        voucher &&
-        page.per_person_budget &&
-        page.total_amount &&
-        compareMoney(page.total_amount, page.per_person_budget) > 0,
-    )
-    const mall = page.submit_mode === "MALL_REDEEM"
     const [searchQuery, setSearchQuery] = React.useState("")
     const [activeCategory, setActiveCategory] = React.useState<string>("ALL")
     const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>(
@@ -258,7 +240,7 @@ export const SelectionReviewCenter = ({
                                 </div>
                             </div>
                             <span className="text-tiny font-semibold text-info-soft-foreground bg-info-soft px-2 py-0.5 rounded-full border border-info-border">
-                                {mall ? "商城意向可选" : "批量采购方案"}
+                                批量采购方案
                             </span>
                         </div>
 
@@ -287,12 +269,12 @@ export const SelectionReviewCenter = ({
                             </div>
                             <div className="rounded-xl bg-info-soft/60 p-2 border border-info-border">
                                 <p className="text-xs text-primary font-medium">
-                                    {mall ? "模式" : "方案总金额"}
+                                    方案总金额
                                 </p>
                                 <p className="text-sm font-bold text-primary mt-0.5 truncate">
                                     {page.total_amount
                                         ? `¥ ${page.total_amount}`
-                                        : "意向库"}
+                                        : "—"}
                                 </p>
                             </div>
                         </div>
@@ -413,13 +395,12 @@ export const SelectionReviewCenter = ({
                                                 {group.items.length} 款
                                             </span>
                                         </div>
-                                        {!mall &&
-                                            compareMoney(group.subtotal, "0") >
-                                                0 && (
-                                                <span className="text-xs font-semibold text-primary">
-                                                    小计 ¥ {groupSubtotal}
-                                                </span>
-                                            )}
+                                        {compareMoney(group.subtotal, "0") >
+                                            0 && (
+                                            <span className="text-xs font-semibold text-primary">
+                                                小计 ¥ {groupSubtotal}
+                                            </span>
+                                        )}
                                     </button>
 
                                     {/* 分类内商品明细 */}
@@ -597,12 +578,6 @@ export const SelectionReviewCenter = ({
                         )}
                     </div>
 
-                    {voucher && (
-                        <SelectionRecipientFields
-                            form={recipientForm}
-                            disabled={locked}
-                        />
-                    )}
                     {/* 业务提醒与锁定说明 */}
                     <div className="rounded-2xl bg-warning-soft/70 p-3 border border-warning-border/60 text-warning-soft-foreground space-y-1">
                         <div className="flex items-center gap-1.5 text-xs font-bold">
@@ -631,9 +606,9 @@ export const SelectionReviewCenter = ({
                     <div className="flex items-center justify-between gap-3">
                         <div>
                             <p className="text-tiny text-muted-foreground">
-                                {mall ? "已选款式总计" : "方案总计金额（含税）"}
+                                方案总计金额（含税）
                             </p>
-                            {page.total_amount != null && !mall ? (
+                            {page.total_amount != null ? (
                                 <div className="flex items-baseline text-primary font-bold">
                                     <span className="text-xs mr-0.5 font-bold">
                                         ¥
@@ -661,15 +636,9 @@ export const SelectionReviewCenter = ({
                             <LoadingButton
                                 id="sales-selection-public-submit"
                                 className="rounded-full"
-                                disabled={
-                                    locked || conflict || dirty || overBudget
-                                }
+                                disabled={locked || conflict || dirty}
                                 loading={submitting}
-                                onClick={() =>
-                                    voucher
-                                        ? void recipientForm.handleSubmit()
-                                        : onSubmit()
-                                }
+                                onClick={() => onSubmit()}
                             >
                                 确认并提交选品
                             </LoadingButton>

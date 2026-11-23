@@ -59,12 +59,6 @@ pub const ADMIN_IMAGE: Permission = Permission::new(resources::SALES_SELECTION_B
 /// 维护选品册访问密码。
 pub const PROTECTION_BOOKLET_PASSWORD: Permission = BOOKLET_DELETE_ITEM;
 
-/// 读取选品册个人提货码。
-pub const PROTECTION_BOOKLET_VOUCHERS: Permission = BOOKLET_COPY_LINK;
-
-/// 查询选品册个人选品明细。
-pub const PROTECTION_BOOKLET_SELECTION_DETAILS: Permission = ADMIN_IMAGE;
-
 /// 复制选品册复用创建权限，原册读取范围由用例重验。
 pub const BOOKLET_COPY: Permission = BOOKLET_CREATE;
 

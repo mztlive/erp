@@ -44,7 +44,6 @@ function ProductIdentity({
 function LineValues({
     line,
     unit,
-    showQuantity,
 }: {
     line: {
         unit_price: string
@@ -52,40 +51,31 @@ function LineValues({
         line_amount?: string | null
     }
     unit?: string
-    showQuantity: boolean
 }) {
     return (
         <>
             <TableCell data-align="end">
                 <MoneyValue display="exact" value={line.unit_price} />
             </TableCell>
-            {showQuantity ? (
-                <>
-                    <TableCell data-align="end">
-                        {line.quantity != null ? (
-                            <QuantityValue
-                                value={String(line.quantity)}
-                                unit={unit}
-                            />
-                        ) : (
-                            "—"
-                        )}
-                    </TableCell>
-                    <TableCell data-align="end">
-                        <MoneyValue
-                            value={line.line_amount}
-                            className="font-semibold"
-                        />
-                    </TableCell>
-                </>
-            ) : null}
+            <TableCell data-align="end">
+                {line.quantity != null ? (
+                    <QuantityValue value={String(line.quantity)} unit={unit} />
+                ) : (
+                    "—"
+                )}
+            </TableCell>
+            <TableCell data-align="end">
+                <MoneyValue
+                    value={line.line_amount}
+                    className="font-semibold"
+                />
+            </TableCell>
         </>
     )
 }
 
 export function ProposalItems({ proposal }: { proposal: ProposalView }) {
     const isPackage = proposal.form === "PACKAGE"
-    const showQuantity = proposal.submit_mode !== "MALL_REDEEM"
     const title = isPackage ? "套餐清单" : "商品清单"
     const linesByItem = new Map<string, SkuLine[]>()
     for (const line of proposal.sku_lines) {
@@ -115,11 +105,7 @@ export function ProposalItems({ proposal }: { proposal: ProposalView }) {
                 >
                     <Table
                         data-density="comfortable"
-                        className={
-                            showQuantity
-                                ? "min-w-[560px] table-fixed"
-                                : "min-w-80 table-fixed"
-                        }
+                        className="min-w-[560px] table-fixed"
                     >
                         <TableHeader>
                             <TableRow>
@@ -129,22 +115,12 @@ export function ProposalItems({ proposal }: { proposal: ProposalView }) {
                                 <TableHead data-align="end" className="w-36">
                                     单价
                                 </TableHead>
-                                {showQuantity ? (
-                                    <TableHead
-                                        data-align="end"
-                                        className="w-24"
-                                    >
-                                        数量
-                                    </TableHead>
-                                ) : null}
-                                {showQuantity ? (
-                                    <TableHead
-                                        data-align="end"
-                                        className="w-36"
-                                    >
-                                        小计
-                                    </TableHead>
-                                ) : null}
+                                <TableHead data-align="end" className="w-24">
+                                    数量
+                                </TableHead>
+                                <TableHead data-align="end" className="w-36">
+                                    小计
+                                </TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -206,7 +182,6 @@ export function ProposalItems({ proposal }: { proposal: ProposalView }) {
                                                         ? "份"
                                                         : product?.unit
                                                 }
-                                                showQuantity={showQuantity}
                                             />
                                         </TableRow>
                                         {isPackage
@@ -231,9 +206,6 @@ export function ProposalItems({ proposal }: { proposal: ProposalView }) {
                                                           <LineValues
                                                               line={member}
                                                               unit={member.unit}
-                                                              showQuantity={
-                                                                  showQuantity
-                                                              }
                                                           />
                                                       </TableRow>
                                                   ),

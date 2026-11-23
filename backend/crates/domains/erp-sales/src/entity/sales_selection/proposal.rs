@@ -14,7 +14,6 @@ use serde::{Deserialize, Serialize};
 
 use super::display_item::{DisplayKind, SalesSelectionDisplayItem};
 use super::pricing::try_mul_u32;
-use super::recipient::SelectionRecipient;
 use super::session::SessionChoice;
 use super::types::{ProposalSource, SelectionForm, SubmitMode};
 
@@ -31,11 +30,11 @@ pub struct SalesSelectionProposalDisplayLine {
     pub cover_asset_id: Option<String>,
     /// 档位；单品为空。
     pub tier_id: Option<String>,
-    /// 份数；商城兑换为空。
+    /// 份数。
     pub quantity: Option<u32>,
     /// 售价。
     pub unit_price: Amount,
-    /// 行金额；商城兑换为空。
+    /// 行金额。
     pub line_amount: Option<Amount>,
 }
 
@@ -62,9 +61,9 @@ pub struct SalesSelectionProposalSkuLine {
     pub unit: String,
     /// 单价。
     pub unit_price: Amount,
-    /// 数量；商城兑换为空。P0 套餐成员一件，数量等于套餐份数。
+    /// 数量。P0 套餐成员一件，数量等于套餐份数。
     pub quantity: Option<u32>,
-    /// 行金额；商城兑换为空。
+    /// 行金额。
     pub line_amount: Option<Amount>,
 }
 
@@ -88,18 +87,13 @@ pub struct SalesSelectionProposalData {
     /// 选品形态。
     pub form: SelectionForm,
     /// 提交方式，必须取自选品册。
+    #[serde(default)]
     pub submit_mode: SubmitMode,
-    /// 个人参与人身份；普通模式与历史方案为空。
-    #[serde(default)]
-    pub participant_id: String,
-    /// 提货券冻结的收件信息。
-    #[serde(default)]
-    pub recipient: Option<SelectionRecipient>,
     /// 已提交会话版本。
     pub session_version: u64,
     /// 提交时间。
     pub submitted_at: Instant,
-    /// 按份采购合计；商城兑换为空。
+    /// 按份采购合计。
     pub total_amount: Option<Amount>,
 }
 
@@ -125,27 +119,22 @@ pub struct SalesSelectionProposal {
     /// 选品形态。
     pub form: SelectionForm,
     /// 提交方式，必须取自选品册。
+    #[serde(default)]
     pub submit_mode: SubmitMode,
-    /// 个人参与人身份；普通模式与历史方案为空。
-    #[serde(default)]
-    pub participant_id: String,
-    /// 提货券冻结的收件信息。
-    #[serde(default)]
-    pub recipient: Option<SelectionRecipient>,
     /// 已提交会话版本。
     pub session_version: u64,
     /// 提交时间。
     pub submitted_at: Instant,
     /// 提交来源。
     pub source: ProposalSource,
-    /// 按份采购合计；商城兑换为空。
+    /// 按份采购合计。
     pub total_amount: Option<Amount>,
 }
 
 impl SalesSelectionProposal {
-    /// 客户提交选择时用已冻结的客户、参与人及合计生成不可变方案表头。
+    /// 客户提交选择时用已冻结的客户及合计生成不可变方案表头。
     /// 返回不可改的方案表头。
-    /// 编号、销售负责人或业务组织为空，或合计与提交方式不一致时拒绝。
+    /// 编号、销售负责人或业务组织为空，或缺少合计时拒绝。
     ///
     /// 输入约定：
     /// - `id`：方案身份
@@ -155,8 +144,8 @@ impl SalesSelectionProposal {
         if proposal_no.is_empty() {
             return Err(Error::from("方案编号不能为空"));
         }
-        if data.submit_mode.requires_quantity() != data.total_amount.is_some() {
-            return Err(Error::from("方案合计必须与提交方式一致"));
+        if data.total_amount.is_none() {
+            return Err(Error::from("方案合计不能为空"));
         }
         if data.sales_owner_user_id.trim().is_empty() {
             return Err(Error::from("销售负责人不能为空"));
@@ -164,7 +153,6 @@ impl SalesSelectionProposal {
         if data.business_org_unit_id.trim().is_empty() {
             return Err(Error::from("业务组织不能为空"));
         }
-        let recipient = validate_participant(data.submit_mode, &data.participant_id, data.recipient)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -177,8 +165,6 @@ impl SalesSelectionProposal {
             batch_id: data.batch_id,
             form: data.form,
             submit_mode: data.submit_mode,
-            participant_id: data.participant_id.trim().to_string(),
-            recipient,
             session_version: data.session_version,
             submitted_at: data.submitted_at,
             source: ProposalSource::PublicLink,
@@ -187,42 +173,21 @@ impl SalesSelectionProposal {
     }
 }
 
-// 冻结销售选品方案前核对参与人和收件人字段，确保与选品册的提交模式相符。
-fn validate_participant(
-    mode: SubmitMode,
-    participant_id: &str,
-    recipient: Option<SelectionRecipient>,
-) -> Result<Option<SelectionRecipient>> {
-    if mode != SubmitMode::PickupVoucher {
-        if !participant_id.is_empty() || recipient.is_some() {
-            return Err(Error::from("普通选品方案不能携带个人提货券信息"));
-        }
-        return Ok(None);
-    }
-    if participant_id.trim().is_empty() || participant_id.chars().count() > 64 {
-        return Err(Error::from("提货券方案必须具有合法参与人身份"));
-    }
-    let recipient = recipient.ok_or_else(|| Error::from("提货券提交必须填写收件信息"))?;
-    Ok(Some(SelectionRecipient::new(recipient)?))
-}
-
 /// 由会话选择与陈列快照构建方案明细。
 /// 返回陈列项行、SKU 行与按份采购合计。
-/// 缺项、份数与方式不符或金额不平衡时拒绝。
+/// 缺项、缺份数或金额不平衡时拒绝。
 ///
 /// 输入约定：
 /// - `proposal_id`：方案
-/// - `submit_mode`：提交方式
 /// - `choices`：已保存选择
 /// - `items`：陈列项
 /// - `next_id`：明细行身份生成
 pub fn build_proposal_lines<F>(
     proposal_id: &SalesSelectionProposalId,
-    submit_mode: SubmitMode,
     choices: &[SessionChoice],
     items: &[SalesSelectionDisplayItem],
     mut next_id: F,
-) -> Result<(Vec<SalesSelectionProposalDisplayLine>, Vec<SalesSelectionProposalSkuLine>, Option<Amount>)>
+) -> Result<(Vec<SalesSelectionProposalDisplayLine>, Vec<SalesSelectionProposalSkuLine>, Amount)>
 where
     F: FnMut() -> String,
 {
@@ -239,8 +204,7 @@ where
             .iter()
             .find(|item| item.base.id == choice.display_item_id.as_ref() && item.is_publishable())
             .ok_or_else(|| Error::from("选择了无效陈列项"))?;
-        let (display_line, item_sku_lines) =
-            lines_for_choice(proposal_id, submit_mode, choice, item, &mut next_id)?;
+        let (display_line, item_sku_lines) = lines_for_choice(proposal_id, choice, item, &mut next_id)?;
 
         if let Some(amount) = display_line.line_amount {
             display_total = super::pricing::try_add(display_total, amount)?;
@@ -254,16 +218,10 @@ where
         sku_lines.extend(item_sku_lines);
     }
 
-    let total = match submit_mode {
-        SubmitMode::ByQuantity | SubmitMode::PickupVoucher => {
-            if display_total != sku_total {
-                return Err(Error::from("陈列项金额与商品金额不一致"));
-            }
-            Some(display_total)
-        },
-        SubmitMode::MallRedeem => None,
-    };
-    Ok((display_lines, sku_lines, total))
+    if display_total != sku_total {
+        return Err(Error::from("陈列项金额与商品金额不一致"));
+    }
+    Ok((display_lines, sku_lines, display_total))
 }
 
 // 为一项选择生成陈列行与 SKU 行。
@@ -272,13 +230,11 @@ where
 //
 // 输入约定：
 // - `proposal_id`：方案
-// - `submit_mode`：提交方式
 // - `choice`：选择
 // - `item`：陈列项
 // - `next_id`：身份生成
 fn lines_for_choice<F>(
     proposal_id: &SalesSelectionProposalId,
-    submit_mode: SubmitMode,
     choice: &SessionChoice,
     item: &SalesSelectionDisplayItem,
     next_id: &mut F,
@@ -286,16 +242,9 @@ fn lines_for_choice<F>(
 where
     F: FnMut() -> String,
 {
-    let quantity = choice.quantity;
-    if submit_mode.requires_quantity() != quantity.is_some() {
-        return Err(Error::from("提交方式与份数不一致"));
-    }
-
+    let copies = choice.quantity.ok_or_else(|| Error::from("按份采购必须填写份数"))?;
     let unit_price = item.price();
-    let line_amount = match quantity {
-        Some(copies) => Some(try_mul_u32(unit_price, copies)?),
-        None => None,
-    };
+    let line_amount = try_mul_u32(unit_price, copies)?;
     let display_line = SalesSelectionProposalDisplayLine {
         base: BaseModel::new(next_id()),
         proposal_id: proposal_id.clone(),
@@ -305,12 +254,12 @@ where
             DisplayKind::Package { tier_id, .. } => Some(tier_id.clone()),
             DisplayKind::SingleSku { .. } => None,
         },
-        quantity,
+        quantity: Some(copies),
         unit_price,
-        line_amount,
+        line_amount: Some(line_amount),
     };
 
-    let sku_lines = sku_lines_for_item(proposal_id, item, quantity, next_id)?;
+    let sku_lines = sku_lines_for_item(proposal_id, item, copies, next_id)?;
     Ok((display_line, sku_lines))
 }
 
@@ -326,7 +275,7 @@ where
 fn sku_lines_for_item<F>(
     proposal_id: &SalesSelectionProposalId,
     item: &SalesSelectionDisplayItem,
-    quantity: Option<u32>,
+    quantity: u32,
     next_id: &mut F,
 ) -> Result<Vec<SalesSelectionProposalSkuLine>>
 where
@@ -339,10 +288,7 @@ where
 
     let mut lines = Vec::with_capacity(members.len());
     for sku in members {
-        let line_amount = match quantity {
-            Some(copies) => Some(try_mul_u32(sku.sales_visible_price_gross, copies)?),
-            None => None,
-        };
+        let line_amount = try_mul_u32(sku.sales_visible_price_gross, quantity)?;
         lines.push(SalesSelectionProposalSkuLine {
             base: BaseModel::new(next_id()),
             proposal_id: proposal_id.clone(),
@@ -353,8 +299,8 @@ where
             specification: sku.specification_attributes.clone(),
             unit: sku.unit.clone(),
             unit_price: sku.sales_visible_price_gross,
-            quantity,
-            line_amount,
+            quantity: Some(quantity),
+            line_amount: Some(line_amount),
         });
     }
     Ok(lines)
@@ -380,9 +326,7 @@ mod tests {
     use crate::entity::sales_selection::session::SessionChoice;
     use crate::entity::sales_selection::sku_snapshot::SkuSnapshot;
     use crate::entity::sales_selection::types::SubmitMode;
-    use crate::entity::sales_selection::{
-        PackageCoverRef, SelectionForm, SelectionRecipient, SpecificationAttributeSnapshot,
-    };
+    use crate::entity::sales_selection::{PackageCoverRef, SelectionForm, SpecificationAttributeSnapshot};
 
     fn sku() -> SkuSnapshot {
         SkuSnapshot {
@@ -415,22 +359,22 @@ mod tests {
             quantity: Some(3),
         }];
         let mut seq = 0;
-        let (display, sku_lines, total) =
-            build_proposal_lines(&proposal_id, SubmitMode::ByQuantity, &choices, &[item], || {
-                seq += 1;
-                format!("id-{seq}")
-            })
-            .unwrap();
+        let (display, sku_lines, total) = build_proposal_lines(&proposal_id, &choices, &[item], || {
+            seq += 1;
+            format!("id-{seq}")
+        })
+        .unwrap();
 
-        assert_eq!(total, Some(Amount::from_str("30.00").unwrap()));
-        assert_eq!(display[0].line_amount, total);
+        assert_eq!(total, Amount::from_str("30.00").unwrap());
+        assert_eq!(display[0].line_amount, Some(total));
         assert_eq!(sku_lines[0].quantity, Some(3));
-        assert_eq!(sku_lines[0].line_amount, total);
+        assert_eq!(sku_lines[0].line_amount, Some(total));
 
         assert_eq!(seq, 2);
         assert_eq!(display[0].base.id, "id-1");
         assert_eq!(sku_lines[0].base.id, "id-2");
     }
+
     fn proposal_data() -> SalesSelectionProposalData {
         SalesSelectionProposalData {
             proposal_no: "P1".into(),
@@ -441,16 +385,7 @@ mod tests {
             business_org_unit_id: "org-1".into(),
             batch_id: "batch".into(),
             form: SelectionForm::SingleSku,
-            submit_mode: SubmitMode::PickupVoucher,
-            participant_id: "person-1".into(),
-            recipient: Some(SelectionRecipient {
-                name: "张三".into(),
-                phone: "13800138000".into(),
-                province: "浙江省".into(),
-                city: "杭州市".into(),
-                district: "西湖区".into(),
-                address: "文三路 1 号".into(),
-            }),
+            submit_mode: SubmitMode::ByQuantity,
             session_version: 2,
             submitted_at: Instant::now(),
             total_amount: Some("30.00".parse().unwrap()),
@@ -458,71 +393,23 @@ mod tests {
     }
 
     #[test]
-    fn voucher_proposal_freezes_recipient_and_requires_personal_identity() {
+    fn proposal_requires_total_amount_and_deserializes_legacy_fields() {
+        let mut missing_total = proposal_data();
+        missing_total.total_amount = None;
+        assert!(SalesSelectionProposal::new(SalesSelectionProposalId::new("p0"), missing_total).is_err());
+
         let proposal =
             SalesSelectionProposal::new(SalesSelectionProposalId::new("p1"), proposal_data()).unwrap();
-        assert_eq!(proposal.participant_id, "person-1");
-        assert_eq!(proposal.recipient.as_ref().unwrap().name, "张三");
-
-        let mut data = proposal_data();
-        data.recipient = None;
-        assert!(SalesSelectionProposal::new(SalesSelectionProposalId::new("p2"), data).is_err());
-
-        let mut data = proposal_data();
-        data.participant_id = " ".into();
-        assert!(SalesSelectionProposal::new(SalesSelectionProposalId::new("p3"), data).is_err());
-
-        let mut data = proposal_data();
-        data.submit_mode = SubmitMode::ByQuantity;
-        assert!(SalesSelectionProposal::new(SalesSelectionProposalId::new("p4"), data).is_err());
-    }
-
-    #[test]
-    fn voucher_line_amounts_match_quantity_mode_exactly() {
-        let item = SalesSelectionDisplayItem::single_sku(
-            SalesSelectionDisplayItemId::new("d1"),
-            SalesSelectionBookletId::new("b1"),
-            "batch".into(),
-            sku(),
-        )
-        .unwrap();
-        let choices = vec![SessionChoice {
-            display_item_id: SalesSelectionDisplayItemId::new("d1"),
-            quantity: Some(3),
-        }];
-        let mut sequence = 0;
-        let (display, sku_lines, total) = build_proposal_lines(
-            &SalesSelectionProposalId::new("p1"),
-            SubmitMode::PickupVoucher,
-            &choices,
-            &[item],
-            || {
-                sequence += 1;
-                format!("id-{sequence}")
-            },
-        )
-        .unwrap();
-
-        assert_eq!(total, Some("30.00".parse().unwrap()));
-        assert_eq!(display[0].line_amount, total);
-        assert_eq!(sku_lines[0].line_amount, total);
-    }
-
-    #[test]
-    fn legacy_proposal_defaults_personal_fields() {
-        let mut data = proposal_data();
-        data.submit_mode = SubmitMode::ByQuantity;
-        data.participant_id.clear();
-        data.recipient = None;
-        let proposal = SalesSelectionProposal::new(SalesSelectionProposalId::new("p1"), data).unwrap();
-        let mut json = serde_json::to_value(proposal).unwrap();
-        json.as_object_mut().unwrap().remove("participant_id");
-        json.as_object_mut().unwrap().remove("recipient");
+        let mut json = serde_json::to_value(&proposal).unwrap();
+        json.as_object_mut()
+            .unwrap()
+            .insert("participant_id".into(), serde_json::Value::String(String::new()));
+        json.as_object_mut().unwrap().insert("recipient".into(), serde_json::Value::Null);
 
         let restored: SalesSelectionProposal = serde_json::from_value(json).unwrap();
-        assert!(restored.participant_id.is_empty());
-        assert!(restored.recipient.is_none());
+        assert_eq!(serde_json::to_value(&restored).unwrap(), serde_json::to_value(&proposal).unwrap());
     }
+
     fn package() -> SalesSelectionDisplayItem {
         let mut second = sku();
         second.sku_id = SkuId::new("sku-2");
@@ -548,28 +435,23 @@ mod tests {
     }
 
     #[test]
-    fn package_voucher_totals_expand_every_member_and_preserve_personal_budget() {
+    fn package_totals_expand_every_member() {
         let package = package();
         let choices = vec![SessionChoice {
             display_item_id: SalesSelectionDisplayItemId::new("package-1"),
             quantity: Some(3),
         }];
         let mut sequence = 0;
-        let (display_lines, sku_lines, total) = build_proposal_lines(
-            &SalesSelectionProposalId::new("p1"),
-            SubmitMode::PickupVoucher,
-            &choices,
-            &[package],
-            || {
+        let (display_lines, sku_lines, total) =
+            build_proposal_lines(&SalesSelectionProposalId::new("p1"), &choices, &[package], || {
                 sequence += 1;
                 format!("line-{sequence}")
-            },
-        )
-        .unwrap();
+            })
+            .unwrap();
 
-        assert_eq!(total, Some("75.00".parse().unwrap()));
+        assert_eq!(total, "75.00".parse().unwrap());
         assert_eq!(display_lines[0].quantity, Some(3));
-        assert_eq!(display_lines[0].line_amount, total);
+        assert_eq!(display_lines[0].line_amount, Some(total));
         assert_eq!(sku_lines.len(), 2);
         assert_eq!(sku_lines[0].quantity, Some(3));
         assert_eq!(sku_lines[0].line_amount, Some("30.00".parse().unwrap()));
@@ -585,7 +467,7 @@ mod tests {
     }
 
     #[test]
-    fn sku_expansion_preserves_member_order_snapshots_and_optional_quantities() {
+    fn sku_expansion_preserves_member_order_and_snapshots() {
         let single = SalesSelectionDisplayItem::single_sku(
             SalesSelectionDisplayItemId::new("single"),
             SalesSelectionBookletId::new("b1"),
@@ -602,30 +484,28 @@ mod tests {
                 DisplayKind::SingleSku { sku } => vec![sku.clone()],
                 DisplayKind::Package { members, .. } => members.clone(),
             };
-            for quantity in [None, Some(0)] {
-                let proposal_id = SalesSelectionProposalId::new("proposal");
-                let mut calls = 0;
-                let lines = sku_lines_for_item(&proposal_id, &item, quantity, &mut || {
-                    calls += 1;
-                    format!("line-{calls}")
-                })
-                .unwrap();
+            let proposal_id = SalesSelectionProposalId::new("proposal");
+            let mut calls = 0;
+            let lines = sku_lines_for_item(&proposal_id, &item, 0, &mut || {
+                calls += 1;
+                format!("line-{calls}")
+            })
+            .unwrap();
 
-                assert_eq!(calls, expected.len());
-                assert_eq!(lines.len(), expected.len());
-                for (index, (line, snapshot)) in lines.iter().zip(&expected).enumerate() {
-                    assert_eq!(line.base.id, format!("line-{}", index + 1));
-                    assert_eq!(line.proposal_id, proposal_id);
-                    assert_eq!(line.display_item_id.as_ref(), item.base.id.as_str());
-                    assert_eq!(line.sku_id, snapshot.sku_id.as_ref());
-                    assert_eq!(line.sku_revision_id, snapshot.sku_revision_id.as_ref());
-                    assert_eq!(line.name, snapshot.name);
-                    assert_eq!(line.specification, snapshot.specification_attributes);
-                    assert_eq!(line.unit, snapshot.unit);
-                    assert_eq!(line.unit_price, snapshot.sales_visible_price_gross);
-                    assert_eq!(line.quantity, quantity);
-                    assert_eq!(line.line_amount, quantity.map(|_| Amount::zero()));
-                }
+            assert_eq!(calls, expected.len());
+            assert_eq!(lines.len(), expected.len());
+            for (index, (line, snapshot)) in lines.iter().zip(&expected).enumerate() {
+                assert_eq!(line.base.id, format!("line-{}", index + 1));
+                assert_eq!(line.proposal_id, proposal_id);
+                assert_eq!(line.display_item_id.as_ref(), item.base.id.as_str());
+                assert_eq!(line.sku_id, snapshot.sku_id.as_ref());
+                assert_eq!(line.sku_revision_id, snapshot.sku_revision_id.as_ref());
+                assert_eq!(line.name, snapshot.name);
+                assert_eq!(line.specification, snapshot.specification_attributes);
+                assert_eq!(line.unit, snapshot.unit);
+                assert_eq!(line.unit_price, snapshot.sales_visible_price_gross);
+                assert_eq!(line.quantity, Some(0));
+                assert_eq!(line.line_amount, Some(Amount::zero()));
             }
         }
     }
@@ -635,17 +515,14 @@ mod tests {
         let mut item = package();
         let DisplayKind::Package { members, .. } = &mut item.kind else { panic!("expected package") };
         members.clear();
-        for quantity in [None, Some(3)] {
-            let mut calls = 0;
-            let lines =
-                sku_lines_for_item(&SalesSelectionProposalId::new("proposal"), &item, quantity, &mut || {
-                    calls += 1;
-                    "unused".into()
-                })
-                .unwrap();
-            assert!(lines.is_empty());
-            assert_eq!(calls, 0);
-        }
+        let mut calls = 0;
+        let lines = sku_lines_for_item(&SalesSelectionProposalId::new("proposal"), &item, 3, &mut || {
+            calls += 1;
+            "unused".into()
+        })
+        .unwrap();
+        assert!(lines.is_empty());
+        assert_eq!(calls, 0);
     }
 
     #[test]
@@ -656,12 +533,11 @@ mod tests {
         members.push(sku());
         let original = item.clone();
         let mut calls = 0;
-        let error =
-            sku_lines_for_item(&SalesSelectionProposalId::new("proposal"), &item, Some(2), &mut || {
-                calls += 1;
-                format!("line-{calls}")
-            })
-            .unwrap_err();
+        let error = sku_lines_for_item(&SalesSelectionProposalId::new("proposal"), &item, 2, &mut || {
+            calls += 1;
+            format!("line-{calls}")
+        })
+        .unwrap_err();
 
         assert_eq!(error.to_string(), "行金额超出可表示范围");
         assert!(matches!(error, Error::LogicError(_)));

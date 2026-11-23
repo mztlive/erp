@@ -231,8 +231,6 @@ fn create_booklet(
             form: req.form,
             submit_mode: req.submit_mode,
             access_password_hash: Some(password_hash),
-            per_person_budget: req.per_person_budget,
-            voucher_count: req.voucher_count,
             pool_source,
             tiers,
             created_by: creator.user_id.clone(),
@@ -359,8 +357,6 @@ mod tests {
             form: SelectionForm::SingleSku,
             submit_mode: SubmitMode::ByQuantity,
             access_password: "original-create-password".into(),
-            per_person_budget: None,
-            voucher_count: None,
             pool_source_kind: crate::entity::sales_selection::PoolSourceKind::Filter,
             pool_filter: None,
             sku_ids: None,
@@ -401,5 +397,19 @@ mod tests {
                 .unwrap()
                 .as_str()
         );
+    }
+
+    #[test]
+    fn create_request_defaults_submit_mode_and_rejects_removed_modes() {
+        let mut without_mode = creation_request();
+        without_mode.as_object_mut().unwrap().remove("submit_mode");
+        let parsed: CreateSalesSelectionBookletRequest = serde_json::from_value(without_mode).unwrap();
+        assert_eq!(parsed.submit_mode, SubmitMode::ByQuantity);
+
+        for removed in ["MALL_REDEEM", "PICKUP_VOUCHER"] {
+            let mut request = creation_request();
+            request["submit_mode"] = json!(removed);
+            assert!(serde_json::from_value::<CreateSalesSelectionBookletRequest>(request).is_err());
+        }
     }
 }

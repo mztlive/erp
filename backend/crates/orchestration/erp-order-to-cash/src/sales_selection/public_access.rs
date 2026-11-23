@@ -1,18 +1,16 @@
-//! 公开密码授权与管理端个人资料读取的组合入口。
+//! 公开密码授权与管理端密码维护的组合入口。
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use erp_permissions::sales_selection;
 use erp_sales::dto::sales_selection::{
     PublicSelectionAccessView, PublicSelectionPageView, SalesSelectionBookletView,
-    SalesSelectionPasswordRequest, SaveSelectionSessionRequest, SelectionDetailView, SelectionVoucherView,
-    SubmitSelectionSessionRequest, UnlockSelectionRequest,
+    SalesSelectionPasswordRequest, SaveSelectionSessionRequest, SubmitSelectionSessionRequest,
+    UnlockSelectionRequest,
 };
 use erp_sales::entity::sales_selection::{
     IdempotencyOperation, SelectionGrant, hash_selection_password, token_hash, verify_selection_password,
 };
 use erp_sales::repository::SalesSelectionExt;
-use erp_sales::repository::sales_selection::SalesSelectionDomainRepository;
 use erp_sales::service::sales_selection::SalesSelectionService;
 use persistence_core::{ReadExecutor, Transactional};
 use tokio::sync::Semaphore;
@@ -25,9 +23,9 @@ use crate::{Error, Result};
 static PASSWORD_WORK: Semaphore = Semaphore::const_new(8);
 
 impl SalesSelectionProcess {
-    /// 读取个人公开页，缺少或失效授权时返回锁定视图。
+    /// 读取公开选品页，缺少或失效授权时返回锁定视图。
     ///
-    /// `token` 为链接，`access` 为密文授权，`ip` 为来源。返回隔离后的个人页面。无效链接、限流或读取失败时拒绝。
+    /// `token` 为链接，`access` 为密文授权，`ip` 为来源。返回公开页面。无效链接、限流或读取失败时拒绝。
     pub async fn public_page(
         &self,
         token: &str,
@@ -37,7 +35,7 @@ impl SalesSelectionProcess {
         self.admit_public("read", ip, Some(token), 1200).await?;
         let grant = access.and_then(|value| SelectionGrant::decode(value, &self.crypto).ok());
         if let Some(grant) = &grant {
-            self.admit_participant("read", &grant.session_id, 120).await?;
+            self.admit_session("read", &grant.session_id, 120).await?;
         }
 
         Ok(SalesSelectionService::new(self.db.clone(), self.services.authorization.clone())
@@ -45,8 +43,8 @@ impl SalesSelectionProcess {
             .await?)
     }
 
-    /// 公开选品访客提交访问密码和个人提货码时，先限流，再在事务外校验密码，成功后返回个人授权和隔离页面。
-    /// 密码或提货码错误、历史选品册未设密码、超限时拒绝。
+    /// 公开选品访客提交访问密码时，先限流，再在事务外校验密码，成功后返回访问授权和页面。
+    /// 密码错误、历史选品册未设密码、超限时拒绝。
     pub async fn public_unlock(
         &self,
         token: String,
@@ -55,10 +53,8 @@ impl SalesSelectionProcess {
     ) -> Result<PublicSelectionAccessView> {
         self.admit_public("unlock", &ip, Some(&token), 2000).await?;
         let service = SalesSelectionService::new(self.db.clone(), self.services.authorization.clone());
-        let scope = service
-            .public_unlock_scope(&token, req.voucher_code.as_deref(), &mut ReadExecutor::default())
-            .await?;
-        self.admit_participant("unlock", &scope, 10).await?;
+        let scope = service.public_unlock_scope(&token, &mut ReadExecutor::default()).await?;
+        self.admit_session("unlock", &scope, 10).await?;
 
         let hash = service
             .public_password_hash(&token, &mut ReadExecutor::default())
@@ -73,23 +69,16 @@ impl SalesSelectionProcess {
         .await
         .map_err(|_| Error::Internal("密码验证失败".into()))?;
         if !accepted {
-            return Err(Error::Forbidden("访问密码或提货码有误，请核对后重新输入".into()));
+            return Err(Error::Forbidden("访问密码有误，请核对后重新输入".into()));
         }
 
         Ok(service
-            .public_unlock(
-                &token,
-                &hash,
-                req.voucher_code.as_deref(),
-                Instant::now(),
-                &self.crypto,
-                &mut ReadExecutor::default(),
-            )
+            .public_unlock(&token, &hash, Instant::now(), &self.crypto, &mut ReadExecutor::default())
             .await?)
     }
 
-    /// 访客暂存个人选择时，校验链接和密文授权、按来源和会话限流，再在保存事务内重验个人资格。
-    /// 成功返回更新后的个人页面；授权失效、额度不符或版本冲突时拒绝。
+    /// 访客暂存选择时，校验链接和密文授权、按来源和会话限流，再在保存事务内重验资格。
+    /// 成功返回更新后的页面；授权失效或版本冲突时拒绝。
     pub async fn public_save(
         &self,
         token: String,
@@ -99,7 +88,7 @@ impl SalesSelectionProcess {
     ) -> Result<PublicSelectionPageView> {
         self.admit_public("write", &ip, Some(&token), 6000).await?;
         let grant = self.decode_grant(&access)?;
-        self.admit_participant("write", &grant.session_id, 30).await?;
+        self.admit_session("write", &grant.session_id, 30).await?;
 
         let db = self.db.clone();
         let authorization = self.services.authorization.clone();
@@ -127,8 +116,8 @@ impl SalesSelectionProcess {
         .await
     }
 
-    /// 访客最终确认个人方案时，校验链接和个人授权并限流，在同一事务提交选择、地址和个人方案，返回个人回执。
-    /// 授权失效、额度或地址不符、版本冲突时不完成提交。
+    /// 访客最终确认方案时，校验链接和授权并限流，在同一事务提交选择和销售方案，返回回执。
+    /// 授权失效或版本冲突时不完成提交。
     pub async fn public_submit(
         &self,
         token: String,
@@ -138,7 +127,7 @@ impl SalesSelectionProcess {
     ) -> Result<PublicSelectionPageView> {
         self.admit_public("submit", &ip, Some(&token), 2000).await?;
         let grant = self.decode_grant(&access)?;
-        self.admit_participant("submit", &grant.session_id, 10).await?;
+        self.admit_session("submit", &grant.session_id, 10).await?;
 
         let db = self.db.clone();
         let authorization = self.services.authorization.clone();
@@ -166,7 +155,7 @@ impl SalesSelectionProcess {
         .await
     }
 
-    /// 校验个人授权后返回图片键。
+    /// 校验授权后返回图片键。
     ///
     /// `token` 为链接，`asset_id` 为图片，`access` 为授权，`ip` 为来源。返回本册快照图片键。授权失效、图片越权或限流时拒绝。
     pub async fn public_image_key(
@@ -178,7 +167,7 @@ impl SalesSelectionProcess {
     ) -> Result<String> {
         self.admit_public("image", ip, Some(token), 6000).await?;
         let grant = self.decode_grant(access)?;
-        self.admit_participant("image", &grant.session_id, 600).await?;
+        self.admit_session("image", &grant.session_id, 600).await?;
         Ok(SalesSelectionService::new(self.db.clone(), self.services.authorization.clone())
             .public_image_key(token, asset_id, &grant, Instant::now(), &mut ReadExecutor::default())
             .await?)
@@ -200,65 +189,7 @@ impl SalesSelectionProcess {
         update_password(self.db.clone(), access, id, req, hash, fingerprint, actor).await
     }
 
-    /// 按复制链接范围读取个人提货码。
-    ///
-    /// `id` 为册，`actor` 为管理操作人。返回可发放提货码及提交状态。权限或范围不足时拒绝。
-    pub async fn vouchers(&self, id: &str, actor: &AuditActor) -> Result<Vec<SelectionVoucherView>> {
-        let db = self.db.clone();
-        let access = self.services.selections.clone();
-        let crypto = self.crypto.clone();
-        let id = id.to_owned();
-        let actor = actor.clone();
-        self.db
-            .client()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let scope = access.resolve(&actor, &sales_selection::BOOKLET_COPY_LINK, executor).await?;
-                    let book = SalesSelectionDomainRepository::new(&db)
-                        .find_authorized_booklet(&id, &scope, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))?;
-
-                    let result = SalesSelectionService::new(db, access.authorization())
-                        .vouchers(&book.base.id, &crypto, executor)
-                        .await?;
-                    scope.validate(executor).await?;
-                    Ok(result)
-                })
-            })
-            .await
-    }
-
-    /// 按册详情范围读取全部个人选择与地址供导出。
-    ///
-    /// `id` 为册，`actor` 为管理操作人。返回全部提交行与收件资料。权限或范围不足时拒绝。
-    pub async fn selection_details(&self, id: &str, actor: &AuditActor) -> Result<Vec<SelectionDetailView>> {
-        let db = self.db.clone();
-        let access = self.services.selections.clone();
-        let crypto = self.crypto.clone();
-        let id = id.to_owned();
-        let actor = actor.clone();
-        self.db
-            .client()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    let scope = access.resolve(&actor, &sales_selection::BOOKLET_DETAIL, executor).await?;
-                    let book = SalesSelectionDomainRepository::new(&db)
-                        .find_authorized_booklet(&id, &scope, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))?;
-
-                    let result = SalesSelectionService::new(db, access.authorization())
-                        .selection_details(&book.base.id, &crypto, executor)
-                        .await?;
-                    scope.validate(executor).await?;
-                    Ok(result)
-                })
-            })
-            .await
-    }
-
-    async fn admit_participant(&self, kind: &str, session_id: &str, limit: i64) -> Result<()> {
+    async fn admit_session(&self, kind: &str, session_id: &str, limit: i64) -> Result<()> {
         let key = format!("participant:{kind}:{}", token_hash(session_id));
         let window = Instant::now().unix_secs() / 60;
         if !self.db.sales_selection_rate().admit(&key, limit, window).await? {

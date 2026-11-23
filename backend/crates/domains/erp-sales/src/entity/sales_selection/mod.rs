@@ -15,7 +15,6 @@ mod price_edit;
 mod pricing;
 mod proposal;
 mod public_access;
-mod recipient;
 mod session;
 mod sku_snapshot;
 mod status;
@@ -42,7 +41,6 @@ pub use proposal::{
     SalesSelectionProposalSkuLine, build_proposal_lines,
 };
 pub use public_access::{SelectionGrant, hash_selection_password, verify_selection_password};
-pub use recipient::SelectionRecipient;
 pub use session::{SalesSelectionSession, SessionChoice};
 pub use sku_snapshot::{
     ImageAssetSnapshot, SelectionReferencePrices, SkuSnapshot, SpecificationAttributeSnapshot, sort_by_sku_id,

@@ -7,7 +7,6 @@ export function receiptContent(
     page: PublicPageView,
     receipt: PublicReceiptView,
 ) {
-    const byQuantity = page.submit_mode !== "MALL_REDEEM"
     const displayItems = new Map(page.items.map((item) => [item.item_id, item]))
     const items = receipt.items.map((choice) => {
         const item = displayItems.get(choice.item_id)
@@ -17,11 +16,8 @@ export function receiptContent(
             coverPath: item?.cover_path,
             specification: item?.specification ?? [],
             members: item?.members ?? [],
-            quantity:
-                byQuantity && choice.quantity != null
-                    ? String(choice.quantity)
-                    : null,
-            amount: byQuantity ? choice.line_amount : null,
+            quantity: choice.quantity != null ? String(choice.quantity) : null,
+            amount: choice.line_amount ?? null,
         }
     })
     const quantities = items.flatMap((item) =>
@@ -30,10 +26,9 @@ export function receiptContent(
     return {
         items,
         notices: page.notices,
-        byQuantity,
-        total: byQuantity ? receipt.total_amount : null,
+        total: receipt.total_amount ?? null,
         quantity:
-            byQuantity && quantities.length === items.length && items.length > 0
+            quantities.length === items.length && items.length > 0
                 ? sumFixed(quantities, { maxScale: 0, outputScale: 0 })
                 : null,
         submittedAt: formatDateTime(

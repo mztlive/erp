@@ -4489,30 +4489,6 @@
     ]
   },
   {
-    "method": "GET",
-    "path": "/sales-selection-books/{id}/vouchers",
-    "handler": "sales_selection::protection::booklet_vouchers",
-    "code": "sales_selection_booklet:copy_link",
-    "group": "销售选品",
-    "group_desc": "选品册与销售方案",
-    "description": "读取选品册个人提货码",
-    "guards": [
-      "sales_selection_booklet:copy_link"
-    ]
-  },
-  {
-    "method": "GET",
-    "path": "/sales-selection-books/{id}/selection-details",
-    "handler": "sales_selection::protection::booklet_selection_details",
-    "code": "sales_selection_booklet:get",
-    "group": "销售选品",
-    "group_desc": "选品册与销售方案",
-    "description": "查询选品册个人选品明细",
-    "guards": [
-      "sales_selection_booklet:get"
-    ]
-  },
-  {
     "method": "POST",
     "path": "/sales-selection-booklets/{id}/access-password",
     "handler": "sales_selection::protection::booklet_password",
@@ -4522,30 +4498,6 @@
     "description": "维护选品册访问密码",
     "guards": [
       "sales_selection_booklet:maintain"
-    ]
-  },
-  {
-    "method": "GET",
-    "path": "/sales-selection-booklets/{id}/vouchers",
-    "handler": "sales_selection::protection::booklet_vouchers",
-    "code": "sales_selection_booklet:copy_link",
-    "group": "销售选品",
-    "group_desc": "选品册与销售方案",
-    "description": "读取选品册个人提货码",
-    "guards": [
-      "sales_selection_booklet:copy_link"
-    ]
-  },
-  {
-    "method": "GET",
-    "path": "/sales-selection-booklets/{id}/selection-details",
-    "handler": "sales_selection::protection::booklet_selection_details",
-    "code": "sales_selection_booklet:get",
-    "group": "销售选品",
-    "group_desc": "选品册与销售方案",
-    "description": "查询选品册个人选品明细",
-    "guards": [
-      "sales_selection_booklet:get"
     ]
   },
   {

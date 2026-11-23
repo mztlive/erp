@@ -154,8 +154,6 @@ mod tests {
                 form: SelectionForm::SingleSku,
                 submit_mode: SubmitMode::ByQuantity,
                 access_password_hash: Some("password-hash".into()),
-                per_person_budget: None,
-                voucher_count: None,
                 pool_source: PoolSource::new(
                     PoolSourceKind::Filter,
                     Some(PoolFilterSnapshot::default()),

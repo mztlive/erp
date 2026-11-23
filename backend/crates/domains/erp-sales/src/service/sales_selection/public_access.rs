@@ -1,4 +1,4 @@
-//! 公开密码解锁、管理端密码维护与个人明细读取。
+//! 公开密码解锁与管理端密码维护。
 
 use erp_core::common::time::Instant;
 use erp_core::ids::SalesSelectionBookletId;
@@ -8,13 +8,14 @@ use super::mapper::public_kind;
 use super::{IdempotencyStoreInput, SalesSelectionService};
 use crate::dto::sales_selection::{
     PublicSelectionAccessView, PublicSelectionPageKind, SalesSelectionBookletView,
-    SalesSelectionPasswordRequest, SelectionDetailView, SelectionVoucherView,
+    SalesSelectionPasswordRequest,
 };
 use crate::entity::sales_selection::{
-    IdempotencyOperation, LinkTokenCrypto, SelectionGrant, SelectionRequestFingerprint, SubmitMode,
-    normalize_idempotency_key, token_hash,
+    IdempotencyOperation, LinkTokenCrypto, SelectionGrant, SelectionRequestFingerprint,
+    normalize_idempotency_key,
 };
 use crate::repository::SalesSelectionExt;
+use crate::repository::prelude::*;
 use crate::{Error, Result};
 
 impl SalesSelectionService {
@@ -31,16 +32,15 @@ impl SalesSelectionService {
         Ok(self.load_by_token(token, executor).await?.access_password_hash)
     }
 
-    /// 已通过密码校验后，再重验当前密码并绑定个人会话。
-    /// 返回个人授权凭证与页面。
-    /// 密码变化、结束、缺提货码或提货码不属于本册时拒绝。
+    /// 已通过密码校验后，再重验当前密码并绑定会话。
+    /// 返回授权凭证与公开选品页。
+    /// 密码变化、选品已结束或会话缺失时拒绝。
     ///
-    /// 输入约定：`token` 为链接，`verified_hash` 为刚验证的哈希，`voucher_code` 为提货码，`now` 为当前时间，`crypto` 为编解码器，`executor` 为读取边界。
+    /// 输入约定：`token` 为链接，`verified_hash` 为刚验证的哈希，`now` 为当前时间，`crypto` 为编解码器，`executor` 为读取边界。
     pub async fn public_unlock(
         &self,
         token: &str,
         verified_hash: &str,
-        voucher_code: Option<&str>,
         now: Instant,
         crypto: &LinkTokenCrypto,
         executor: &mut dyn Executor,
@@ -53,45 +53,32 @@ impl SalesSelectionService {
             return Err(Error::Forbidden("选品已结束".into()));
         }
 
-        let session = self.unlock_session(&book, voucher_code, executor).await?;
+        let session = self.unlock_session(&book, executor).await?;
         let access_token = SelectionGrant::issue(&book, &session, now, crypto)?;
-        let page = self.participant_page(&book, &session, now, executor).await?;
+        let page = self.session_page(&book, &session, now, executor).await?;
         Ok(PublicSelectionAccessView { access_token, page })
     }
 
-    /// 在密码慢验证前确定限流作用域；不返回任何个人视图。
-    /// 结果：提货券返回个人会话身份，普通册返回共享会话身份。
-    /// 链接或提货码无效时拒绝。
+    /// 在密码慢验证前确定限流作用域；不返回任何业务视图。
+    /// 结果：返回当前选品册的会话身份。
+    /// 链接或会话无效时拒绝。
     ///
-    /// 输入约定：`token` 为链接，`voucher_code` 为个人提货码，`executor` 为读取边界。
-    pub async fn public_unlock_scope(
-        &self,
-        token: &str,
-        voucher_code: Option<&str>,
-        executor: &mut dyn Executor,
-    ) -> Result<String> {
+    /// 输入约定：`token` 为链接，`executor` 为读取边界。
+    pub async fn public_unlock_scope(&self, token: &str, executor: &mut dyn Executor) -> Result<String> {
         let book = self.load_by_token(token, executor).await?;
-        Ok(self.unlock_session(&book, voucher_code, executor).await?.base.id)
+        Ok(self.unlock_session(&book, executor).await?.base.id)
     }
 
     async fn unlock_session(
         &self,
         book: &crate::entity::sales_selection::SalesSelectionBooklet,
-        voucher_code: Option<&str>,
         executor: &mut dyn Executor,
     ) -> Result<crate::entity::sales_selection::SalesSelectionSession> {
-        let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
-        let found = if book.submit_mode == SubmitMode::PickupVoucher {
-            let code = voucher_code
-                .filter(|value| value.len() <= 128)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .ok_or_else(|| Error::Forbidden("请输入有效提货码".into()))?;
-            domain.session_by_voucher_hash(&book.base.id, &token_hash(code), executor).await?
-        } else {
-            domain.session_by_participant(&book.base.id, "", executor).await?
-        };
-        found.ok_or_else(|| Error::Forbidden("访问密码或提货码有误，请核对后重新输入".into()))
+        self.db
+            .sales_selection_sessions()
+            .find_by_booklet(&book.base.id, executor)
+            .await?
+            .ok_or_else(|| Error::Forbidden("访问密码有误，请核对后重新输入".into()))
     }
 
     /// 在调用方授权事务内更新访问密码并保存幂等结果。
@@ -140,71 +127,5 @@ impl SalesSelectionService {
         )
         .await?;
         Ok((view, true))
-    }
-
-    /// 读取当前册所有提货码及提交状态。
-    /// 返回个人提货码；普通册返回空列表。
-    /// 密文损坏或读取失败时拒绝。
-    ///
-    /// 输入约定：`id` 为已授权册，`crypto` 为内部码编解码器，`executor` 为读取边界。
-    pub async fn vouchers(
-        &self,
-        id: &str,
-        crypto: &LinkTokenCrypto,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<SelectionVoucherView>> {
-        let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
-        let sessions = domain.sessions_for_booklet(id, executor).await?;
-        sessions
-            .into_iter()
-            .filter(|session| session.voucher_code_ciphertext.is_some())
-            .map(|session| {
-                let code = crypto.decrypt(session.voucher_code_ciphertext.as_deref().unwrap_or_default())?;
-                Ok(SelectionVoucherView {
-                    voucher_code: code,
-                    participant_id: session.participant_id,
-                    submitted: session.frozen,
-                    proposal_id: session.proposal_id.map(|id| id.to_string()),
-                })
-            })
-            .collect()
-    }
-
-    /// 读取已授权册的全部个人提交明细和收件信息。
-    /// 返回每人完整 SKU 行及冻结地址，供管理端导出。
-    /// 明细读取或密文解码失败时拒绝。
-    ///
-    /// 输入约定：`id` 为已授权册，`crypto` 为内部码编解码器，`executor` 为读取边界。
-    pub async fn selection_details(
-        &self,
-        id: &str,
-        crypto: &LinkTokenCrypto,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<SelectionDetailView>> {
-        let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
-        let sessions = domain.sessions_for_booklet(id, executor).await?;
-        let proposals = domain.proposals_for_booklet(id, executor).await?;
-
-        let mut result = Vec::with_capacity(proposals.len());
-        for proposal in proposals {
-            let view = self.proposal_view_of(&proposal, executor).await?;
-            let voucher_code = sessions
-                .iter()
-                .find(|session| session.participant_id == proposal.participant_id)
-                .and_then(|session| session.voucher_code_ciphertext.as_deref())
-                .map(|cipher| crypto.decrypt(cipher))
-                .transpose()?;
-            result.push(SelectionDetailView {
-                participant_id: proposal.participant_id,
-                voucher_code,
-                proposal_id: proposal.base.id,
-                proposal_no: proposal.proposal_no,
-                submitted_at: proposal.submitted_at,
-                recipient: proposal.recipient,
-                total_amount: proposal.total_amount,
-                items: view.sku_lines,
-            });
-        }
-        Ok(result)
     }
 }

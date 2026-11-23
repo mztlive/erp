@@ -28,7 +28,7 @@ pub use scope::SelectionReadScope;
 
 use crate::entity::sales_selection::{
     SalesSelectionBooklet, SalesSelectionDisplayItem, SalesSelectionPoolMember, SalesSelectionPrepareTask,
-    SalesSelectionProposal, SalesSelectionSession,
+    SalesSelectionProposal,
 };
 use crate::repository::extensions::SalesSelectionExt;
 use crate::repository::filter::push_undeleted;
@@ -58,8 +58,6 @@ pub struct SelectionBookFilter {
     pub form: Option<crate::entity::sales_selection::SelectionForm>,
     /// 状态；`None` 表示不筛选。
     pub status: Option<crate::entity::sales_selection::BookletStatus>,
-    /// 提交方式；`None` 表示不筛选。
-    pub submit_mode: Option<crate::entity::sales_selection::SubmitMode>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -80,7 +78,6 @@ impl Default for SelectionBookFilter {
             customer_id: None,
             form: None,
             status: None,
-            submit_mode: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -93,7 +90,7 @@ impl Default for SelectionBookFilter {
 impl QueryFilter for SelectionBookFilter {
     // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     //
-    // 未删除条件始终放入 `$and`。负责人、业务组织有值时按 `$in` 追加；客户、形态、状态、提交方式有值时按等值追加。客户名称关键字去空白后按字面量正则匹配 `customer_name`。
+    // 未删除条件始终放入 `$and`。负责人、业务组织有值时按 `$in` 追加；客户、形态、状态有值时按等值追加。客户名称关键字去空白后按字面量正则匹配 `customer_name`。
     // 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut and: Vec<Document> = Vec::new();
@@ -114,9 +111,6 @@ impl QueryFilter for SelectionBookFilter {
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
-        }
-        if let Some(mode) = self.submit_mode {
-            filter.insert("submit_mode", mode.as_str());
         }
         if let Some(q) = self.q.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
             insert_literal_regex_filter(&mut filter, "customer_name", Some(q));
@@ -305,75 +299,6 @@ impl<'a> SalesSelectionDomainRepository<'a> {
             .await
     }
 
-    /// 按本册参与人稳定身份读取独立会话。
-    /// 返回匹配的个人会话。
-    /// 传播数据库查询失败。
-    ///
-    /// 输入约定：
-    /// - `booklet_id`：选品册身份
-    /// - `participant_id`：参与人身份；普通模式为空
-    /// - `executor`：当前事务执行器
-    pub async fn session_by_participant(
-        &self,
-        booklet_id: &str,
-        participant_id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<SalesSelectionSession>> {
-        let mut filter = doc! { "booklet_id": booklet_id, "participant_id": participant_id };
-        if participant_id.is_empty() {
-            filter.insert("participant_id", doc! { "$in": ["", null] });
-        }
-        self.db.sales_selection_sessions().find_one(filter, executor).await
-    }
-
-    /// 按所属册与提货券代码哈希读取独立会话。
-    /// 返回本册对应券码的个人会话。
-    /// 传播数据库查询失败。
-    ///
-    /// 输入约定：
-    /// - `booklet_id`：选品册身份
-    /// - `voucher_hash`：券码哈希
-    /// - `executor`：当前事务执行器
-    pub async fn session_by_voucher_hash(
-        &self,
-        booklet_id: &str,
-        voucher_hash: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<SalesSelectionSession>> {
-        self.db
-            .sales_selection_sessions()
-            .find_one(doc! { "booklet_id": booklet_id, "voucher_code_hash": voucher_hash }, executor)
-            .await
-    }
-
-    /// 读取指定册的全部独立会话。
-    /// 返回普通会话或该册所有个人会话。
-    /// 传播数据库查询失败。
-    ///
-    /// 输入约定：
-    /// - `booklet_id`：已由调用方完成授权的选品册
-    pub async fn sessions_for_booklet(
-        &self,
-        booklet_id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<SalesSelectionSession>> {
-        self.db.sales_selection_sessions().find_many(doc! { "booklet_id": booklet_id }, executor).await
-    }
-
-    /// 读取指定册全部已提交方案。
-    /// 返回本册普通方案或所有个人方案。
-    /// 传播数据库查询失败。
-    ///
-    /// 输入约定：
-    /// - `booklet_id`：已由调用方完成授权的选品册
-    pub async fn proposals_for_booklet(
-        &self,
-        booklet_id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<SalesSelectionProposal>> {
-        self.db.sales_selection_proposals().find_many(doc! { "booklet_id": booklet_id }, executor).await
-    }
-
     /// 按选品册读取方案。
     /// 结果：存在时返回方案；一册最多一份由唯一索引保证。
     /// 查询失败时返回仓储错误。
@@ -385,10 +310,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
         booklet_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<SalesSelectionProposal>> {
-        self.db
-            .sales_selection_proposals()
-            .find_one(doc! { "booklet_id": booklet_id, "participant_id": { "$in": ["", null] } }, executor)
-            .await
+        self.db.sales_selection_proposals().find_one(doc! { "booklet_id": booklet_id }, executor).await
     }
 
     /// 持久化一次同步准备的全部结果。
@@ -474,7 +396,6 @@ mod tests {
             customer_id: Some("cust-1".into()),
             form: None,
             status: Some(crate::entity::sales_selection::BookletStatus::Draft),
-            submit_mode: None,
             page: 1,
             page_size: 20,
             sort_by: None,

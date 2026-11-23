@@ -66,7 +66,7 @@ export const ChoiceSummary = ({ page }: { page: PublicPageView }) => {
                     尚未选择商品
                 </p>
             )}
-            {page.submit_mode !== "MALL_REDEEM" && total != null && (
+            {total != null && (
                 <div className="flex items-center justify-between pt-2 border-t border-grid">
                     <span className="text-xs font-medium text-muted-foreground">
                         方案合计金额（含税）

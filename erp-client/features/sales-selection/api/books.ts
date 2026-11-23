@@ -10,8 +10,6 @@ import {
     sumActionableBookCounts,
 } from "@/features/sales-selection/lib/actionable-books"
 import type {
-    BookVoucherView,
-    BookSelectionDetailView,
     BookListQuery,
     BookListResult,
     CreateBookInput,
@@ -47,10 +45,6 @@ export const fetchBooks = async (
             selection_form:
                 query.selection_form && query.selection_form !== "ALL"
                     ? query.selection_form
-                    : undefined,
-            submit_mode:
-                query.submit_mode && query.submit_mode !== "ALL"
-                    ? query.submit_mode
                     : undefined,
             status:
                 query.status && query.status !== "ALL"
@@ -97,7 +91,7 @@ export const fetchBookDetail = async (
     apiGet<SelectionBookDetail>(`/admin/sales-selection-books/${bookId}`)
 
 /**
- * 创建选品册：绑定客户、形态、提交方式与商品池来源。
+ * 创建选品册：绑定客户、形态与商品池来源。
  * @param input 创建载荷（含幂等键）
  */
 export const createBook = async (
@@ -105,8 +99,6 @@ export const createBook = async (
 ): Promise<SelectionBookDetail> =>
     apiPost<SelectionBookDetail>("/admin/sales-selection-books", {
         access_password: input.access_password,
-        per_person_budget: input.per_person_budget,
-        voucher_count: input.voucher_count,
         customer_id: input.customer_id,
         form: input.selection_form,
         submit_mode: input.submit_mode,
@@ -288,9 +280,3 @@ export const setBookAccessPassword = (
         `/admin/sales-selection-booklets/${bookId}/access-password`,
         payload,
     )
-export const fetchBookVouchers = (bookId: string): Promise<BookVoucherView[]> =>
-    apiGet(`/admin/sales-selection-booklets/${bookId}/vouchers`)
-export const fetchBookSelectionDetails = (
-    bookId: string,
-): Promise<BookSelectionDetailView[]> =>
-    apiGet(`/admin/sales-selection-booklets/${bookId}/selection-details`)

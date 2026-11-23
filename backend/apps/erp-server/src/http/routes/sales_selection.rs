@@ -391,53 +391,23 @@ pub fn public_routes() -> Router<HttpState> {
 }
 
 fn book_protection_routes_books() -> Router<HttpState> {
-    Router::new()
-        .route(
-            "/sales-selection-books/{id}/access-password",
-            permission_route(
-                post(sales_selection::protection::booklet_password),
-                &permissions::sales_selection::BOOKLET_DELETE_ITEM,
-            ),
-        )
-        .route(
-            "/sales-selection-books/{id}/vouchers",
-            permission_route(
-                get(sales_selection::protection::booklet_vouchers),
-                &permissions::sales_selection::BOOKLET_COPY_LINK,
-            ),
-        )
-        .route(
-            "/sales-selection-books/{id}/selection-details",
-            permission_route(
-                get(sales_selection::protection::booklet_selection_details),
-                &permissions::sales_selection::ADMIN_IMAGE,
-            ),
-        )
+    Router::new().route(
+        "/sales-selection-books/{id}/access-password",
+        permission_route(
+            post(sales_selection::protection::booklet_password),
+            &permissions::sales_selection::BOOKLET_DELETE_ITEM,
+        ),
+    )
 }
 
 fn book_protection_routes_booklets() -> Router<HttpState> {
-    Router::new()
-        .route(
-            "/sales-selection-booklets/{id}/access-password",
-            permission_route(
-                post(sales_selection::protection::booklet_password),
-                &permissions::sales_selection::BOOKLET_DELETE_ITEM,
-            ),
-        )
-        .route(
-            "/sales-selection-booklets/{id}/vouchers",
-            permission_route(
-                get(sales_selection::protection::booklet_vouchers),
-                &permissions::sales_selection::BOOKLET_COPY_LINK,
-            ),
-        )
-        .route(
-            "/sales-selection-booklets/{id}/selection-details",
-            permission_route(
-                get(sales_selection::protection::booklet_selection_details),
-                &permissions::sales_selection::ADMIN_IMAGE,
-            ),
-        )
+    Router::new().route(
+        "/sales-selection-booklets/{id}/access-password",
+        permission_route(
+            post(sales_selection::protection::booklet_password),
+            &permissions::sales_selection::BOOKLET_DELETE_ITEM,
+        ),
+    )
 }
 
 async fn private_public_response(mut response: Response) -> Response {

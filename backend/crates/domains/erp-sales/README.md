@@ -41,8 +41,8 @@
 ### 销售选品：准备批次、链接授权和客户会话分别控制
 
 - [选品册状态](src/entity/sales_selection/status.rs)主路径为草稿 → 准备中 → 待发布 → 已发布。创建时会排入首次准备；待发布可再次准备，准备失败恢复到任务开始前的草稿或待发布。准备结果按批次保存商品、图片与陈列快照；写入时校验册版本、活动任务和任务运行版本，防止迟到结果覆盖当前批次。待发布时可改当前批次的册内价格，不改目录价格；发布必须确认册版本和当前批次，并复核冻结 SKU 修订仍可售。见[准备队列](src/service/sales_selection/prepare_queue.rs)、[册内改价](src/service/sales_selection/pricing.rs)和[发布](src/service/sales_selection/publish.rs)。
-- `base.version`、`current_batch_id`、`link_token_version` 是册的写入版本、当前批次和链接令牌版本；客户会话另用 `session_version` 防止并发覆盖。发布建立受链接、密码和有效期约束的客户会话；提交在同一事务中冻结会话并写入方案、陈列行、SKU 行和幂等结果。按份采购和商城兑换均为一册一方案，提交后为 `SUBMITTED`；提货券模式按参与人独立提交，每人至多一份方案，册仍为 `PUBLISHED`。草稿或待发布可作废，已发布可关闭，链接到期或撤销后不能继续公开操作。见[选品册实体](src/entity/sales_selection/booklet.rs)、[客户会话](src/service/sales_selection/session.rs)和[选品唯一索引](src/indexes/sales_selection.rs)。
-- 只有按份采购方案可为同一客户预填实物与服务销售单。销售单保留方案 ID 和编号作追溯，预填明细来自冻结 SKU 行；商业条款、交付信息和开单凭据仍按销售单规则办理。见[开单依据](src/dto/sales_order/selection_basis.rs)与[方案来源规则](src/entity/sales_order/selection_source.rs)。
+- `base.version`、`current_batch_id`、`link_token_version` 是册的写入版本、当前批次和链接令牌版本；客户会话另用 `session_version` 防止并发覆盖。发布建立受链接、密码和有效期约束的客户会话；提交在同一事务中冻结会话并写入方案、陈列行、SKU 行和幂等结果，一册一方案，提交后为 `SUBMITTED`。草稿或待发布可作废，已发布可关闭，链接到期或撤销后不能继续公开操作。见[选品册实体](src/entity/sales_selection/booklet.rs)、[客户会话](src/service/sales_selection/session.rs)和[选品唯一索引](src/indexes/sales_selection.rs)。
+- 按份采购方案可为同一客户预填实物与服务销售单。销售单保留方案 ID 和编号作追溯，预填明细来自冻结 SKU 行；商业条款、交付信息和开单凭据仍按销售单规则办理。见[开单依据](src/dto/sales_order/selection_basis.rs)与[方案来源规则](src/entity/sales_order/selection_source.rs)。
 
 <a name="协作示例"></a>
 

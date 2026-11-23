@@ -12,7 +12,7 @@ use erp_permissions::sales_selection;
 use id_generator::next_id;
 use persistence_core::{Executor, Transactional};
 
-use crate::entity::sales_selection::{SalesSelectionPoolMember, SubmitMode};
+use crate::entity::sales_selection::SalesSelectionPoolMember;
 
 mod replay;
 
@@ -107,36 +107,16 @@ impl SalesSelectionService {
         let (_token, token_hash, cipher) =
             crypto.issue().map_err(|error| Error::Internal(error.to_string()))?;
         booklet.publish(token_hash, cipher, Instant::now(), actor.id())?;
-        let sessions = self.publish_sessions(&booklet, crypto)?;
-        self.commit_publish(booklet, sessions, items, command, executor).await
+        let session = self.publish_session(&booklet)?;
+        self.commit_publish(booklet, session, items, command, executor).await
     }
 
-    fn publish_sessions(
-        &self,
-        book: &SalesSelectionBooklet,
-        crypto: &LinkTokenCrypto,
-    ) -> Result<Vec<SalesSelectionSession>> {
+    fn publish_session(&self, book: &SalesSelectionBooklet) -> Result<SalesSelectionSession> {
         if book.access_password_hash.is_none() {
             return Err(Error::ValidationError("请先设置选品访问密码".into()));
         }
         let book_id = SalesSelectionBookletId::new(book.base.id.clone());
-        if book.submit_mode != SubmitMode::PickupVoucher {
-            return Ok(vec![SalesSelectionSession::new(SalesSelectionSessionId::new(next_id()), book_id)]);
-        }
-        (0..book.voucher_count.unwrap_or(0))
-            .map(|_| {
-                let id = next_id();
-                let (_, hash, cipher) = crypto.issue()?;
-                SalesSelectionSession::new_participant(
-                    SalesSelectionSessionId::new(id.clone()),
-                    book_id.clone(),
-                    id,
-                    hash,
-                    cipher,
-                )
-                .map_err(Error::from)
-            })
-            .collect()
+        Ok(SalesSelectionSession::new(SalesSelectionSessionId::new(next_id()), book_id))
     }
 
     // 复核完成后在发布事务内更新册并写入会话、幂等记录，避免返回无法重新打开的发布结果。
@@ -145,14 +125,14 @@ impl SalesSelectionService {
     //
     // 输入约定：
     // - `booklet`：已发布态的选品册
-    // - `sessions`：新建空会话
+    // - `session`：新建空会话
     // - `items`：有效陈列（仅用于视图）
     // - `command`：已认证发布人、幂等键与请求哈希
     // - `executor`：发布入口持有的事务执行器
     async fn commit_publish(
         &self,
         mut booklet: SalesSelectionBooklet,
-        sessions: Vec<SalesSelectionSession>,
+        session: SalesSelectionSession,
         items: Vec<SalesSelectionDisplayItem>,
         command: &PublishCommand,
         executor: &mut dyn Executor,
@@ -163,9 +143,7 @@ impl SalesSelectionService {
             .await?;
 
         self.db.sales_selection_booklets().update(&mut booklet, executor).await?;
-        for session in &sessions {
-            self.db.sales_selection_sessions().create(session, executor).await?;
-        }
+        self.db.sales_selection_sessions().create(&session, executor).await?;
 
         let view = Self::booklet_view(&booklet, &items, None, None);
         let record = Self::idempotency_record(IdempotencyStoreInput {

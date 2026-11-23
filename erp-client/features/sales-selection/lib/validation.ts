@@ -81,15 +81,10 @@ export const createBookSchema = z
         selection_form: z.enum(["SINGLE_SKU", "PACKAGE"], {
             message: "请选择选品形态",
         }),
-        submit_mode: z.enum(["BY_QUANTITY", "MALL_REDEEM", "PICKUP_VOUCHER"], {
-            message: "请选择提交方式",
-        }),
         access_password: z
             .string()
             .min(8, "访问密码至少 8 位")
             .max(64, "访问密码最多 64 位"),
-        per_person_budget: z.string(),
-        voucher_count: z.string(),
         source_kind: z.enum(["FILTER", "SELECTION"], {
             message: "请选择商品来源",
         }),
@@ -98,21 +93,6 @@ export const createBookSchema = z
         tiers: z.array(tierRuleSchema).optional(),
     })
     .superRefine((value, ctx) => {
-        if (value.submit_mode === "PICKUP_VOUCHER") {
-            if (!targetAmountString.safeParse(value.per_person_budget).success)
-                ctx.addIssue({
-                    code: "custom",
-                    path: ["per_person_budget"],
-                    message: "每人额度必须为大于 0 的金额，最多两位小数",
-                })
-            const count = value.voucher_count.trim()
-            if (!/^[1-9]\d{0,3}$/.test(count) || BigInt(count) > BigInt(1000))
-                ctx.addIssue({
-                    code: "custom",
-                    path: ["voucher_count"],
-                    message: "提货码数量必须为 1 到 1000 的整数",
-                })
-        }
         if (value.selection_form === "PACKAGE") {
             const tiers = value.tiers ?? []
             if (tiers.length < 1 || tiers.length > 10) {
@@ -144,52 +124,6 @@ export const createBookSchema = z
     })
 
 export type CreateBookFormValue = z.input<typeof createBookSchema>
-
-/** 会话单项选择。 */
-const sessionSelectionSchema = z.object({
-    item_id: z.string().trim().min(1, "请选择陈列项"),
-    quantity: quantityStringSchema.optional(),
-})
-
-/**
- * 构建保存会话校验：按份必须带份数，兑换禁止带份数。
- * @param submitMode 选品册提交方式
- */
-export const buildSaveSelectionSchema = (
-    submitMode: "BY_QUANTITY" | "MALL_REDEEM" | "PICKUP_VOUCHER",
-) =>
-    z
-        .object({
-            selections: z
-                .array(sessionSelectionSchema)
-                .min(1, "请至少选择 1 项后再提交"),
-        })
-        .superRefine((value, ctx) => {
-            const ids = value.selections.map((item) => item.item_id)
-            if (new Set(ids).size !== ids.length) {
-                ctx.addIssue({
-                    code: "custom",
-                    path: ["selections"],
-                    message: "存在重复选择的陈列项",
-                })
-            }
-            value.selections.forEach((item, index) => {
-                if (submitMode !== "MALL_REDEEM" && !item.quantity) {
-                    ctx.addIssue({
-                        code: "custom",
-                        path: ["selections", index, "quantity"],
-                        message: "请填写该项份数",
-                    })
-                }
-                if (submitMode === "MALL_REDEEM" && item.quantity) {
-                    ctx.addIssue({
-                        code: "custom",
-                        path: ["selections", index, "quantity"],
-                        message: "商城兑换不需要填写份数",
-                    })
-                }
-            })
-        })
 
 /** 生成请求幂等键（浏览器随机，断网重试不另生键由调用方缓存）。 */
 export const createIdempotencyKey = (): string => {
