@@ -20,10 +20,10 @@ impl RbacService {
     ) -> Result<PermissionSet> {
         let ids = self.role_ids(actor.kind(), actor.id()).await?;
         let roles = self.db.roles().enabled_roles(&ids, executor).await?;
-        let enforcer = self.fresh_enforcer().await?.read().await;
+        let snapshot = self.fresh_snapshot().await?.read().await;
         let mut permissions = vec![];
         for role in roles {
-            permissions.extend(implicit_permissions_for_role(&enforcer, &role.base.id)?.into_vec());
+            permissions.extend(implicit_permissions_for_role(&snapshot, &role.base.id)?.into_vec());
         }
         Ok(PermissionSet::new(permissions))
     }

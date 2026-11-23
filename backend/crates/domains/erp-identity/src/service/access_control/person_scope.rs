@@ -70,8 +70,7 @@ impl AccessControlService {
                     tree = Some(OrgTree::new(&organizations.units)?);
                 }
                 for id in ids {
-                    if tree.as_ref().expect("首次显式组织目标已加载组织树").expand(id, false)?.is_empty()
-                    {
+                    if !tree.as_ref().expect("首次显式组织目标已加载组织树").is_active(id)? {
                         return Err(Error::ValidationError("目标部门已停用".into()));
                     }
                 }
@@ -82,7 +81,7 @@ impl AccessControlService {
         Ok(())
     }
 
-    // 范围校验通过后，在原事务确认旧配置可转换，再按动作更新或新增；不触碰未选动作，也不软删除占用唯一键的行。
+    // 范围校验通过后，按动作更新或新增；不触碰未选动作，也不软删除占用唯一键的行。
     async fn replace_person_scope(
         &self,
         user: &str,
@@ -91,7 +90,6 @@ impl AccessControlService {
     ) -> Result<()> {
         let mut existing =
             self.db.person_data_scopes().for_person(user, Some(&req.resource), None, executor).await?;
-        req.ensure_legacy_conversion(&existing)?;
 
         for action in &req.actions {
             let expression = req.expression(action);

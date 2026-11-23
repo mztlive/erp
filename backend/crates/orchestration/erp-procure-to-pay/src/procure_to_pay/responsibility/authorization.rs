@@ -6,7 +6,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::AccountKind;
-use erp_identity::{AuthorizationService, MongoCasbinAdapter};
+use erp_identity::{AuthorizationService, PolicyStore};
 use erp_permissions::purchase_order;
 use erp_procurement::service::procurement_responsibility::CandidateResolution;
 use mongodb::Database;
@@ -26,7 +26,7 @@ struct RbacPolicy<'a>(&'a Arc<AuthorizationService>, &'a Database);
 #[async_trait]
 impl ResponsibilityPolicy for RbacPolicy<'_> {
     async fn revision(&self, executor: &mut dyn Executor) -> Result<u64> {
-        Ok(MongoCasbinAdapter::new(self.1.clone()).policy_revision(executor).await?)
+        Ok(PolicyStore::new(self.1.clone()).policy_revision(executor).await?)
     }
     async fn enforce_owner(&self, owner_id: &str, executor: &mut dyn Executor) -> Result<bool> {
         let permission = purchase_order::CREATE;

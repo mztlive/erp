@@ -5,7 +5,7 @@ use validator::Validate;
 
 use crate::AccessControlExt;
 use crate::entity::account_core::AccountCore;
-use crate::entity::auth::{LoginAccount, Secret};
+use crate::entity::auth::LoginAccount;
 use crate::error::{Error, Result};
 use crate::repository::prelude::*;
 
@@ -66,9 +66,9 @@ impl From<&AccountCore> for BackofficeAuthResult {
     }
 }
 
-/// 处理后台登录和会话重验，统一规范化账号、检查类型与状态，并在验密通过后将旧 MD5 凭证迁移为 Argon2id。
+/// 处理后台登录和会话重验，统一规范化账号、检查类型与状态。
 pub struct BackofficeAuthService {
-    // 登录和会话重验所读的账号库，也用于持久化升级后的凭证。
+    // 登录和会话重验所读的账号库。
     db: Database,
 }
 
@@ -80,34 +80,16 @@ impl BackofficeAuthService {
 
     /// 后台登录时校验请求中的账号、密码和类型，只返回不含密码哈希的身份。
     /// 不存在、类型不符、不可登录及密码错误统一为凭证错误；数据库错误单独返回。
-    /// 旧 MD5 凭证匹配后必须先成功写入 Argon2id 凭证，才能交付登录身份。
     pub async fn authenticate(&self, request: &crate::dto::AuthRequest) -> Result<BackofficeAuthResult> {
         request.validate()?;
-        let stored_account = self.find_account(&request.account).await?;
-        let secret = stored_account
-            .as_ref()
-            .and_then(|account| backoffice_secret(account, request.account_kind))
-            .cloned();
-        let is_authenticatable = secret.is_some();
-        let password_check = password::verify_password(secret, request.password.clone()).await?;
-        let mut stored_account = match (stored_account, password_check.is_match()) {
-            (Some(account), true) => account,
-            (account, _) => {
-                tracing::info!(
-                    account = request.account.as_str(),
-                    account_kind = ?request.account_kind,
-                    found = account.is_some(),
-                    authenticatable = is_authenticatable,
-                    "backoffice authenticate rejected"
-                );
-                return Err(invalid_credentials());
-            },
-        };
-
-        if let Some(secret) = password_check.into_upgraded_secret() {
-            stored_account.secret = secret;
-            self.db.accounts().update(&mut stored_account, &mut NoTransaction).await?;
-        }
+        let stored_account = authenticate_account(
+            &self.db,
+            &request.account,
+            request.password.clone(),
+            DomainAccountKind::Admin,
+            request.account_kind == DomainAccountKind::Admin,
+        )
+        .await?;
         Ok(BackofficeAuthResult::from(&stored_account))
     }
 
@@ -131,24 +113,51 @@ impl BackofficeAuthService {
 
         Ok(BackofficeAuthResult::from(stored_account))
     }
-
-    // 登录时按规范化账号查询；格式无效视为未找到，交给密码校验做占位计算。
-    async fn find_account(&self, account: &str) -> Result<Option<AccountCore>> {
-        let Ok(account) = LoginAccount::new(account) else {
-            return Ok(None);
-        };
-
-        Ok(self.db.accounts().find_by_account(account.as_str(), &mut NoTransaction).await?)
-    }
 }
 
-// 后台密码认证失败时使用统一错误，不对外区分账号状态或密码不匹配。
-fn invalid_credentials() -> Error {
+/// 后台与门户共用的账号密码认证：按规范化账号查库、仅接受目标类型可用凭证，并始终走占位验密边界。
+pub(crate) async fn authenticate_account(
+    db: &Database,
+    account: &str,
+    password: String,
+    kind: DomainAccountKind,
+    kind_allowed: bool,
+) -> Result<AccountCore> {
+    let stored = match LoginAccount::new(account) {
+        Ok(login) => db.accounts().find_by_account(login.as_str(), &mut NoTransaction).await?,
+        Err(_) => None,
+    };
+    let secret = kind_allowed
+        .then(|| stored.as_ref().and_then(|item| item.authentication_secret_for(kind)).cloned())
+        .flatten();
+    let authenticatable = secret.is_some();
+    if password::verify_password(secret, password).await?
+        && let Some(stored) = stored
+    {
+        return Ok(stored);
+    }
+
+    tracing::info!(
+        account,
+        account_kind = ?kind,
+        found = stored.is_some(),
+        authenticatable,
+        "account authenticate rejected"
+    );
+    Err(invalid_credentials())
+}
+
+// 密码认证失败时使用统一错误，不对外区分账号状态或密码不匹配。
+pub(crate) fn invalid_credentials() -> Error {
     Error::Unauthenticated("用户名或密码错误".to_string())
 }
 
 // 后台验密前只为可登录的内部账号取凭证，请求中的账号类型不能切换身份域。
-fn backoffice_secret(account: &AccountCore, requested_kind: DomainAccountKind) -> Option<&Secret> {
+#[cfg(test)]
+fn backoffice_secret(
+    account: &AccountCore,
+    requested_kind: DomainAccountKind,
+) -> Option<&crate::entity::auth::Secret> {
     (requested_kind == DomainAccountKind::Admin)
         .then(|| account.authentication_secret_for(DomainAccountKind::Admin))
         .flatten()
@@ -189,7 +198,7 @@ pub use crate::dto::{AuthRequest, AuthResponse};
 mod tests {
     use erp_core::AccountKind;
 
-    use super::password::{PasswordCheck, verify_password};
+    use super::password::verify_password;
     use super::{BackofficeAuthResult, backoffice_secret};
     use crate::entity::account_core::{AccountCore, AccountCoreData, AccountStatus};
     use crate::entity::auth::{LoginAccount, Secret};
@@ -224,9 +233,7 @@ mod tests {
     async fn authentication_rules_should_accept_matching_active_account() {
         let account = account(AccountKind::Admin, AccountStatus::Active);
         let secret = account.authentication_secret_for(AccountKind::Admin).cloned();
-        let result = verify_password(secret, "password123".to_string()).await.unwrap();
-
-        assert!(matches!(result, PasswordCheck::Current));
+        assert!(verify_password(secret, "password123".to_string()).await.unwrap());
     }
 
     // 验证停用账号仍经过密码校验边界，但正确密码也不能登录。
@@ -234,8 +241,7 @@ mod tests {
     async fn inactive_account_should_still_use_password_boundary() {
         let suspended = account(AccountKind::Admin, AccountStatus::Suspended);
         let secret = suspended.authentication_secret_for(AccountKind::Admin).cloned();
-        let result = verify_password(secret, "password123".to_string()).await.unwrap();
-        assert!(matches!(result, PasswordCheck::Mismatch));
+        assert!(!verify_password(secret, "password123".to_string()).await.unwrap());
     }
 
     // 验证身份结果保留会话所需信息，调试输出不暴露 Argon2 哈希。

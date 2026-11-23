@@ -1,4 +1,4 @@
-//! 权限、角色绑定、人员数据范围和审计事件的专用查询。
+//! 人员数据范围和审计事件的专用查询。
 //! 审计事件只追加，不提供软删除或恢复入口。
 
 use application_core::SortDir;
@@ -7,11 +7,9 @@ use mongodb::bson::{Document, doc};
 use crate::entity::access_control::paging::{PageParams, TimeSort};
 
 pub mod audit_event;
-pub mod permission;
 pub mod person_scope;
 
 pub use audit_event::{AuditEventFilter, AuditEventRepositoryExt, AuditEventRow};
-pub use permission::{PermissionFilter, PermissionRepositoryExt, UserRoleRepositoryExt};
 
 // 将已校验的时间排序转为 MongoDB 排序，并用同向 ID 打破并列。
 fn sort_doc(paging: &PageParams) -> Document {
@@ -24,21 +22,6 @@ fn sort_doc(paging: &PageParams) -> Document {
         TimeSort::UpdatedAt => "updated_at",
     };
     doc! { field: direction, "id": direction }
-}
-
-/// 限定权限目录查询只返回展示所需字段。
-pub(super) fn permission_projection() -> Document {
-    doc! {
-        "id": 1,
-        "resource": 1,
-        "action": 1,
-        "name": 1,
-        "description": 1,
-        "system": 1,
-        "disabled": 1,
-        "version": 1,
-        "created_at": 1,
-    }
 }
 
 /// 限定审计列表只读取安全投影字段，不加载完整事件。
@@ -65,26 +48,8 @@ mod tests {
     use mongodb::bson::doc;
     use persistence_core::QueryFilter;
 
-    use super::{AuditEventFilter, PageParams, PermissionFilter, sort_doc};
+    use super::{AuditEventFilter, PageParams, sort_doc};
     use crate::entity::access_control::AuditEventResult;
-
-    // 验证权限资源按字面量筛选，停用和内建状态精确匹配，且排除已删除记录。
-    #[test]
-    fn permission_filter_applies_resource_regex_and_flags() {
-        let filter = PermissionFilter {
-            resource: Some("sales_order".to_string()),
-            disabled: Some(false),
-            system: Some(true),
-            paging: Default::default(),
-        };
-
-        let document = filter.to_doc();
-        assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
-        let resource = document.get_document("resource").unwrap();
-        assert_eq!(resource.get_str("$regex").unwrap(), "sales_order");
-        assert!(!document.get_bool("disabled").unwrap());
-        assert!(document.get_bool("system").unwrap());
-    }
 
     // 验证审计操作者与动作的正则字符被转义，且对象和结果按精确值筛选。
     #[test]

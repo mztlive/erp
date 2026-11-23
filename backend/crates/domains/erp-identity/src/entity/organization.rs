@@ -1,4 +1,4 @@
-//! 内部组织、主属成员和按角色授予的管理关系；不承载法人或仓库身份。
+//! 内部组织和主属成员关系；不承载法人或仓库身份。
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -132,29 +132,6 @@ impl OrgMembership {
     }
 }
 
-/// 旧部门管理关系的审计记录；当时由账号所持且具备完整动作权限的指定角色启用，现已停用。
-#[derive(Debug, Clone, Serialize, Deserialize, Entity, PartialEq, Eq)]
-pub struct OrgManagementAssignment {
-    /// 历史管理关系的 ID 与持久化元数据。
-    #[serde(flatten)]
-    pub base: BaseModel,
-    /// 历史管理范围授予的账号 ID。
-    pub user_id: String,
-    /// 当时绑定的授予角色 ID。
-    pub role_id: String,
-    /// 历史管理范围的起始组织 ID。
-    pub org_unit_id: String,
-    /// 当时是否将起始组织的下级纳入管理范围。
-    pub include_descendants: bool,
-    /// 平铺存储的历史管理关系有效期。
-    #[serde(flatten)]
-    pub validity: OrgValidity,
-    /// 当时授予管理关系的操作人 ID。
-    pub granted_by: String,
-    /// 当时授予管理关系的审计原因。
-    pub reason: String,
-}
-
 /// 借用已校验的组织节点，提供祖先路径和下级范围解析。
 pub struct OrgTree<'a> {
     // 按组织 ID 定位节点，供逐级查找上级。
@@ -215,11 +192,15 @@ impl<'a> OrgTree<'a> {
         Ok(())
     }
 
+    /// 判断目标组织存在且从根到目标的整条祖先路径均启用；未知目标返回错误。
+    pub fn is_active(&self, id: &str) -> Result<bool> {
+        Ok(self.path(id)?.iter().all(|node| node.enabled))
+    }
+
     /// 按 ID 有序返回目标组织；`descendants` 为真时沿启用分支递归纳入下级。
     /// 未知目标报错；目标或任一祖先停用时返回空集合，展开时跳过停用分支。
     pub fn expand(&self, id: &str, descendants: bool) -> Result<BTreeSet<String>> {
-        let target_path = self.path(id)?;
-        if target_path.iter().any(|node| !node.enabled) {
+        if !self.is_active(id)? {
             return Ok(BTreeSet::new());
         }
 
@@ -236,6 +217,15 @@ impl<'a> OrgTree<'a> {
                     pending.push(child.base.id.as_str());
                 }
             }
+        }
+        Ok(result)
+    }
+
+    /// 将多个组织节点按同一展开规则合并为有序启用集合；任一未知目标返回错误。
+    pub fn expand_all(&self, ids: &[String], descendants: bool) -> Result<BTreeSet<String>> {
+        let mut result = BTreeSet::new();
+        for id in ids {
+            result.extend(self.expand(id, descendants)?);
         }
         Ok(result)
     }

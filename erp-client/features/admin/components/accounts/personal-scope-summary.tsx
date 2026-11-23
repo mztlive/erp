@@ -57,9 +57,6 @@ export function ProposedScopeSummary({
                     resource: value.resource,
                     action,
                     expression: {
-                        additive: true,
-                        history_read: false,
-                        condition: null,
                         alternatives: [
                             ...new Map(
                                 alternatives.map((terms) => [

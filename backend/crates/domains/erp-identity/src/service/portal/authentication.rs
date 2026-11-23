@@ -8,9 +8,8 @@ use super::{PortalIdentityService, invalid_session};
 use crate::dto::PortalLoginPayload;
 use crate::entity::portal::PortalActor;
 use crate::repository::portal::{PortalBindingRepositoryExt, PortalIdentityExt};
-use crate::repository::prelude::*;
-use crate::service::auth::password;
-use crate::{AccessControlExt, Error, LoginAccount, Result};
+use crate::service::auth::{authenticate_account, invalid_credentials};
+use crate::{AccessControlExt, LoginAccount, Result};
 
 impl PortalIdentityService {
     /// 门户登录只按允许的登录字段认证供应商账号，不接收客户端指定的身份类型。
@@ -19,22 +18,14 @@ impl PortalIdentityService {
     pub async fn authenticate(&self, request: &PortalLoginPayload) -> Result<PortalActor> {
         request.validate()?;
         let login = LoginAccount::new(&request.account)?;
-
-        let stored = self.db.accounts().find_by_account(login.as_str(), &mut NoTransaction).await?;
-        let secret = stored
-            .as_ref()
-            .and_then(|account| account.authentication_secret_for(AccountKind::Supplier))
-            .cloned();
-        let password_check = password::verify_password(secret, request.password.clone()).await?;
-        let mut stored = match (stored, password_check.is_match()) {
-            (Some(account), true) => account,
-            _ => return Err(invalid_credentials()),
-        };
-
-        if let Some(secret) = password_check.into_upgraded_secret() {
-            stored.secret = secret;
-            self.db.accounts().update(&mut stored, &mut NoTransaction).await?;
-        }
+        let stored = authenticate_account(
+            &self.db,
+            login.as_str(),
+            request.password.clone(),
+            AccountKind::Supplier,
+            true,
+        )
+        .await?;
 
         let binding = self
             .db
@@ -69,16 +60,11 @@ impl PortalIdentityService {
     }
 }
 
-// 门户登录失败时返回统一凭证错误，不暴露内部账号是否存在或供应商绑定状态。
-fn invalid_credentials() -> Error {
-    Error::Unauthenticated("用户名或密码错误".into())
-}
-
 #[cfg(test)]
 mod tests {
     use erp_core::AccountKind;
 
-    use crate::service::auth::password::{PasswordCheck, verify_password};
+    use crate::service::auth::password::verify_password;
     use crate::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
 
     // 验证内部账号即使用正确密码，也只能经过门户占位验密并得到不匹配。
@@ -95,9 +81,6 @@ mod tests {
         )
         .unwrap();
         let secret = account.authentication_secret_for(AccountKind::Supplier).cloned();
-        assert!(matches!(
-            verify_password(secret, "password123".into()).await.unwrap(),
-            PasswordCheck::Mismatch
-        ));
+        assert!(!verify_password(secret, "password123".into()).await.unwrap());
     }
 }

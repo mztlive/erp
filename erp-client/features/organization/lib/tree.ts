@@ -1,7 +1,6 @@
 import type {
     OrganizationStateView,
     OrganizationUrlState,
-    OrgManagementAssignment,
     OrgMembership,
     OrgUnit,
 } from "@/features/organization/types"
@@ -10,7 +9,6 @@ export type OrgTreeNode = {
     unit: OrgUnit
     children: OrgTreeNode[]
     members: OrgMembership[]
-    management: OrgManagementAssignment[]
 }
 
 export function personLabel(
@@ -77,15 +75,6 @@ export function buildOrganizationForest(
                 unit,
                 children: [],
                 members: view.memberships.filter(
-                    (item) =>
-                        item.org_unit_id === unit.id &&
-                        isRelationActive(
-                            item.valid_from,
-                            item.valid_to,
-                            view.asOf,
-                        ),
-                ),
-                management: view.management.filter(
                     (item) =>
                         item.org_unit_id === unit.id &&
                         isRelationActive(

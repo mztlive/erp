@@ -130,15 +130,12 @@ impl PolicyScope {
         action_expression(&self.grants, action)
     }
 
-    /// 对照文件前重新校验已存的追加范围。旧完整表达式及旧历史或交集字段保持原样。
+    /// 对照文件前重新规范化已存的追加范围。
     pub(super) fn canonical_existing_expression(
         &self,
         action: &str,
         expression: &PersonScopeExpression,
     ) -> Result<PersonScopeExpression> {
-        if !expression.additive || expression.history_read || expression.condition.is_some() {
-            return Ok(expression.clone());
-        }
         let grants = expression
             .alternatives
             .iter()
@@ -155,7 +152,6 @@ impl PolicyScope {
             resource: self.resource.clone(),
             actions: self.actions.clone(),
             grants: self.grants.clone(),
-            replace_legacy: self.replace_legacy,
             expected_policy_version: version,
         }
         .normalized()
@@ -171,11 +167,7 @@ fn action_expression(grants: &[PersonScopeGrant], action: &str) -> Result<Person
         .collect::<Result<Vec<_>>>()?;
     keyed.sort_by(|a, b| a.0.cmp(&b.0));
     keyed.dedup_by(|a, b| a.0 == b.0);
-    Ok(PersonScopeExpression {
-        additive: true,
-        alternatives: keyed.into_iter().map(|(_, terms)| terms.clone()).collect(),
-        ..Default::default()
-    })
+    Ok(PersonScopeExpression { alternatives: keyed.into_iter().map(|(_, terms)| terms.clone()).collect() })
 }
 
 /// 去除外部人员 ID 的首尾空白；结果为空、超过 128 字节或含控制字符时返回校验错误。

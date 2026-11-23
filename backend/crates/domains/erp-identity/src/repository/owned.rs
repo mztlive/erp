@@ -7,10 +7,7 @@ pub type PersonQueryQualificationRepository<'a> =
     persistence_core::Repository<'a, crate::entity::person_directory::PersonQueryQualification>;
 pub type AuditEventRepository<'a> =
     persistence_core::Repository<'a, crate::entity::access_control::AuditEvent>;
-pub type PermissionRepository<'a> =
-    persistence_core::Repository<'a, crate::entity::access_control::PermissionDefinition>;
 pub type RoleRepository<'a> = persistence_core::Repository<'a, crate::entity::Role>;
-pub type UserRoleRepository<'a> = persistence_core::Repository<'a, crate::entity::access_control::UserRole>;
 
 pub type PersonDataScopeRepository<'a> =
     persistence_core::Repository<'a, crate::entity::access_control::person_scope::PersonDataScope>;

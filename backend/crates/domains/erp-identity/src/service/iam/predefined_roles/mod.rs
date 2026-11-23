@@ -78,13 +78,13 @@ pub(crate) const PREDEFINED_ROLES: &[PredefinedRoleDef] = &[
     PredefinedRoleDef {
         id: "role-management",
         name: "管理层",
-        description: "经营质量、盈亏、履约与票款汇总只读；仅可在授权范围管理待办责任，不改写业务事实。",
+        description: "查看经营、履约、票款及待办责任，不修改业务或审批状态。",
         permissions: MANAGEMENT_PERMISSIONS,
     },
     PredefinedRoleDef {
         id: "role-sysadmin",
         name: "系统管理员",
-        description: "同步监控、集成错误、对账差异与来源注册；不替代业务部门改写商业事实，不含账号/角色超级权限。",
+        description: "处理同步与集成异常、技术配置和组织治理；审批流程管理单独授权。",
         permissions: SYSADMIN_PERMISSIONS,
     },
 ];

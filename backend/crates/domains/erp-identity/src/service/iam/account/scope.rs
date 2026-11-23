@@ -21,8 +21,6 @@ pub(crate) async fn seed_company(db: &Database, user: &str, executor: &mut dyn E
             resource: spec.permission().resource().into(),
             action: spec.permission().action().into(),
             expression: PersonScopeExpression {
-                additive: false,
-                history_read: false,
                 alternatives: vec![vec![PersonScopeTerm {
                     scope_type: DataScopeType::Company,
                     target_dimension: spec.dimensions()[0],
@@ -30,7 +28,6 @@ pub(crate) async fn seed_company(db: &Database, user: &str, executor: &mut dyn E
                     include_descendants: None,
                     scope_targets: vec![],
                 }]],
-                condition: None,
             },
         };
         db.person_data_scopes().create(&scope, executor).await?;

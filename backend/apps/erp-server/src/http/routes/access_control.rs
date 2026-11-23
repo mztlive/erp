@@ -1,12 +1,12 @@
 //! 域 D06 `access_control` 管理端路由。
 //!
-//! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/permissions`、
-//! `/admin/data-scopes`、`/admin/user-roles`、`/admin/audit-events`；
+//! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/person-data-scopes`、
+//! `/admin/authorization-policies`、`/admin/audit-events` 等；
 //! 每条路由统一走 JWT 认证；业务授权由用例执行，目录由 `permission_route` 提供，权限由显式目录统一定义。
 
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
-use axum::routing::{delete, get, post, put};
+use axum::routing::{get, post, put};
 use erp_permissions as permissions;
 
 use crate::http::handler::{access_control, organization};
@@ -17,10 +17,8 @@ use crate::http::state::HttpState;
 pub fn routes() -> Router<HttpState> {
     Router::new()
         .merge(organization_routes())
-        .merge(permission_routes())
         .merge(person_scope_routes())
         .merge(policy_bundle_routes())
-        .merge(binding_routes())
         .merge(inspection_routes())
         .merge(people_routes())
         .merge(resource_grant_routes())
@@ -85,65 +83,6 @@ fn organization_routes() -> Router<HttpState> {
         .route(
             "/org-units/change",
             permission_route(post(organization::change), &permissions::organization::CHANGE),
-        )
-}
-
-// 为父路由挂载权限目录管理路由。
-fn permission_routes() -> Router<HttpState> {
-    Router::new()
-        .route(
-            "/permissions",
-            permission_route(
-                get(access_control::permission_list),
-                &permissions::access_control::PERMISSION_LIST,
-            ),
-        )
-        .route(
-            "/permissions",
-            permission_route(
-                post(access_control::permission_create),
-                &permissions::access_control::PERMISSION_CREATE,
-            ),
-        )
-        .route(
-            "/permissions/{id}",
-            permission_route(
-                put(access_control::permission_update),
-                &permissions::access_control::PERMISSION_UPDATE,
-            ),
-        )
-        .route(
-            "/permissions/{id}",
-            permission_route(
-                delete(access_control::permission_delete),
-                &permissions::access_control::PERMISSION_DELETE,
-            ),
-        )
-}
-
-// 为父路由挂载用户角色绑定及撤销路由。
-fn binding_routes() -> Router<HttpState> {
-    Router::new()
-        .route(
-            "/user-roles",
-            permission_route(
-                get(access_control::user_role_list),
-                &permissions::access_control::USER_ROLE_LIST,
-            ),
-        )
-        .route(
-            "/user-roles",
-            permission_route(
-                post(access_control::user_role_create),
-                &permissions::access_control::USER_ROLE_CREATE,
-            ),
-        )
-        .route(
-            "/user-roles/{id}/revoke",
-            permission_route(
-                post(access_control::user_role_revoke),
-                &permissions::access_control::USER_ROLE_REVOKE,
-            ),
         )
 }
 

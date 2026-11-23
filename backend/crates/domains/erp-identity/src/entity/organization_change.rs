@@ -21,9 +21,6 @@ pub struct OrganizationState {
     pub units: Vec<OrgUnit>,
     /// 主属关系记录，用有效期区分历史、当前和未来归属。
     pub memberships: Vec<OrgMembership>,
-    /// 仅供旧审计读取的管理关系，当前授权和变更校验均不使用；空集合时省略。
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub management: Vec<OrgManagementAssignment>,
 }
 
 /// 版本化的组织管理命令；新实体 ID 由服务端生成，更新须匹配当前组织版本。
@@ -89,24 +86,6 @@ pub enum OrganizationOperation {
         /// 要结束主属关系的账号 ID。
         user_id: String,
     },
-    /// 旧管理关系授予命令，仅供审计读取，请求校验拒绝执行。
-    GrantManagement {
-        /// 当时获授管理范围的账号 ID。
-        user_id: String,
-        /// 当时绑定的授予角色 ID。
-        role_id: String,
-        /// 原管理范围的起始组织 ID。
-        org_unit_id: String,
-        /// 原授权是否覆盖起始组织的下级。
-        include_descendants: bool,
-        /// 原授予请求的失效时点，`None` 表示无固定终点。
-        valid_to: Option<Instant>,
-    },
-    /// 旧管理关系撤销命令，仅供审计读取，请求校验拒绝执行。
-    RevokeManagement {
-        /// 当时要撤销的管理关系 ID。
-        assignment_id: String,
-    },
 }
 
 /// 提交或预览组织变更的请求，携带并发校验和幂等回放所需信息。
@@ -157,10 +136,6 @@ impl OrganizationChangeRequest {
     /// 幂等键须为 1 至 128 字节的 ASCII 字母、数字、下划线或短横线；原因去首尾空白后须非空，原值最多 1000 字符。
     pub fn validate(&self) -> Result<()> {
         match &self.change {
-            OrganizationOperation::GrantManagement { .. }
-            | OrganizationOperation::RevokeManagement { .. } => {
-                return Err(Error::ValidationError("部门管理关系已停用，请在人员数据范围中设置授权".into()));
-            },
             OrganizationOperation::UpdatePersonProfile { profile } => {
                 profile.validate()?;
             },
@@ -288,10 +263,6 @@ impl OrganizationState {
             OrganizationOperation::EndMembership { user_id } => {
                 self.end_membership(user_id, actor, reason, at)?
             },
-            OrganizationOperation::GrantManagement { .. }
-            | OrganizationOperation::RevokeManagement { .. } => {
-                return Err(Error::ValidationError("部门管理关系已停用，请在人员数据范围中设置授权".into()));
-            },
         }
         Ok(())
     }
@@ -409,7 +380,7 @@ impl OrganizationState {
 
     // 借助已校验的树确认目标存在，且目标至根的路径全部启用。
     fn ensure_enabled(&self, id: &str) -> Result<()> {
-        if OrgTree::new(&self.units)?.expand(id, false)?.is_empty() {
+        if !OrgTree::new(&self.units)?.is_active(id)? {
             return Err(Error::ValidationError("组织已停用".into()));
         }
         Ok(())
@@ -438,7 +409,6 @@ mod tests {
         assert!(before.units[0].leader.is_none());
         assert_eq!(first.units[0].leader.as_ref().unwrap().user_id, "manager");
         assert_eq!(first.memberships, before.memberships);
-        assert_eq!(first.management, before.management);
 
         let mut next = request(OrganizationOperation::SetLeader {
             org_unit_id: "one".into(),
@@ -483,7 +453,6 @@ mod tests {
                 changed_by: "admin".into(),
                 reason: "初始化".into(),
             }],
-            management: vec![],
         }
     }
 
@@ -590,8 +559,6 @@ mod tests {
             role_ids: None,
             name: Some("新姓名".into()),
             org_unit_id: Some("two".into()),
-            remove_management_ids: vec![],
-            add_management: vec![],
         };
         let change = request(OrganizationOperation::UpdatePersonProfile { profile: profile.clone() });
         let after = before.changed(&change, "id", "admin", Instant::from_unix_secs(10)).unwrap();
@@ -602,7 +569,6 @@ mod tests {
         assert_eq!(membership.base.id, "id-0");
         assert_eq!(membership.changed_by, "admin");
         assert_eq!(membership.reason, change.reason);
-        assert!(after.management.is_empty());
 
         let mut name_only = profile.clone();
         name_only.org_unit_id = None;
@@ -629,7 +595,6 @@ mod tests {
                 .is_err()
         );
         assert_eq!(before.own_org("sales", Instant::from_unix_secs(10)).unwrap(), Some("one"));
-        assert!(before.management.is_empty());
     }
 
     // 验证调岗边界前后分别解析到旧、新组织，历史记录和原快照均保留。
@@ -714,73 +679,6 @@ mod tests {
         assert_eq!(before.version, 1);
         assert!(before.units[0].enabled);
         assert_eq!(before.units[0].parent_id, None);
-    }
-
-    // 验证旧管理命令仍可序列化往返，重读后仍被请求校验和状态变更入口拒绝。
-    #[test]
-    fn legacy_management_commands_deserialize_but_cannot_change_state() {
-        let before = state();
-        for operation in [
-            OrganizationOperation::GrantManagement {
-                user_id: "sales".into(),
-                role_id: "role".into(),
-                org_unit_id: "one".into(),
-                include_descendants: false,
-                valid_to: None,
-            },
-            OrganizationOperation::RevokeManagement { assignment_id: "old".into() },
-        ] {
-            let request = request(operation);
-            let encoded = serde_json::to_string(&request).unwrap();
-            let decoded = serde_json::from_str::<OrganizationChangeRequest>(&encoded).unwrap();
-            assert_eq!(decoded, request);
-            assert!(matches!(decoded.validate(), Err(Error::ValidationError(_))));
-            assert!(before.changed(&decoded, "id", "admin", Instant::from_unix_secs(10)).is_err());
-        }
-        assert_eq!(before.version, 1);
-        assert!(before.management.is_empty());
-    }
-
-    // 验证含旧管理关系的快照可重读，部门仍可停用并原样保留历史关系。
-    #[test]
-    fn historical_management_does_not_block_department_disable() {
-        let mut before = state();
-        before.management.push(OrgManagementAssignment {
-            base: BaseModel::new("legacy".into()),
-            user_id: "sales".into(),
-            role_id: "old-role".into(),
-            org_unit_id: "two".into(),
-            include_descendants: true,
-            validity: OrgValidity { valid_from: Instant::from_unix_secs(1), valid_to: None },
-            granted_by: "admin".into(),
-            reason: "历史".into(),
-        });
-
-        let snapshot = serde_json::to_value(&before).unwrap();
-        assert_eq!(snapshot["management"].as_array().unwrap().len(), 1);
-        let before: OrganizationState = serde_json::from_value(snapshot).unwrap();
-
-        let after = before
-            .changed(
-                &request(OrganizationOperation::DisableUnit { org_unit_id: "two".into() }),
-                "id",
-                "admin",
-                Instant::from_unix_secs(10),
-            )
-            .unwrap();
-        assert!(!after.units[1].enabled);
-        assert_eq!(after.management, before.management);
-    }
-
-    // 验证空管理历史在新快照中省略，并兼容缺失字段和旧空数组。
-    #[test]
-    fn current_snapshots_omit_retired_management_and_accept_empty_history() {
-        let before = state();
-        let mut snapshot = serde_json::to_value(&before).unwrap();
-        assert!(snapshot.get("management").is_none());
-        assert_eq!(serde_json::from_value::<OrganizationState>(snapshot.clone()).unwrap(), before);
-        snapshot["management"] = serde_json::json!([]);
-        assert_eq!(serde_json::from_value::<OrganizationState>(snapshot).unwrap(), before);
     }
 
     // 验证主属查询拒绝重叠关系，变更请求校验拒绝空白幂等键。

@@ -34,7 +34,7 @@ type ActionBlocker = Readonly<{
 type UserRoleTimePolicy =
     | {
           state: "MISSING"
-          allowedActions: readonly ["EMERGENCY_REVOKE_USER_ROLE"]
+          allowedActions: readonly string[]
           blockerCode: "USER_ROLE_TIME_POLICY_MISSING"
       }
     | {
@@ -134,7 +134,6 @@ export type UserRow = Readonly<{
     riskFlags: readonly string[]
     permissionVersion: string
     organizationLabel: string
-    roleAssignmentId?: string
 }>
 
 export type ScopeRow = Readonly<{
@@ -330,19 +329,8 @@ export type AccessChangeCommand =
     | {
           subjectType: "USER"
           subjectId: string
-          action: "EMERGENCY_REVOKE_USER_ROLE"
-          roleAssignmentId: string
-          expectedPermissionVersion: string
-          reasonCode: string
-          comment?: string
-          idempotencyKey: string
-      }
-    | {
-          subjectType: "USER"
-          subjectId: string
           action: "ASSIGN_USER_ROLE" | "CHANGE_USER_ROLE" | "REVOKE_USER_ROLE"
           roleId: string
-          roleAssignmentId?: string
           timePolicyVersion: string
           effectiveAt?: string
           expiresAt?: string

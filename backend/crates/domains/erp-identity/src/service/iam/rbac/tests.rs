@@ -2,20 +2,19 @@ use std::collections::{HashMap, HashSet};
 
 use application_core::AuditActor;
 use async_trait::async_trait;
-use casbin::{CoreApi, Enforcer, MemoryAdapter, RbacApi};
 use erp_core::AccountKind;
 use persistence_core::Executor;
 
 use super::{
-    AuthorizedAccountManagement, RBAC_MODEL, ROOT_ROLE_ID, RbacService, RolePermissionSnapshot,
-    collect_role_ids, commit_outcome_unknown, ensure_all_roles_assignable, ensure_management_subset,
-    ensure_permission_subset, ensure_policy_snapshot_revision, ensure_roles_delegable,
-    ensure_target_roles_manageable, parse_policy_permissions, permission_pairs, permissions_for_roles,
-    role_key, role_or_not_found, root_role_is_current,
+    AuthorizedAccountManagement, ROOT_ROLE_ID, RbacService, RolePermissionSnapshot, collect_role_ids,
+    commit_outcome_unknown, ensure_all_roles_assignable, ensure_management_subset, ensure_permission_subset,
+    ensure_policy_snapshot_revision, ensure_roles_delegable, ensure_target_roles_manageable,
+    permission_pairs, permissions_for_roles, role_key, role_or_not_found, root_role_is_current,
 };
 use crate::entity::{Permission, PermissionSet, Role, RoleData};
 use crate::error::Error;
 use crate::ports::{IdentityAuditPort, PreparedResourceAudit};
+use crate::repository::policy_store::PolicySnapshot;
 use crate::{RoleId, RoleIdSet};
 
 #[test]
@@ -255,12 +254,11 @@ fn permission_pairs_are_deduplicated_and_sorted() {
 // 验证载入的策略行也按同一顺序规范化并去重。
 #[test]
 fn loaded_policy_permissions_use_the_same_deduplicated_order() {
-    let permissions = parse_policy_permissions(vec![
-        vec!["role:a".to_string(), "customer".to_string(), "read".to_string()],
-        vec!["role:a".to_string(), "role".to_string(), "write".to_string()],
-        vec!["role:a".to_string(), "customer".to_string(), "read".to_string()],
-    ])
-    .unwrap();
+    let mut snapshot = PolicySnapshot::default();
+    snapshot.insert_rule("p", "p", vec!["role:a".into(), "customer".into(), "read".into()]);
+    snapshot.insert_rule("p", "p", vec!["role:a".into(), "role".into(), "write".into()]);
+    snapshot.insert_rule("p", "p", vec!["role:a".into(), "customer".into(), "read".into()]);
+    let permissions = snapshot.direct_permissions("role:a").unwrap();
 
     assert_eq!(
         permissions.as_slice(),
@@ -306,16 +304,12 @@ async fn unknown_commit_outcome_poison_policy_state() {
     assert!(next_command.ensure_policy_consistency_known().is_ok());
 }
 
-// 验证生产 Casbin 模型向绑定 root 的账号授予跨资源操作，未绑定账号无法使用其通配权限。
-#[tokio::test]
-async fn casbin_model_should_enforce_role_permissions_and_wildcards() {
-    let model = casbin::DefaultModel::from_str(RBAC_MODEL).await.unwrap();
-    let mut enforcer = Enforcer::new(model, MemoryAdapter::default()).await.unwrap();
-    enforcer.add_role_for_user("user:admin:1", &role_key("role-root"), None).await.unwrap();
-    enforcer
-        .add_permission_for_user(&role_key("role-root"), vec!["*".to_string(), "*".to_string()])
-        .await
-        .unwrap();
+// 验证策略快照向绑定 root 的账号授予跨资源操作，未绑定账号无法使用其通配权限。
+#[test]
+fn policy_snapshot_should_enforce_role_permissions_and_wildcards() {
+    let mut snapshot = PolicySnapshot::default();
+    snapshot.add_role_edge("user:admin:1", role_key("role-root"));
+    snapshot.add_permission(&role_key("role-root"), "*".into(), "*".into());
 
     for code in [
         "role:delete",
@@ -327,37 +321,32 @@ async fn casbin_model_should_enforce_role_permissions_and_wildcards() {
         "approval_instance:decide",
     ] {
         let permission = Permission::parse(code).unwrap();
-        assert!(enforcer.enforce(("user:admin:1", permission.resource(), permission.action())).unwrap());
+        assert!(snapshot.allows("user:admin:1", &permission));
     }
-    assert!(!enforcer.enforce(("user:admin:2", "role", "delete")).unwrap());
+    assert!(!snapshot.allows("user:admin:2", &Permission::parse("role:delete").unwrap()));
 }
 
 // 验证计算角色可授予的权限时纳入父角色的继承权限。
-#[tokio::test]
-async fn role_grant_scope_includes_inherited_permissions() {
-    let model = casbin::DefaultModel::from_str(RBAC_MODEL).await.unwrap();
-    let mut enforcer = Enforcer::new(model, MemoryAdapter::default()).await.unwrap();
-    enforcer.add_role_for_user(&role_key("role-child"), &role_key("role-parent"), None).await.unwrap();
-    enforcer
-        .add_permission_for_user(&role_key("role-parent"), vec!["customer".to_string(), "delete".to_string()])
-        .await
-        .unwrap();
+#[test]
+fn role_grant_scope_includes_inherited_permissions() {
+    let mut snapshot = PolicySnapshot::default();
+    snapshot.add_role_edge(&role_key("role-child"), role_key("role-parent"));
+    snapshot.add_permission(&role_key("role-parent"), "customer".into(), "delete".into());
 
-    let permissions = permissions_for_roles(&enforcer, &["role-child".to_string()]).unwrap();
+    let permissions = permissions_for_roles(&snapshot, &["role-child".to_string()]).unwrap();
 
     assert_eq!(permissions.as_slice(), &[Permission::parse("customer:delete").unwrap()]);
 }
 
 // 验证批量读取角色绑定时，未绑定账号仍在结果中占一项，角色列表为空。
-#[tokio::test]
-async fn batch_role_ids_should_include_unbound_accounts() {
-    let model = casbin::DefaultModel::from_str(RBAC_MODEL).await.unwrap();
-    let mut enforcer = Enforcer::new(model, MemoryAdapter::default()).await.unwrap();
-    enforcer.add_role_for_user("user:admin:1", &role_key("role-a"), None).await.unwrap();
-    enforcer.add_role_for_user("user:admin:1", &role_key("role-b"), None).await.unwrap();
+#[test]
+fn batch_role_ids_should_include_unbound_accounts() {
+    let mut snapshot = PolicySnapshot::default();
+    snapshot.add_role_edge("user:admin:1", role_key("role-a"));
+    snapshot.add_role_edge("user:admin:1", role_key("role-b"));
 
     let account_ids = vec!["1".to_string(), "2".to_string()];
-    let role_ids = collect_role_ids(&enforcer, AccountKind::Admin, &account_ids).unwrap();
+    let role_ids = collect_role_ids(&snapshot, AccountKind::Admin, &account_ids).unwrap();
     let mut bound_role_ids = role_ids.get("1").cloned().unwrap();
     bound_role_ids.sort();
 

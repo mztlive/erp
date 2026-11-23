@@ -156,9 +156,6 @@ pub const PAYABLE_ACCOUNT: &str = "payable_account";
 /// `payment_reversal` 资源。
 pub const PAYMENT_REVERSAL: &str = "payment_reversal";
 
-/// `permission` 资源。
-pub const PERMISSION: &str = "permission";
-
 /// `person_query_qualification` 资源。
 pub const PERSON_QUERY_QUALIFICATION: &str = "person_query_qualification";
 
@@ -323,9 +320,6 @@ pub const SUPPLIER_SETTLEMENT_STATEMENT: &str = "supplier_settlement_statement";
 
 /// `unit_of_measure` 资源。
 pub const UNIT_OF_MEASURE: &str = "unit_of_measure";
-
-/// `user_role` 资源。
-pub const USER_ROLE: &str = "user_role";
 
 /// `voucher_category_profile` 资源。
 pub const VOUCHER_CATEGORY_PROFILE: &str = "voucher_category_profile";

@@ -15,7 +15,6 @@ use crate::entity::organization_change::*;
 
 pub const ORG_UNITS: &str = "org_units";
 pub const ORG_MEMBERSHIPS: &str = "org_memberships";
-pub const ORG_MANAGEMENT: &str = "org_management_assignments";
 pub const ORG_REVISIONS: &str = "org_revisions";
 pub const ORG_CHANGES: &str = "org_changes";
 
@@ -31,7 +30,7 @@ impl<'a> OrganizationRepository<'a> {
         Self { db }
     }
 
-    /// 在调用方同一事务读取组织版本、单元和成员；没有版本文档时以 0 开始。旧管理关系只从历史回执读取，任何集合读取失败都不返回部分状态。
+    /// 在调用方同一事务读取组织版本、单元和成员；没有版本文档时以 0 开始。任何集合读取失败都不返回部分状态。
     pub async fn state(&self, executor: &mut dyn Executor) -> Result<OrganizationState> {
         Ok(OrganizationState {
             version: self.revision(executor).await?.map(|value| value.revision).unwrap_or(0),
@@ -39,7 +38,6 @@ impl<'a> OrganizationRepository<'a> {
             memberships: Repository::<OrgMembership>::new(self.db, ORG_MEMBERSHIPS)
                 .list_all(executor)
                 .await?,
-            management: Vec::new(),
         })
     }
 

@@ -1,19 +1,18 @@
-//! Casbin RBAC 服务。
-
-mod database_reset;
-mod seed_command;
-mod templates;
+//! RBAC 策略与角色管理服务。
 
 mod authorize;
 mod bundle;
 mod command;
-mod enforcer;
 mod policy;
 mod qualification;
 mod query;
-pub use qualification::QualifiedPermissions;
-mod root;
+mod seed_command;
+mod snapshot;
+mod templates;
 mod transaction;
+
+pub use command::ensure_root_role;
+pub use qualification::QualifiedPermissions;
 
 #[cfg(test)]
 mod tests;
@@ -27,57 +26,39 @@ use authorize::{
     ensure_all_roles_assignable, ensure_management_subset, ensure_permission_subset, ensure_roles_delegable,
     ensure_target_roles_manageable,
 };
-use casbin::Enforcer;
 use erp_core::AccountKind;
 use mongodb::Database;
 #[cfg(test)]
 use policy::{
-    collect_role_ids, commit_outcome_unknown, ensure_policy_snapshot_revision, parse_policy_permissions,
-    permission_pairs, permissions_for_roles, role_key, role_or_not_found, root_role_is_current,
+    collect_role_ids, commit_outcome_unknown, ensure_policy_snapshot_revision, permission_pairs,
+    permissions_for_roles, role_key, role_or_not_found, root_role_is_current,
 };
-pub use root::ensure_root_role;
 use tokio::sync::{Mutex, OnceCell, RwLock};
 
-use crate::MongoCasbinAdapter;
+use crate::PolicyStore;
 use crate::entity::rbac::{Permission, PermissionSet, RoleId, RoleIdSet};
 pub use crate::entity::role::ROOT_ROLE_ID;
 use crate::ports::IdentityAuditPort;
+use crate::repository::policy_store::PolicySnapshot;
 const ROOT_ROLE_NAME: &str = "超级管理员";
 const ROLE_PREFIX: &str = "role:";
 const ROOT_ROLE_INIT_ATTEMPTS: usize = 3;
 const MAX_STABLE_POLICY_LOAD_ATTEMPTS: usize = 3;
 
-const RBAC_MODEL: &str = r#"
-[request_definition]
-r = sub, obj, act
-
-[policy_definition]
-p = sub, obj, act
-
-[role_definition]
-g = _, _
-
-[policy_effect]
-e = some(where (p.eft == allow))
-
-[matchers]
-m = g(r.sub, p.sub) && (p.obj == "*" || r.obj == p.obj) && (p.act == "*" || r.act == p.act)
-"#;
-
-/// 共享 Casbin RBAC 服务。
+/// 共享 RBAC 服务。
 pub type SharedRbacService = Arc<RbacService>;
 
-/// 以 Casbin 策略为角色绑定和功能权限的权威来源，供身份管理与统一授权服务使用。
+/// 以持久化的角色绑定和功能权限为权威来源，供身份管理与统一授权服务使用。
 pub struct RbacService {
     // 供身份仓储访问账号和角色等元数据的数据库句柄。
     db: Database,
-    // 从 MongoDB 加载和写入 Casbin 规则、绑定及全局策略版本的适配器。
-    policy_store: MongoCasbinAdapter,
+    // 从 MongoDB 加载和写入策略规则、绑定及全局策略版本的存储。
+    policy_store: PolicyStore,
     // 准备和持久化角色、绑定等管理操作的审计。
     audit: Arc<dyn IdentityAuditPort>,
-    // 首次使用时异步初始化的本地 Enforcer，以读写锁隔离判定与刷新。
-    enforcer: OnceCell<RwLock<Enforcer>>,
-    // 本地 Enforcer 最近一次稳定加载的策略版本，供缓存对齐和授权取证。
+    // 首次使用时异步初始化的本地策略快照，以读写锁隔离判定与刷新。
+    snapshot: OnceCell<RwLock<PolicySnapshot>>,
+    // 本地快照最近一次稳定加载的策略版本，供缓存对齐和授权取证。
     loaded_policy_revision: AtomicU64,
     // 策略缓存须重载的标记，成功取得稳定快照后才清除。
     policy_stale: AtomicBool,
@@ -199,14 +180,14 @@ struct AuthorizedRoleUpdate {
 }
 
 impl RbacService {
-    /// 组装 RBAC 服务的数据库和审计依赖；Casbin Enforcer 在首次使用时才异步加载 MongoDB 策略。
+    /// 组装 RBAC 服务的数据库和审计依赖；本地策略快照在首次使用时才异步加载。
     pub fn new(db: Database, audit: Arc<dyn IdentityAuditPort>) -> Self {
-        let policy_store = MongoCasbinAdapter::new(db.clone());
+        let policy_store = PolicyStore::new(db.clone());
         Self {
             db,
             policy_store,
             audit,
-            enforcer: OnceCell::new(),
+            snapshot: OnceCell::new(),
             loaded_policy_revision: AtomicU64::new(0),
             policy_stale: AtomicBool::new(false),
             policy_consistency_unknown: AtomicBool::new(false),

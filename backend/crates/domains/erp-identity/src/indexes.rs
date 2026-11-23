@@ -1,7 +1,6 @@
 //! 身份域账号、权限、人员范围、组织及审计事件的索引登记。
 
 use mongodb::bson::{Document, doc};
-use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
 use persistence_core::indexes::{named_index, unique_index};
@@ -29,10 +28,6 @@ pub async fn ensure_portal_indexes(db: &Database) -> Result<()> {
 
 const ACCOUNTS: &str = "accounts";
 const ROLES: &str = "roles";
-/// `permission` 集合名（单一来源：`AccessControlExt` 关联常量）。
-const PERMISSIONS: &str = <mongodb::Database as AccessControlExt>::PERMISSIONS;
-/// `user_role` 集合名（单一来源：`AccessControlExt` 关联常量）。
-const USER_ROLES: &str = <mongodb::Database as AccessControlExt>::USER_ROLES;
 /// `audit_event` 集合名（单一来源：`AccessControlExt` 关联常量）。
 const AUDIT_EVENTS: &str = <mongodb::Database as AccessControlExt>::AUDIT_EVENTS;
 
@@ -52,8 +47,6 @@ pub async fn ensure_accounts_and_roles(db: &Database) -> Result<()> {
 /// 在应用审计日志索引就绪后登记身份的策略、范围、组织、记录授权及审计事件索引。首次建索引失败时停止。
 pub async fn ensure_authorization(db: &Database) -> Result<()> {
     create_indexes(db, CASBIN_RULES, casbin_indexes()).await?;
-    create_indexes(db, PERMISSIONS, permission_indexes()).await?;
-    create_indexes(db, USER_ROLES, user_role_indexes()).await?;
 
     create_indexes(db, AUDIT_EVENTS, audit_event_indexes()).await?;
     create_indexes(
@@ -126,35 +119,6 @@ fn casbin_indexes() -> Vec<IndexModel> {
     ]
 }
 
-// 按资源和动作约束权限定义全局唯一，并加速停用状态查询。软删除保留原身份，保障已有绑定与历史审计仍能对应同一权限。
-fn permission_indexes() -> Vec<IndexModel> {
-    vec![
-        unique_index("uk_permissions_id", doc! { "id": 1 }),
-        unique_index("uk_permissions_resource_action", doc! { "resource": 1, "action": 1 }),
-        named_index("idx_permissions_disabled", doc! { "disabled": 1 }),
-    ]
-}
-
-// 用部分唯一索引限制同一账号和角色只保留一条未撤销绑定，同时允许保留多条撤销历史。
-// 空值匹配显式 `null` 和缺失字段；写入撤销时间后释放唯一约束。已过期但未撤销的绑定须先经撤权命令处理，以完整记录审计。MongoDB 8 的部分索引不支持 `$exists: false`。
-// 若未来改为全生命周期仅允许一条绑定，需移除该部分唯一索引并改用全局唯一索引 `uk_user_roles_binding`。
-fn user_role_indexes() -> Vec<IndexModel> {
-    vec![
-        unique_index("uk_user_roles_id", doc! { "id": 1 }),
-        IndexModel::builder()
-            .keys(doc! { "user_id": 1, "role_id": 1 })
-            .options(
-                IndexOptions::builder()
-                    .name("uk_user_roles_active".to_string())
-                    .unique(true)
-                    .partial_filter_expression(doc! { "revoked_at": null })
-                    .build(),
-            )
-            .build(),
-        named_index("idx_user_roles_user_effective", doc! { "user_id": 1, "effective_from": -1 }),
-    ]
-}
-
 // 以稳定 ID 防止重复追加审计事件，并加速按操作人、业务对象、请求追踪号和时间查阅。审计历史长期保留，索引不自动清理过期资料。
 fn audit_event_indexes() -> Vec<IndexModel> {
     vec![
@@ -169,10 +133,10 @@ fn audit_event_indexes() -> Vec<IndexModel> {
     ]
 }
 
-// 启动时建立组织稳定 ID、成员有效期和管理范围查询索引；跨记录的写入一致性由全局组织版本事务保证。
+// 启动时建立组织稳定 ID 和成员有效期查询索引；跨记录的写入一致性由全局组织版本事务保证。
 async fn ensure_organizations(db: &Database) -> Result<()> {
     use crate::repository::organization::*;
-    for collection in [ORG_UNITS, ORG_MEMBERSHIPS, ORG_MANAGEMENT, ORG_REVISIONS, ORG_CHANGES] {
+    for collection in [ORG_UNITS, ORG_MEMBERSHIPS, ORG_REVISIONS, ORG_CHANGES] {
         create_indexes(db, collection, vec![unique_index(format!("uk_{collection}_id"), doc! { "id": 1 })])
             .await?;
     }
@@ -196,15 +160,6 @@ async fn ensure_organizations(db: &Database) -> Result<()> {
                 doc! { "org_unit_id": 1, "valid_from": 1, "valid_to": 1 },
             ),
         ],
-    )
-    .await?;
-    create_indexes(
-        db,
-        ORG_MANAGEMENT,
-        vec![named_index(
-            "idx_management_user_role_validity",
-            doc! { "user_id": 1, "role_id": 1, "valid_from": 1, "valid_to": 1 },
-        )],
     )
     .await
 }
@@ -311,22 +266,9 @@ async fn ensure_resource_grant_events(db: &Database) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    // 验证权限和角色绑定可以按唯一稳定 ID 定位记录，供读取与乐观锁更新使用。
-    #[test]
-    fn collections_look_up_by_unique_stable_id() {
-        for indexes in [super::permission_indexes(), super::user_role_indexes()] {
-            assert!(indexes.iter().any(|index| {
-                index.keys == mongodb::bson::doc! { "id": 1 }
-                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
-            }));
-        }
-    }
-
     use mongodb::bson::doc;
 
-    use super::{
-        account_indexes, audit_event_indexes, casbin_indexes, permission_indexes, user_role_indexes,
-    };
+    use super::{account_indexes, audit_event_indexes, casbin_indexes};
 
     // 验证账号 ID 和登录名均全局唯一，软删除也不会释放身份。
     #[test]
@@ -352,45 +294,6 @@ mod tests {
         let indexes = casbin_indexes();
         assert!(indexes.iter().any(|index| index.keys.contains_key("values.0")));
         assert!(indexes.iter().any(|index| index.keys.contains_key("values.1")));
-    }
-
-    // 验证资源与动作组成全局唯一权限身份，并保留按停用状态检索的索引。
-    #[test]
-    fn permission_identity_is_globally_unique() {
-        let indexes = permission_indexes();
-        let identity = indexes
-            .iter()
-            .find(|index| {
-                index.options.as_ref().and_then(|options| options.name.as_deref())
-                    == Some("uk_permissions_resource_action")
-            })
-            .unwrap();
-        assert_eq!(identity.keys, doc! { "resource": 1, "action": 1 });
-        assert_eq!(identity.options.as_ref().unwrap().unique, Some(true));
-        assert!(identity.options.as_ref().unwrap().partial_filter_expression.is_none());
-
-        assert!(indexes.iter().any(|index| index.keys == doc! { "disabled": 1 }));
-    }
-
-    // 验证账号与角色的唯一约束只覆盖未撤销绑定，保留撤权历史及按账号、有效期查询能力。
-    #[test]
-    fn user_role_uniqueness_is_partial_over_unrevoked_bindings() {
-        let indexes = user_role_indexes();
-        let active = indexes
-            .iter()
-            .find(|index| {
-                index.options.as_ref().and_then(|options| options.name.as_deref())
-                    == Some("uk_user_roles_active")
-            })
-            .unwrap();
-        assert_eq!(active.keys, doc! { "user_id": 1, "role_id": 1 });
-        assert_eq!(active.options.as_ref().unwrap().unique, Some(true));
-        assert_eq!(
-            active.options.as_ref().unwrap().partial_filter_expression,
-            Some(doc! { "revoked_at": null })
-        );
-
-        assert!(indexes.iter().any(|index| { index.keys == doc! { "user_id": 1, "effective_from": -1 } }));
     }
 
     // 验证审计可按稳定 ID、操作人、业务对象和请求追踪号定位。

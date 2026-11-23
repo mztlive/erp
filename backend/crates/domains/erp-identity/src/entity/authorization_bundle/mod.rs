@@ -80,7 +80,4 @@ pub struct PolicyScope {
     pub mode: PolicyMode,
     /// 各动作的追加授权条款；空列表清空选定动作的追加项。
     pub grants: Vec<PersonScopeGrant>,
-    /// 是否明确允许选定动作的旧完整表达式转换为基础范围加追加授权；默认关闭。
-    #[serde(default)]
-    pub replace_legacy: bool,
 }

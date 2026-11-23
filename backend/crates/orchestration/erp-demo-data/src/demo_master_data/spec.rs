@@ -134,7 +134,6 @@ impl DemoPersonScope {
             resource: business.resource.clone(),
             actions: actions.clone(),
             grants: vec![PersonScopeGrant { actions, terms: vec![term] }],
-            replace_legacy: false,
             expected_policy_version: policy_version,
         }
         .normalized()?;

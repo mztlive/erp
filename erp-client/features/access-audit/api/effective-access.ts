@@ -8,7 +8,6 @@ import type {
     BackendAdmin,
     BackendDataScope,
     BackendRole,
-    BackendUserRole,
 } from "./backend-types"
 import { permissionLabel } from "@/features/admin/lib/permission-catalog"
 import { governancePolicies, instantToIso, SCOPE_TYPE_LABEL } from "./mappers"
@@ -81,9 +80,6 @@ export async function fetchEffectiveAccess(
 
     const roles = await apiGet<BackendRole[]>("/admin/roles")
     const roleNameById = new Map(roles.map((role) => [role.id, role.name]))
-    const userRoles = await apiGet<BackendUserRole[]>("/admin/user-roles", {
-        user_id: subjectId,
-    })
 
     const scopes = await fetchPersonScopes(subjectId)
     const asOf = instantToIso(admin.created_at) ?? ""
@@ -139,22 +135,11 @@ export async function fetchEffectiveAccess(
         ],
         fieldPolicies: [],
         historicalParticipantRules: [],
-        deniedOrBlocked: userRoles
-            .filter((assignment) => assignment.revoked_at != null)
-            .map((assignment) => ({
-                id: assignment.id,
-                code: "REVOKED",
-                message: `角色 ${roleNameById.get(assignment.role_id) ?? assignment.role_id} 已撤权`,
-                layer: "MODULE_ACTION" as const,
-                layerLabel: "功能操作权限",
-                sourceType: "USER_ROLE",
-                sourceLabel:
-                    roleNameById.get(assignment.role_id) ?? assignment.role_id,
-            })),
+        deniedOrBlocked: [],
         permissionVersion,
         calculatedAt: asOf,
         governancePolicies: gp,
-        allowedActions: ["VIEW_EFFECTIVE_ACCESS", "EMERGENCY_REVOKE_USER_ROLE"],
+        allowedActions: ["VIEW_EFFECTIVE_ACCESS"],
         actionBlockers: [],
     }
 }

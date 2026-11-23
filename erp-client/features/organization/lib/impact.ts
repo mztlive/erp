@@ -2,7 +2,6 @@ import type { BusinessDiffEntry } from "@/components/business"
 import { KIND_LABEL, OPERATION_LABEL } from "@/features/organization/lib/labels"
 import {
     personLabel as resolvePerson,
-    roleLabel as resolveRole,
     unitLabel,
 } from "@/features/organization/lib/tree"
 import type {
@@ -24,10 +23,6 @@ function membershipKey(state: OrganizationState): Set<string> {
     )
 }
 
-function managementKey(state: OrganizationState): Set<string> {
-    return new Set(state.management.map((item) => item.id))
-}
-
 export function impactChanges(
     receipt: OrganizationChangeReceipt,
     directory?: Pick<OrganizationStateView, "people" | "roles">,
@@ -35,7 +30,6 @@ export function impactChanges(
     const beforeUnits = unitMap(receipt.before)
     const changes: BusinessDiffEntry[] = []
     const people = directory?.people ?? []
-    const roles = directory?.roles ?? []
 
     for (const unit of receipt.after.units) {
         const previous = beforeUnits.get(unit.id)
@@ -119,34 +113,6 @@ export function impactChanges(
             before: "暂未分配部门",
             after: unitLabel(receipt.after.units, item.org_unit_id),
             note: "调岗保留原关系记录",
-        })
-    }
-
-    const afterGrants = managementKey(receipt.after)
-    for (const item of receipt.before.management) {
-        const updated = receipt.after.management.find(
-            (row) => row.id === item.id,
-        )
-        if (afterGrants.has(item.id) && updated?.valid_to === item.valid_to)
-            continue
-        changes.push({
-            id: `grant-end-${item.id}`,
-            field: `${resolvePerson(people, item.user_id)} · ${resolveRole(roles, item.role_id)}`,
-            before: unitLabel(receipt.before.units, item.org_unit_id),
-            after: "撤销管理范围",
-            note: "不授予业务执行权",
-        })
-    }
-    const beforeGrants = managementKey(receipt.before)
-    for (const item of receipt.after.management) {
-        if (beforeGrants.has(item.id)) continue
-        changes.push({
-            id: `grant-add-${item.id}`,
-            field: `${resolvePerson(people, item.user_id)} · ${resolveRole(roles, item.role_id)}`,
-            before: "无该管理范围",
-            after: `${unitLabel(receipt.after.units, item.org_unit_id)}${
-                item.include_descendants ? "（含下级）" : "（仅本级）"
-            }`,
         })
     }
 

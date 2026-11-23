@@ -335,9 +335,7 @@ export function validateCreateDataScope(
     } else if (input.scopeTargets.length > 0) {
         return "请选择具体要授权的部门或范围"
     }
-    const needsDescendants =
-        input.targetDimension === "internal_org" &&
-        input.targetMode !== "managed_orgs"
+    const needsDescendants = input.targetDimension === "internal_org"
     if (needsDescendants === (input.includeDescendants == null)) {
         return "请确认部门范围是否包含下级部门"
     }

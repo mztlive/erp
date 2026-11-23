@@ -15,10 +15,7 @@ export type PersonScopeTerm = {
     scope_targets: string[]
 }
 export type PersonScopeExpression = {
-    additive: boolean
-    history_read: boolean
     alternatives: PersonScopeTerm[][]
-    condition: PersonScopeTerm[] | null
 }
 export type PersonDataScope = {
     created_at: number
@@ -65,7 +62,6 @@ export type PersonScopeInput = {
     resource: string
     actions: string[]
     grants: PersonScopeGrant[]
-    replace_legacy: boolean
     editor: PersonGrantEditorInput | null
 }
 const path = (userId: string) =>
@@ -104,7 +100,6 @@ export const savePersonScope = (
         resource: value.resource,
         actions: value.actions,
         grants: value.grants.map(({ actions, terms }) => ({ actions, terms })),
-        replace_legacy: value.replace_legacy,
         expected_policy_version: version,
     })
 
@@ -166,37 +161,25 @@ export function personTermsDescription(
     )
 }
 
-/** 明确展示旧表达式的交集与历史读取，不把旧条件误说成追加授权。 */
 export function personScopeDescription(
     scope: PersonDataScope | undefined,
     labels: Map<string, string> = new Map(),
     defaultSelf = false,
 ): string {
     if (!scope) return defaultSelf ? "本人负责的数据（默认）" : "无数据访问范围"
-    if (scope.expression.additive)
-        return personEffectiveDescription(
-            scope,
-            {
-                resource: scope.resource,
-                configurable_actions: [scope.action],
-                policy_description: "",
-                actions: [scope.action],
-                dimensions: [],
-                default_self: defaultSelf,
-                default_self_actions: defaultSelf ? [scope.action] : [],
-            },
-            labels,
-        )
-    const expression = scope.expression
-    const alternatives = expression.alternatives.map((terms) =>
-        personTermsDescription(terms, labels),
+    return personEffectiveDescription(
+        scope,
+        {
+            resource: scope.resource,
+            configurable_actions: [scope.action],
+            policy_description: "",
+            actions: [scope.action],
+            dimensions: [],
+            default_self: defaultSelf,
+            default_self_actions: defaultSelf ? [scope.action] : [],
+        },
+        labels,
     )
-    if (expression.history_read) alternatives.push("曾参与经办的历史单据")
-    const union = alternatives.join("；或 ") || "无数据访问范围"
-    if (expression.condition?.length === 0) return "无数据访问范围"
-    return expression.condition
-        ? `（${union}），且必须满足：${personTermsDescription(expression.condition, labels)}`
-        : union
 }
 
 /** 本人基础范围使用服务端逐动作配置，资源汇总不参与单项判断。 */
@@ -220,7 +203,6 @@ export function personDefaultScopeDescription(
     return `${defaults.map(actionLabel).join("、")}默认包含本人负责的数据；其余操作需显式添加范围。`
 }
 
-/** 基础范围只对新授权模型生效；旧授权按原条件单独说明。 */
 export function personEffectiveDescription(
     scope: PersonDataScope | undefined,
     business: PersonScopeBusiness,
@@ -232,8 +214,6 @@ export function personEffectiveDescription(
         (scope && !business.configurable_actions.includes(scope.action))
     )
         return business.policy_description
-    if (scope && !scope.expression.additive)
-        return `旧版范围规则：${personScopeDescription(scope, labels)}（保存后将更新为新版规则）`
     const defaultSelf = action
         ? personHasDefaultSelf(business, action)
         : business.default_self
@@ -253,7 +233,6 @@ export function personEffectiveDescription(
     return descriptions.join("；或 ") || "无数据访问范围，请添加授权"
 }
 
-/** 保留可直接表达的旧授权；复杂条件必须在明确确认转换后才能替换。 */
 export function personScopeDefaults(
     data: PersonScopeList,
     resource: string,
@@ -265,8 +244,6 @@ export function personScopeDefaults(
             item.resource === resource &&
             business?.configurable_actions.includes(item.action),
     )) {
-        if (row.expression.condition !== null || row.expression.history_read)
-            continue
         for (const terms of row.expression.alternatives) {
             if (
                 !terms.length ||
@@ -287,7 +264,6 @@ export function personScopeDefaults(
         resource,
         actions: business?.configurable_actions ?? [],
         grants: [...grants.values()],
-        replace_legacy: false,
         editor: null,
     }
 }

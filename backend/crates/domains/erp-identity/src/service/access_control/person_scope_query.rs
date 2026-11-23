@@ -8,7 +8,7 @@ use crate::dto::person_scope::{PersonBusinessOption, PersonScopeView, RetiredPer
 use crate::entity::access_control::scope_spec;
 use crate::repository::OrganizationRepository;
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
-use crate::{AccessControlExt, AccessTarget, Error, Permission, Result, RoleRepositoryExt};
+use crate::{AccessControlExt, AccessTarget, Error, Permission, Result};
 
 impl AccessControlService {
     /// 管理员打开人员范围配置页时，同一事务返回既有范围（含退役项）、当前操作候选和保存用的策略版本。
@@ -82,13 +82,13 @@ impl AccessControlService {
                 scope_spec::resources().into_iter().flat_map(scope_spec::display_actions).cloned().collect()
             },
         };
-        let snapshot = self.rbac.role_permission_snapshot(account.kind, user, &permissions).await?;
-        self.rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
-        let roles = self.db.roles().enabled_roles(snapshot.role_ids(), executor).await?;
-
-        permissions.retain(|permission| {
-            roles.iter().any(|role| snapshot.role_covers(&role.base.id, std::iter::once(permission)))
-        });
+        let target = AuditActor::new(user.into(), account.secret.account().into(), account.kind);
+        let granted = self
+            .rbac
+            .qualified_permissions_for_account(&target, &account, &permissions, executor)
+            .await?
+            .permissions();
+        permissions.retain(|permission| granted.covers_one(permission));
         Ok(permissions)
     }
 }

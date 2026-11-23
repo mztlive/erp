@@ -9,7 +9,7 @@ use erp_permissions::{
 
 use crate::Permission;
 
-pub(super) const PERMISSIONS: &[Permission] = &[
+pub(in crate::entity::access_control::scope_spec) const PERMISSIONS: &[Permission] = &[
     internal::CATALOG_BRAND_CREATE_ATTACHMENT_UPLOAD,
     internal::CATALOG_BRAND_UPDATE_ATTACHMENT_UPLOAD,
     internal::CATALOG_CREATE_ATTACHMENT_UPLOAD,
@@ -66,13 +66,11 @@ pub(super) const PERMISSIONS: &[Permission] = &[
     internal::DELIVERY_TEMPLATE_WRITE,
     internal::SUPPLIER_IMPORT_SUBMIT,
     internal::PRODUCT_IMPORT_SUBMIT,
-    access_control::PERMISSION_LIST,
-    access_control::PERMISSION_CREATE,
-    access_control::PERMISSION_UPDATE,
-    access_control::PERMISSION_DELETE,
-    access_control::USER_ROLE_LIST,
-    access_control::USER_ROLE_CREATE,
-    access_control::USER_ROLE_REVOKE,
+    internal::SUPPLIER_FULFILLMENT_COMPLETED_RESULT_READ,
+    bulk_job::BACKGROUND_JOB_CANCEL_ALL,
+    payable::PAYMENT_RECIPIENT_REVEAL,
+    integration_ops::ERROR_TASK_CREATE,
+    integration_ops::DIFFERENCE_CREATE,
     access_control::AUDIT_EVENT_LIST,
     access_control::PERSON_SCOPE_LIST,
     access_control::PERSON_SCOPE_SAVE,

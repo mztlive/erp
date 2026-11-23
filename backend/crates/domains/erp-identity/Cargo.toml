@@ -13,7 +13,6 @@ application-core = { workspace = true }
 argon2 = { workspace = true }
 async-trait = { workspace = true }
 bson = { workspace = true, features = ["serde_json-1"] }
-casbin = { workspace = true }
 chrono = { workspace = true }
 entity-core = { workspace = true }
 entity-macros = { workspace = true }

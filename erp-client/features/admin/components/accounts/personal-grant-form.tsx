@@ -7,7 +7,6 @@ import { useAppForm } from "@/components/form"
 import { DiscardConfirmDialog } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
     Dialog,
     DialogContent,
@@ -26,7 +25,7 @@ import {
     AlertDialogAction,
 } from "@/components/ui/alert-dialog"
 import type { OrgUnit } from "@/features/organization/types"
-import { actionLabel, resourceLabel } from "@/lib/permission-catalog"
+import { resourceLabel } from "@/lib/permission-catalog"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { PersonalGrantDraft } from "../../hooks/use-personal-grant-draft"
@@ -34,7 +33,6 @@ import { useSavePersonScope } from "../../hooks/use-person-data-scopes"
 import {
     personScopeDefaults,
     personDefaultScopeDescription,
-    personScopeDescription,
     personGrantKey,
     type PersonGrantEditorInput,
     type PersonScopeInput,
@@ -106,16 +104,6 @@ export function PersonalGrantForm({
                 : undefined,
         [option],
     )
-    const legacy = data.items.filter(
-        (item) =>
-            item.resource === resource &&
-            business?.actions.includes(item.action) &&
-            !item.expression.additive,
-    )
-    const complexLegacy = legacy.filter(
-        (item) =>
-            item.expression.history_read || item.expression.condition !== null,
-    )
     const stale = version !== data.policy_version
     const schema = z
         .custom<PersonScopeInput>()
@@ -163,11 +151,6 @@ export function PersonalGrantForm({
                     code: "custom",
                     message: "请完善所有追加范围后保存，或移除不需要的条目",
                 })
-            if (legacy.length && !value.replace_legacy)
-                context.addIssue({
-                    code: "custom",
-                    message: "请核对旧版范围规则，并确认保存后更新为新版规则",
-                })
             if (
                 value.grants.some(
                     (grant) =>
@@ -212,7 +195,6 @@ export function PersonalGrantForm({
         JSON.stringify({
             resource: input.resource,
             actions: [...input.actions].sort(),
-            replace_legacy: input.replace_legacy,
             grants: input.grants
                 .map(({ actions, terms }) =>
                     JSON.stringify({
@@ -251,7 +233,6 @@ export function PersonalGrantForm({
         },
         [form, business],
     )
-    const labels = new Map(units.map((unit) => [unit.id, unit.name]))
     const validation = schema.safeParse(value)
     const incompleteKeys = new Set(
         value.grants
@@ -397,73 +378,8 @@ export function PersonalGrantForm({
                                             {personDefaultScopeDescription(
                                                 business,
                                             )}
-                                            {legacy.length
-                                                ? "（原授权转换后生效）"
-                                                : ""}
                                         </p>
                                     </div>
-                                    {legacy.length > 0 && (
-                                        <section className="space-y-3 rounded-md border border-warning-border bg-warning-soft p-3">
-                                            <h3 className="font-medium">
-                                                旧版范围规则（保存后将更新为新版规则）
-                                            </h3>
-                                            {legacy.map((scope) => (
-                                                <p
-                                                    key={scope.id}
-                                                    className="text-xs leading-6"
-                                                >
-                                                    {actionLabel(scope.action)}
-                                                    ：
-                                                    {personScopeDescription(
-                                                        scope,
-                                                        labels,
-                                                    )}
-                                                </p>
-                                            ))}
-                                            <p className="text-xs text-muted-foreground">
-                                                可兼容的范围已自动迁移到下方列表中，保存后将统一按新版规则生效。
-                                                {business.default_self &&
-                                                    "默认本人范围已保留。"}
-                                            </p>
-                                            {complexLegacy.length > 0 && (
-                                                <p className="text-xs text-warning-soft-foreground">
-                                                    {complexLegacy
-                                                        .map((scope) =>
-                                                            actionLabel(
-                                                                scope.action,
-                                                            ),
-                                                        )
-                                                        .join("、")}
-                                                    包含曾参与经办的历史单据或附加限制，无法自动迁移。保存更新后这些旧规则将被移除，请在下方重新添加所需范围并核对结果。
-                                                </p>
-                                            )}
-                                            <form.Field name="replace_legacy">
-                                                {(field) => (
-                                                    <label
-                                                        htmlFor="person-scope-convert-legacy"
-                                                        className="flex items-start gap-2 text-xs"
-                                                    >
-                                                        <Checkbox
-                                                            id="person-scope-convert-legacy"
-                                                            checked={
-                                                                field.state
-                                                                    .value
-                                                            }
-                                                            onCheckedChange={(
-                                                                checked,
-                                                            ) =>
-                                                                field.handleChange(
-                                                                    checked ===
-                                                                        true,
-                                                                )
-                                                            }
-                                                        />
-                                                        我已核对旧版规则与上方更新后的范围，确认保存并替换旧规则。
-                                                    </label>
-                                                )}
-                                            </form.Field>
-                                        </section>
-                                    )}
                                     <PersonalGrantList
                                         value={value}
                                         business={business}

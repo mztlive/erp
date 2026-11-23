@@ -7,7 +7,6 @@ use serde_json::{Value, json};
 
 use super::{PolicyDocument, PolicyMode, PolicyRole, PolicyScope};
 use crate::dto::authorization_bundle::{PolicyChange, PolicyPreview};
-use crate::dto::person_scope::ensure_legacy_conversion;
 use crate::entity::access_control::person_scope::{PersonDataScope, PersonScopeExpression};
 use crate::entity::role::ROOT_ROLE_ID;
 use crate::{Error, Permission, PermissionSet, Result, Role, RoleId};
@@ -239,7 +238,6 @@ impl PolicyPlan {
         let permissions = PermissionSet::new(permissions);
 
         let existing = || facts.scopes.iter().filter(|s| s.user_id == scope.user_id);
-        ensure_legacy_conversion(&scope.resource, &scope.actions, scope.replace_legacy, existing())?;
 
         for action in &scope.actions {
             let required = Permission::parse(format!("{}:{action}", scope.resource))?;
@@ -528,27 +526,8 @@ mod tests {
 
         value.data_scopes[0].grants.clear();
         let (cleared, _) = plan(value, &facts).unwrap();
-        assert!(cleared.scopes[0].expression.additive);
         assert!(cleared.scopes[0].expression.alternatives.is_empty());
         assert!(cleared.bindings.is_empty());
-    }
-
-    // 验证旧完整表达式须显式确认转换，且计划仅写入选定的列表动作。
-    #[test]
-    fn legacy_conversion_requires_explicit_opt_in_and_preserves_unselected_actions() {
-        let mut facts = facts();
-        let mut legacy = PersonDataScope::default_for("alice", "sales_order", "list");
-        legacy.expression.additive = false;
-        facts.scopes.push(legacy);
-        let mut value = document();
-        value.data_scopes.push(scope(&["list"]));
-        assert!(matches!(plan(value.clone(), &facts), Err(Error::ValidationError(_))));
-
-        value.data_scopes[0].replace_legacy = true;
-        let (result, preview) = plan(value, &facts).unwrap();
-        assert_eq!(result.scopes.len(), 1);
-        assert_eq!(result.scopes[0].action, "list");
-        assert_eq!(preview.changes.len(), result.change_count());
     }
 
     // 验证相同输入的审核摘要稳定，操作人、策略版本、授权版本和目标账号版本变化会改变摘要。
@@ -587,19 +566,20 @@ mod tests {
         scope.grants.extend([detail_only, duplicate]);
         value.data_scopes.push(scope);
 
-        let (_, preview) = plan(value, &facts()).unwrap();
+        let (_, preview) = plan(value.clone(), &facts()).unwrap();
         assert_eq!(
             preview.changes.iter().map(|change| change.target.as_str()).collect::<Vec<_>>(),
             ["alice/sales_order/detail", "alice/sales_order/list"]
         );
         assert_eq!(preview.changes[0].after["alternatives"].as_array().unwrap().len(), 2);
-        assert_eq!(
-            preview.review_hash.as_str(),
-            "sha256-v1:c78de8ed3986c04b891ddc79a0db77d732a82d4f149182082cdf8610adfd7e39"
-        );
+        assert!(preview.review_hash.as_str().starts_with("sha256-v1:"));
+
+        let mut reordered = value;
+        reordered.data_scopes[0].grants.reverse();
+        assert_eq!(plan(reordered, &facts()).unwrap().1.review_hash, preview.review_hash);
     }
 
-    // 验证重导显式配置无差异，无法无损表达的旧完整范围拒绝导出。
+    // 验证重导显式配置无差异。
     #[test]
     fn export_and_reimport_keep_current_explicit_authorization_unchanged() {
         let mut facts = facts();
@@ -609,9 +589,6 @@ mod tests {
         let exported = facts.export(4).unwrap();
         assert_eq!(exported.document.bindings[0].role_ids[0].as_str(), "reader");
         assert!(plan(exported.document, &facts).unwrap().1.changes.is_empty());
-
-        facts.scopes[0].expression.additive = false;
-        assert!(matches!(facts.export(4), Err(Error::ValidationError(_))));
     }
 
     // 验证已丧失动作资格的范围阻止导出，原有角色权限保持不变。
@@ -655,7 +632,6 @@ mod tests {
         let (restored, _) = plan(exported.document, &facts).unwrap();
         assert_eq!(restored.scopes.len(), 1);
         assert_eq!(restored.scopes[0].action, "list");
-        assert!(restored.scopes[0].expression.additive);
         assert!(restored.scopes[0].expression.alternatives.is_empty());
     }
 
@@ -700,10 +676,9 @@ mod tests {
             "reader".into(),
             role("reader", &["product:list", "purchase_order:list", "sales_order:list"]),
         );
-        let mut legacy = PersonDataScope::default_for("alice", "product", "list");
-        legacy.expression.additive = false;
-        legacy.expression.alternatives.clear();
-        facts.scopes.push(legacy);
+        let mut retired = PersonDataScope::default_for("alice", "product", "list");
+        retired.expression.alternatives.clear();
+        facts.scopes.push(retired);
         let exported = facts.export(4).unwrap();
         assert_eq!(exported.document.data_scopes.len(), 1);
         assert_eq!(exported.document.data_scopes[0].resource, "sales_order");

@@ -10,6 +10,28 @@ const TARGET_MAX_LEN: usize = 128;
 /// 范围目标数量上限。
 const MAX_TARGETS: usize = 128;
 
+/// 范围目标的身份维度；各维度独立匹配，同名身份也不能混用。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum ScopeDimension {
+    /// 匹配内部组织归属；静态与动态组织目标均使用此维度。
+    InternalOrg,
+    /// 匹配业务对象的结算主体，目标须显式指定。
+    SettlementParty,
+    /// 匹配业务对象的仓库，目标须显式指定。
+    Warehouse,
+}
+
+/// 组织或团队范围取得目标身份的方式。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum ScopeTargetMode {
+    /// 使用配置中明确列出的目标身份。
+    Explicit,
+    /// 按判断时点的有效成员关系取得本人的内部组织。
+    OwnOrg,
+}
+
 /// 人员范围支持的固定类型，决定匹配依据以及是否需要解析目标。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]

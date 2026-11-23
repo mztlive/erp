@@ -1,7 +1,6 @@
 //! 身份领域应用错误，保留原来的 IAM、认证与访问控制映射。
 
 use application_core::{ErrorClass, ValidationIssues, impl_application_error_conversions};
-use casbin::Error as CasbinError;
 use erp_permissions::ParsePermissionError;
 use mongodb::error::Error as MongoError;
 use persistence_core::{Error as PersistenceError, impl_repository_error};
@@ -85,13 +84,6 @@ impl From<MongoError> for Error {
     // 将驱动错误交给统一仓储分类，保留唯一键和瞬态事务错误的业务映射。
     fn from(error: MongoError) -> Self {
         PersistenceError::from(error).into()
-    }
-}
-
-impl From<CasbinError> for Error {
-    // 将策略加载或匹配故障归入角色权限错误，保留 Casbin 的消息供排查。
-    fn from(error: CasbinError) -> Self {
-        Self::Rbac(error.to_string())
     }
 }
 

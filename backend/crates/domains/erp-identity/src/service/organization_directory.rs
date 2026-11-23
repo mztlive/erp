@@ -30,12 +30,7 @@ impl OrganizationDirectoryService {
         executor: &mut dyn Executor,
     ) -> Result<BTreeSet<String>> {
         let state = OrganizationRepository::new(&self.db).state(executor).await?;
-        let tree = OrgTree::new(&state.units)?;
-        let mut result = BTreeSet::new();
-        for id in ids {
-            result.extend(tree.expand(id, include_descendants)?);
-        }
-        Ok(result)
+        OrgTree::new(&state.units)?.expand_all(ids, include_descendants)
     }
 
     /// 按组织 ID 集合和指定时点查找有效成员，返回排序去重的后台账号 ID，供按组织筛选业务数据。

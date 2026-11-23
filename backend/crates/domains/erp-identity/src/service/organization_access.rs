@@ -16,9 +16,7 @@ pub async fn ensure_org_enabled(
         return Ok(());
     };
     let units = OrganizationRepository::new(db).units(executor).await?;
-    let tree = OrgTree::new(&units)?;
-    let path = tree.path(org)?;
-    if path.iter().any(|node| !node.enabled) {
+    if !OrgTree::new(&units)?.is_active(org)? {
         return Err(Error::BusinessLogicError("目标业务组织已停用".into()));
     }
     Ok(())

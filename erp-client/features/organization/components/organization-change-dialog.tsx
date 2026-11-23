@@ -47,8 +47,6 @@ const schema = z
             "disable_unit",
             "transfer_member",
             "end_membership",
-            "grant_management",
-            "revoke_management",
         ]),
         name: z.string(),
         parentId: z.string(),
@@ -56,10 +54,6 @@ const schema = z
         orgUnitId: z.string(),
         userId: z.string(),
         userIds: z.array(z.string()),
-        roleId: z.string(),
-        includeDescendants: z.enum(["true", "false"]),
-        validTo: z.string(),
-        assignmentId: z.string(),
         reason: z.string().trim().min(1, "必须填写变更原因").max(1000),
     })
     .superRefine((draft, context) => {
@@ -84,12 +78,6 @@ const schema = z
                 code: "custom",
                 path: ["orgUnitId"],
                 message: "请选择部门",
-            })
-        if (["grant_management", "revoke_management"].includes(draft.operation))
-            context.addIssue({
-                code: "custom",
-                path: ["operation"],
-                message: "部门管理关系已停用，请在人员资料中设置数据范围。",
             })
     })
 

@@ -1,24 +1,19 @@
 //! 按权限固定的授权规则。对象判断和查询转换共用这里产生的数据条件。
 use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::slice;
 
 use erp_permissions::{
-    MODULES, catalog, internal, receivable, sales_inquiry, supplier, supplier_fulfillment, supplier_offering,
+    MODULES, approval_instance, internal, inventory, purchase_order, purchase_payment_request, receivable,
+    returns, sales_order, supplier, supplier_fulfillment, supplier_offering, supplier_settlement, work_item,
 };
 
 use crate::QualifiedPermissions;
-mod inventory_warehouses;
 pub(crate) mod quality;
 pub(super) mod queries;
 pub(super) mod records;
 pub(crate) mod selection;
 pub(crate) mod sources;
-use std::collections::BTreeSet;
-
-use erp_permissions::{
-    approval_instance, cost, inventory, purchase_order, purchase_payment_request, returns, sales_order,
-    supplier_settlement, work_item,
-};
 
 use super::{
     approval_query, approvals, definitions, materials, operations, transfers, work_item_query, work_items,
@@ -58,7 +53,7 @@ impl<'a> ScopeLookup<'a> {
 
 /// 取得固定入口须由同一启用角色授予的完整权限，范围复用入口沿用原动作组合，调用方不能拼装。
 pub(crate) fn same_role_permissions(permission: &Permission) -> Vec<Permission> {
-    if let Some(source) = inventory_warehouses::source(permission) {
+    if let Some(source) = scope_spec::warehouse_source(permission) {
         return same_role_permissions(source);
     }
     if transfers::supports(permission) {
@@ -70,36 +65,7 @@ pub(crate) fn same_role_permissions(permission: &Permission) -> Vec<Permission> 
     if let Some(entry) = definitions::entry(permission) {
         return vec![entry];
     }
-    if let Some(required) = records::requirements(permission) {
-        return required;
-    }
-
-    let mut required = vec![permission.clone()];
-    if [
-        sales_inquiry::COMMANDS_SALES_CREATE,
-        sales_inquiry::COMMANDS_SALES_SAVE,
-        sales_inquiry::COMMANDS_SALES_SUBMIT,
-        sales_inquiry::IMPORT_SALES_IMPORT_PREVIEW,
-    ]
-    .contains(permission)
-    {
-        required.push(catalog::PRODUCT_SELLABLE_SKU_LIST);
-    }
-    if permission == &approval_instance::SUBMIT_DECISION || approvals::supports(permission) {
-        required.push(approval_instance::INSTANCE_LIST.clone());
-    } else if permission == &sales_order::SUBMIT {
-        required.push(sales_order::CREATE);
-    } else if permission == &cost::ENTRY_LIST {
-        required.push(sales_order::LIST.clone());
-    } else if permission == &cost::ENTRY_CREATE {
-        required.push(sales_order::DETAIL.clone());
-    } else if matches!(permission, p if p == &inventory::STOCK_ADJUSTMENT_LIST || p == &inventory::STOCK_ADJUSTMENT_CREATE || p == &inventory::STOCK_ADJUSTMENT_UPDATE || p == &inventory::STOCK_ADJUSTMENT_SUBMIT)
-    {
-        required.push(inventory::STOCK_ADJUSTMENT_DETAIL);
-    } else if permission == &purchase_payment_request::CREDIT_LIST {
-        required.push(purchase_payment_request::DETAIL);
-    }
-    required
+    records::requirements(permission).map_or_else(|| vec![permission.clone()], <[Permission]>::to_vec)
 }
 
 /// 生成对象和查询共用的普通条件，纳入固定事实维度、范围、责任和允许的读取补充；来源及精确任务另有专用规则。
@@ -143,24 +109,39 @@ pub(crate) fn data_condition(permission: &Permission, scope: Option<&ResolvedSco
     }
 }
 
+const CANDIDATE_OR_RECORDS_TARGETS: &[Permission] = &[
+    returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT,
+    returns::SUPPLIER_REFUND_SUPPLIER_REFUND_SUBMIT,
+    returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_SUBMIT,
+    returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_SUBMIT,
+    supplier_fulfillment::ORDER_SUBMIT,
+    internal::SALES_CREATE_AND_SUBMIT,
+];
+
+const TASK_ONLY_TARGETS: &[Permission] = &[
+    internal::WORK_ITEM_EXECUTE,
+    internal::WORK_ITEM_RECIPIENT,
+    supplier_offering::COMPLETE_SUPPLY_EXCEPTION_TASK,
+    purchase_payment_request::CREDIT_LIST,
+    receivable::INVOICE_POST,
+];
+
+const CANDIDATE_ONLY_TARGETS: &[Permission] = &[
+    internal::WORK_ITEM_EXECUTION_QUALIFICATION,
+    internal::PURCHASE_CREATE_AND_SUBMIT,
+    internal::SALES_INQUIRY_IMPORT_CREATE,
+    internal::SALES_ORDER_HANDOVER_RECIPIENT,
+];
+
 // 识别覆盖默认目标形态的固定入口；未特判时交给动作类别，不把有任务或候选要求的操作降级为普通记录。
 fn specific_target(permission: &Permission, target: &AccessTarget) -> Option<bool> {
-    if [
-        returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT,
-        returns::SUPPLIER_REFUND_SUPPLIER_REFUND_SUBMIT,
-        returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_SUBMIT,
-        returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_SUBMIT,
-        supplier_fulfillment::ORDER_SUBMIT,
-        internal::SALES_CREATE_AND_SUBMIT,
-    ]
-    .contains(permission)
-    {
+    if CANDIDATE_OR_RECORDS_TARGETS.contains(permission) {
         return Some(matches!(target, AccessTarget::Candidate(_) | AccessTarget::Records(_)));
     }
-    if [internal::WORK_ITEM_EXECUTE, internal::WORK_ITEM_RECIPIENT].contains(permission) {
+    if TASK_ONLY_TARGETS.contains(permission) {
         return Some(matches!(target, AccessTarget::Task { .. }));
     }
-    if permission == &internal::WORK_ITEM_EXECUTION_QUALIFICATION {
+    if CANDIDATE_ONLY_TARGETS.contains(permission) {
         return Some(matches!(target, AccessTarget::Candidate(_)));
     }
     if let Some(allowed) = definitions::target(permission, target) {
@@ -173,26 +154,11 @@ fn specific_target(permission: &Permission, target: &AccessTarget) -> Option<boo
                     && matches!(target, AccessTarget::Candidate(_))),
         );
     }
-    if permission == &supplier_offering::COMPLETE_SUPPLY_EXCEPTION_TASK {
-        return Some(matches!(target, AccessTarget::Task { .. }));
-    }
-    if permission == &purchase_payment_request::CREDIT_LIST || permission == &receivable::INVOICE_POST {
-        return Some(matches!(target, AccessTarget::Task { .. }));
-    }
     if matches!(target, AccessTarget::Task { .. }) && task_supported(permission) {
         return Some(true);
     }
     if permission == &sales_order::SUBMIT && matches!(target, AccessTarget::Candidate(_)) {
         return Some(true);
-    }
-    if [
-        internal::PURCHASE_CREATE_AND_SUBMIT,
-        internal::SALES_INQUIRY_IMPORT_CREATE,
-        internal::SALES_ORDER_HANDOVER_RECIPIENT,
-    ]
-    .contains(permission)
-    {
-        return Some(matches!(target, AccessTarget::Candidate(_)));
     }
     None
 }
@@ -241,7 +207,7 @@ pub(super) fn ensure_target(permission: &Permission, target: &AccessTarget) -> R
 
 /// 识别可走读取路径的固定动作；非读取对象操作必须先进入快照，精确任务仍另受快照限制。
 pub(super) fn is_read(permission: &Permission) -> bool {
-    if let Some(source) = inventory_warehouses::source(permission) {
+    if let Some(source) = scope_spec::warehouse_source(permission) {
         return is_read(source);
     }
     if transfers::supports(permission) {
@@ -510,7 +476,7 @@ pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
     required.extend(quality::qualifications(permission));
     required.extend(approvals::qualifications(permission));
     required.extend(work_items::qualifications(permission));
-    required.extend(records::independent(permission));
+    required.extend_from_slice(records::independent(permission));
     required.extend(records::optional(permission));
 
     required.sort();
@@ -539,7 +505,7 @@ pub(super) fn missing_public_permission(
         return None;
     }
     let mut required = same_role_permissions(permission);
-    required.extend(records::independent(permission));
+    required.extend_from_slice(records::independent(permission));
     required.extend_from_slice(task_required);
     required.sort();
     required.dedup();

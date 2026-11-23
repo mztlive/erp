@@ -34,7 +34,7 @@ function governancePolicies(): AccessGovernancePolicyView {
     return {
         userRoleTimePolicy: {
             state: "MISSING",
-            allowedActions: ["EMERGENCY_REVOKE_USER_ROLE"],
+            allowedActions: [],
             blockerCode: "USER_ROLE_TIME_POLICY_MISSING",
         },
         fieldPolicyGranularity: {
@@ -172,7 +172,6 @@ function toUserRow(
         riskFlags: [],
         permissionVersion,
         organizationLabel: "—",
-        roleAssignmentId: admin.role_ids[0],
     }
 }
 

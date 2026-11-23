@@ -14,7 +14,7 @@ macro_rules! access_key {
         #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
         pub struct $name(
             // 私有文本由 `parse` 校验后保存。
-            String
+            String,
         );
         impl $name {
             /// 解析服务端登记键；仅接受 1 至 64 字节的 ASCII 小写字母、数字或下划线。
@@ -46,26 +46,26 @@ pub enum AccessTarget {
     /// 读取已有记录的当前事实后检查单条或批量目标。
     Records(
         /// 本次操作涉及的完整记录 ID 集合。
-        ResourceTargets
+        ResourceTargets,
     ),
     /// 创建前检查拟写入的归属和来源。
     Candidate(
         /// 服务端确认的候选事实，版本留空以区分持久化记录。
-        ObjectFacts
+        ObjectFacts,
     ),
     /// 同时检查原记录的操作资格和变更后的归属。
     OwnershipChange {
         /// 用于读取当前事实的原记录 ID。
         id: String,
         /// 服务端核定的变更后归属事实。
-        candidate: ObjectFacts
+        candidate: ObjectFacts,
     },
     /// 用精确任务身份及版本检查任务操作。
     Task {
         /// 任务自身的记录 ID。
         id: String,
         /// 调用方持有的非空任务版本，须与当前任务事实一致。
-        version: String
+        version: String,
     },
 }
 

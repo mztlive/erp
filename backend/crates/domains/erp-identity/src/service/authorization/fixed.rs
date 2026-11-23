@@ -116,7 +116,7 @@ impl Facilities for FixedIdentity {
 // 按资源和目标 ID 读取预先提供的内存事实，不访问数据库。
 struct FixedFacts(
     // 供事实端口按请求资源和 ID 筛选的固定对象集合。
-    Vec<ObjectFacts>
+    Vec<ObjectFacts>,
 );
 
 #[async_trait]

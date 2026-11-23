@@ -227,7 +227,7 @@ export async function fetchAccessList(
             gp.auditAccessPolicy.state === "MISSING"
                 ? gp.auditAccessPolicy.fallbackTo
                 : undefined,
-        allowedActions: ["VIEW_EFFECTIVE_ACCESS", "EMERGENCY_REVOKE_USER_ROLE"],
+        allowedActions: ["VIEW_EFFECTIVE_ACCESS"],
         actionBlockers,
         workItemSupport: "DISABLED",
     }

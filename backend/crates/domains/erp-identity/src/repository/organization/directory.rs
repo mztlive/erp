@@ -72,7 +72,6 @@ impl OrganizationRepository<'_> {
             version: self.revision(executor).await?.map_or(0, |row| row.revision),
             units: self.units(executor).await?,
             memberships: self.directory_memberships(Some(&[actor_id.to_owned()]), None, at, executor).await?,
-            management: Vec::new(),
         })
     }
 

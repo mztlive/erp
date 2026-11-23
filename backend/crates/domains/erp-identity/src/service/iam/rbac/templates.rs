@@ -4,7 +4,7 @@ use std::sync::atomic::Ordering;
 
 use application_core::AuditActor;
 use erp_permissions::admin;
-use persistence_core::{Executor, Transactional};
+use persistence_core::Executor;
 
 use super::RbacService;
 use super::policy::{permission_pairs, permissions_for_actor, role_key};
@@ -26,16 +26,9 @@ impl RbacService {
     ) -> Result<BuiltinRoleCatalog> {
         let service = self.clone();
         let actor = actor.clone();
-        let access = ManagementAccess::new(authorization, actor.clone(), &admin::ROLE_LIST_ROLES);
-        self.db
-            .client()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    access.require(executor).await?;
-                    let catalog = service.role_catalog(&actor, executor).await?;
-                    access.require(executor).await?;
-                    Ok(catalog)
-                })
+        ManagementAccess::new(authorization, actor.clone(), &admin::ROLE_LIST_ROLES)
+            .verified_read_tx(&self.db, move |executor| {
+                Box::pin(async move { service.role_catalog(&actor, executor).await })
             })
             .await
     }
@@ -48,8 +41,8 @@ impl RbacService {
         executor: &mut dyn Executor,
     ) -> Result<BuiltinRoleCatalog> {
         let (permissions, policy_version) = {
-            let enforcer = self.fresh_enforcer().await?.read().await;
-            (permissions_for_actor(&enforcer, actor)?, self.loaded_policy_revision.load(Ordering::Acquire))
+            let snapshot = self.fresh_snapshot().await?.read().await;
+            (permissions_for_actor(&snapshot, actor)?, self.loaded_policy_revision.load(Ordering::Acquire))
         };
         let can_create = permissions.covers_one(&admin::ROLE_CREATE_ROLE);
 

@@ -67,7 +67,6 @@ mod tests {
             let request = DemoPersonScope::request(login, &business, &[], 7).unwrap().unwrap();
             assert_eq!(request.grants[0].terms[0].scope_type, DataScopeType::Company);
             assert_eq!(request.expected_policy_version, 7);
-            assert!(!request.replace_legacy);
         }
     }
 

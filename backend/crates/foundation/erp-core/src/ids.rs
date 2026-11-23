@@ -37,8 +37,6 @@
 //!
 //! D06 `access_control`：
 //! - `role` → 沿用 `erp_identity::RoleId`（本模块不重复定义）
-//! - `permission` → `PermissionId`
-//! - `user_role` → `UserRoleId`
 //! - `audit_event` → `AuditEventId`
 //!
 //! D07 `party`：
@@ -224,8 +222,6 @@ id_type!(FileAssetId);
 id_type!(DocumentAttachmentId);
 
 // D06 access_control（`role` 沿用 erp_identity::RoleId，见文件头映射表）
-id_type!(PermissionId);
-id_type!(UserRoleId);
 id_type!(AuditEventId);
 
 // D07 party

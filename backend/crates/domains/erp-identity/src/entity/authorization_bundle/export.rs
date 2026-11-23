@@ -80,7 +80,6 @@ impl PolicyFacts {
                         resource: resource.into(),
                         actions: missing,
                         mode: PolicyMode::Replace,
-                        replace_legacy: false,
                         grants: vec![],
                     });
                 }
@@ -101,19 +100,12 @@ impl PolicyFacts {
             }
             self.ensure_scope_qualification(scope)?;
             let expression = &scope.expression;
-            if !expression.additive || expression.history_read || expression.condition.is_some() {
-                return Err(Error::ValidationError(format!(
-                    "人员 {} 的 {}:{} 为旧表达式，不能无损导出为1.0配置",
-                    scope.user_id, scope.resource, scope.action
-                )));
-            }
 
             document.data_scopes.push(PolicyScope {
                 user_id: scope.user_id.clone(),
                 resource: scope.resource.clone(),
                 actions: vec![scope.action.clone()],
                 mode: PolicyMode::Replace,
-                replace_legacy: false,
                 grants: expression
                     .alternatives
                     .iter()

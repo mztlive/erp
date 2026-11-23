@@ -5,7 +5,9 @@ use persistence_core::Executor;
 use super::{RbacService, RolePermissionSnapshot};
 use crate::repository::prelude::*;
 use crate::service::directory::AccountDirectoryService;
-use crate::{AccessControlExt, AccountSummary, Error, Permission, PermissionSet, Result, Role, RoleId};
+use crate::{
+    AccessControlExt, AccountCore, AccountSummary, Error, Permission, PermissionSet, Result, Role, RoleId,
+};
 
 /// 批量功能资格结果，绑定已核验账号及启用角色；对象访问仍需完整授权。
 #[derive(Debug, Clone)]
@@ -98,10 +100,21 @@ impl RbacService {
             .filter(|account| account.is_authorization_actor(actor.kind()));
         let Some(account) = account else { return Ok(None) };
 
+        Ok(Some(self.qualified_permissions_for_account(actor, &account, permissions, executor).await?))
+    }
+
+    /// 沿原执行器为已确认有效的账号核对策略版本与启用角色，返回对应批次的功能资格快照。
+    pub(crate) async fn qualified_permissions_for_account(
+        &self,
+        actor: &AuditActor,
+        account: &AccountCore,
+        permissions: &[Permission],
+        executor: &mut dyn Executor,
+    ) -> Result<QualifiedPermissions> {
         let snapshot = self.role_permission_snapshot(actor.kind(), actor.id(), permissions).await?;
         let roles = self.db.roles().enabled_roles(snapshot.role_ids(), executor).await?;
         self.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
-        Ok(Some(qualified(snapshot, roles, actor, account.base.version, AccountSummary::from(&account))))
+        Ok(qualified(snapshot, roles, actor, account.base.version, AccountSummary::from(account)))
     }
 }
 

@@ -59,9 +59,6 @@ pub(crate) fn ensure_targets(change: &OrganizationOperation, access: &Authorized
             }
         },
         EndMembership { user_id } => targets.push(state.own_org(user_id, access.as_of)?),
-        GrantManagement { .. } | RevokeManagement { .. } => {
-            return Err(Error::ValidationError("部门管理关系已停用，请在人员数据范围中设置授权".into()));
-        },
     }
 
     if targets.into_iter().any(|id| !covers(access, id)) {
@@ -106,7 +103,6 @@ pub(crate) fn visible_state(mut state: OrganizationState, access: &AuthorizedDat
     }
 
     state.memberships.retain(|m| ids.contains(&m.org_unit_id));
-    state.management.retain(|m| ids.contains(&m.org_unit_id));
     state
 }
 
@@ -172,7 +168,6 @@ mod tests {
                 changed_by: "admin".into(),
                 reason: "初始化".into(),
             }],
-            management: Vec::new(),
         }
     }
 
@@ -274,8 +269,6 @@ mod tests {
                 role_ids: None,
                 name: Some("新姓名".into()),
                 org_unit_id: Some("two".into()),
-                remove_management_ids: vec![],
-                add_management: vec![],
             },
         };
         let limited_to = |org: &str, organizations| {

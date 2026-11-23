@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 
 use application_core::AuditActor;
-use casbin::Enforcer;
 use erp_core::AccountKind;
 use persistence_core::{Executor, NoTransaction};
 
@@ -18,12 +17,13 @@ use crate::AccessControlExt;
 use crate::entity::rbac::{Permission, PermissionSet, RoleId, RoleIdSet};
 use crate::entity::role::Role;
 use crate::error::{Error, Result};
+use crate::repository::policy_store::PolicySnapshot;
 use crate::repository::prelude::*;
 
-// 管理授权检查使用的同一 Casbin 快照，冻结操作人的授权上限与策略版本。
+// 管理授权检查使用的同一策略快照，冻结操作人的授权上限与策略版本。
 struct ActorPermissionSnapshot<'a> {
-    // 持有 Enforcer 读锁，供调用方读取同版的目标策略；后续网络 I/O 前须释放。
-    enforcer: tokio::sync::RwLockReadGuard<'a, Enforcer>,
+    // 持有策略快照读锁，供调用方读取同版的目标策略；后续网络 I/O 前须释放。
+    snapshot: tokio::sync::RwLockReadGuard<'a, PolicySnapshot>,
     // 操作人在该快照中的隐式权限集，作为子集校验的上限。
     actor_permissions: PermissionSet,
     // 快照对应的策略版本，供后续写事务重验。
@@ -34,10 +34,10 @@ impl RbacService {
     // 四个管理授权入口共用此方法，在同一读锁下取得操作人的隐式权限与策略版本。
     // 调用方在锁内完成各自的子集校验，后续网络 I/O 前须释放读锁；快照加载或权限解析失败时返回错误。
     async fn actor_permission_snapshot(&self, actor: &AuditActor) -> Result<ActorPermissionSnapshot<'_>> {
-        let enforcer = self.fresh_enforcer().await?.read().await;
-        let actor_permissions = permissions_for_actor(&enforcer, actor)?;
+        let snapshot = self.fresh_snapshot().await?.read().await;
+        let actor_permissions = permissions_for_actor(&snapshot, actor)?;
         let policy_revision = self.loaded_policy_revision.load(Ordering::Acquire);
-        Ok(ActorPermissionSnapshot { enforcer, actor_permissions, policy_revision })
+        Ok(ActorPermissionSnapshot { snapshot, actor_permissions, policy_revision })
     }
 
     /// 在普通管理入口授予角色前，确认 `role_ids` 全部存在且启用，拒绝内建 `role-root` 和系统角色。
@@ -55,12 +55,12 @@ impl RbacService {
         let snapshot = self.actor_permission_snapshot(actor).await?;
         ensure_permission_subset(
             &snapshot.actor_permissions,
-            &permissions_for_roles(&snapshot.enforcer, &role_ids)?,
+            &permissions_for_roles(&snapshot.snapshot, &role_ids)?,
         )?;
         Ok(AuthorizedRoleGrant { role_ids, policy_revision: snapshot.policy_revision })
     }
 
-    /// 在普通入口管理目标账号前，用同一 Casbin 快照校验目标现有权限和拟授予角色权限均在操作人权限内。
+    /// 在普通入口管理目标账号前，用同一策略快照校验目标现有权限和拟授予角色权限均在操作人权限内。
     /// 目标若绑定内建 `role-root`、系统角色或无法确认的角色即拒绝；拟授予角色须存在、启用且允许普通分配。
     /// 返回写事务所需的策略版本；`requested_role_ids` 为 `None` 时保持绑定，有值时返回经校验的完整替换上下文。
     /// 任一校验或策略加载失败时返回错误。
@@ -72,16 +72,16 @@ impl RbacService {
         requested_role_ids: Option<RoleIdSet>,
     ) -> Result<AuthorizedAccountManagement> {
         let snapshot = self.actor_permission_snapshot(actor).await?;
-        let target_role_ids = role_ids_for_account(&snapshot.enforcer, target_kind, target_id)?;
+        let target_role_ids = role_ids_for_account(&snapshot.snapshot, target_kind, target_id)?;
         authorize_account_permissions(
-            &snapshot.enforcer,
+            &snapshot.snapshot,
             &snapshot.actor_permissions,
             target_kind,
             target_id,
             requested_role_ids.as_ref(),
         )?;
         let policy_revision = snapshot.policy_revision;
-        drop(snapshot.enforcer);
+        drop(snapshot.snapshot);
 
         let roles = self.load_management_roles(&target_role_ids, requested_role_ids.as_ref()).await?;
         ensure_target_roles_manageable(&target_role_ids, &roles)?;
@@ -137,7 +137,7 @@ impl RbacService {
     ) -> Result<AuthorizedRoleUpdate> {
         let permissions = updated_permissions.map(PermissionSet::new);
         let snapshot = self.actor_permission_snapshot(actor).await?;
-        let current_permissions = implicit_permissions_for_role(&snapshot.enforcer, role_id)?;
+        let current_permissions = implicit_permissions_for_role(&snapshot.snapshot, role_id)?;
         ensure_management_subset(&snapshot.actor_permissions, &current_permissions)?;
         if let Some(permissions) = permissions.as_ref() {
             ensure_permission_subset(&snapshot.actor_permissions, permissions)?;
@@ -234,18 +234,18 @@ pub(super) fn ensure_roles_delegable(roles: &[Role]) -> Result<()> {
     })
 }
 
-// 管理目标账号前，在同一 Enforcer 快照内核对目标现有隐式权限及拟授予角色权限均由操作人覆盖。
+// 管理目标账号前，在同一策略快照内核对目标现有隐式权限及拟授予角色权限均由操作人覆盖。
 fn authorize_account_permissions(
-    enforcer: &Enforcer,
+    snapshot: &PolicySnapshot,
     actor_permissions: &PermissionSet,
     target_kind: AccountKind,
     target_id: &str,
     requested_role_ids: Option<&RoleIdSet>,
 ) -> Result<()> {
-    let target_permissions = permissions_for_account(enforcer, target_kind, target_id)?;
+    let target_permissions = permissions_for_account(snapshot, target_kind, target_id)?;
     ensure_management_subset(actor_permissions, &target_permissions)?;
     if let Some(role_ids) = requested_role_ids {
-        let requested_permissions = permissions_for_roles(enforcer, role_ids)?;
+        let requested_permissions = permissions_for_roles(snapshot, role_ids)?;
         ensure_permission_subset(actor_permissions, &requested_permissions)?;
     }
     Ok(())

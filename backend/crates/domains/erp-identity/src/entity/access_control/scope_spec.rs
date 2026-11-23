@@ -47,14 +47,6 @@ pub(crate) enum ActionKind {
     Source,
 }
 
-/// 不登记范围规格的固定入口，用于区分任务、功能资格和真实来源。
-pub(super) struct FixedAction {
-    // 固定入口对应的精确权限。
-    permission: Permission,
-    // 入口的校验类别；不得再次登记为范围入口。
-    kind: ActionKind,
-}
-
 /// 组织事实加载由本次范围计算决定，不写进范围定义。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum OrganizationLoad {
@@ -63,26 +55,24 @@ pub(crate) enum OrganizationLoad {
     AllMembers,
 }
 
-/// 用固定目录数据构造范围规格。
-pub(super) fn scope(
-    permission: &Permission,
-    source: ScopeSource,
-    default_self: bool,
-    scope_types: &'static [DataScopeType],
-    dimensions: &'static [ScopeDimension],
-    allows_history: bool,
-) -> ScopeSpec {
-    ScopeSpec {
-        permission: permission.clone(),
-        source,
-        default_self,
-        scope_types,
-        dimensions,
-        allows_history,
-    }
-}
-
 impl ScopeSpec {
+    /// 用固定目录数据构造范围规格。
+    pub(super) const fn new(
+        permission: Permission,
+        source: ScopeSource,
+        default_self: bool,
+        scope_types: &'static [DataScopeType],
+        dimensions: &'static [ScopeDimension],
+        allows_history: bool,
+    ) -> Self {
+        Self { permission, source, default_self, scope_types, dimensions, allows_history }
+    }
+
+    pub(super) const fn with_types(mut self, scope_types: &'static [DataScopeType]) -> Self {
+        self.scope_types = scope_types;
+        self
+    }
+
     /// 返回规格绑定的权限，供目录查找和授权入口对照。
     pub(crate) fn permission(&self) -> &Permission {
         &self.permission
@@ -119,9 +109,23 @@ impl ScopeSpec {
     }
 }
 
+/// 从仓库入口配对查原库存动作，以复用其功能资格和数据范围，不将仓库视作库存记录。
+pub(crate) fn warehouse_source(permission: &Permission) -> Option<&'static Permission> {
+    INVENTORY_WAREHOUSE_ENTRIES.iter().find_map(|(entry, source)| (entry == permission).then_some(source))
+}
+
 // 借用尚未验证的静态范围目录，供目录验证自身时使用。
 fn raw_specs() -> &'static [ScopeSpec] {
-    catalog::SPECS.as_slice()
+    catalog::SPECS
+}
+
+// 枚举全部无范围固定入口及其动作类别。
+fn fixed_actions() -> impl Iterator<Item = (&'static Permission, ActionKind)> {
+    catalog::TASK_ACTIONS
+        .iter()
+        .map(|p| (p, ActionKind::Task))
+        .chain(catalog::SOURCE_ACTIONS.iter().map(|p| (p, ActionKind::Source)))
+        .chain(catalog::FUNCTION_ACTIONS.iter().map(|p| (p, ActionKind::Function)))
 }
 
 /// 首次枚举范围目录时验证登记合同，之后复用已验证的目录；目录错误会终止调用。
@@ -202,10 +206,9 @@ pub(crate) fn action_kind(resource: &str, action: &str) -> Option<ActionKind> {
     if find_action(resource, action).is_some() {
         return Some(ActionKind::Scope);
     }
-    catalog::FIXED_ACTIONS
-        .iter()
-        .find(|entry| entry.permission.resource() == resource && entry.permission.action() == action)
-        .map(|entry| entry.kind)
+    fixed_actions()
+        .find(|(permission, _)| permission.resource() == resource && permission.action() == action)
+        .map(|(_, kind)| kind)
 }
 
 /// 按完整权限识别入口分类；未登记时不允许继续授权。
@@ -237,7 +240,7 @@ pub(crate) fn actions(resource: &str) -> impl Iterator<Item = &'static Permissio
     raw_specs()
         .iter()
         .map(ScopeSpec::permission)
-        .chain(catalog::FIXED_ACTIONS.iter().map(|entry| &entry.permission))
+        .chain(fixed_actions().map(|(permission, _)| permission))
         .filter(move |permission| permission.resource() == resource)
 }
 
@@ -252,11 +255,7 @@ pub(crate) fn display_actions(resource: &str) -> impl Iterator<Item = &'static P
 pub(crate) fn resources() -> Vec<&'static str> {
     let _ = specs();
     let mut resources = Vec::new();
-    for permission in raw_specs()
-        .iter()
-        .map(|spec| spec.permission())
-        .chain(catalog::FIXED_ACTIONS.iter().map(|entry| &entry.permission))
-    {
+    for permission in raw_specs().iter().map(ScopeSpec::permission).chain(fixed_actions().map(|(p, _)| p)) {
         if !resources.contains(&permission.resource()) {
             resources.push(permission.resource());
         }
@@ -363,12 +362,12 @@ pub(crate) fn validate_catalog() -> Result<()> {
         validate_scope(spec)?;
     }
 
-    for entry in catalog::FIXED_ACTIONS.iter() {
-        if find(&entry.permission).is_some() {
-            return Err(Error::ValidationError(format!("{} 同时声明了范围和无范围动作", entry.permission)));
+    for (permission, kind) in fixed_actions() {
+        if find(permission).is_some() {
+            return Err(Error::ValidationError(format!("{permission} 同时声明了范围和无范围动作")));
         }
-        if entry.kind == ActionKind::Scope {
-            return Err(Error::ValidationError(format!("{} 的无范围分类无效", entry.permission)));
+        if kind == ActionKind::Scope {
+            return Err(Error::ValidationError(format!("{permission} 的无范围分类无效")));
         }
     }
 
@@ -529,16 +528,16 @@ mod tests {
         let org: &[ScopeDimension] = &[ScopeDimension::InternalOrg];
         let types: &[DataScopeType] = &[DataScopeType::Company];
 
-        let missing = scope(&LEFT, ScopeSource::Permission(MISSING), false, types, org, false);
+        let missing = ScopeSpec::new(LEFT, ScopeSource::Permission(MISSING), false, types, org, false);
         assert!(runtime_source(&missing).is_err());
 
         let list = erp_permissions::contract::LIST;
-        let cycle = scope(&list, ScopeSource::Permission(list.clone()), false, types, org, false);
+        let cycle = ScopeSpec::new(list.clone(), ScopeSource::Permission(list), false, types, org, false);
         assert!(runtime_source(&cycle).is_err());
 
-        let chained = scope(
-            &LEFT,
-            ScopeSource::Permission(erp_permissions::contract::LIST.clone()),
+        let chained = ScopeSpec::new(
+            LEFT,
+            ScopeSource::Permission(erp_permissions::contract::LIST),
             false,
             types,
             org,

@@ -157,15 +157,10 @@ impl TargetFacts {
     /// 检查整批根、候选及嵌套来源均未到期，防止用已失效的责任事实授权。
     pub(super) fn ensure_current(&self) -> Result<()> {
         for object in &self.objects {
-            ensure_unexpired(object)?;
+            ensure_unexpired(object, "DATA_SCOPE_CHANGED：对象责任关系已到期")?;
         }
         if let Some(candidate) = &self.candidate {
-            if candidate.valid_until.is_some_and(|until| Instant::now() >= until) {
-                return Err(Error::ConflictError("DATA_SCOPE_CHANGED：候选归属已到期".into()));
-            }
-            for child in source_objects(candidate) {
-                ensure_unexpired(child)?;
-            }
+            ensure_unexpired(candidate, "DATA_SCOPE_CHANGED：候选归属已到期")?;
         }
         Ok(())
     }
@@ -206,18 +201,13 @@ impl TargetFacts {
     }
 }
 
-// 枚举当前对象已加载的直接来源，供递归检查后续层级的期限。
-fn source_objects(object: &ObjectFacts) -> impl Iterator<Item = &ObjectFacts> {
-    object.relations.values().flat_map(|relation| &relation.objects)
-}
-
-// 递归检查持久化对象及实际来源的责任有效期，到期报告范围变化。
-fn ensure_unexpired(object: &ObjectFacts) -> Result<()> {
+// 递归检查对象及嵌套来源的责任有效期，到期报告范围变化。
+fn ensure_unexpired(object: &ObjectFacts, root_message: &str) -> Result<()> {
     if object.valid_until.is_some_and(|until| Instant::now() >= until) {
-        return Err(Error::ConflictError("DATA_SCOPE_CHANGED：对象责任关系已到期".into()));
+        return Err(Error::ConflictError(root_message.into()));
     }
-    for child in source_objects(object) {
-        ensure_unexpired(child)?;
+    for child in object.relations.values().flat_map(|relation| &relation.objects) {
+        ensure_unexpired(child, "DATA_SCOPE_CHANGED：对象责任关系已到期")?;
     }
     Ok(())
 }

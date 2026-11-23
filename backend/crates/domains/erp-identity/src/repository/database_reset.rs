@@ -6,7 +6,7 @@ use mongodb::bson::doc;
 use persistence_core::{Executor, ResetRetention};
 
 use crate::entity::database_reset::ensure_reset_admin;
-use crate::{AccessControlExt, AccountCoreRepositoryExt, Error, MongoCasbinAdapter, ROOT_ROLE_ID, Result};
+use crate::{AccessControlExt, AccountCoreRepositoryExt, Error, PolicyStore, ROOT_ROLE_ID, Result};
 
 /// 全库重置前在调用方事务内确认操作者是启用的 `admin` 超管，并登记其账号、内建角色、直接授权规则及策略版本的物理文档 ID。账号或角色缺失、资格不符或登记失败时拒绝重置。
 pub(crate) async fn retention(
@@ -29,8 +29,6 @@ pub(crate) async fn retention(
     let mut kept = ResetRetention::default();
     kept.require(db, db.accounts().collection().name(), doc! { "id": &account.base.id }, executor).await?;
     kept.require(db, db.roles().collection().name(), doc! { "id": ROOT_ROLE_ID }, executor).await?;
-    MongoCasbinAdapter::new(db.clone())
-        .retain_root_authorization(&account.base.id, &mut kept, executor)
-        .await?;
+    PolicyStore::new(db.clone()).retain_root_authorization(&account.base.id, &mut kept, executor).await?;
     Ok(kept)
 }

@@ -34,8 +34,7 @@ impl PortalIdentityService {
             .find_by_id(&current.account_id, &mut NoTransaction)
             .await?
             .ok_or_else(invalid_session)?;
-        let check = password::verify_password(Some(account.secret), input.old_password.clone()).await?;
-        if !check.is_match() {
+        if !password::verify_password(Some(account.secret), input.old_password.clone()).await? {
             return Err(Error::Unauthenticated("原密码错误".into()));
         }
 

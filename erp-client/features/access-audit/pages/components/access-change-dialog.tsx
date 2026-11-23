@@ -22,7 +22,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { riskLabel } from "@/features/access-audit/lib/risk-labels"
 import type { useAccessChangeFlow } from "@/features/access-audit/pages/hooks/use-access-change-flow"
 import type {
-    AccessChangeCommand,
     AccessChangeOutcome,
     AccessImpactPreview,
 } from "@/features/access-audit/types"
@@ -34,7 +33,6 @@ type AccessChangeDialogProps = {
     open: boolean
     onOpenChange: (open: boolean) => void
     impact: AccessImpactPreview | null
-    pendingCommand: AccessChangeCommand | null
     isSubmitting: boolean
     form: ChangeReasonFormApi
     onApplyOutcome: (outcome: AccessChangeOutcome) => void
@@ -44,7 +42,6 @@ function AccessChangeDialog({
     open,
     onOpenChange,
     impact,
-    pendingCommand,
     isSubmitting,
     form,
     onApplyOutcome,
@@ -224,12 +221,7 @@ function AccessChangeDialog({
                                             label="确认提交"
                                             pendingLabel="提交中…"
                                             disabled={isSubmitting}
-                                            variant={
-                                                pendingCommand?.action ===
-                                                "EMERGENCY_REVOKE_USER_ROLE"
-                                                    ? "destructive"
-                                                    : "default"
-                                            }
+                                            variant="default"
                                         />
                                     </form.AppForm>
                                 </DialogFooter>

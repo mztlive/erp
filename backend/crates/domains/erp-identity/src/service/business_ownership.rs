@@ -20,7 +20,7 @@ pub async fn required_business_org(db: &Database, user: &str, executor: &mut dyn
     let org = state
         .own_org(user, Instant::now())?
         .ok_or_else(|| Error::BusinessLogicError("负责人缺少有效主属组织，请先维护组织成员".into()))?;
-    if OrgTree::new(&state.units)?.expand(org, false)?.is_empty() {
+    if !OrgTree::new(&state.units)?.is_active(org)? {
         return Err(Error::BusinessLogicError("负责人所属组织已停用".into()));
     }
     Ok(org.into())

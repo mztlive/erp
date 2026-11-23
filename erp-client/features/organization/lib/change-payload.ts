@@ -15,10 +15,6 @@ export type OrganizationChangeDraft = {
     orgUnitId: string
     userId: string
     userIds: string[]
-    roleId: string
-    includeDescendants: "true" | "false"
-    validTo: string
-    assignmentId: string
     reason: string
 }
 
@@ -30,10 +26,6 @@ export const EMPTY_CHANGE_DRAFT: OrganizationChangeDraft = {
     orgUnitId: "",
     userId: "",
     userIds: [],
-    roleId: "",
-    includeDescendants: "false",
-    validTo: "",
-    assignmentId: "",
     reason: "",
 }
 
@@ -89,20 +81,6 @@ export function buildOrganizationOperation(
             }
         case "end_membership":
             return { operation: "end_membership", user_id: draft.userId }
-        case "grant_management":
-            return {
-                operation: "grant_management",
-                user_id: draft.userId,
-                role_id: draft.roleId,
-                org_unit_id: draft.orgUnitId,
-                include_descendants: draft.includeDescendants === "true",
-                valid_to: shanghaiDateTimeToUnix(draft.validTo),
-            }
-        case "revoke_management":
-            return {
-                operation: "revoke_management",
-                assignment_id: draft.assignmentId,
-            }
     }
 }
 

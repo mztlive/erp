@@ -127,16 +127,32 @@ impl AccessValidity {
 
     /// 授权解析、执行或交付时校验原事务及读取阶段；跨边界返回校验错误，到期返回 `DATA_SCOPE_CHANGED`。
     pub(crate) fn ensure_current(&self, executor: &mut dyn Executor) -> Result<()> {
-        if !self.boundary.is_current(executor) {
-            return Err(Error::ValidationError("授权结果不能跨事务或读取阶段使用".into()));
-        }
+        Self::check_stage(
+            &self.boundary,
+            self.valid_until,
+            executor,
+            "授权结果不能跨事务或读取阶段使用",
+            "DATA_SCOPE_CHANGED：授权关系已到期",
+        )
+    }
 
+    /// 校验执行阶段边界和有效期；跨边界报 `ValidationError`，到期报 `ConflictError`。
+    pub(crate) fn check_stage(
+        boundary: &ExecutionBoundary,
+        valid_until: Option<Instant>,
+        executor: &mut dyn Executor,
+        wrong_stage: &str,
+        expired: &str,
+    ) -> Result<()> {
+        if !boundary.is_current(executor) {
+            return Err(Error::ValidationError(wrong_stage.into()));
+        }
         #[cfg(test)]
         let now = PROOF_TIME.try_with(Cell::get).unwrap_or_else(|_| Instant::now());
         #[cfg(not(test))]
         let now = Instant::now();
-        if self.valid_until.is_some_and(|until| now >= until) {
-            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：授权关系已到期".into()));
+        if valid_until.is_some_and(|until| now >= until) {
+            return Err(Error::ConflictError(expired.into()));
         }
         Ok(())
     }

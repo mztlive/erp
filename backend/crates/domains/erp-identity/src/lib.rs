@@ -15,8 +15,7 @@ pub use ports::{IdentityAuditPort, PreparedResourceAudit};
 // 身份与组织：认证、门户、账号核心及目录。
 pub use {
     entity::{
-        AccountCore, AccountCoreData, AccountCoreUpdate, AccountStatus, LoginAccount, PasswordVerification,
-        Secret,
+        AccountCore, AccountCoreData, AccountCoreUpdate, AccountStatus, LoginAccount, Secret,
         portal::{PortalActor, PortalBinding, PortalRole},
     },
     repository::{
@@ -39,9 +38,7 @@ pub use {
     ports::{AccessFactsPort, AccessMapping},
     repository::{
         AccessControlExt, AuditEventFilter, AuditEventRepository, AuditEventRepositoryExt, AuditEventRow,
-        CASBIN_RULES, MongoCasbinAdapter, PermissionFilter, PermissionRepository, PermissionRepositoryExt,
-        RoleRepository, RoleRepositoryExt, UserRoleRepository, UserRoleRepositoryExt,
-        authorization::CompiledAccess,
+        CASBIN_RULES, PolicyStore, RoleRepository, RoleRepositoryExt, authorization::CompiledAccess,
     },
     service::{
         access_control::AccessControlService,

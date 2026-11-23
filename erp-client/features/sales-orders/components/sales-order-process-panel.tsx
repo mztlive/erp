@@ -55,7 +55,7 @@ export function SalesOrderProcessPanel({
             </DetailWorkspaceSection>
 
             <DetailWorkspaceSection
-                width="full"
+                width="form"
                 title="流程记录"
                 actions={
                     <div className="flex flex-wrap items-center gap-3">
@@ -101,21 +101,18 @@ export function SalesOrderProcessPanel({
                 }
             >
                 {selected === "approval" ? (
-                    <div className="max-w-4xl">
-                        <ApprovalPanel order={order} />
-                    </div>
+                    <ApprovalPanel order={order} />
                 ) : (
-                    <div className="max-w-4xl">
-                        <SalesTimeline
-                            salesOrderId={order.id}
-                            idPrefix={`${prefix}-timeline`}
-                            fixedCategory={selected}
-                            embedded
-                            includeDetails={includeDetails}
-                            groupByDocument
-                            plainApprovalReasons
-                        />
-                    </div>
+                    <SalesTimeline
+                        salesOrderId={order.id}
+                        idPrefix={`${prefix}-timeline`}
+                        fixedCategory={selected}
+                        embedded
+                        includeDetails={includeDetails}
+                        groupByDocument
+                        plainApprovalReasons
+                        currentDocument={{ type: "sales_order", id: order.id }}
+                    />
                 )}
             </DetailWorkspaceSection>
         </>

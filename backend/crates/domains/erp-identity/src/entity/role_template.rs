@@ -1,6 +1,5 @@
 //! 部署岗位模板的身份、权限分工及生成规则。
 
-use erp_permissions::policy_permission::FINANCE_LEDGER_READ;
 use serde::Serialize;
 
 use crate::entity::{Permission, PermissionSet, Role};
@@ -24,44 +23,17 @@ pub struct BuiltinRoleTemplate {
 }
 
 impl BuiltinRoleTemplate {
-    /// 构造部署岗位模板，解析、筛选并去重共享权限；非法权限标识返回错误。
-    /// 综合财务模板额外包含整账读取资格。
+    /// 构造部署岗位模板，解析并去重静态权限；非法权限标识返回错误。
     pub fn new(id: &str, name: &str, description: &str, raw: &[&str]) -> Result<Self> {
-        let mut permissions =
-            raw.iter().map(Permission::parse).collect::<std::result::Result<Vec<_>, _>>()?;
-        Self::retain_position_permissions(id, &mut permissions);
-        if id == "role-finance" {
-            permissions.push(FINANCE_LEDGER_READ);
-        }
-
+        let permissions = raw.iter().map(Permission::parse).collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(Self {
             id: id.into(),
             name: name.into(),
-            description: if id == "role-management" {
-                "查看经营、履约、票款及待办责任，不修改业务或审批状态。".into()
-            } else if id == "role-sysadmin" {
-                "处理同步与集成异常、技术配置和组织治理；审批流程管理单独授权。".into()
-            } else {
-                description.into()
-            },
+            description: description.into(),
             permissions: PermissionSet::new(permissions).into_vec(),
             setup_requirements: Self::setup_requirements(id).iter().map(|value| (*value).into()).collect(),
             recommended: id != "role-finance",
         })
-    }
-
-    // 生成模板时限制管理层为业务只读和待办管理，排除技术岗的审批实例与流程权限。
-    fn retain_position_permissions(id: &str, permissions: &mut Vec<Permission>) {
-        match id {
-            "role-management" => permissions.retain(|permission| {
-                matches!(permission.action(), "list" | "detail" | "read")
-                    || (permission.resource() == "work_item" && permission.action() == "manage")
-            }),
-            "role-sysadmin" => permissions.retain(|permission| {
-                !matches!(permission.resource(), "approval_process" | "approval_instance")
-            }),
-            _ => {},
-        }
     }
 
     // 给出生成岗位后仍需管理员配置的范围、流程或责任；生成本身不写入这些配置。

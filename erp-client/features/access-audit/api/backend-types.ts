@@ -16,18 +16,6 @@ type BackendAdmin = {
     created_at: number
 }
 
-type BackendPermission = {
-    id: string
-    resource: string
-    action: string
-    name: string
-    description?: string | null
-    system: boolean
-    disabled: boolean
-    version: number
-    created_at: number
-}
-
 type BackendDataScope = {
     summary?: string
     id: string
@@ -47,21 +35,6 @@ type BackendDataScope = {
     enabled?: boolean
     resource?: string
     actions?: string[]
-    version: number
-    created_at: number
-}
-
-type BackendUserRole = {
-    id: string
-    user_id: string
-    role_id: string
-    effective_from: number
-    effective_to?: number | null
-    assigned_by: string
-    revoked_at?: number | null
-    revoked_by?: string | null
-    revoke_reason_code?: string | null
-    revoke_reason_text?: string | null
     version: number
     created_at: number
 }
@@ -89,7 +62,5 @@ export type {
     BackendAdmin,
     BackendAuditEvent,
     BackendDataScope,
-    BackendPermission,
     BackendRole,
-    BackendUserRole,
 }

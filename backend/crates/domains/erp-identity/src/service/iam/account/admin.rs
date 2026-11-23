@@ -6,7 +6,7 @@ use application_core::AuditActor;
 use erp_core::AccountKind;
 use erp_permissions::admin;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::dto::{
@@ -54,7 +54,7 @@ pub struct InitializeSuperAdminResult {
 enum SuperAdminInitialization {
     Created(
         // 已初始化根角色绑定和公司人员范围的新账号。
-        AccountCore
+        AccountCore,
     ),
     Existing {
         // 完成资料更新和角色绑定后的账号。
@@ -62,7 +62,7 @@ enum SuperAdminInitialization {
         // 修复前是否不可登录或已软删除。
         reactivated: bool,
         // 修复前是否缺少 `role-root` 绑定。
-        root_role_bound: bool
+        root_role_bound: bool,
     },
 }
 
@@ -152,19 +152,15 @@ impl AdminService {
     ) -> Result<Vec<AdminItem>> {
         let db = self.db.clone();
         let rbac = self.rbac.clone();
-        let access = ManagementAccess::new(authorization, actor.clone(), &admin::ACCOUNT_LIST_ADMINS);
-        self.db
-            .client()
-            .with_transaction(move |executor| {
+        ManagementAccess::new(authorization, actor.clone(), &admin::ACCOUNT_LIST_ADMINS)
+            .verified_read_tx(&self.db, move |executor| {
                 Box::pin(async move {
-                    access.require(executor).await?;
-
                     let admins = db.accounts().list_by_kind(AccountKind::Admin, executor).await?;
                     let account_ids =
                         admins.iter().map(|account| account.base.id.clone()).collect::<Vec<_>>();
                     let mut role_ids = rbac.account_roles(AccountKind::Admin, &account_ids, executor).await?;
 
-                    let items = admins
+                    Ok(admins
                         .into_iter()
                         .map(|account| {
                             let roles = role_ids.remove(&account.base.id).unwrap_or_default();
@@ -173,10 +169,7 @@ impl AdminService {
                                 roles.into_iter().map(|id| id.to_string()).collect(),
                             )
                         })
-                        .collect();
-
-                    access.require(executor).await?;
-                    Ok(items)
+                        .collect())
                 })
             })
             .await

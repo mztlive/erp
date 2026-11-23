@@ -212,6 +212,10 @@ export function SalesOrderDetailSectionContent({
                                 idPrefix={`sales-overview-timeline-${prefix}`}
                                 compact
                                 onOpenFull={() => onSelectSection("timeline")}
+                                currentDocument={{
+                                    type: "sales_order",
+                                    id: order.id,
+                                }}
                             />
                         </DetailWorkspaceSection>
                     }
@@ -330,6 +334,7 @@ export function SalesOrderDetailSectionContent({
                         salesOrderId={order.id}
                         idPrefix={`sales-returns-timeline-${prefix}`}
                         fixedCategory="returns"
+                        currentDocument={{ type: "sales_order", id: order.id }}
                     />
                 </DetailWorkspaceSection>
             ) : null}

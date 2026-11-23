@@ -2,7 +2,7 @@
 
 use serde::Serialize;
 
-use crate::entity::organization::{OrgManagementAssignment, OrgMembership, OrgUnit};
+use crate::entity::organization::{OrgMembership, OrgUnit};
 
 /// 组织管理页读取配置状态时返回，只展示配置边界内的组织事实与必要授权版本。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -13,8 +13,6 @@ pub struct OrganizationStateView {
     pub units: Vec<OrgUnit>,
     /// 配置边界内可见的主属成员关系。
     pub memberships: Vec<OrgMembership>,
-    /// 配置边界内可见的组织管理授权。
-    pub management: Vec<OrgManagementAssignment>,
     /// 组织页面的人员标签与分派候选，不含联系方式。
     pub people: Vec<OrgPersonView>,
     /// 用于解释管理授权和选择角色的角色资料。
@@ -78,7 +76,6 @@ impl OrganizationStateView {
             version,
             units: visible.units,
             memberships: visible.memberships,
-            management: visible.management,
             people,
             roles,
             scope_version,
@@ -101,12 +98,7 @@ mod tests {
     #[test]
     fn compose_marks_no_scope_without_inventing_company() {
         let view = OrganizationStateView::compose(
-            OrganizationState {
-                version: 4,
-                units: Vec::new(),
-                memberships: Vec::new(),
-                management: Vec::new(),
-            },
+            OrganizationState { version: 4, units: Vec::new(), memberships: Vec::new() },
             "scope-v".into(),
             9,
             "2026-09-15T00:00:00Z".into(),

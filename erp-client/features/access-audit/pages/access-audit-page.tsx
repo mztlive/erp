@@ -309,7 +309,6 @@ export function AccessAuditPage() {
                     }
                 }}
                 impact={page.impact}
-                pendingCommand={page.pendingCommand}
                 isSubmitting={page.submitMutation.isPending}
                 form={page.form}
                 onApplyOutcome={page.applyOutcome}

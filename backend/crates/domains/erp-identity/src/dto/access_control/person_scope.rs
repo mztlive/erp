@@ -19,9 +19,6 @@ pub struct SavePersonScopeRequest {
     pub actions: Vec<String>,
     /// 所选动作的新附加授权列表；传空列表可清除这些动作的附加授权。
     pub grants: Vec<PersonScopeGrant>,
-    /// 是否确认将所选动作的旧完整表达式转换为基础范围加附加授权；默认 `false`。
-    #[serde(default)]
-    pub replace_legacy: bool,
     /// 保存时用于检测并发策略变更的预期版本。
     pub expected_policy_version: u64,
 }
@@ -168,25 +165,15 @@ impl SavePersonScopeRequest {
         Ok(PersonScopeCommand { request: self, targets })
     }
 
-    /// 在写事务中检查本资源所选动作的现有配置。覆盖旧完整表达式须显式确认，
-    /// 避免静默加入本人范围或移除旧上限。
-    pub fn ensure_legacy_conversion(&self, existing: &[PersonDataScope]) -> Result<()> {
-        ensure_legacy_conversion(&self.resource, &self.actions, self.replace_legacy, existing)
-    }
-
-    /// 为本次保存的指定动作生成附加表达式；无适用授权时附加列表为空。
-    /// 历史读取标记为 `false`，旧交集条件为空；本人基础由运行时策略解析。
+    /// 为本次保存的指定动作生成附加表达式；无适用授权时附加列表为空。本人基础由运行时策略解析。
     pub fn expression(&self, action: &str) -> PersonScopeExpression {
         PersonScopeExpression {
-            additive: true,
-            history_read: false,
             alternatives: self
                 .grants
                 .iter()
                 .filter(|grant| grant.actions.iter().any(|value| value == action))
                 .map(|grant| grant.terms.clone())
                 .collect(),
-            condition: None,
         }
     }
 }
@@ -218,22 +205,6 @@ pub(crate) fn normalize_grants(
         }
     }
     Ok(normalized)
-}
-
-pub(crate) fn ensure_legacy_conversion<'a>(
-    resource: &str,
-    actions: &[String],
-    replace_legacy: bool,
-    existing: impl IntoIterator<Item = &'a PersonDataScope>,
-) -> Result<()> {
-    if !replace_legacy
-        && existing.into_iter().any(|scope| {
-            scope.resource == resource && actions.contains(&scope.action) && !scope.expression.additive
-        })
-    {
-        return Err(Error::ValidationError("存在旧范围配置，请明确确认转换为基础范围加附加授权".into()));
-    }
-    Ok(())
 }
 
 impl PersonScopeGrant {
@@ -330,7 +301,6 @@ mod tests {
                     scope_targets: vec![],
                 }],
             }],
-            replace_legacy: false,
             expected_policy_version: 1,
         }
     }
@@ -537,14 +507,13 @@ mod tests {
         ));
     }
 
-    // 拒绝错误维度、角色专用的管理部门模式及缺少下级标记的本人组织模式。
+    // 拒绝错误维度及缺少下级标记的本人组织模式。
     #[test]
-    fn command_rejects_wrong_dimensions_and_role_only_mode() {
+    fn command_rejects_wrong_dimensions_and_missing_descendants() {
         use crate::access_control::ScopeTargetMode;
 
         for (dimension, mode, descendants) in [
             (ScopeDimension::Warehouse, ScopeTargetMode::OwnOrg, Some(false)),
-            (ScopeDimension::InternalOrg, ScopeTargetMode::ManagedOrgs, None),
             (ScopeDimension::InternalOrg, ScopeTargetMode::OwnOrg, None),
         ] {
             let mut input = request();
@@ -559,30 +528,14 @@ mod tests {
         }
     }
 
-    // 反序列化保存请求时拒绝顶层 `terms`、`role_id` 和 `expression` 字段。
+    // 反序列化保存请求时拒绝顶层 `terms`、`role_id`、`expression` 和 `replace_legacy` 字段。
     #[test]
     fn api_refuses_old_terms_and_untrusted_expression() {
-        for extra in ["terms", "role_id", "expression"] {
+        for extra in ["terms", "role_id", "expression", "replace_legacy"] {
             let mut value = serde_json::json!({"resource":"sales_order","actions":["detail"],"grants":[],"expected_policy_version":1});
             value[extra] = serde_json::json!([]);
             assert!(serde_json::from_value::<SavePersonScopeRequest>(value).is_err());
         }
-    }
-    // 仅选中的旧动作须确认转换；未选动作保持原样，清空授权后仍拒绝通配动作。
-    #[test]
-    fn legacy_conversion_is_explicit_and_only_checks_selected_operations() {
-        let mut save = request();
-        let mut old = PersonDataScope::default_for("alice", "sales_order", "detail");
-        old.expression.additive = false;
-        assert!(save.ensure_legacy_conversion(&[old.clone()]).is_err());
-        save.replace_legacy = true;
-        assert!(save.ensure_legacy_conversion(&[old.clone()]).is_ok());
-        save.replace_legacy = false;
-        old.action = "submit".into();
-        assert!(save.ensure_legacy_conversion(&[old]).is_ok());
-        save.grants.clear();
-        save.actions = vec!["*".into()];
-        assert!(save.normalized().is_err());
     }
     // 销售单的 `list`、`update`、`submit` 分别合并适用部门授权，均保留本人基础。
     #[test]

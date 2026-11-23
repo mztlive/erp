@@ -30,19 +30,12 @@ pub struct PersonScopeTerm {
     pub scope_targets: Vec<String>,
 }
 
-/// 单个资源动作的人员范围表达式，保留旧配置的交集语义并支持新版附加授权。
+/// 单个资源动作的人员附加范围表达式；解析时按动作政策自动补本人基础。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct PersonScopeExpression {
-    /// 新版仅存附加授权，解析时按动作政策补本人基础；旧记录缺字段时沿用完整表达式。
-    #[serde(default)]
-    pub additive: bool,
-    /// 旧表达式的历史读取标记，用于选择上限；历史参与能否补权由动作政策决定。
-    pub history_read: bool,
-    /// 任选其一的正向范围分支；解析时只保留独立满足必需维度的非空组。
+    /// 任选其一的正向附加范围分支；解析时只保留独立满足必需维度的非空组。
     pub alternatives: Vec<Vec<PersonScopeTerm>>,
-    /// 旧表达式另存的交集条件；显式空组拒绝普通和历史路径。
-    pub condition: Option<Vec<PersonScopeTerm>>,
 }
 
 /// 按账号、业务资源和动作唯一保存的人员配置；本人基础由动作政策提供。
@@ -57,7 +50,7 @@ pub struct PersonDataScope {
     pub resource: String,
     /// 资源下的单一动作标识，决定必需维度和历史读取政策。
     pub action: String,
-    /// 保存的旧完整表达式或新版附加授权。
+    /// 保存的附加授权表达式。
     pub expression: PersonScopeExpression,
 }
 
@@ -68,10 +61,10 @@ impl PersonScopeExpression {
         scope_spec::find_action(resource, action).is_some_and(|spec| spec.default_self())
     }
 
-    // 编译新版附加授权时按动作政策追加本人负责分支，旧完整表达式沿用原分支。
+    // 编译附加授权时按动作政策追加本人负责分支。
     fn branches(&self, resource: &str, action: &str) -> Vec<Vec<PersonScopeTerm>> {
         let mut branches = self.alternatives.clone();
-        if self.additive && Self::default_self(resource, action) {
+        if Self::default_self(resource, action) {
             branches.push(vec![PersonScopeTerm {
                 scope_type: DataScopeType::SelfOwned,
                 target_dimension: ScopeDimension::InternalOrg,
@@ -83,28 +76,12 @@ impl PersonScopeExpression {
         branches
     }
 
-    // 旧配置沿用原交集；动作支持历史读取而旧配置未开启时，须用唯一分支作上限，且不得另存交集。
-    // 新版拒绝旧历史或交集字段；仅在支持历史读取时用内部组织维度的授予并集限制历史补权。
+    // 仅在动作支持历史读取时，用内部组织维度的授予并集限制历史补权。
     fn read_limit(
-        &self,
         branches: &[Vec<PersonScopeTerm>],
         dimensions: &[ScopeDimension],
         allows_history: bool,
     ) -> Result<Option<Vec<PersonScopeTerm>>> {
-        if !self.additive {
-            if allows_history && !self.history_read && (branches.len() != 1 || self.condition.is_some()) {
-                return Err(Error::ValidationError("普通人员范围必须包含一组完整条件".into()));
-            }
-            return Ok(if self.history_read || !allows_history {
-                self.condition.clone()
-            } else {
-                branches.first().cloned()
-            });
-        }
-
-        if self.history_read || self.condition.is_some() {
-            return Err(Error::ValidationError("附加授权不能携带历史读取或旧交集条件".into()));
-        }
         if !allows_history {
             return Ok(None);
         }
@@ -135,7 +112,7 @@ impl PersonDataScope {
         at: Instant,
     ) -> Result<ResolvedScope> {
         let branches = self.expression.branches(&self.resource, &self.action);
-        let condition = self.expression.read_limit(&branches, dimensions, allows_history)?;
+        let condition = PersonScopeExpression::read_limit(&branches, dimensions, allows_history)?;
 
         let tree = OrgTree::new(&state.units)?;
         let compiler =
@@ -149,7 +126,6 @@ impl PersonDataScope {
             }
         }
 
-        // 显式空条件编译为空条款，始终拒绝普通和历史读取。
         let user_limit = condition.as_ref().map(|terms| compiler.clause(terms)).transpose()?;
         Ok(ResolvedScope { role_clauses, user_limit })
     }
@@ -162,7 +138,7 @@ impl PersonDataScope {
             user_id: user.into(),
             resource: resource.into(),
             action: action.into(),
-            expression: PersonScopeExpression { additive: true, ..Default::default() },
+            expression: PersonScopeExpression::default(),
         }
     }
 
@@ -178,7 +154,6 @@ mod tests {
     use crate::access_control::ScopedObject;
     use crate::entity::organization::{OrgMembership, OrgUnit, OrgUnitKind, OrgValidity};
 
-    // 构造内部组织维度的基础项，让各用例按需覆盖目标设置。
     fn term(kind: DataScopeType) -> PersonScopeTerm {
         PersonScopeTerm {
             scope_type: kind,
@@ -188,22 +163,13 @@ mod tests {
             scope_targets: vec![],
         }
     }
-    // 将测试条件放入账号 `alice` 的旧版销售单详情配置，构成一组完整范围。
+
     fn config(terms: Vec<PersonScopeTerm>) -> PersonDataScope {
-        PersonDataScope {
-            base: BaseModel::fake(),
-            user_id: "alice".into(),
-            resource: "sales_order".into(),
-            action: "detail".into(),
-            expression: PersonScopeExpression {
-                additive: false,
-                history_read: false,
-                alternatives: vec![terms],
-                condition: None,
-            },
-        }
+        let mut policy = PersonDataScope::default_for("alice", "sales_order", "detail");
+        policy.expression.alternatives = vec![terms];
+        policy
     }
-    // 构造归属部门 `one` 的对象事实，由测试指定本人负责和历史参与状态。
+
     fn object(owned: bool, history: bool) -> ScopedObject<'static> {
         ScopedObject {
             owned,
@@ -214,98 +180,58 @@ mod tests {
             warehouse_id: None,
         }
     }
-    // 验证非法目标被拒绝；空分支只剩显式允许的历史路径，该路径仍受上限约束。
-    #[test]
-    fn invalid_terms_and_empty_branches_remain_closed() {
-        let state = OrganizationState::default();
-        let mut policy = config(vec![PersonScopeTerm {
-            target_mode: Some(ScopeTargetMode::ManagedOrgs),
+
+    fn departments() -> OrganizationState {
+        OrganizationState {
+            units: ["one", "two"]
+                .into_iter()
+                .map(|id| {
+                    OrgUnit::new(
+                        id.into(),
+                        id.into(),
+                        None,
+                        OrgUnitKind::Department,
+                        "system".into(),
+                        "test".into(),
+                    )
+                    .unwrap()
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    fn department(id: &str) -> PersonScopeTerm {
+        PersonScopeTerm {
+            target_mode: Some(ScopeTargetMode::Explicit),
+            include_descendants: Some(false),
+            scope_targets: vec![id.into()],
             ..term(DataScopeType::Organization)
-        }]);
-        assert!(policy.compile(&state, &[], false, Instant::now()).is_err());
-        policy.expression.alternatives = vec![vec![PersonScopeTerm {
+        }
+    }
+
+    // 验证非法目标被拒绝；显式拒绝关闭两条路径；公司范围须单独授予。
+    #[test]
+    fn invalid_terms_denied_and_company_scope_behave_as_specified() {
+        let state = OrganizationState::default();
+        let at = Instant::from_unix_secs(10);
+        let policy = config(vec![PersonScopeTerm {
             target_dimension: ScopeDimension::Warehouse,
             target_mode: Some(ScopeTargetMode::Explicit),
             scope_targets: vec!["*".into()],
             ..term(DataScopeType::Organization)
-        }]];
-        assert!(policy.compile(&state, &[], false, Instant::now()).is_err());
-
-        policy.expression.alternatives.clear();
-        policy.expression.history_read = true;
-        let scope = policy.compile(&state, &[], true, Instant::now()).unwrap();
-        assert!(!scope.has_role_scope());
-        assert!(!scope.allows(&object(true, false), false));
-        assert!(scope.allows(&object(false, true), true));
-
-        policy.expression.condition = Some(vec![PersonScopeTerm {
-            target_mode: Some(ScopeTargetMode::OwnOrg),
-            include_descendants: Some(false),
-            ..term(DataScopeType::Organization)
         }]);
-        assert!(
-            !policy.compile(&state, &[], true, Instant::now()).unwrap().allows(&object(false, true), true)
-        );
-    }
+        assert!(policy.compile(&state, &[], false, at).is_err());
 
-    // 旧记录仍可解码管理部门模式，但交集不能因该模式无效而放宽。
-    #[test]
-    fn legacy_managed_org_mode_decodes_but_cannot_be_used_as_a_limit() {
-        let mut policy = config(vec![term(DataScopeType::Company)]);
-        let saved: PersonScopeExpression = serde_json::from_value(serde_json::json!({
-            "history_read": true,
-            "alternatives": policy.expression.alternatives,
-            "condition": [{
-                "scope_type": "team", "target_dimension": "internal_org",
-                "target_mode": "managed_orgs", "scope_targets": []
-            }]
-        }))
-        .unwrap();
-        assert!(!saved.additive);
-        assert_eq!(saved.condition.as_ref().unwrap()[0].target_mode, Some(ScopeTargetMode::ManagedOrgs));
-        policy.expression = saved;
-        assert!(matches!(
-            policy.resolve(&OrganizationState::default(), Instant::now()),
-            Err(Error::ValidationError(message)) if message == "人员范围不接受角色管理部门模式"
-        ));
-    }
-
-    // 验证旧本人范围约束历史读取，显式拒绝关闭两条路径，公司范围须单独授予。
-    #[test]
-    fn explicit_self_does_not_add_history_and_company_is_explicit() {
-        let state = OrganizationState::default();
-        let at = Instant::from_unix_secs(10);
-        let own = config(vec![term(DataScopeType::SelfOwned)]).resolve(&state, at).unwrap();
+        let own = PersonDataScope::default_for("alice", "sales_order", "detail").resolve(&state, at).unwrap();
         assert!(own.allows(&object(true, false), true));
         assert!(!own.allows(&object(false, true), true));
         assert!(!PersonDataScope::denied().allows(&object(true, true), true));
+
         let all = config(vec![term(DataScopeType::Company)]).resolve(&state, at).unwrap();
         assert!(all.allows(&object(false, false), true));
     }
-    // 验证旧交集同时收窄历史读取和写入，显式空交集拒绝所有对象。
-    #[test]
-    fn migrated_history_and_write_intersection_remain_exact() {
-        let mut policy = config(vec![term(DataScopeType::Company)]);
-        policy.expression.history_read = true;
-        policy.expression.condition = Some(vec![term(DataScopeType::SelfOwned)]);
-        let scope = policy.resolve(&OrganizationState::default(), Instant::now()).unwrap();
-        assert!(!scope.allows(&object(false, true), true));
-        assert!(scope.allows(&object(true, true), true));
 
-        policy.expression.history_read = false;
-        policy.action = "update".into();
-        let scope = policy.resolve(&OrganizationState::default(), Instant::now()).unwrap();
-        assert!(!scope.allows(&object(false, false), false));
-        assert!(scope.allows(&object(true, false), false));
-
-        policy.expression.condition = Some(vec![]);
-        assert!(
-            !policy
-                .compile(&OrganizationState::default(), &[], false, Instant::now())
-                .unwrap()
-                .allows(&object(true, true), true)
-        );
-    }
     // 验证本人组织范围在成员关系生效时纳入部门，到失效时点即移除。
     #[test]
     fn own_department_preserves_membership_validity() {
@@ -348,67 +274,6 @@ mod tests {
                     .allows(&object(false, true), true),
                 expected
             );
-        }
-    }
-    // 验证仓库和结算主体须在同一分支匹配，跨分支拼接的目标被拒绝。
-    #[test]
-    fn dimension_combinations_do_not_cross_between_branches() {
-        let warehouse = |id: &str| PersonScopeTerm {
-            scope_type: DataScopeType::Organization,
-            target_dimension: ScopeDimension::Warehouse,
-            target_mode: Some(ScopeTargetMode::Explicit),
-            include_descendants: None,
-            scope_targets: vec![id.into()],
-        };
-        let party =
-            |id: &str| PersonScopeTerm { target_dimension: ScopeDimension::SettlementParty, ..warehouse(id) };
-        let mut policy = config(vec![]);
-        policy.expression.alternatives =
-            vec![vec![warehouse("a"), party("x")], vec![warehouse("b"), party("y")]];
-        let scope = policy
-            .compile(
-                &OrganizationState::default(),
-                &[ScopeDimension::Warehouse, ScopeDimension::SettlementParty],
-                false,
-                Instant::now(),
-            )
-            .unwrap();
-
-        let mut target = object(false, false);
-        target.warehouse_id = Some("a");
-        target.settlement_party_id = Some("x");
-        assert!(scope.allows(&target, false));
-        target.settlement_party_id = Some("y");
-        assert!(!scope.allows(&target, false));
-    }
-    // 准备两个启用部门，供人员范围测试通过组织树展开真实目标。
-    fn departments() -> OrganizationState {
-        OrganizationState {
-            units: ["one", "two"]
-                .into_iter()
-                .map(|id| {
-                    OrgUnit::new(
-                        id.into(),
-                        id.into(),
-                        None,
-                        OrgUnitKind::Department,
-                        "system".into(),
-                        "test".into(),
-                    )
-                    .unwrap()
-                })
-                .collect(),
-            ..Default::default()
-        }
-    }
-
-    // 构造只覆盖指定部门的显式项，并明确排除下级。
-    fn department(id: &str) -> PersonScopeTerm {
-        PersonScopeTerm {
-            target_mode: Some(ScopeTargetMode::Explicit),
-            include_descendants: Some(false),
-            scope_targets: vec![id.into()],
-            ..term(DataScopeType::Organization)
         }
     }
 
@@ -457,26 +322,6 @@ mod tests {
         assert!(scope.allows(&target, true));
     }
 
-    // 验证字段缺失的旧记录沿用旧范围，新版拒绝历史读取标记和旧交集条件。
-    #[test]
-    fn legacy_records_do_not_gain_self_and_additive_rejects_legacy_conditions() {
-        let mut policy = config(vec![department("one")]);
-        let mut serialized = serde_json::to_value(&policy).unwrap();
-        serialized["expression"].as_object_mut().unwrap().remove("additive");
-        policy = serde_json::from_value(serialized).unwrap();
-        assert!(!policy.expression.additive);
-        let mut target = object(true, false);
-        target.org_unit_id = Some("outside");
-        assert!(!policy.resolve(&departments(), Instant::now()).unwrap().allows(&target, true));
-
-        policy.expression.additive = true;
-        policy.expression.history_read = true;
-        assert!(policy.resolve(&departments(), Instant::now()).is_err());
-        policy.expression.history_read = false;
-        policy.expression.condition = Some(vec![]);
-        assert!(policy.resolve(&departments(), Instant::now()).is_err());
-    }
-
     // 以无本人基础的动作验证多维附加项保持原组合，启用历史补权时拒绝该维度组合。
     #[test]
     fn multiple_dimension_grants_remain_separate_and_have_no_default_self() {
@@ -509,33 +354,27 @@ mod tests {
         assert!(!scope.allows(&target, false));
         assert!(policy.compile(&departments(), &dimensions, true, Instant::now()).is_err());
     }
-    // 验证无人员配置时任务列表和详情只匹配本人，管理动作仍为空范围。
+
+    // 验证无人员配置时任务列表和详情只匹配本人，管理动作仍为空范围；管理范围可显式授予。
     #[test]
     fn task_read_defaults_to_self_without_granting_manage() {
+        let state = departments();
         for action in ["list", "detail", "manage"] {
             let policy = PersonDataScope::default_for("alice", "work_item", action);
-            let scope = policy.resolve(&departments(), Instant::now()).unwrap();
+            let scope = policy.resolve(&state, Instant::now()).unwrap();
             assert_eq!(scope.allows(&object(true, false), false), action != "manage");
             assert!(!scope.allows(&object(false, true), false));
         }
+
+        let mut detail = PersonDataScope::default_for("alice", "work_item", "detail");
+        detail.expression.alternatives = vec![vec![department("two")]];
+        assert!(detail.resolve(&state, Instant::now()).unwrap().allows(&object(true, false), false));
+
+        let mut manage = PersonDataScope::default_for("alice", "work_item", "manage");
+        manage.expression.alternatives = vec![vec![term(DataScopeType::SelfOwned)]];
+        assert!(manage.resolve(&state, Instant::now()).unwrap().allows(&object(true, false), false));
     }
 
-    // 验证附加部门保留任务本人基础，旧显式范围及空上限仍生效，管理范围可显式授予。
-    #[test]
-    fn task_self_baseline_respects_explicit_scope_contract() {
-        let mut policy = PersonDataScope::default_for("alice", "work_item", "detail");
-        policy.expression.alternatives = vec![vec![department("two")]];
-        let resolve = |policy: &PersonDataScope| policy.resolve(&departments(), Instant::now()).unwrap();
-        assert!(resolve(&policy).allows(&object(true, false), false));
-        policy.expression.additive = false;
-        assert!(!resolve(&policy).allows(&object(true, false), false));
-        policy.expression.alternatives = vec![vec![term(DataScopeType::SelfOwned)]];
-        policy.expression.condition = Some(vec![]);
-        assert!(!resolve(&policy).allows(&object(true, false), false));
-        policy.action = "manage".into();
-        policy.expression.condition = None;
-        assert!(resolve(&policy).allows(&object(true, false), false));
-    }
     // 验证解析沿用各动作登记的本人基础和历史读取政策，未知动作返回错误。
     #[test]
     fn registered_resolution_uses_one_default_and_history_contract() {

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/timeline"
 import { MoneyValue } from "@/components/business"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { formatDateTime } from "@/lib/datetime"
 import { approvalResultText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
 import type { TimelineEvent } from "../types"
@@ -113,14 +114,27 @@ function TimelineEventList({
         <Timeline aria-label="业务时间线">
             {events.map((event) => {
                 const isCurrentDocument =
-                    currentDocument?.type === event.document_type &&
-                    currentDocument.id === event.document_id
+                    currentDocument != null &&
+                    currentDocument.id === event.document_id &&
+                    (currentDocument.type === event.document_type ||
+                        (currentDocument.type === "sales_order" &&
+                            event.document_type === "voucher_sales_order"))
                 const approval = event.approval
                 const presentation = approval
                     ? approvalPresentation[approval.result]
                     : undefined
                 const Icon = presentation?.icon
                 const rejected = approval?.result === "REJECTED"
+                const occurredIso = new Date(
+                    event.occurred_at * 1000,
+                ).toISOString()
+                const showActor =
+                    Boolean(event.actor_name) &&
+                    event.actor_name !== "审批流程" &&
+                    !(
+                        event.id.startsWith("allocation:") &&
+                        event.actor_name === "未记录操作人"
+                    )
                 return (
                     <TimelineItem key={event.id} className="min-w-0 pb-6">
                         <TimelineMarker
@@ -136,7 +150,12 @@ function TimelineEventList({
                         <TimelineTitle className="flex min-h-6 min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                             <span className="min-w-0 break-words">
                                 {approval
-                                    ? (approval.node_name ?? "审批流程")
+                                    ? (approval.node_name ??
+                                      (event.title &&
+                                      event.title !== "通过" &&
+                                      event.title !== "驳回"
+                                          ? event.title
+                                          : "审批决定"))
                                     : event.title}
                             </span>
                             {presentation && (
@@ -148,27 +167,16 @@ function TimelineEventList({
                             )}
                         </TimelineTitle>
                         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                            <time
-                                className="num"
-                                dateTime={new Date(
-                                    event.occurred_at * 1000,
-                                ).toISOString()}
-                            >
+                            <time className="num" dateTime={occurredIso}>
                                 {timeOnly
                                     ? new Date(
                                           event.occurred_at * 1000,
                                       ).toLocaleTimeString("zh-CN", {
                                           hour12: false,
                                       })
-                                    : new Date(
-                                          event.occurred_at * 1000,
-                                      ).toLocaleString("zh-CN", {
-                                          hour12: false,
-                                      })}
+                                    : formatDateTime(occurredIso, "full")}
                             </time>
-                            {event.actor_name && (
-                                <span>{event.actor_name}</span>
-                            )}
+                            {showActor && <span>{event.actor_name}</span>}
                             {approval?.round_no != null && (
                                 <span>第 {approval.round_no} 轮</span>
                             )}

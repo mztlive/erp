@@ -10,6 +10,7 @@ use super::AuthorizationService;
 use super::resolve::scope_deadline;
 use crate::entity::authorization::AccessContext;
 use crate::entity::person_profile_change::ORGANIZATION_PERSON_PROFILE_CHANGE;
+use crate::repository::authorization::AccessValidity;
 use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{Error, Result};
 
@@ -44,13 +45,7 @@ impl SnapshotScope {
     }
 
     pub(super) fn check(&self, executor: &mut dyn Executor, wrong_stage: &str, expired: &str) -> Result<()> {
-        if !self.boundary.is_current(executor) {
-            return Err(Error::ValidationError(wrong_stage.into()));
-        }
-        if self.valid_until.is_some_and(|until| Instant::now() >= until) {
-            return Err(Error::ConflictError(expired.into()));
-        }
-        Ok(())
+        AccessValidity::check_stage(&self.boundary, self.valid_until, executor, wrong_stage, expired)
     }
 }
 

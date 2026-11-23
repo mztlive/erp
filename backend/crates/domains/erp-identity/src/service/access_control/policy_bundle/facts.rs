@@ -7,7 +7,7 @@ use persistence_core::Executor;
 use super::PolicyBundleService;
 use crate::entity::authorization_bundle::plan::{PolicyFacts, PolicyRoleState, PolicyUserState};
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
-use crate::{AccessControlExt, Error, MongoCasbinAdapter, Permission, Result, subject};
+use crate::{AccessControlExt, Error, Permission, PolicyStore, Result, subject};
 
 impl PolicyBundleService {
     /// 预览、应用或导出时，沿原事务按规范化引用有界读取人员、直接角色绑定、角色和人员范围。
@@ -49,7 +49,7 @@ impl PolicyBundleService {
             .filter(|account| account.is_active_backoffice())
             .ok_or_else(|| Error::ValidationError(format!("后台人员不存在或已失效：{id}")))?;
 
-        let keys = MongoCasbinAdapter::new(self.access.db.clone())
+        let keys = PolicyStore::new(self.access.db.clone())
             .subject_roles(&subject(AccountKind::Admin, id), executor)
             .await?;
         PolicyUserState::from_role_keys(user.base.version, keys)
@@ -62,7 +62,7 @@ impl PolicyBundleService {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<PolicyRoleState>> {
-        let store = MongoCasbinAdapter::new(self.access.db.clone());
+        let store = PolicyStore::new(self.access.db.clone());
         let key = format!("role:{id}");
         let subjects = store.role_subjects(&key, executor).await?;
         let parents = store.subject_roles(&key, executor).await?;

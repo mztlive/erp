@@ -1,6 +1,6 @@
 "use client"
 
-import { ShieldOffIcon, UserRoundCogIcon } from "lucide-react"
+import { UserRoundCogIcon } from "lucide-react"
 
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
@@ -33,10 +33,7 @@ type UseUserColumnsInput = {
  * 不占列。有效权限由整行点击打开。
  */
 function useUserColumns({
-    data,
     rowFocusRef,
-    startChange,
-    previewingCommand,
     setRoleAssignment,
 }: UseUserColumnsInput) {
     return React.useMemo<ColumnDef<UserRow>[]>(
@@ -120,7 +117,6 @@ function useUserColumns({
                 cell: ({ row }) => {
                     const user = row.original
                     const segment = toAutomationIdSegment(user.id)
-                    const roleAssignmentId = user.roleAssignmentId
                     return (
                         <TableRowActions
                             moreId={`operations-access-users-row-${segment}-menu-trigger`}
@@ -145,47 +141,13 @@ function useUserColumns({
                                             roleIds: user.roleIds,
                                         }),
                                 },
-                                ...(roleAssignmentId
-                                    ? [
-                                          {
-                                              id: `operations-access-users-row-${segment}-emergency-revoke`,
-                                              label: "紧急撤权",
-                                              icon: ShieldOffIcon,
-                                              destructive: true,
-                                              loading:
-                                                  previewingCommand?.subjectId ===
-                                                      user.userId &&
-                                                  previewingCommand.action ===
-                                                      "EMERGENCY_REVOKE_USER_ROLE",
-                                              onClick: () =>
-                                                  void startChange({
-                                                      subjectType: "USER",
-                                                      subjectId: user.userId,
-                                                      action: "EMERGENCY_REVOKE_USER_ROLE",
-                                                      roleAssignmentId,
-                                                      expectedPermissionVersion:
-                                                          data?.permissionVersion ??
-                                                          user.permissionVersion,
-                                                      reasonCode:
-                                                          "EMERGENCY_STOP_LOSS",
-                                                      idempotencyKey: "pending",
-                                                  }),
-                                          },
-                                      ]
-                                    : []),
                             ]}
                         />
                     )
                 },
             },
         ],
-        [
-            startChange,
-            previewingCommand,
-            data?.permissionVersion,
-            rowFocusRef,
-            setRoleAssignment,
-        ],
+        [rowFocusRef, setRoleAssignment],
     )
 }
 

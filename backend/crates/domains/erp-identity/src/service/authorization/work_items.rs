@@ -1,6 +1,5 @@
 //! 工作项办理从真实任务种类选择固定资格及来源，不接受业务调用方拼装政策。
 use application_core::AuditActor;
-use erp_core::common::time::Instant;
 use erp_permissions::{
     Permission, approval_instance, fulfillment, integration_ops, internal, inventory, legacy_import, payable,
     purchase_order, purchase_payment_request, receivable, returns, sales_inquiry, sales_order, sales_review,
@@ -11,7 +10,7 @@ use persistence_core::Executor;
 use super::targets::{SourceEvidence, TargetFacts};
 use super::{AuthorizationService, rules};
 use crate::entity::authorization::{AccessContext, AccessTarget, ObjectFacts, RelationKey};
-use crate::repository::authorization::AccessProof;
+use crate::repository::authorization::{AccessProof, AccessValidity};
 use crate::{Error, QualifiedPermissions, Result};
 
 const DECISION: &[Permission] = &[approval_instance::COPIES_HISTORY, approval_instance::SUBMIT_DECISION];
@@ -380,13 +379,13 @@ impl AuthorizationService {
             return Err(Error::Forbidden("目标账号不具备同角色完整任务执行资格".into()));
         }
 
-        if !boundary.is_current(executor) {
-            return Err(Error::ValidationError("任务资格检查跨越执行阶段".into()));
-        }
-        if candidate.valid_until.is_some_and(|until| Instant::now() >= until) {
-            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：任务资格候选已失效".into()));
-        }
-        Ok(())
+        AccessValidity::check_stage(
+            &boundary,
+            candidate.valid_until,
+            executor,
+            "任务资格检查跨越执行阶段",
+            "DATA_SCOPE_CHANGED：任务资格候选已失效",
+        )
     }
 
     /// 实际办理和终态幂等回放沿用同一套来源与功能检查；具体状态和当前指派仍由业务命令核验。

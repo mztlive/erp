@@ -6,13 +6,14 @@
 //! 此格式替代旧 Debug 编码，旧分页版本按原 DATA_SCOPE_CHANGED 合同失效。
 
 mod authorization;
-mod scope;
+
+use crate::entity::access_control::{ResolvedScope, ScopeClause};
 
 /// 身份域内部的版本指纹编码器，以类型标记和边界形成稳定字节串。
 #[derive(Default)]
 pub(crate) struct Fingerprint(
     // 待计算摘要的完整编码；临时元素编码也使用此缓冲区。
-    Vec<u8>
+    Vec<u8>,
 );
 
 impl Fingerprint {
@@ -87,6 +88,31 @@ impl Fingerprint {
     /// 消费编码缓冲区，生成版本字段使用的 32 字符小写十六进制 MD5 摘要。
     pub(crate) fn finish(self) -> String {
         format!("{:x}", md5::compute(self.0))
+    }
+
+    /// 为版本绑定范围：先编码无序角色条款，再编码可选个人上限，区分未设上限与空条款。
+    pub(crate) fn scope(&mut self, scope: &ResolvedScope) {
+        let ResolvedScope { role_clauses, user_limit } = scope;
+        self.unordered(role_clauses, Self::clause);
+        self.optional(user_limit.as_ref(), Self::clause);
+    }
+
+    // 依次编码公司、本人、协作及组织、结算主体、仓库，三组 ID 均按无序集合处理。
+    fn clause(&mut self, clause: &ScopeClause) {
+        let ScopeClause {
+            company,
+            self_owned,
+            collaborative,
+            org_unit_ids,
+            settlement_party_ids,
+            warehouse_ids,
+        } = clause;
+        self.boolean(*company);
+        self.boolean(*self_owned);
+        self.boolean(*collaborative);
+        for ids in [org_unit_ids, settlement_party_ids, warehouse_ids] {
+            self.unordered(ids, |hash, id| hash.text(id));
+        }
     }
 }
 

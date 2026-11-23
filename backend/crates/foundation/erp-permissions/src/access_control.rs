@@ -4,27 +4,6 @@ use crate::{Permission, PermissionDef, groups, resources};
 /// 检查人员访问权限。
 pub const INSPECTION_INSPECT: Permission = PERSON_SCOPE_LIST;
 
-/// 查询权限定义列表。
-pub const PERMISSION_LIST: Permission = Permission::new(resources::PERMISSION, "list");
-
-/// 创建权限定义。
-pub const PERMISSION_CREATE: Permission = Permission::new(resources::PERMISSION, "create");
-
-/// 更新权限定义。
-pub const PERMISSION_UPDATE: Permission = Permission::new(resources::PERMISSION, "update");
-
-/// 删除权限定义。
-pub const PERMISSION_DELETE: Permission = Permission::new(resources::PERMISSION, "delete");
-
-/// 查询用户角色绑定。
-pub const USER_ROLE_LIST: Permission = Permission::new(resources::USER_ROLE, "list");
-
-/// 分配用户角色。
-pub const USER_ROLE_CREATE: Permission = Permission::new(resources::USER_ROLE, "create");
-
-/// 撤权用户角色。
-pub const USER_ROLE_REVOKE: Permission = Permission::new(resources::USER_ROLE, "revoke");
-
 /// 查询审计事件列表。
 pub const AUDIT_EVENT_LIST: Permission = Permission::new(resources::AUDIT_EVENT, "list");
 
@@ -80,62 +59,6 @@ pub const RESOURCE_GRANT_MANAGE: Permission = PERSON_SCOPE_SAVE;
 
 /// 本模块独立权限及可复用展示说明；接口专属说明由应用提供。
 pub const ENTRIES: &[(&str, PermissionDef)] = &[
-    (
-        "PERMISSION_LIST",
-        PermissionDef {
-            permission: &PERMISSION_LIST,
-            group: groups::ACCESS_CONTROL,
-            description: "查询权限定义列表",
-        },
-    ),
-    (
-        "PERMISSION_CREATE",
-        PermissionDef {
-            permission: &PERMISSION_CREATE,
-            group: groups::ACCESS_CONTROL,
-            description: "创建权限定义",
-        },
-    ),
-    (
-        "PERMISSION_UPDATE",
-        PermissionDef {
-            permission: &PERMISSION_UPDATE,
-            group: groups::ACCESS_CONTROL,
-            description: "更新权限定义",
-        },
-    ),
-    (
-        "PERMISSION_DELETE",
-        PermissionDef {
-            permission: &PERMISSION_DELETE,
-            group: groups::ACCESS_CONTROL,
-            description: "删除权限定义",
-        },
-    ),
-    (
-        "USER_ROLE_LIST",
-        PermissionDef {
-            permission: &USER_ROLE_LIST,
-            group: groups::ACCESS_CONTROL,
-            description: "查询用户角色绑定",
-        },
-    ),
-    (
-        "USER_ROLE_CREATE",
-        PermissionDef {
-            permission: &USER_ROLE_CREATE,
-            group: groups::ACCESS_CONTROL,
-            description: "分配用户角色",
-        },
-    ),
-    (
-        "USER_ROLE_REVOKE",
-        PermissionDef {
-            permission: &USER_ROLE_REVOKE,
-            group: groups::ACCESS_CONTROL,
-            description: "撤权用户角色",
-        },
-    ),
     (
         "AUDIT_EVENT_LIST",
         PermissionDef {

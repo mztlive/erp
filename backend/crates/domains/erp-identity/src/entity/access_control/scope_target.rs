@@ -4,7 +4,7 @@ use erp_core::Error as CoreError;
 use super::person_scope::PersonScopeTerm;
 use super::scope_type::normalize_scope_targets;
 use super::{DataScopeType, ScopeDimension, ScopeTargetMode};
-use crate::{Error, Result};
+use crate::Result;
 
 /// 已校验的人员范围目标，各模式只携带适用信息，沿用原有持久化协议。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,9 +66,7 @@ impl ScopeTarget {
         if (mode == ScopeTargetMode::Explicit) == ids.is_empty() {
             return Err(CoreError::from("显式模式必须指定目标，动态模式不得混入静态目标").into());
         }
-        // 先校验目标形态，再拒绝合法形态的旧管理部门模式。
-        let needs_descendants =
-            term.target_dimension == ScopeDimension::InternalOrg && mode != ScopeTargetMode::ManagedOrgs;
+        let needs_descendants = term.target_dimension == ScopeDimension::InternalOrg;
         if needs_descendants != term.include_descendants.is_some() {
             return Err(
                 CoreError::from("内部组织显式或本人组织模式必须明确是否包含下级，其他模式不得设置").into()
@@ -76,9 +74,6 @@ impl ScopeTarget {
         }
 
         match mode {
-            ScopeTargetMode::ManagedOrgs => {
-                Err(Error::ValidationError("人员范围不接受角色管理部门模式".into()))
-            },
             ScopeTargetMode::OwnOrg => Ok(Self::OwnOrg {
                 include_descendants: term.include_descendants.expect("本人组织已要求下级标记"),
             }),
@@ -118,15 +113,16 @@ impl ScopeTarget {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Error;
 
     // 多个字段不合法时，沿用先维度、再静态目标、最后下级标记的报错顺序。
     #[test]
-    fn malformed_managed_org_mode_reports_the_first_shape_error() {
+    fn malformed_dynamic_mode_reports_the_first_shape_error() {
         let mut term = PersonScopeTerm {
             scope_type: DataScopeType::Team,
             target_dimension: ScopeDimension::Warehouse,
-            target_mode: Some(ScopeTargetMode::ManagedOrgs),
-            include_descendants: Some(false),
+            target_mode: Some(ScopeTargetMode::OwnOrg),
+            include_descendants: None,
             scope_targets: vec!["one".into()],
         };
         let assert_error = |term: &PersonScopeTerm, expected: &str| {

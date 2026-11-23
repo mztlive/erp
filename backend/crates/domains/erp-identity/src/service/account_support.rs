@@ -62,7 +62,7 @@ mod tests {
 
     use super::{account_of_kind, apply_account_update};
     use crate::entity::{AccountCore, AccountCoreData, AccountCoreUpdate, AccountStatus, LoginAccount};
-    use crate::service::auth::password::{PasswordCheck, hash_secret, verify_password};
+    use crate::service::auth::password::{hash_secret, verify_password};
 
     // 验证更新同时保存修改后的名称，并生成可用新密码验证的凭证，调用方可直接持久化返回的账号。
     #[tokio::test]
@@ -92,10 +92,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(account.name, "新管理员");
-        assert!(matches!(
-            verify_password(Some(account.secret), "next-password".to_string()).await.unwrap(),
-            PasswordCheck::Current
-        ));
+        assert!(verify_password(Some(account.secret), "next-password".to_string()).await.unwrap());
     }
 
     // 验证缺失的账号按不存在返回，使业务入口可统一处理缺失或类型不符的身份。
