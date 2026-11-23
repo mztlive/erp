@@ -108,6 +108,7 @@ export function SalesOrderEditableCenter({
             />
 
             <DetailWorkspaceBody
+                className="flex flex-col"
                 alerts={
                     isRejected ? (
                         <Alert variant="destructive">

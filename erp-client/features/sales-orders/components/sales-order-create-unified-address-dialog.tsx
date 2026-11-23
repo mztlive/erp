@@ -4,7 +4,7 @@ import * as React from "react"
 import { MapPinIcon } from "lucide-react"
 import { z } from "zod"
 
-import { QuantityValue } from "@/components/business"
+import { QuantityValue, detailWorkspaceStyles } from "@/components/business"
 import { toFieldErrors, useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
@@ -77,15 +77,20 @@ export function SalesOrderCreateUnifiedAddressDialog({
             <Button
                 id="sales-orders-create-unified-address-open"
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="sm"
+                className={detailWorkspaceStyles.subtleButton}
                 disabled={lineCount === 0}
                 onClick={() => {
                     form.reset({ ...EMPTY_ADDRESS, ...initialAddress })
                     setOpen(true)
                 }}
             >
-                <MapPinIcon aria-hidden="true" />
+                <MapPinIcon
+                    data-icon="inline-start"
+                    className="size-3.5"
+                    aria-hidden="true"
+                />
                 {triggerLabel}
             </Button>
             <Dialog open={open} onOpenChange={setOpen}>

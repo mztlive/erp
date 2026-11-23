@@ -1,9 +1,10 @@
 "use client"
 
-import { toFieldErrors } from "@/components/form"
 import type { SettlementPartyComboboxItem } from "@/components/business/entity-comboboxes"
-import { SettlementPartySearchCombobox } from "@/features/entity-selectors"
+import { toFieldErrors } from "@/components/form"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
+import { RequiredMark } from "@/components/ui/required-mark"
+import { SettlementPartySearchCombobox } from "@/features/entity-selectors"
 import type { SalesOrderCreateFormApi } from "../lib/sales-order-create-form-types"
 
 export function SalesOrderCreateSettlementField({
@@ -21,7 +22,7 @@ export function SalesOrderCreateSettlementField({
                 <Field>
                     <FieldLabel htmlFor="sales-orders-create-settlement">
                         结算主体
-                        <span className="text-destructive">*</span>
+                        <RequiredMark />
                     </FieldLabel>
                     <SettlementPartySearchCombobox
                         id="sales-orders-create-settlement"
@@ -39,8 +40,8 @@ export function SalesOrderCreateSettlementField({
                     />
                     <p className="text-xs text-muted-foreground">
                         {hasContract
-                            ? "默认使用合同的我方签约主体，可按本次销售安排调整。"
-                            : "选择本次销售的结算主体，补合同时保留此选择。"}
+                            ? "默认取合同签约主体，可按本单调整"
+                            : "后补合同时保留此选择"}
                     </p>
                     <FieldError
                         errors={toFieldErrors(field.state.meta.errors)}

@@ -1,25 +1,30 @@
 "use client"
+
 import { useEffect, useState } from "react"
-import { useRouter } from "@/lib/navigation"
+
 import {
     BusinessFailureState,
+    DetailWorkspaceBody,
+    DetailWorkspaceChrome,
+    DetailWorkspacePage,
+    DetailWorkspaceSection,
+    DetailWorkspaceSkeleton,
     MoneyValue,
-    PageHeader,
-    PageScaffold,
     QuantityValue,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
+import { getErrorMessage } from "@/lib/api/errors"
 import { type FormalCommandIdentity } from "@/lib/formal-command"
 import { readInquiryLocalValue } from "@/lib/inquiry-local"
-import { getErrorMessage } from "@/lib/api/errors"
+import { useRouter } from "@/lib/navigation"
 import type { InquirySalesBasis } from "../api/inquiry-basis"
-import { useInquirySalesBasis } from "../hooks/use-inquiry-sales-basis"
 import { useCreateSalesOrderMutation } from "../hooks/queries"
+import { useInquirySalesBasis } from "../hooks/use-inquiry-sales-basis"
 import {
     InquirySalesCommandLedger,
-    inquirySaleScope,
     inquirySaleDraftKey,
+    inquirySaleScope,
     readInquirySaleCommand,
     type InquirySalePayload,
 } from "../lib/inquiry-sales-storage"
@@ -56,31 +61,38 @@ export function InquirySalesOrderCreate({
         window.addEventListener("storage", restore)
         return () => window.removeEventListener("storage", restore)
     }, [userId, scope])
+
     if (profile.isError && !profile.data)
         return (
-            <PageScaffold>
-                <PageHeader title="当前账号暂时无法核对" />
-                <BusinessFailureState
-                    error={profile.error}
-                    onRetry={() => void profile.refetch()}
-                />
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title="当前账号暂时无法核对" />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <BusinessFailureState
+                            error={profile.error}
+                            onRetry={() => void profile.refetch()}
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     if (restoredIdentity !== `${userId}:${scope}` || !userId)
         return (
-            <PageScaffold>
-                <PageHeader
-                    title="从询价创建销售单"
-                    description="正在核对当前账号和上次开单记录…"
-                />
-            </PageScaffold>
+            <DetailWorkspaceSkeleton
+                title="从询价创建销售单"
+                description="正在核对当前账号和上次开单记录…"
+            />
         )
     if (storageError)
         return (
-            <PageScaffold>
-                <PageHeader title="上次开单待核对" />
-                <BusinessFailureState error={storageError} />
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title="上次开单待核对" />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <BusinessFailureState error={storageError} />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     if (saved)
         return (
@@ -92,23 +104,25 @@ export function InquirySalesOrderCreate({
         )
     if (basis.isPending)
         return (
-            <PageScaffold>
-                <PageHeader
-                    title="从询价创建销售单"
-                    description="正在核对已接受结果、可转数量和上次操作…"
-                />
-            </PageScaffold>
+            <DetailWorkspaceSkeleton
+                title="从询价创建销售单"
+                description="正在核对已接受结果、可转数量和上次操作…"
+            />
         )
     if (!basis.data)
         return (
-            <PageScaffold>
-                <PageHeader title="询价暂不可用于开单" />
-                <BusinessFailureState
-                    error={basis.error}
-                    onRetry={() => void basis.refetch()}
-                    retryLabel="重新核对"
-                />
-            </PageScaffold>
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome title="询价暂不可用于开单" />
+                <DetailWorkspaceBody>
+                    <DetailWorkspaceSection width="form">
+                        <BusinessFailureState
+                            error={basis.error}
+                            onRetry={() => void basis.refetch()}
+                            retryLabel="重新核对"
+                        />
+                    </DetailWorkspaceSection>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     return (
         <LoadedInquirySale
@@ -150,51 +164,66 @@ function InquirySaleRecovery({
         }
     }
     return (
-        <PageScaffold>
-            <PageHeader
+        <DetailWorkspacePage>
+            <DetailWorkspaceChrome
                 title="核对上次开单结果"
-                description="上次发送的开单内容已保留。核对会沿用原操作记录；确认前请勿重新创建。"
+                meta="上次发送的开单内容已保留。核对会沿用原操作记录；确认前请勿重新创建。"
             />
-            <div className="space-y-3 rounded-lg border p-4">
-                <p className="text-body-compact font-medium">
-                    销售单号：{command.payload.orderNo}
-                </p>
-                {command.payload.lineItems.map((line) => (
-                    <div
-                        key={line.rowKey}
-                        className="flex flex-wrap gap-3 text-body-compact"
-                    >
-                        <span>{line.name}</span>
-                        <QuantityValue value={line.quantity} unit={line.unit} />
-                        <span>
-                            成交单价{" "}
-                            <MoneyValue value={line.unitPriceGross || "0"} />
-                        </span>
-                        <span>
-                            {line.deliveryAllocations?.length ?? 0} 个配送地址
-                        </span>
-                    </div>
-                ))}
-                {mutation.error || recoveryError ? (
-                    <p
-                        role="status"
-                        className="text-body-compact text-destructive"
-                    >
-                        {getErrorMessage(
-                            mutation.error ?? recoveryError,
-                            "结果仍待核对，请保持当前记录后重试。",
-                        )}
-                    </p>
-                ) : null}
-                <Button
-                    id="inquiry-sales-create-recover"
-                    disabled={mutation.isPending}
-                    onClick={() => void recover()}
+            <DetailWorkspaceBody>
+                <DetailWorkspaceSection
+                    width="form"
+                    title="待核对明细"
+                    subtitle={`销售单号：${command.payload.orderNo}`}
                 >
-                    {mutation.isPending ? "正在核对…" : "核对上次开单结果"}
-                </Button>
-            </div>
-        </PageScaffold>
+                    <div className="divide-y divide-border/60 border-y border-border/60">
+                        {command.payload.lineItems.map((line) => (
+                            <div
+                                key={line.rowKey}
+                                className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3"
+                            >
+                                <span className="font-medium text-foreground">
+                                    {line.name}
+                                </span>
+                                <QuantityValue
+                                    value={line.quantity}
+                                    unit={line.unit}
+                                />
+                                <span className="text-muted-foreground">
+                                    成交单价{" "}
+                                    <MoneyValue
+                                        value={line.unitPriceGross || "0"}
+                                        className="text-foreground"
+                                    />
+                                </span>
+                                <span className="num text-xs text-muted-foreground">
+                                    {line.deliveryAllocations?.length ?? 0}{" "}
+                                    个配送地址
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                    {mutation.error || recoveryError ? (
+                        <p role="status" className="text-destructive">
+                            {getErrorMessage(
+                                mutation.error ?? recoveryError,
+                                "结果仍待核对，请保持当前记录后重试。",
+                            )}
+                        </p>
+                    ) : null}
+                    <div>
+                        <Button
+                            id="inquiry-sales-create-recover"
+                            disabled={mutation.isPending}
+                            onClick={() => void recover()}
+                        >
+                            {mutation.isPending
+                                ? "正在核对…"
+                                : "核对上次开单结果"}
+                        </Button>
+                    </div>
+                </DetailWorkspaceSection>
+            </DetailWorkspaceBody>
+        </DetailWorkspacePage>
     )
 }
 

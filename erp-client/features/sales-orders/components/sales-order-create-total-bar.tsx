@@ -2,18 +2,15 @@
 
 import { useSelector } from "@tanstack/react-form"
 
-import {
-    MoneyValue,
-    StickyTotalBar,
-    ValidationSummary,
-} from "@/components/business"
+import { MoneyValue, ValidationSummary } from "@/components/business"
 import { FormError, toFieldErrors } from "@/components/form"
+import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
 import {
     calculateGrossProfit,
     calculateTotals,
 } from "@/features/sales-orders/lib/sales-order-create-model"
-import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
 import { compareDecimal } from "@/lib/fixed-decimal"
+import { cn } from "@/lib/utils"
 
 const HEADER_VALIDATION_FIELDS = [
     { name: "contractId", label: "有效合同", targetId: "contractId" },
@@ -72,7 +69,6 @@ const HEADER_VALIDATION_FIELDS = [
 
 export type SalesOrderCreateTotalBarProps = {
     form: SalesOrderCreateFormApi
-    compact?: boolean
     isSubmitting: boolean
     onSaveDraftClick: () => void
     onSubmitClick: () => void
@@ -80,7 +76,6 @@ export type SalesOrderCreateTotalBarProps = {
 
 export function SalesOrderCreateTotalBar({
     form,
-    compact = false,
     isSubmitting,
     onSaveDraftClick,
     onSubmitClick,
@@ -104,18 +99,19 @@ export function SalesOrderCreateTotalBar({
     return (
         <>
             {headerIssues.length > 0 ? (
-                <ValidationSummary
-                    className="border-t border-grid p-4 sm:px-5"
-                    issues={headerIssues}
-                    title={`基本信息共 ${headerIssues.length} 项待处理`}
-                />
+                <div className="border-t border-border/60 py-4">
+                    <ValidationSummary
+                        issues={headerIssues}
+                        title={`基本信息共 ${headerIssues.length} 项待处理`}
+                    />
+                </div>
             ) : null}
 
             <form.AppForm>
                 <FormError
                     id="sales-orders-create-submit-error"
                     tabIndex={0}
-                    className="max-h-32 min-w-0 shrink-0 overflow-y-auto border-t border-grid px-4 py-3 wrap-anywhere sm:px-5"
+                    className="max-h-32 min-w-0 shrink-0 overflow-y-auto border-t border-border/60 py-3 wrap-anywhere"
                 />
             </form.AppForm>
 
@@ -125,6 +121,9 @@ export function SalesOrderCreateTotalBar({
                         values.lineItems,
                         values.taxRatePercent,
                     )
+                    const skuCount = values.lineItems.filter((line) =>
+                        line.sku.trim(),
+                    ).length
                     const grossProfit = calculateGrossProfit(values.lineItems)
                     const grossProfitSign =
                         grossProfit === null
@@ -133,110 +132,108 @@ export function SalesOrderCreateTotalBar({
                     // 负毛利红色、正毛利绿色，零毛利保持默认色。
                     const grossProfitTone =
                         grossProfitSign < 0
-                            ? "text-destructive"
+                            ? "text-destructive font-medium"
                             : grossProfitSign > 0
-                              ? "text-success-soft-foreground"
-                              : undefined
+                              ? "text-success-soft-foreground font-medium"
+                              : "text-foreground"
                     return (
-                        <StickyTotalBar
-                            layout="inline"
-                            className="mt-auto shrink-0 border-border/60 px-0 py-3.5"
-                            items={[
-                                {
-                                    id: "gross",
-                                    label: "含税合计",
-                                    value: (
+                        <aside
+                            data-slot="sticky-total-bar"
+                            aria-label="金额汇总与操作"
+                            className="sticky bottom-0 z-20 mt-auto shrink-0 border-t border-border/70 bg-card/95 py-3 backdrop-blur-xs"
+                        >
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                    <span className="num text-body-compact font-medium text-foreground">
+                                        共 {skuCount} 项商品
+                                    </span>
+                                    <span
+                                        aria-hidden="true"
+                                        className="hidden h-3.5 w-px bg-border sm:inline-block"
+                                    />
+                                    <span>
+                                        不含税{" "}
+                                        <MoneyValue
+                                            value={totals.net}
+                                            className="text-foreground"
+                                        />
+                                    </span>
+                                    <span>
+                                        税额{" "}
+                                        <MoneyValue
+                                            value={totals.tax}
+                                            className="text-foreground"
+                                        />
+                                        <span className="num">
+                                            （{values.taxRatePercent || "0"}%）
+                                        </span>
+                                    </span>
+                                    {values.nature === "physical_service" ? (
+                                        <span title="各行（含税成交单价 − 采购供给单价）× 数量，逐行舍入后合计">
+                                            预估含税毛利{" "}
+                                            {grossProfit === null ? (
+                                                <span>待完善</span>
+                                            ) : (
+                                                <MoneyValue
+                                                    value={grossProfit}
+                                                    className={cn(
+                                                        grossProfitTone,
+                                                    )}
+                                                />
+                                            )}
+                                        </span>
+                                    ) : null}
+                                </div>
+
+                                <div className="flex flex-wrap items-center justify-between gap-4 lg:justify-end">
+                                    <div className="flex items-baseline gap-2.5">
+                                        <span className="text-xs text-muted-foreground">
+                                            含税合计
+                                        </span>
                                         <MoneyValue
                                             value={totals.gross}
-                                            size={
-                                                compact ? undefined : "summary"
-                                            }
-                                            className={
-                                                compact
-                                                    ? "text-value-section font-semibold tracking-tight"
-                                                    : undefined
-                                            }
+                                            size="section"
                                         />
-                                    ),
-                                    description: (
-                                        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 lg:justify-end">
-                                            {values.nature ===
-                                            "physical_service" ? (
-                                                <span title="各行（含税成交单价 − 采购供给单价）× 数量，逐行舍入后合计">
-                                                    预估毛利（含税）{" "}
-                                                    {grossProfit === null ? (
-                                                        <span>待完善</span>
-                                                    ) : (
-                                                        <MoneyValue
-                                                            value={grossProfit}
-                                                            className={
-                                                                grossProfitTone
-                                                            }
-                                                        />
-                                                    )}
-                                                </span>
-                                            ) : null}
-                                            <span>
-                                                不含税金额{" "}
-                                                <MoneyValue
-                                                    value={totals.net}
-                                                />
-                                            </span>
-                                            <span>
-                                                税额{" "}
-                                                <MoneyValue
-                                                    value={totals.tax}
-                                                />
-                                                （税率{" "}
-                                                {values.taxRatePercent || "0"}
-                                                %）
-                                            </span>
-                                        </div>
-                                    ),
-                                },
-                            ]}
-                            leftActions={
-                                <span className="text-body-compact text-muted-foreground">
-                                    共{" "}
-                                    {
-                                        values.lineItems.filter((line) =>
-                                            line.sku.trim(),
-                                        ).length
-                                    }{" "}
-                                    项商品
-                                </span>
-                            }
-                            actions={
-                                <form.AppForm>
-                                    <form.SubmitButton
-                                        id="sales-orders-create-save-draft"
-                                        showError={false}
-                                        variant="outline"
-                                        label={
-                                            isSubmitting
-                                                ? "处理中…"
-                                                : "保存草稿"
-                                        }
-                                        pendingLabel="正在保存草稿…"
-                                        loading={isSubmitting}
-                                        disabled={isSubmitting}
-                                        onClick={onSaveDraftClick}
+                                    </div>
+                                    <span
+                                        aria-hidden="true"
+                                        className="hidden h-6 w-px bg-border/80 sm:inline-block"
                                     />
-                                    <form.SubmitButton
-                                        id="sales-orders-create-submit"
-                                        showError={false}
-                                        data-testid="sales-order-submit"
-                                        label="提交审批"
-                                        pendingLabel="正在提交…"
-                                        loading={isSubmitting}
-                                        disabled={isSubmitting}
-                                        onClick={onSubmitClick}
-                                    >
-                                        {isSubmitting ? "处理中…" : "提交审批"}
-                                    </form.SubmitButton>
-                                </form.AppForm>
-                            }
-                        />
+                                    <div className="flex shrink-0 items-center gap-2">
+                                        <form.AppForm>
+                                            <form.SubmitButton
+                                                id="sales-orders-create-save-draft"
+                                                showError={false}
+                                                variant="outline"
+                                                label={
+                                                    isSubmitting
+                                                        ? "处理中…"
+                                                        : "保存草稿"
+                                                }
+                                                pendingLabel="正在保存草稿…"
+                                                loading={isSubmitting}
+                                                disabled={isSubmitting}
+                                                onClick={onSaveDraftClick}
+                                            />
+                                            <form.SubmitButton
+                                                id="sales-orders-create-submit"
+                                                showError={false}
+                                                data-testid="sales-order-submit"
+                                                label="提交审批"
+                                                pendingLabel="正在提交…"
+                                                loading={isSubmitting}
+                                                disabled={isSubmitting}
+                                                onClick={onSubmitClick}
+                                            >
+                                                {isSubmitting
+                                                    ? "处理中…"
+                                                    : "提交审批"}
+                                            </form.SubmitButton>
+                                        </form.AppForm>
+                                    </div>
+                                </div>
+                            </div>
+                        </aside>
                     )
                 }}
             </form.Subscribe>

@@ -644,9 +644,13 @@
 }
 /* 飞书风格纯白通栏详情工作面：吸顶头部通栏、分区细线、12px 沉稳标签、柔底轻控件、无框内联编辑表 */
 .erp-detail-workspace-page [data-slot="detail-workspace-chrome"],
-.erp-detail-workspace-page [data-slot="detail-workspace-summary"] {
+.erp-detail-workspace-page [data-slot="detail-workspace-summary"],
+.erp-detail-workspace-page [data-slot="sticky-total-bar"] {
     margin-inline: calc(var(--scaffold-px) * -1);
     padding-inline: var(--scaffold-px);
+}
+.erp-detail-workspace-page [data-slot="sticky-total-bar"] {
+    box-shadow: var(--shadow-footer);
 }
 .erp-detail-workspace-page
     [data-slot="detail-workspace-chrome"][data-scrolled="true"] {
@@ -717,7 +721,8 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
     :is(
         [data-slot="input"],
         [data-slot="textarea"],
-        [data-slot="input-group"]
+        [data-slot="input-group"],
+        [data-slot="popover-trigger"]:has(> [data-slot="date-picker-value"])
     ):not(:disabled):not([data-disabled]):not([aria-invalid="true"]):not(
         :has([aria-invalid="true"])
     ):not(:has(> input:disabled)):not(:has(> textarea:disabled)):not(
@@ -731,7 +736,8 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
     :is(
         [data-slot="input"],
         [data-slot="textarea"],
-        [data-slot="input-group"]
+        [data-slot="input-group"],
+        [data-slot="popover-trigger"]:has(> [data-slot="date-picker-value"])
     ):not(:disabled):not([data-disabled]):not([aria-invalid="true"]):not(
         :has([aria-invalid="true"])
     ):not(:has(> input:disabled)):not(:has(> textarea:disabled)):not(
@@ -745,16 +751,29 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
     :is(
         [data-slot="input"]:focus-visible,
         [data-slot="textarea"]:focus-visible,
-        [data-slot="input-group"]:focus-within
+        [data-slot="input-group"]:focus-within,
+        [data-slot="popover-trigger"]:has(
+                > [data-slot="date-picker-value"]
+            ):focus-visible,
+        [data-slot="popover-trigger"]:has(
+                > [data-slot="date-picker-value"]
+            )[aria-expanded="true"]
     ):not([aria-invalid="true"]):not(:has([aria-invalid="true"])):not(
         [data-slot="input-group-control"]
     ) {
     border-color: var(--primary);
     background-color: var(--card);
 }
-/* 详情页内嵌可编辑表格（如 SKU 矩阵）：纯白表头、无四周边框、单元格内输入框静止无框柔底，聚焦亮蓝 */
+/* 详情页内嵌可编辑表格（如 SKU 矩阵、销售明细）：纯白表头、无四周边框、单元格内控件静止无框柔底，聚焦亮蓝 */
 .erp-detail-workspace-page [data-slot="detail-inline-table"] {
     --table-header: var(--card);
+}
+.erp-detail-workspace-page
+    [data-slot="detail-inline-table"]
+    [data-slot="editable-line-item-table"]
+    > .erp-raised-surface {
+    border-width: 0;
+    background-color: transparent;
 }
 .erp-detail-workspace-page
     [data-slot="detail-inline-table"]
@@ -787,8 +806,15 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
 .erp-detail-workspace-page
     [data-slot="detail-inline-table"]
     [data-slot="table-body"]
-    :is([data-slot="input"], [data-slot="textarea"]):not(:disabled):not(
-        [aria-invalid="true"]
+    :is(
+        [data-slot="input"],
+        [data-slot="textarea"],
+        [data-slot="input-group"],
+        [data-slot="popover-trigger"]:has(> [data-slot="date-picker-value"])
+    ):not(:disabled):not([data-disabled]):not([aria-invalid="true"]):not(
+        :has([aria-invalid="true"])
+    ):not(:has(> input:disabled)):not(:has(> textarea:disabled)):not(
+        [data-slot="input-group-control"]
     ) {
     border-color: transparent;
     background-color: color-mix(in oklab, var(--muted) 52%, transparent);
@@ -796,17 +822,34 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
 .erp-detail-workspace-page
     [data-slot="detail-inline-table"]
     [data-slot="table-body"]
-    :is([data-slot="input"], [data-slot="textarea"]):not(:disabled):not(
-        [aria-invalid="true"]
+    :is(
+        [data-slot="input"],
+        [data-slot="textarea"],
+        [data-slot="input-group"],
+        [data-slot="popover-trigger"]:has(> [data-slot="date-picker-value"])
+    ):not(:disabled):not([data-disabled]):not([aria-invalid="true"]):not(
+        :has([aria-invalid="true"])
+    ):not(:has(> input:disabled)):not(:has(> textarea:disabled)):not(
+        [data-slot="input-group-control"]
     ):hover {
     background-color: color-mix(in oklab, var(--muted) 85%, transparent);
 }
 .erp-detail-workspace-page
     [data-slot="detail-inline-table"]
     [data-slot="table-body"]
-    :is([data-slot="input"], [data-slot="textarea"]):not(:disabled):not(
-        [aria-invalid="true"]
-    ):focus-visible {
+    :is(
+        [data-slot="input"]:focus-visible,
+        [data-slot="textarea"]:focus-visible,
+        [data-slot="input-group"]:focus-within,
+        [data-slot="popover-trigger"]:has(
+                > [data-slot="date-picker-value"]
+            ):focus-visible,
+        [data-slot="popover-trigger"]:has(
+                > [data-slot="date-picker-value"]
+            )[aria-expanded="true"]
+    ):not([aria-invalid="true"]):not(:has([aria-invalid="true"])):not(
+        [data-slot="input-group-control"]
+    ) {
     border-color: color-mix(in oklab, var(--primary) 65%, transparent);
     background-color: var(--card);
     box-shadow: 0 0 0 3px var(--ring);
@@ -814,7 +857,9 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
 .erp-detail-workspace-page
     [data-slot="detail-inline-table"]
     [data-slot="table-body"]
-    :is([data-slot="input"], [data-slot="textarea"]):disabled {
+    :is([data-slot="input"], [data-slot="textarea"]):not(
+        [data-slot="input-group-control"]
+    ):disabled {
     border-color: transparent;
     background-color: transparent;
 }

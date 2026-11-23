@@ -20,7 +20,7 @@ export function SalesOrderCreateLinePriceEditor({
     const id = `sales-orders-create-line-${toAutomationIdSegment(line.rowKey)}-unit-price`
 
     return (
-        <div className="min-w-32">
+        <div className="min-w-28">
             <form.AppField name={`lineItems[${rowIndex}].pricingMode`}>
                 {(modeField) => (
                     <form.AppField
@@ -30,8 +30,12 @@ export function SalesOrderCreateLinePriceEditor({
                             const invalid =
                                 field.state.meta.isTouched &&
                                 !field.state.meta.isValid
+                            const isGift = modeField.state.value === "GIFT"
                             return (
-                                <Field data-invalid={invalid || undefined}>
+                                <Field
+                                    className="gap-0"
+                                    data-invalid={invalid || undefined}
+                                >
                                     <FieldLabel
                                         htmlFor={id}
                                         className="sr-only"
@@ -44,12 +48,10 @@ export function SalesOrderCreateLinePriceEditor({
                                         type="text"
                                         inputMode="decimal"
                                         value={field.state.value}
-                                        disabled={
-                                            modeField.state.value === "GIFT"
-                                        }
+                                        disabled={isGift}
                                         className="num min-w-24 text-right"
                                         aria-invalid={invalid || undefined}
-                                        placeholder="请填写"
+                                        placeholder={isGift ? "0" : "请填写"}
                                         aria-describedby={
                                             invalid ? `${id}-error` : undefined
                                         }

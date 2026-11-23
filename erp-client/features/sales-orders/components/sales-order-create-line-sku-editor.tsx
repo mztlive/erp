@@ -5,11 +5,11 @@ import { PackageSearchIcon } from "lucide-react"
 import { toFieldErrors } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { Field, FieldError } from "@/components/ui/field"
-import type { CreateSalesOrderFormValues } from "@/features/sales-orders/lib/sales-order-create-model"
-import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
-import type { SalesOrderNature } from "@/features/sales-orders/types"
-import { VoucherCategorySearchCombobox } from "@/features/sales-orders/components/voucher-category-search-combobox"
 import { SkuThumbnail } from "@/features/sales-orders/components/sku-thumbnail"
+import { VoucherCategorySearchCombobox } from "@/features/sales-orders/components/voucher-category-search-combobox"
+import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
+import type { CreateSalesOrderFormValues } from "@/features/sales-orders/lib/sales-order-create-model"
+import type { SalesOrderNature } from "@/features/sales-orders/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export type SalesOrderCreateLineSkuEditorProps = {
@@ -21,7 +21,7 @@ export type SalesOrderCreateLineSkuEditorProps = {
     imageAssetId?: string
 }
 
-/** 明细行"销售项目"列：卡券选类目，实物/服务选公司商品池 SKU。 */
+/** 明细行“销售项目”列：卡券选类目，实物/服务选公司商品池 SKU。 */
 export function SalesOrderCreateLineSkuEditor({
     form,
     values,
@@ -35,7 +35,7 @@ export function SalesOrderCreateLineSkuEditor({
     if (!lineKey) return null
 
     return nature === "card_voucher" ? (
-        <div className="min-w-60 max-w-md">
+        <div className="min-w-52 max-w-sm">
             <form.AppField name={nameFieldName}>{() => null}</form.AppField>
             <form.AppField name={`lineItems[${rowIndex}].sku`}>
                 {(field) => {
@@ -43,7 +43,10 @@ export function SalesOrderCreateLineSkuEditor({
                         field.state.meta.isTouched && !field.state.meta.isValid
                     const errors = toFieldErrors(field.state.meta.errors)
                     return (
-                        <Field data-invalid={isInvalid || undefined}>
+                        <Field
+                            className="gap-0"
+                            data-invalid={isInvalid || undefined}
+                        >
                             <VoucherCategorySearchCombobox
                                 id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-category`}
                                 value={field.state.value || undefined}
@@ -95,7 +98,7 @@ export function SalesOrderCreateLineSkuEditor({
             </form.AppField>
         </div>
     ) : (
-        <div className="min-w-60 max-w-md">
+        <div className="min-w-48 max-w-xs">
             <form.AppField name={nameFieldName}>{() => null}</form.AppField>
             <form.AppField name={`lineItems[${rowIndex}].sku`}>
                 {(field) => {
@@ -106,14 +109,17 @@ export function SalesOrderCreateLineSkuEditor({
                     const selectedLabel =
                         line?.name.trim() || line?.sku.trim() || ""
                     return (
-                        <Field data-invalid={isInvalid || undefined}>
+                        <Field
+                            className="gap-0"
+                            data-invalid={isInvalid || undefined}
+                        >
                             <Button
                                 id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-pick-sku`}
                                 type="button"
-                                variant="outline"
+                                variant="ghost"
                                 // 商品名与规格可换行，避免标准按钮的固定高度覆盖内容高度。
                                 size={null}
-                                className="h-auto min-h-control w-full justify-start gap-3 px-3 py-1.5 text-left"
+                                className="group/sku -mx-1.5 -my-1 h-auto min-h-control w-[calc(100%+0.75rem)] justify-start gap-2.5 rounded-md px-1.5 py-1 text-left font-normal hover:bg-muted/60"
                                 aria-label={
                                     selectedLabel
                                         ? `更换销售项目 ${selectedLabel}`
@@ -125,24 +131,33 @@ export function SalesOrderCreateLineSkuEditor({
                                     <SkuThumbnail
                                         assetId={imageAssetId}
                                         label={selectedLabel}
-                                        className="size-10 rounded-md"
+                                        className="size-9 rounded-md"
                                     />
                                 ) : (
                                     <PackageSearchIcon
                                         data-icon="inline-start"
+                                        className="text-muted-foreground"
                                         aria-hidden="true"
                                     />
                                 )}
-                                <span className="min-w-0 whitespace-normal break-words">
-                                    {selectedLabel || "选择商品"}
+                                <span className="min-w-0 flex-1 whitespace-normal break-words">
+                                    <span
+                                        className={
+                                            selectedLabel
+                                                ? "block font-medium text-foreground"
+                                                : "block text-muted-foreground"
+                                        }
+                                    >
+                                        {selectedLabel || "选择商品"}
+                                    </span>
                                     {line?.specification ? (
-                                        <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                                        <span className="mt-0.5 block text-xs text-muted-foreground">
                                             {line.specification}
                                         </span>
                                     ) : null}
                                 </span>
                                 {selectedLabel ? (
-                                    <span className="ml-auto shrink-0 text-xs font-normal text-muted-foreground">
+                                    <span className="ml-auto shrink-0 text-xs text-muted-foreground/75 transition-colors group-hover/sku:text-primary group-focus-visible/sku:text-primary">
                                         更换
                                     </span>
                                 ) : null}

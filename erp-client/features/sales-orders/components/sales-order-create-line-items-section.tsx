@@ -1,26 +1,23 @@
 "use client"
 
 import * as React from "react"
-import type {
-    InquirySalesBasis,
-    InquirySalesSourceSnapshot,
-} from "../api/inquiry-basis"
-import { InquiryDeliveryAllocationEditor } from "./inquiry-delivery-allocation-editor"
-import { SalesDeliveryAllocationEditor } from "./sales-delivery-allocation-editor"
+import { ChevronDownIcon, PackageSearchIcon, PlusIcon } from "lucide-react"
 
-import { PlusIcon, PackageSearchIcon, ChevronDownIcon } from "lucide-react"
+import {
+    DetailWorkspaceSection,
+    QuantityValue,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Collapsible,
-    CollapsibleTrigger,
     CollapsibleContent,
+    CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { QuantityValue } from "@/components/business"
 import { toast } from "@/components/ui/toast"
-import { SellableSkuSelectDialog } from "@/features/sales-orders/components/sellable-sku-select-dialog"
 import { SalesOrderCreateDueDateBatchBar } from "@/features/sales-orders/components/sales-order-create-due-date-batch-bar"
-import { SalesOrderCreatePriceBasisBatchMenu } from "./sales-order-create-price-basis-batch-menu"
 import { SalesOrderCreateLineItemTable } from "@/features/sales-orders/components/sales-order-create-line-item-table"
+import { SellableSkuSelectDialog } from "@/features/sales-orders/components/sellable-sku-select-dialog"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
 import { applyDueDateToLines } from "@/features/sales-orders/lib/sales-order-create-model"
 import { applySellablePicksToLines } from "@/features/sales-orders/lib/sales-order-create-sku-picks"
@@ -29,14 +26,20 @@ import type {
     SalesLineProcurementResponsibility,
     SalesProcurementPriceBasis,
 } from "@/features/sales-orders/types"
+import type {
+    InquirySalesBasis,
+    InquirySalesSourceSnapshot,
+} from "../api/inquiry-basis"
 import { supplyReferencePrice } from "../lib/sales-procurement-price"
+import { InquiryDeliveryAllocationEditor } from "./inquiry-delivery-allocation-editor"
+import { SalesDeliveryAllocationEditor } from "./sales-delivery-allocation-editor"
+import { SalesOrderCreatePriceBasisBatchMenu } from "./sales-order-create-price-basis-batch-menu"
 
 export type SalesOrderCreateLineItemsSectionProps = {
     form: SalesOrderCreateFormApi
     draftId?: string
     inquirySource?: InquirySalesBasis | InquirySalesSourceSnapshot
     inquiryLocked?: boolean
-    compact?: boolean
     procurementOwners?: ReadonlyMap<string, SalesLineProcurementResponsibility>
     procurementFetching?: boolean
     procurementError?: boolean
@@ -47,7 +50,6 @@ type SkuPickerState = { mode: "add" } | { mode: "replace"; rowIndex: number }
 export function SalesOrderCreateLineItemsSection({
     form,
     draftId,
-    compact = false,
     inquirySource,
     inquiryLocked = false,
     procurementOwners,
@@ -126,77 +128,46 @@ export function SalesOrderCreateLineItemsSection({
 
     return (
         <>
-            <section
-                id="sales-line-items-section"
-                tabIndex={-1}
-                className="min-w-0 space-y-3 border-t border-grid p-4 outline-none sm:p-5"
-                aria-labelledby="sales-create-lines-title"
+            <form.Subscribe
+                selector={(state) => ({
+                    nature: state.values.nature,
+                    lines: state.values.lineItems,
+                })}
             >
-                <form.Subscribe
-                    selector={(state) => ({
-                        nature: state.values.nature,
-                        lines: state.values.lineItems,
-                    })}
-                >
-                    {({ nature, lines }) => (
-                        <>
-                            <div
-                                className={
-                                    compact
-                                        ? "flex flex-wrap items-center justify-between gap-3"
-                                        : "contents"
-                                }
-                            >
-                                <div className="flex flex-wrap items-baseline gap-3">
-                                    <h2
-                                        id="sales-create-lines-title"
-                                        className="font-heading text-section-title font-semibold tracking-tight"
-                                    >
-                                        销售明细
-                                    </h2>
-                                    <span className="text-body-compact text-muted-foreground">
-                                        {nature === "card_voucher" ? (
-                                            "卡券 · 仅一条明细"
-                                        ) : (
-                                            <>
-                                                已添加{" "}
-                                                <QuantityValue
-                                                    unit=""
-                                                    value={String(
-                                                        lines.filter((line) =>
-                                                            line.sku.trim(),
-                                                        ).length,
-                                                    )}
-                                                />{" "}
-                                                项商品
-                                            </>
-                                        )}
-                                    </span>
-                                </div>
-                                {nature === "physical_service" &&
+                {({ nature, lines }) => {
+                    const skuCount = lines.filter((line) =>
+                        line.sku.trim(),
+                    ).length
+                    return (
+                        <DetailWorkspaceSection
+                            id="sales-line-items-section"
+                            tabIndex={-1}
+                            title="销售明细"
+                            headingId="sales-create-lines-title"
+                            width="full"
+                            badge={
+                                <span className="num rounded-sm bg-muted/80 px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+                                    {nature === "card_voucher" ? (
+                                        "卡券 · 单行明细"
+                                    ) : (
+                                        <>
+                                            <QuantityValue
+                                                unit=""
+                                                value={String(skuCount)}
+                                            />{" "}
+                                            项商品
+                                        </>
+                                    )}
+                                </span>
+                            }
+                            actions={
+                                nature === "physical_service" &&
                                 !inquiryLocked ? (
                                     <div
                                         role="group"
                                         aria-label="销售明细操作"
-                                        className={
-                                            compact
-                                                ? "flex flex-wrap items-center gap-2"
-                                                : "flex flex-wrap items-center gap-3 rounded-lg bg-muted/50 p-3"
-                                        }
+                                        className="flex flex-wrap items-center gap-1.5"
                                     >
-                                        <Button
-                                            id="sales-orders-create-line-items-add"
-                                            type="button"
-                                            variant={
-                                                compact ? "outline" : "default"
-                                            }
-                                            onClick={() =>
-                                                setPicker({ mode: "add" })
-                                            }
-                                        >
-                                            <PlusIcon aria-hidden="true" />
-                                            添加商品
-                                        </Button>
                                         {lines.length > 0 ? (
                                             <>
                                                 <SalesOrderCreateDueDateBatchBar
@@ -211,65 +182,92 @@ export function SalesOrderCreateLineItemsSection({
                                                 />
                                             </>
                                         ) : null}
+                                        <Button
+                                            id="sales-orders-create-line-items-add"
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                setPicker({ mode: "add" })
+                                            }
+                                        >
+                                            <PlusIcon
+                                                data-icon="inline-start"
+                                                aria-hidden="true"
+                                            />
+                                            添加商品
+                                        </Button>
                                     </div>
-                                ) : null}
-                            </div>
-                            {nature === "physical_service" &&
-                            lines.length > 0 ? (
-                                <p className="text-xs text-muted-foreground">
-                                    {inquiryLocked
-                                        ? "成交单价优先带入询价销售价，可修改；未填写销售价的商品须补填。"
-                                        : "成交单价由销售填写。"}
-                                    赠品单价为 0、不收款。
-                                    {inquiryLocked
-                                        ? "采购供给价由询价覆盖，不可修改。"
-                                        : "采购供给价按所选集采或一件代发价格带出，可调整。"}
-                                    供给总额按单价乘数量计算，用于估算含税毛利。
-                                </p>
-                            ) : null}
+                                ) : undefined
+                            }
+                        >
                             {nature === "physical_service" &&
                             lines.length === 0 ? (
-                                <div className="flex min-h-24 items-center justify-center gap-3 rounded-md border border-dashed border-border bg-muted/10 px-4 py-4">
-                                    <PackageSearchIcon
-                                        className="size-5 shrink-0 text-muted-foreground"
-                                        aria-hidden="true"
-                                    />
+                                <div className="flex flex-col items-center justify-center gap-3 border-y border-border/70 py-10 text-center">
+                                    <div className="flex size-10 items-center justify-center rounded-full bg-muted/70 text-muted-foreground">
+                                        <PackageSearchIcon
+                                            className="size-5"
+                                            aria-hidden="true"
+                                        />
+                                    </div>
                                     <div className="space-y-1">
-                                        <p className="text-body-compact font-medium">
-                                            尚未添加商品
+                                        <p className="font-medium text-foreground">
+                                            尚未添加销售商品
                                         </p>
                                         <p className="text-xs text-muted-foreground">
-                                            点击“添加商品”，选择后设置数量和交付日，成交单价由销售填写。
+                                            从公司商品池选择商品后，填写数量、含税成交单价与期望交付日
                                         </p>
                                     </div>
+                                    {!inquiryLocked ? (
+                                        <Button
+                                            id="sales-orders-create-line-items-empty-add"
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                setPicker({ mode: "add" })
+                                            }
+                                        >
+                                            <PlusIcon
+                                                data-icon="inline-start"
+                                                aria-hidden="true"
+                                            />
+                                            添加商品
+                                        </Button>
+                                    ) : null}
                                 </div>
                             ) : null}
-                        </>
-                    )}
-                </form.Subscribe>
-                <SalesOrderCreateLineItemTable
-                    form={form}
-                    inquiryLocked={inquiryLocked}
-                    procurementOwners={procurementOwners}
-                    procurementFetching={procurementFetching}
-                    procurementError={procurementError}
-                    onPickSku={(rowIndex) =>
-                        setPicker({ mode: "replace", rowIndex })
-                    }
-                />
-                <SellableSkuSelectDialog
-                    open={picker != null}
-                    onOpenChange={(open) => {
-                        if (!open) setPicker(null)
-                    }}
-                    multiple={picker?.mode !== "replace"}
-                    excludeProductKind="VOUCHER"
-                    title={
-                        picker?.mode === "replace" ? "更换销售商品" : "添加商品"
-                    }
-                    onConfirm={handleConfirmPicks}
-                />
-            </section>
+
+                            <SalesOrderCreateLineItemTable
+                                form={form}
+                                inquiryLocked={inquiryLocked}
+                                procurementOwners={procurementOwners}
+                                procurementFetching={procurementFetching}
+                                procurementError={procurementError}
+                                onPickSku={(rowIndex) =>
+                                    setPicker({ mode: "replace", rowIndex })
+                                }
+                            />
+
+                            <SellableSkuSelectDialog
+                                open={picker != null}
+                                onOpenChange={(open) => {
+                                    if (!open) setPicker(null)
+                                }}
+                                multiple={picker?.mode !== "replace"}
+                                excludeProductKind="VOUCHER"
+                                title={
+                                    picker?.mode === "replace"
+                                        ? "更换销售商品"
+                                        : "添加商品"
+                                }
+                                onConfirm={handleConfirmPicks}
+                            />
+                        </DetailWorkspaceSection>
+                    )
+                }}
+            </form.Subscribe>
+
             {inquirySource ? (
                 <InquiryDeliveryAllocationEditor
                     form={form}
@@ -278,43 +276,51 @@ export function SalesOrderCreateLineItemsSection({
             ) : (
                 <SalesDeliveryAllocationEditor form={form} draftId={draftId} />
             )}
+
             <form.AppField name="remark">
                 {(field) => (
-                    <Collapsible
-                        open={remarkOpen || field.state.meta.errors.length > 0}
-                        onOpenChange={setRemarkOpen}
-                        className="border-t border-grid px-4 py-3 sm:px-5"
-                    >
-                        <CollapsibleTrigger
-                            id="sales-orders-create-remark-toggle"
-                            render={
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    className="-ml-2 text-muted-foreground"
-                                />
+                    <DetailWorkspaceSection width="form" className="py-4!">
+                        <Collapsible
+                            open={
+                                remarkOpen || field.state.meta.errors.length > 0
                             }
+                            onOpenChange={setRemarkOpen}
                         >
-                            <ChevronDownIcon
-                                className="size-4 transition-transform in-data-[panel-open]:rotate-180"
-                                aria-hidden="true"
-                            />
-                            {field.state.value
-                                ? "内部说明（已填写）"
-                                : "内部说明（选填）"}
-                        </CollapsibleTrigger>
-                        <CollapsibleContent keepMounted>
-                            <field.TextareaField
-                                id="sales-orders-create-remark"
-                                label="内部说明（选填）"
-                                hideLabel
-                                className="pt-2"
-                                placeholder="补充客户确认、交付或内部协同说明"
-                                rows={2}
-                            />
-                        </CollapsibleContent>
-                    </Collapsible>
+                            <CollapsibleTrigger
+                                id="sales-orders-create-remark-toggle"
+                                render={
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className={`-ml-2.5 ${detailWorkspaceStyles.quietButton}`}
+                                    />
+                                }
+                            >
+                                <ChevronDownIcon
+                                    className="size-4 transition-transform in-data-[panel-open]:rotate-180"
+                                    aria-hidden="true"
+                                />
+                                {field.state.value
+                                    ? "内部说明（已填写）"
+                                    : "添加内部说明（选填）"}
+                            </CollapsibleTrigger>
+                            <CollapsibleContent keepMounted>
+                                <div
+                                    data-slot="detail-form-grid"
+                                    className="pt-2.5"
+                                >
+                                    <field.TextareaField
+                                        id="sales-orders-create-remark"
+                                        label="内部说明（选填）"
+                                        hideLabel
+                                        placeholder="补充客户确认、交付或内部协同说明"
+                                        rows={2}
+                                    />
+                                </div>
+                            </CollapsibleContent>
+                        </Collapsible>
+                    </DetailWorkspaceSection>
                 )}
             </form.AppField>
         </>

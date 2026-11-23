@@ -449,8 +449,10 @@ export function DetailWorkspaceChrome({
  */
 export function DetailWorkspaceSection({
     id,
+    tabIndex,
     title,
     headingId,
+    headingTabIndex,
     ariaLabel,
     badge,
     subtitle,
@@ -462,8 +464,10 @@ export function DetailWorkspaceSection({
     contentClassName,
 }: {
     id?: string
+    tabIndex?: number
     title?: React.ReactNode
     headingId?: string
+    headingTabIndex?: number
     ariaLabel?: string
     badge?: React.ReactNode
     subtitle?: React.ReactNode
@@ -479,6 +483,7 @@ export function DetailWorkspaceSection({
     return (
         <section
             id={id}
+            tabIndex={tabIndex}
             data-slot="detail-workspace-section"
             data-divider={
                 divider === true
@@ -491,6 +496,7 @@ export function DetailWorkspaceSection({
             aria-labelledby={headingId}
             className={cn(
                 styles.section,
+                tabIndex != null && "outline-none",
                 divider === true && "border-t border-border/60",
                 divider === false && "border-t-0!",
                 className,
@@ -506,11 +512,16 @@ export function DetailWorkspaceSection({
             >
                 {hasHeader ? (
                     <div className={styles.sectionHeader}>
-                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
                             {title != null ? (
                                 <h2
                                     id={headingId}
-                                    className={styles.sectionTitle}
+                                    tabIndex={headingTabIndex}
+                                    className={cn(
+                                        styles.sectionTitle,
+                                        headingTabIndex != null &&
+                                            "outline-none",
+                                    )}
                                 >
                                     {title}
                                 </h2>

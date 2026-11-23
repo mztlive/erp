@@ -1,32 +1,36 @@
 "use client"
 
+import { CircleHelpIcon } from "lucide-react"
+
 import {
     MoneyValue,
     taxAmountToneClass,
     type EditableLineItemColumn,
 } from "@/components/business"
+import { DetailHint } from "@/components/business/detail-presentation"
+import { StatusBadge } from "@/components/ui/status-badge"
+import {
+    SalesOrderCreateLineGiftToggle,
+    SalesOrderCreateLinePriceEditor,
+} from "@/features/sales-orders/components/sales-order-create-line-price-editor"
+import { SalesOrderCreateLineSkuEditor } from "@/features/sales-orders/components/sales-order-create-line-sku-editor"
+import { SkuThumbnail } from "@/features/sales-orders/components/sku-thumbnail"
+import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
+import type { CreateSalesOrderFormValues } from "@/features/sales-orders/lib/sales-order-create-model"
 import {
     CARD_FORM_OPTIONS,
     calculateTotals,
     deriveVoucherGiftPreview,
 } from "@/features/sales-orders/lib/sales-order-create-model"
-import type { CreateSalesOrderFormValues } from "@/features/sales-orders/lib/sales-order-create-model"
-import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
 import type {
     SalesLineProcurementResponsibility,
     SalesOrderDraftLineInput,
 } from "@/features/sales-orders/types"
-import { SalesOrderCreateLineSkuEditor } from "@/features/sales-orders/components/sales-order-create-line-sku-editor"
-import { SkuThumbnail } from "@/features/sales-orders/components/sku-thumbnail"
-import {
-    SalesOrderCreateLineGiftToggle,
-    SalesOrderCreateLinePriceEditor,
-} from "@/features/sales-orders/components/sales-order-create-line-price-editor"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     SalesProcurementBasisEditor,
     SalesProcurementPriceEditor,
 } from "./sales-order-procurement-price-editor"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 
 function ProcurementOwnerPreview({
     line,
@@ -39,23 +43,34 @@ function ProcurementOwnerPreview({
 }) {
     return (
         <div
-            className="flex min-h-control w-28 items-center"
+            className="flex min-h-control w-24 items-center"
             data-testid={`sales-line-procurement-owner-${line.rowKey}`}
         >
             {!line.sku.trim() ? (
-                <span className="text-muted-foreground">
-                    选择商品后自动匹配
-                </span>
+                <span className="text-xs text-muted-foreground">待选商品</span>
             ) : status.fetching ? (
-                <span className="text-muted-foreground">正在匹配…</span>
+                <span className="text-xs text-muted-foreground">匹配中…</span>
             ) : responsibility?.resolved && responsibility.ownerName ? (
-                <span className="font-medium text-foreground">
+                <span
+                    className="truncate font-medium text-foreground"
+                    title={responsibility.ownerName}
+                >
                     {responsibility.ownerName}
                 </span>
             ) : status.error ? (
-                <span className="text-destructive">匹配失败，暂不能提交</span>
+                <StatusBadge
+                    tone="destructive"
+                    appearance="text"
+                    label="匹配失败"
+                    title="采购负责人暂时无法匹配，请稍后重试"
+                />
             ) : (
-                <span className="text-destructive">待配置 · 暂不能提交</span>
+                <StatusBadge
+                    tone="destructive"
+                    appearance="text"
+                    label="待配置"
+                    title="暂未匹配采购负责人，请联系管理员维护采购责任规则"
+                />
             )}
         </div>
     )
@@ -83,21 +98,23 @@ export function buildSalesOrderCreateLineItemColumns(
             renderValue: ({ item }) => item.name,
             renderEditor: ({ rowIndex }) =>
                 inquiryLocked ? (
-                    <div className="flex min-w-60 items-center gap-3 py-2">
+                    <div className="flex min-w-48 max-w-xs items-center gap-2.5 py-0.5">
                         <SkuThumbnail
                             assetId={skuImages.get(
                                 values.lineItems[rowIndex]?.sku ?? "",
                             )}
                             label={values.lineItems[rowIndex]?.name ?? "商品"}
-                            className="size-10 rounded-md"
+                            className="size-9 rounded-md"
                         />
                         <div className="min-w-0 whitespace-normal break-words">
-                            <p className="font-medium">
+                            <p className="font-medium text-foreground">
                                 {values.lineItems[rowIndex]?.name}
                             </p>
-                            <p className="text-xs text-muted-foreground">
-                                {values.lineItems[rowIndex]?.specification}
-                            </p>
+                            {values.lineItems[rowIndex]?.specification ? (
+                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                    {values.lineItems[rowIndex]?.specification}
+                                </p>
+                            ) : null}
                         </div>
                     </div>
                 ) : (
@@ -118,6 +135,7 @@ export function buildSalesOrderCreateLineItemColumns(
             header: "数量 / 单位",
             required: true,
             numeric: true,
+            align: "end",
             renderValue: ({ item }) => `${item.quantity} ${item.unit}`,
             renderEditor: ({ rowIndex }) => {
                 const line = values.lineItems[rowIndex]
@@ -126,8 +144,8 @@ export function buildSalesOrderCreateLineItemColumns(
                 const unitLocked =
                     nature === "card_voucher" || Boolean(line?.sku?.trim())
                 return (
-                    <div className="flex min-w-32 items-center gap-2">
-                        <div className="w-20 shrink-0">
+                    <div className="flex min-w-24 items-center justify-end gap-1.5">
+                        <div className="w-18 shrink-0">
                             <form.AppField
                                 name={`lineItems[${rowIndex}].quantity`}
                                 listeners={{
@@ -153,7 +171,8 @@ export function buildSalesOrderCreateLineItemColumns(
                                         hideLabel
                                         type="text"
                                         inputMode="decimal"
-                                        inputClassName="num"
+                                        className="gap-0"
+                                        inputClassName="num text-right"
                                     />
                                 )}
                             </form.AppField>
@@ -161,7 +180,7 @@ export function buildSalesOrderCreateLineItemColumns(
                         <form.AppField name={`lineItems[${rowIndex}].unit`}>
                             {(field) => (
                                 <span
-                                    className="min-w-8 shrink-0 text-muted-foreground"
+                                    className="min-w-6 shrink-0 text-left text-xs text-muted-foreground"
                                     title={
                                         unitLocked
                                             ? nature === "card_voucher"
@@ -180,7 +199,28 @@ export function buildSalesOrderCreateLineItemColumns(
         },
         {
             id: "unitPrice",
-            header: "含税成交单价",
+            header:
+                nature === "physical_service" ? (
+                    <span className="inline-flex items-center justify-end gap-0.5">
+                        含税成交单价
+                        <DetailHint
+                            id="sales-orders-create-unit-price-hint"
+                            label="含税成交单价"
+                            icon={
+                                <CircleHelpIcon
+                                    className="size-3.5"
+                                    aria-hidden="true"
+                                />
+                            }
+                        >
+                            {inquiryLocked
+                                ? "优先带入询价销售价，可修改；未填销售价的商品须补填。赠品单价为 0、不收款。"
+                                : "由销售填写含税成交单价；勾选赠品后单价固定为 0、不收款。"}
+                        </DetailHint>
+                    </span>
+                ) : (
+                    "含税成交单价"
+                ),
             required: true,
             numeric: true,
             align: "end",
@@ -213,7 +253,7 @@ export function buildSalesOrderCreateLineItemColumns(
                   },
                   {
                       id: "procurementPriceBasis",
-                      header: "供给取价方式",
+                      header: "取价方式",
                       renderValue: ({ item }) =>
                           inquiryLocked
                               ? "询价覆盖"
@@ -232,7 +272,25 @@ export function buildSalesOrderCreateLineItemColumns(
                   },
                   {
                       id: "procurementSupplyPrice",
-                      header: "采购供给单价",
+                      header: (
+                          <span className="inline-flex items-center justify-end gap-0.5">
+                              采购供给单价
+                              <DetailHint
+                                  id="sales-orders-create-supply-price-hint"
+                                  label="采购供给单价"
+                                  icon={
+                                      <CircleHelpIcon
+                                          className="size-3.5"
+                                          aria-hidden="true"
+                                      />
+                                  }
+                              >
+                                  {inquiryLocked
+                                      ? "由询价结果覆盖，不可修改；按单价乘数量估算含税毛利。"
+                                      : "按所选集采或一件代发参考价带出，可手工调整；用于估算含税毛利。"}
+                              </DetailHint>
+                          </span>
+                      ),
                       required: true,
                       numeric: true,
                       align: "end",
@@ -261,7 +319,7 @@ export function buildSalesOrderCreateLineItemColumns(
                           const lineKey = values.lineItems[rowIndex]?.rowKey
                           if (!lineKey) return null
                           return (
-                              <div className="min-w-20">
+                              <div className="min-w-24">
                                   <form.AppField
                                       name={`lineItems[${rowIndex}].faceValue`}
                                   >
@@ -276,7 +334,7 @@ export function buildSalesOrderCreateLineItemColumns(
                                               inputMode="decimal"
                                               placeholder="0.00"
                                               className="gap-0"
-                                              inputClassName="num min-w-20 text-right"
+                                              inputClassName="num min-w-24 text-right"
                                           />
                                       )}
                                   </form.AppField>
@@ -306,7 +364,7 @@ export function buildSalesOrderCreateLineItemColumns(
                           )
                           return (
                               <span
-                                  className="num flex h-8 min-w-16 items-center justify-end tabular-nums text-muted-foreground"
+                                  className="num flex min-h-control min-w-16 items-center justify-end text-muted-foreground"
                                   title={
                                       gift
                                           ? `配赠率 ${gift.giftRatePercent}%（金额 ${gift.giftAmount}）。配赠 = 面值小计 − 成交金额，系统计算不可改。`
@@ -327,7 +385,7 @@ export function buildSalesOrderCreateLineItemColumns(
                           const lineKey = values.lineItems[rowIndex]?.rowKey
                           if (!lineKey) return null
                           return (
-                              <div className="min-w-24">
+                              <div className="w-28">
                                   <form.AppField
                                       name={`lineItems[${rowIndex}].cardForm`}
                                   >
@@ -359,7 +417,7 @@ export function buildSalesOrderCreateLineItemColumns(
                           const lineKey = values.lineItems[rowIndex]?.rowKey
                           if (!lineKey) return null
                           return (
-                              <div className="min-w-32">
+                              <div className="w-36">
                                   <form.AppField
                                       name={`lineItems[${rowIndex}].dueDate`}
                                   >
@@ -371,6 +429,8 @@ export function buildSalesOrderCreateLineItemColumns(
                                               required
                                               size="default"
                                               hideLabel
+                                              className="gap-0"
+                                              inputClassName="num"
                                           />
                                       )}
                                   </form.AppField>
@@ -411,7 +471,7 @@ export function buildSalesOrderCreateLineItemColumns(
             numeric: true,
             align: "end",
             renderValue: ({ item }) => (
-                <div className="flex min-h-control items-center justify-end">
+                <div className="flex min-h-control items-center justify-end font-medium">
                     <MoneyValue
                         value={
                             calculateTotals([item], values.taxRatePercent).gross

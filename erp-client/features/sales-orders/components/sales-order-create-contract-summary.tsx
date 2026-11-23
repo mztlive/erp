@@ -2,29 +2,27 @@
 
 import { useState } from "react"
 import { useSelector } from "@tanstack/react-form"
-import { CheckCircle2Icon } from "lucide-react"
+import { FileTextIcon } from "lucide-react"
+
+import { detailWorkspaceStyles } from "@/components/business"
+import { toFieldErrors } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { FieldError } from "@/components/ui/field"
-import { toFieldErrors } from "@/components/form"
-import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
-import type { ContractCenterView } from "@/features/contracts/types"
 import { ContractFilePreviewDialog } from "@/features/contracts/components/contract-file-preview-dialog"
+import type { ContractCenterView } from "@/features/contracts/types"
+import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 import type { SalesOrderCreateFormApi } from "../lib/sales-order-create-form-types"
 
 export function SalesOrderCreateContractSummary({
     form,
     contract,
-    imported,
     canChange,
     onChange,
-    compact = false,
 }: {
     form: SalesOrderCreateFormApi
     contract: ContractCenterView
-    imported: boolean
     canChange: boolean
     onChange: () => void
-    compact?: boolean
 }) {
     const values = useSelector(form.store, (state) => state.values)
     const [previewOpen, setPreviewOpen] = useState(false)
@@ -46,17 +44,13 @@ export function SalesOrderCreateContractSummary({
             : PAYMENT_TERM_OPTIONS.find(
                   (item) => item.value === values.paymentTerms,
               )?.label || values.paymentTerms
+    const revisionNo =
+        revision?.revisionNo ?? contract.currentRevision.revisionNo
+
     return (
         <div className="space-y-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className={compact ? "min-w-0 space-y-1.5" : "space-y-2"}>
-                    <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <CheckCircle2Icon
-                            className="size-4 text-success"
-                            aria-hidden="true"
-                        />
-                        {imported ? "合同已归档，开单信息已带入" : "已关联合同"}
-                    </p>
+            <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2.5">
+                <div className="min-w-0 space-y-1">
                     <form.AppField name="customerId">
                         {(field) => (
                             <div
@@ -64,13 +58,7 @@ export function SalesOrderCreateContractSummary({
                                 tabIndex={-1}
                                 className="outline-none"
                             >
-                                <p
-                                    className={
-                                        compact
-                                            ? "break-words text-body-compact font-semibold"
-                                            : "text-body-compact font-semibold"
-                                    }
-                                >
+                                <p className="break-words font-semibold text-foreground">
                                     {values.customerName}
                                 </p>
                                 <FieldError
@@ -86,11 +74,12 @@ export function SalesOrderCreateContractSummary({
                             <div
                                 id="contractId"
                                 tabIndex={-1}
-                                className="text-xs break-words text-muted-foreground outline-none"
+                                className="outline-none"
                             >
-                                合同编号：{contract.contractNo} · v
-                                {revision?.revisionNo ??
-                                    contract.currentRevision.revisionNo}
+                                <p className="num break-words text-xs text-muted-foreground">
+                                    合同编号：{contract.contractNo} · v
+                                    {revisionNo}
+                                </p>
                                 <FieldError
                                     errors={toFieldErrors(
                                         field.state.meta.errors,
@@ -100,43 +89,55 @@ export function SalesOrderCreateContractSummary({
                         )}
                     </form.AppField>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                    {file ? (
-                        <Button
-                            id="sales-orders-create-contract-original"
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setPreviewOpen(true)}
-                        >
-                            查看合同原文
-                        </Button>
-                    ) : null}
-                    {canChange ? (
-                        <Button
-                            id="sales-orders-create-contract-change"
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={onChange}
-                        >
-                            更换合同
-                        </Button>
-                    ) : null}
-                </div>
+                {file || canChange ? (
+                    <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                        {file ? (
+                            <Button
+                                id="sales-orders-create-contract-original"
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className={detailWorkspaceStyles.subtleButton}
+                                onClick={() => setPreviewOpen(true)}
+                            >
+                                <FileTextIcon
+                                    data-icon="inline-start"
+                                    className="size-3.5"
+                                    aria-hidden="true"
+                                />
+                                查看合同原文
+                            </Button>
+                        ) : null}
+                        {canChange ? (
+                            <Button
+                                id="sales-orders-create-contract-change"
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className={detailWorkspaceStyles.quietButton}
+                                onClick={onChange}
+                            >
+                                更换合同
+                            </Button>
+                        ) : null}
+                    </div>
+                ) : null}
             </div>
-            <dl className="grid grid-cols-1 gap-3 rounded-lg bg-muted/40 p-3 text-body-compact sm:grid-cols-3">
+
+            <dl className="grid grid-cols-1 gap-x-8 gap-y-3 border-t border-border/50 pt-3.5 sm:grid-cols-3">
                 <form.AppField name="paymentTerms">
                     {(field) => (
                         <div
                             id="sales-orders-create-header-payment-terms"
                             tabIndex={-1}
-                            className="outline-none"
+                            className="min-w-0 space-y-1 outline-none"
                         >
-                            <dt className="text-xs text-muted-foreground">
+                            <dt className="text-xs font-medium text-muted-foreground">
                                 付款条件
                             </dt>
-                            <dd className="mt-1">{payment || "未提供"}</dd>
+                            <dd className="break-words text-foreground">
+                                {payment || "未提供"}
+                            </dd>
                             <FieldError
                                 errors={toFieldErrors(field.state.meta.errors)}
                             />
@@ -148,12 +149,12 @@ export function SalesOrderCreateContractSummary({
                         <div
                             id="sales-orders-create-header-invoice-type"
                             tabIndex={-1}
-                            className="outline-none"
+                            className="min-w-0 space-y-1 outline-none"
                         >
-                            <dt className="text-xs text-muted-foreground">
+                            <dt className="text-xs font-medium text-muted-foreground">
                                 开票要求
                             </dt>
-                            <dd className="mt-1">
+                            <dd className="break-words text-foreground">
                                 {field.state.value || "未提供"}
                             </dd>
                             <FieldError
@@ -167,12 +168,12 @@ export function SalesOrderCreateContractSummary({
                         <div
                             id="sales-orders-create-header-tax-rate"
                             tabIndex={-1}
-                            className="outline-none"
+                            className="min-w-0 space-y-1 outline-none"
                         >
-                            <dt className="text-xs text-muted-foreground">
+                            <dt className="text-xs font-medium text-muted-foreground">
                                 税率
                             </dt>
-                            <dd className="mt-1">
+                            <dd className="num text-foreground">
                                 {field.state.value
                                     ? `${field.state.value}%`
                                     : "未提供"}
@@ -184,6 +185,7 @@ export function SalesOrderCreateContractSummary({
                     )}
                 </form.AppField>
             </dl>
+
             {file ? (
                 <ContractFilePreviewDialog
                     contractId={contract.contractId}

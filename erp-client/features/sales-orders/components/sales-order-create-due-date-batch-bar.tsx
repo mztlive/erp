@@ -2,16 +2,17 @@
 
 import * as React from "react"
 import { CalendarDaysIcon } from "lucide-react"
-import { QuantityValue } from "@/components/business"
+
+import { QuantityValue, detailWorkspaceStyles } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { DatePicker } from "@/components/ui/date-picker"
 import { Field, FieldLabel } from "@/components/ui/field"
 import {
     Popover,
-    PopoverTrigger,
     PopoverContent,
-    PopoverTitle,
     PopoverDescription,
+    PopoverTitle,
+    PopoverTrigger,
 } from "@/components/ui/popover"
 
 export type SalesOrderCreateDueDateBatchBarProps = {
@@ -29,10 +30,21 @@ export function SalesOrderCreateDueDateBatchBar({
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger
                 id="sales-orders-create-batch-due-date-open"
-                render={<Button type="button" variant="outline" />}
+                render={
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={detailWorkspaceStyles.subtleButton}
+                    />
+                }
                 disabled={lineCount === 0}
             >
-                <CalendarDaysIcon aria-hidden="true" />
+                <CalendarDaysIcon
+                    data-icon="inline-start"
+                    className="size-3.5"
+                    aria-hidden="true"
+                />
                 设置统一交付日
             </PopoverTrigger>
             <PopoverContent
@@ -52,6 +64,7 @@ export function SalesOrderCreateDueDateBatchBar({
                     </FieldLabel>
                     <DatePicker
                         id="sales-orders-create-batch-due-date"
+                        size="default"
                         value={dueDate || undefined}
                         onValueChange={(next) => setDueDate(next ?? "")}
                         placeholder="选择日期"
@@ -62,6 +75,7 @@ export function SalesOrderCreateDueDateBatchBar({
                 <Button
                     id="sales-orders-create-batch-due-date-apply"
                     type="button"
+                    size="sm"
                     disabled={!dueDate || lineCount === 0}
                     onClick={() => {
                         onApply(dueDate)

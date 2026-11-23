@@ -1,8 +1,8 @@
 "use client"
 
 import { MoneyValue } from "@/components/business"
-import { compareDecimal } from "@/lib/fixed-decimal"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import type { SalesOrderCreateFormApi } from "../lib/sales-order-create-form-types"
 import {
     supplyAmount,
@@ -24,12 +24,12 @@ export function SalesProcurementBasisEditor({
     if (!line) return null
     if (inquiryLocked)
         return (
-            <span className="flex min-h-control items-center text-body-compact">
+            <span className="flex min-h-control items-center text-muted-foreground">
                 询价覆盖
             </span>
         )
     return (
-        <div className="w-32">
+        <div className="w-28">
             <form.AppField
                 name={`lineItems[${rowIndex}].procurementPriceBasis`}
                 listeners={{
@@ -52,6 +52,7 @@ export function SalesProcurementBasisEditor({
                         hideLabel
                         allowClear={false}
                         placeholder="请选择"
+                        className="gap-0"
                         options={[
                             { value: "BULK", label: "集采" },
                             { value: "DROPSHIP", label: "一件代发" },
@@ -77,10 +78,12 @@ export function SalesProcurementPriceEditor({
         !inquiryLocked &&
         line.procurementPriceBasis &&
         !supplyReferencePrice(line.referencePrices, line.procurementPriceBasis)
+    const missingLabel =
+        line.procurementPriceBasis === "BULK" ? "集采价" : "一件代发价"
     return (
-        <div className="w-40 space-y-1">
+        <div className="w-32 space-y-1">
             {inquiryLocked ? (
-                <span className="flex min-h-control items-center justify-end text-body-compact">
+                <span className="flex min-h-control items-center justify-end">
                     <MoneyValue value={line.procurementSupplyPrice || null} />
                 </span>
             ) : (
@@ -95,26 +98,25 @@ export function SalesProcurementPriceEditor({
                             hideLabel
                             type="text"
                             inputMode="decimal"
-                            placeholder="请填写单价"
+                            placeholder="请填写"
                             className="gap-0"
                             inputClassName="num text-right"
                         />
                     )}
                 </form.AppField>
             )}
-            {showAmount && (
-                <div className="text-right text-xs text-muted-foreground">
+            {showAmount ? (
+                <div className="num text-right text-xs text-muted-foreground">
                     供给总额{" "}
                     {amount === null ? "待完善" : <MoneyValue value={amount} />}
                 </div>
-            )}
+            ) : null}
             {missingReference ? (
-                <p className="text-xs text-warning-soft-foreground">
-                    未配置
-                    {line.procurementPriceBasis === "BULK"
-                        ? "集采价"
-                        : "一件代发价"}
-                    ，请填写供给单价或切换取价方式。
+                <p
+                    className="text-right text-xs text-warning-soft-foreground"
+                    title={`未配置${missingLabel}，请填写供给单价或切换取价方式`}
+                >
+                    未配{missingLabel}，请手填
                 </p>
             ) : null}
         </div>

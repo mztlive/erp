@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react"
 import { DownloadIcon, UploadIcon } from "lucide-react"
+import { detailWorkspaceStyles } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
@@ -87,8 +88,9 @@ export function SalesDeliveryWorkbookActions({
             <Button
                 id={`${prefix}-export`}
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="sm"
+                className={detailWorkspaceStyles.subtleButton}
                 disabled={exporting || regions.isPending}
                 onClick={() => {
                     if (regions.data) void download(regions.data)
@@ -101,20 +103,29 @@ export function SalesDeliveryWorkbookActions({
                     }
                 }}
             >
-                <DownloadIcon />
+                <DownloadIcon
+                    data-icon="inline-start"
+                    className="size-3.5"
+                    aria-hidden="true"
+                />
                 {exporting ? "正在导出…" : "导出收货安排"}
             </Button>
             <Button
                 id={`${prefix}-import`}
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="sm"
+                className={detailWorkspaceStyles.subtleButton}
                 onClick={() => {
                     prepare()
                     setOpen(true)
                 }}
             >
-                <UploadIcon />
+                <UploadIcon
+                    data-icon="inline-start"
+                    className="size-3.5"
+                    aria-hidden="true"
+                />
                 批量导入地址
             </Button>
             {open && (

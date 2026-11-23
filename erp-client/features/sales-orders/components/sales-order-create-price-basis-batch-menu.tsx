@@ -1,6 +1,8 @@
 "use client"
 
 import { ChevronDownIcon } from "lucide-react"
+
+import { detailWorkspaceStyles } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     DropdownMenu,
@@ -23,13 +25,27 @@ export function SalesOrderCreatePriceBasisBatchMenu({
         <DropdownMenu>
             <DropdownMenuTrigger
                 id="sales-orders-create-batch-price-basis-open"
-                render={<Button type="button" variant="outline" />}
+                render={
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={detailWorkspaceStyles.subtleButton}
+                    />
+                }
                 disabled={lineCount === 0}
             >
                 批量设置取价方式
-                <ChevronDownIcon aria-hidden="true" />
+                <ChevronDownIcon
+                    data-icon="inline-end"
+                    className="size-3.5"
+                    aria-hidden="true"
+                />
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-72 max-w-[calc(100vw-2rem)]">
+            <DropdownMenuContent
+                align="end"
+                className="w-72 max-w-[calc(100vw-2rem)]"
+            >
                 <DropdownMenuGroup>
                     <DropdownMenuLabel>
                         应用到全部 {lineCount}{" "}

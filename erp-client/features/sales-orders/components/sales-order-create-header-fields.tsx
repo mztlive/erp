@@ -2,21 +2,21 @@
 
 import { useSelector } from "@tanstack/react-form"
 import { z } from "zod"
-import type { SettlementPartyComboboxItem } from "@/components/business/entity-comboboxes"
-import { SalesOrderCreateSettlementField } from "./sales-order-create-settlement-field"
 
-import {
-    PAYMENT_TERM_OPTIONS,
-    WELFARE_SCENARIO_OPTIONS,
-} from "@/lib/business-options"
+import type { SettlementPartyComboboxItem } from "@/components/business/entity-comboboxes"
+import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
 import {
     NATURE_OPTIONS,
     decimalAtMost,
     decimalInput,
     hasMeaningfulLines,
 } from "@/features/sales-orders/lib/sales-order-create-model"
-import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
 import type { SalesOrderNature } from "@/features/sales-orders/types"
+import {
+    PAYMENT_TERM_OPTIONS,
+    WELFARE_SCENARIO_OPTIONS,
+} from "@/lib/business-options"
+import { SalesOrderCreateSettlementField } from "./sales-order-create-settlement-field"
 
 export type SalesOrderCreateHeaderFieldsProps = {
     form: SalesOrderCreateFormApi
@@ -48,7 +48,7 @@ export function SalesOrderCreateHeaderFields({
             className={
                 compact
                     ? "grid min-w-0 grid-cols-1 items-start gap-4 sm:grid-cols-2"
-                    : "grid min-w-0 grid-cols-1 items-start gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3"
+                    : "grid min-w-0 grid-cols-1 items-start gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-3"
             }
         >
             <form.AppField name="nature">
@@ -63,7 +63,7 @@ export function SalesOrderCreateHeaderFields({
                             allowClear={false}
                             disabled={natureLocked}
                             description={
-                                natureLocked ? "建单后不能改" : undefined
+                                natureLocked ? "建单后不可修改" : undefined
                             }
                             onValueChange={(value: string) => {
                                 const nature = value as SalesOrderNature
@@ -173,7 +173,6 @@ export function SalesOrderCreateHeaderFields({
                                 description={
                                     hasContract ? "沿用合同约定" : undefined
                                 }
-                                className="max-w-36"
                                 inputClassName="num text-right"
                             />
                         )}
@@ -186,8 +185,8 @@ export function SalesOrderCreateHeaderFields({
                         <div
                             className={
                                 compact
-                                    ? "grid grid-cols-1 gap-4 border-t border-grid pt-3 sm:col-span-2 sm:grid-cols-2"
-                                    : "grid grid-cols-1 gap-4 border-t border-grid pt-3 sm:col-span-2 sm:grid-cols-2 lg:col-span-3"
+                                    ? "grid grid-cols-1 gap-4 border-t border-border/60 pt-4 sm:col-span-2 sm:grid-cols-2"
+                                    : "grid grid-cols-1 gap-x-5 gap-y-4 border-t border-border/60 pt-4 sm:col-span-2 sm:grid-cols-2 lg:col-span-3 lg:grid-cols-3"
                             }
                         >
                             <form.AppField
@@ -200,6 +199,7 @@ export function SalesOrderCreateHeaderFields({
                                     <field.DateField
                                         id="sales-orders-create-header-fulfillment-deadline"
                                         label="履约期限"
+                                        size="default"
                                         required
                                     />
                                 )}
@@ -216,8 +216,9 @@ export function SalesOrderCreateHeaderFields({
                                     <field.DateField
                                         id="sales-orders-create-header-receivable-due-date"
                                         label="应收到期日"
+                                        size="default"
                                         required
-                                        description="审批生效后按此日期形成应收；该日期不能早于提交日"
+                                        description="审批生效后按此日形成应收，不早于提交日"
                                     />
                                 )}
                             </form.AppField>

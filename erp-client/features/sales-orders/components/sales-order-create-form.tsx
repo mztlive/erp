@@ -14,16 +14,22 @@ import { useRouter } from "@/lib/navigation"
 
 import { revalidateLogic, useSelector } from "@tanstack/react-form"
 import { useQueryClient } from "@tanstack/react-query"
+import { ArrowLeftRightIcon, ClipboardListIcon } from "lucide-react"
 
 import {
-    DiscardConfirmDialog,
     DetailWorkspaceBody,
     DetailWorkspaceChrome,
+    DetailWorkspaceDirtyBadge,
+    DetailWorkspaceMeta,
     DetailWorkspacePage,
+    DetailWorkspaceSection,
+    DiscardConfirmDialog,
+    detailWorkspaceStyles,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
-import { toast } from "@/components/ui/toast"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
+import { toast } from "@/components/ui/toast"
 import { SalesOrderCreateContractLoading } from "./sales-order-create-contract-loading"
 import { SalesOrderCreateContractSummary } from "./sales-order-create-contract-summary"
 import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
@@ -619,21 +625,21 @@ export function SalesOrderCreateForm({
             <form.AppField name="ownerUserId">{() => null}</form.AppField>
             <form.AppField name="ownerName">
                 {(field) => (
-                    <div
+                    <span
                         id="sales-orders-create-header-owner-name"
                         tabIndex={-1}
-                        className="flex min-w-0 flex-wrap items-baseline gap-2 text-xs"
+                        className="inline-flex min-w-0 flex-wrap items-baseline gap-1.5 text-xs outline-none"
                         aria-live="polite"
                     >
                         <span className="text-muted-foreground">负责销售</span>
-                        <span className="break-words font-medium">
+                        <span className="break-words font-medium text-foreground">
                             {profileQuery.isPending
                                 ? "加载当前用户…"
                                 : profileQuery.isError
                                   ? "无法获取登录用户"
                                   : field.state.value || "当前用户未就绪"}
                         </span>
-                    </div>
+                    </span>
                 )}
             </form.AppField>
         </>
@@ -673,26 +679,82 @@ export function SalesOrderCreateForm({
         )
     const inquirySwitchDisabled =
         submission.isSubmitting || Boolean(submission.formalFailure?.unknown)
+    const canChangeEntry =
+        !entryOpen &&
+        !uploadOpen &&
+        purpose === "create" &&
+        !submission.draftIdentity &&
+        !source &&
+        !inquirySource
 
-    const editor = (
-        <>
-            {canChooseInquiry && !entryOpen && (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
-                    <p className="text-xs text-muted-foreground">
-                        已有采购反馈？可从已接受的询价结果带入开单信息。
-                    </p>
+    const chromeSecondaryActions =
+        !entryOpen && !uploadOpen && (canChooseInquiry || canChangeEntry) ? (
+            <>
+                {canChooseInquiry ? (
                     <Button
                         id="sales-orders-create-from-inquiry"
                         type="button"
-                        variant="outline"
+                        variant="ghost"
+                        size="sm"
+                        className={detailWorkspaceStyles.subtleButton}
                         disabled={inquirySwitchDisabled}
                         onClick={() => setInquiryPickerOpen(true)}
                     >
+                        <ClipboardListIcon
+                            data-icon="inline-start"
+                            className="size-3.5"
+                            aria-hidden="true"
+                        />
                         从询价单带入
                     </Button>
-                </div>
-            )}
-            {inquiryPickerOpen && (
+                ) : null}
+                {canChangeEntry ? (
+                    <form.Subscribe
+                        selector={(state) => state.values.evidenceUploadPending}
+                    >
+                        {(uploading) => (
+                            <Button
+                                id="sales-orders-create-change-entry"
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className={detailWorkspaceStyles.quietButton}
+                                disabled={uploading || submission.isSubmitting}
+                                onClick={() => setEntryOpen(true)}
+                            >
+                                <ArrowLeftRightIcon
+                                    data-icon="inline-start"
+                                    className="size-3.5"
+                                    aria-hidden="true"
+                                />
+                                更换开单方式
+                            </Button>
+                        )}
+                    </form.Subscribe>
+                ) : null}
+            </>
+        ) : undefined
+
+    const headerAlerts = (
+        <>
+            {!uploadOpen && source ? (
+                <SalesOrderSelectionSource source={source} />
+            ) : null}
+            {!uploadOpen && inquirySource ? (
+                <SalesOrderInquirySource source={inquirySource} />
+            ) : null}
+            <SalesOrderCreateAlerts
+                formalFailure={submission.formalFailure}
+                createError={submission.createMutation.error ?? null}
+                draftSaved={submission.draftSaved}
+            />
+            {!uploadOpen && !embeddedDraft ? approvalArea : null}
+        </>
+    )
+
+    const editor = (
+        <>
+            {inquiryPickerOpen ? (
                 <SalesOrderInquiryPickerDialog
                     key={selectedCustomerId}
                     customerId={selectedCustomerId}
@@ -709,18 +771,13 @@ export function SalesOrderCreateForm({
                         )
                     }}
                 />
-            )}
-            {source && <SalesOrderSelectionSource source={source} />}
-            {inquirySource && (
-                <SalesOrderInquirySource source={inquirySource} />
-            )}
-            <SalesOrderCreateAlerts
-                formalFailure={submission.formalFailure}
-                createError={submission.createMutation.error ?? null}
-                draftSaved={submission.draftSaved}
-            />
+            ) : null}
 
-            {!embeddedDraft ? approvalArea : null}
+            {chrome === "none" ? (
+                <div className="space-y-2.5 pt-4 empty:hidden">
+                    {headerAlerts}
+                </div>
+            ) : null}
 
             <div className={uploadOpen ? "hidden" : "contents"}>
                 {entryOpen ? (
@@ -767,190 +824,164 @@ export function SalesOrderCreateForm({
                             void form.handleSubmit()
                         }}
                     >
-                        <div className="flex min-w-0 flex-1 flex-col">
-                            <div
-                                id={
-                                    embeddedDraft
-                                        ? "sales-orders-draft-content-scroll"
-                                        : undefined
-                                }
-                                className="contents"
-                            >
-                                <div className="contents">
-                                    <section
-                                        className="min-w-0 space-y-5 py-6 first:pt-5"
-                                        aria-labelledby={
-                                            orderBasis === "contract"
-                                                ? "sales-create-contract-title"
-                                                : undefined
-                                        }
-                                        aria-label={
-                                            orderBasis === "evidence"
-                                                ? "客户与开单材料"
-                                                : undefined
-                                        }
-                                    >
-                                        <div
-                                            data-slot="detail-form-grid"
-                                            className="max-w-4xl space-y-5"
-                                        >
-                                            {orderBasis === "contract" ? (
-                                                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-                                                    <h2
-                                                        id="sales-create-contract-title"
-                                                        tabIndex={-1}
-                                                        className="font-heading text-section-title font-semibold tracking-tight outline-none"
-                                                    >
-                                                        {showContractSummary
-                                                            ? "合同信息"
-                                                            : "客户与合同"}
-                                                    </h2>
-                                                    {!showContractSummary &&
-                                                    !submission.draftIdentity &&
-                                                    purpose === "create" ? (
-                                                        <form.Subscribe
-                                                            selector={(state) =>
-                                                                state.values
-                                                                    .evidenceUploadPending
-                                                            }
-                                                        >
-                                                            {(uploading) => (
-                                                                <Button
-                                                                    id="sales-orders-create-change-entry"
-                                                                    type="button"
-                                                                    variant="ghost"
-                                                                    size="sm"
-                                                                    disabled={
-                                                                        uploading ||
-                                                                        submission.isSubmitting
-                                                                    }
-                                                                    onClick={() =>
-                                                                        setEntryOpen(
-                                                                            true,
-                                                                        )
-                                                                    }
-                                                                >
-                                                                    更换开单方式
-                                                                </Button>
-                                                            )}
-                                                        </form.Subscribe>
-                                                    ) : null}
-                                                    {chrome === "none"
-                                                        ? owner
-                                                        : null}
-                                                </div>
-                                            ) : chrome === "none" ? (
-                                                owner
-                                            ) : null}
-                                            {showContractSummary &&
-                                            contractQuery.data ? (
-                                                <SalesOrderCreateContractSummary
-                                                    compact={embeddedDraft}
-                                                    form={form}
-                                                    contract={
-                                                        contractQuery.data
-                                                    }
-                                                    imported={
-                                                        importedContractId ===
-                                                        selectedContractId
-                                                    }
-                                                    canChange={
-                                                        !submission.draftIdentity &&
-                                                        !submission.isSubmitting
-                                                    }
-                                                    onChange={() =>
-                                                        setContractPickerOpen(
-                                                            true,
-                                                        )
-                                                    }
-                                                />
-                                            ) : (
-                                                <SalesOrderCreateContractSection
-                                                    form={form}
-                                                    sourceCustomerLocked={Boolean(
-                                                        source,
-                                                    )}
-                                                    customerLocked={
-                                                        submission.draftIdentity !=
-                                                        null
-                                                    }
-                                                    onContractChange={
-                                                        handleContractChange
-                                                    }
-                                                    onOrderBasisChange={
-                                                        handleOrderBasisChange
-                                                    }
-                                                    onUploadClick={
-                                                        picker.selectFile
-                                                    }
-                                                />
-                                            )}
-                                        </div>
-                                    </section>
-                                    <section
-                                        className="min-w-0 space-y-5 border-t border-border/60 py-6"
-                                        aria-labelledby="sales-create-settlement-title"
-                                    >
-                                        <h2
-                                            id="sales-create-settlement-title"
-                                            className="font-heading text-section-title font-semibold tracking-tight"
-                                        >
-                                            本次销售信息
-                                        </h2>
-                                        <div
-                                            data-slot="detail-form-grid"
-                                            className="max-w-4xl"
-                                        >
-                                            <SalesOrderCreateHeaderFields
-                                                compact={false}
-                                                form={form}
-                                                natureLocked={natureLocked}
-                                                contractResolved={
-                                                    showContractSummary
-                                                }
-                                                settlementSnapshot={
-                                                    settlementSnapshot
-                                                }
-                                                applyNature={applyNature}
-                                                onNatureChangeRequest={
-                                                    setPendingNature
+                        <div
+                            id={
+                                embeddedDraft
+                                    ? "sales-orders-draft-content-scroll"
+                                    : undefined
+                            }
+                            className="min-w-0 flex-1"
+                        >
+                            {orderBasis === "contract" ? (
+                                <DetailWorkspaceSection
+                                    width="form"
+                                    title={
+                                        showContractSummary
+                                            ? "合同信息"
+                                            : "客户与合同"
+                                    }
+                                    headingId="sales-create-contract-title"
+                                    headingTabIndex={-1}
+                                    badge={
+                                        showContractSummary ? (
+                                            <StatusBadge
+                                                tone="success"
+                                                appearance="quiet"
+                                                label={
+                                                    importedContractId ===
+                                                    selectedContractId
+                                                        ? "已归档并带入"
+                                                        : "已关联合同"
                                                 }
                                             />
-                                        </div>
-                                    </section>
+                                        ) : undefined
+                                    }
+                                    actions={
+                                        chrome === "none" ? owner : undefined
+                                    }
+                                >
+                                    <div data-slot="detail-form-grid">
+                                        {showContractSummary &&
+                                        contractQuery.data ? (
+                                            <SalesOrderCreateContractSummary
+                                                form={form}
+                                                contract={contractQuery.data}
+                                                canChange={
+                                                    !submission.draftIdentity &&
+                                                    !submission.isSubmitting
+                                                }
+                                                onChange={() =>
+                                                    setContractPickerOpen(true)
+                                                }
+                                            />
+                                        ) : (
+                                            <SalesOrderCreateContractSection
+                                                form={form}
+                                                sourceCustomerLocked={Boolean(
+                                                    source,
+                                                )}
+                                                customerLocked={
+                                                    submission.draftIdentity !=
+                                                    null
+                                                }
+                                                onContractChange={
+                                                    handleContractChange
+                                                }
+                                                onOrderBasisChange={
+                                                    handleOrderBasisChange
+                                                }
+                                                onUploadClick={
+                                                    picker.selectFile
+                                                }
+                                            />
+                                        )}
+                                    </div>
+                                </DetailWorkspaceSection>
+                            ) : (
+                                <DetailWorkspaceSection
+                                    width="form"
+                                    title="客户与开单材料"
+                                    headingId="sales-create-evidence-title"
+                                    headingTabIndex={-1}
+                                    badge={
+                                        <StatusBadge
+                                            tone="warning"
+                                            appearance="quiet"
+                                            label="先开单，后补合同"
+                                        />
+                                    }
+                                    actions={
+                                        chrome === "none" ? owner : undefined
+                                    }
+                                >
+                                    <div data-slot="detail-form-grid">
+                                        <SalesOrderCreateContractSection
+                                            form={form}
+                                            sourceCustomerLocked={Boolean(
+                                                source,
+                                            )}
+                                            customerLocked={
+                                                submission.draftIdentity != null
+                                            }
+                                            onContractChange={
+                                                handleContractChange
+                                            }
+                                            onOrderBasisChange={
+                                                handleOrderBasisChange
+                                            }
+                                            onUploadClick={picker.selectFile}
+                                        />
+                                    </div>
+                                </DetailWorkspaceSection>
+                            )}
+
+                            <DetailWorkspaceSection
+                                width="form"
+                                title="本次销售信息"
+                                headingId="sales-create-settlement-title"
+                            >
+                                <div data-slot="detail-form-grid">
+                                    <SalesOrderCreateHeaderFields
+                                        compact={false}
+                                        form={form}
+                                        natureLocked={natureLocked}
+                                        contractResolved={showContractSummary}
+                                        settlementSnapshot={settlementSnapshot}
+                                        applyNature={applyNature}
+                                        onNatureChangeRequest={setPendingNature}
+                                    />
                                 </div>
-                                <SalesOrderCreateLineItemsSection
-                                    inquirySource={inquirySource}
-                                    inquiryLocked={Boolean(inquirySource)}
-                                    draftId={initialDraft?.salesOrderId}
-                                    compact={embeddedDraft}
-                                    form={form}
-                                    procurementOwners={
-                                        procurementResponsibilityQuery.byRowKey
-                                    }
-                                    procurementFetching={
-                                        procurementResponsibilityQuery.isFetching
-                                    }
-                                    procurementError={
-                                        procurementResponsibilityQuery.isError &&
-                                        !procurementResponsibilityQuery.data
-                                    }
-                                />
-                            </div>
-                            <SalesOrderCreateTotalBar
-                                compact={embeddedDraft}
+                            </DetailWorkspaceSection>
+
+                            <SalesOrderCreateLineItemsSection
+                                inquirySource={inquirySource}
+                                inquiryLocked={Boolean(inquirySource)}
+                                draftId={initialDraft?.salesOrderId}
                                 form={form}
-                                isSubmitting={submission.isSubmitting}
-                                onSaveDraftClick={() => {
-                                    submission.submitIntentRef.current =
-                                        "SAVE_DRAFT"
-                                }}
-                                onSubmitClick={() => {
-                                    submission.submitIntentRef.current =
-                                        "SUBMIT"
-                                }}
+                                procurementOwners={
+                                    procurementResponsibilityQuery.byRowKey
+                                }
+                                procurementFetching={
+                                    procurementResponsibilityQuery.isFetching
+                                }
+                                procurementError={
+                                    procurementResponsibilityQuery.isError &&
+                                    !procurementResponsibilityQuery.data
+                                }
                             />
                         </div>
+
+                        <SalesOrderCreateTotalBar
+                            form={form}
+                            isSubmitting={submission.isSubmitting}
+                            onSaveDraftClick={() => {
+                                submission.submitIntentRef.current =
+                                    "SAVE_DRAFT"
+                            }}
+                            onSubmitClick={() => {
+                                submission.submitIntentRef.current = "SUBMIT"
+                            }}
+                        />
                     </form>
                 )}
             </div>
@@ -975,7 +1006,7 @@ export function SalesOrderCreateForm({
             ) : null}
             <div
                 id="sales-orders-create-contract-import"
-                className={!uploadOpen ? "hidden" : "min-w-0"}
+                className={!uploadOpen ? "hidden" : "min-w-0 py-5"}
             >
                 <input
                     id="sales-orders-create-contract-upload-input"
@@ -1052,12 +1083,34 @@ export function SalesOrderCreateForm({
     if (chrome === "none") return editor
 
     return (
-        <DetailWorkspacePage className="pb-8">
+        <DetailWorkspacePage>
             <DetailWorkspaceChrome
                 title={purpose === "create" ? "新建销售单" : "编辑销售单"}
                 documentNumber={submission.draftIdentity?.documentNumber}
                 version={submission.draftIdentity?.version}
-                primaryAction={owner}
+                primaryStatus={
+                    submission.draftIdentity
+                        ? { label: "草稿", tone: "neutral" }
+                        : undefined
+                }
+                titleExtra={
+                    dirty ? (
+                        <DetailWorkspaceDirtyBadge label="未保存" />
+                    ) : undefined
+                }
+                meta={
+                    <DetailWorkspaceMeta
+                        items={[
+                            owner,
+                            !entryOpen && !uploadOpen
+                                ? orderBasis === "contract"
+                                    ? "关联合同开单"
+                                    : "先开单，后补合同"
+                                : null,
+                        ]}
+                    />
+                }
+                secondaryActions={chromeSecondaryActions}
                 back={{
                     id: "sales-orders-create-back-to-list",
                     label: "销售单列表",
@@ -1070,7 +1123,12 @@ export function SalesOrderCreateForm({
                     },
                 }}
             />
-            <DetailWorkspaceBody>{editor}</DetailWorkspaceBody>
+            <DetailWorkspaceBody
+                className="flex flex-col"
+                alerts={headerAlerts}
+            >
+                {editor}
+            </DetailWorkspaceBody>
             <DiscardConfirmDialog
                 id="sales-orders-create-leave"
                 open={leaveConfirmOpen}

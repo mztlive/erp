@@ -183,24 +183,28 @@ export function SalesOrderCreatePage({
             return (
                 <DetailWorkspacePage>
                     <DetailWorkspaceChrome title="销售方案暂不可用于开单" />
-                    <BusinessFailureState
-                        error={basisQuery.error}
-                        onRetry={() => void basisQuery.refetch()}
-                        retryLabel="重新加载"
-                        details={
-                            <Button
-                                id="sales-create-proposal-back"
-                                variant="outline"
-                                render={
-                                    <Link
-                                        href={`/sales/selection/proposals/${encodeURIComponent(initialSelectionProposalId)}`}
-                                    />
+                    <DetailWorkspaceBody>
+                        <DetailWorkspaceSection width="form">
+                            <BusinessFailureState
+                                error={basisQuery.error}
+                                onRetry={() => void basisQuery.refetch()}
+                                retryLabel="重新加载"
+                                details={
+                                    <Button
+                                        id="sales-create-proposal-back"
+                                        variant="outline"
+                                        render={
+                                            <Link
+                                                href={`/sales/selection/proposals/${encodeURIComponent(initialSelectionProposalId)}`}
+                                            />
+                                        }
+                                    >
+                                        返回销售方案
+                                    </Button>
                                 }
-                            >
-                                返回销售方案
-                            </Button>
-                        }
-                    />
+                            />
+                        </DetailWorkspaceSection>
+                    </DetailWorkspaceBody>
                 </DetailWorkspacePage>
             )
         return (

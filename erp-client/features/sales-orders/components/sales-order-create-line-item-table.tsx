@@ -7,12 +7,13 @@ import {
     BusinessFailureState,
     EditableLineItemTable,
     ValidationSummary,
+    detailWorkspaceStyles,
 } from "@/components/business"
 import { toFieldErrors } from "@/components/form"
-import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
-import type { SalesLineProcurementResponsibility } from "@/features/sales-orders/types"
 import { buildSalesOrderCreateLineItemColumns } from "@/features/sales-orders/components/sales-order-create-line-item-columns"
 import { useSalesLineImagesQuery } from "@/features/sales-orders/hooks/use-sales-line-images-query"
+import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
+import type { SalesLineProcurementResponsibility } from "@/features/sales-orders/types"
 
 export type SalesOrderCreateLineItemTableProps = {
     inquiryLocked?: boolean
@@ -59,6 +60,7 @@ export function SalesOrderCreateLineItemTable({
             }
         })
     }, [form, inquiryLocked, nature, skuImages.references])
+
     /** 明细表根路径校验错误（如卡券仅一条）在明细区汇总展示。 */
     const lineItemIssues = useSelector(form.store, (state) => {
         return toFieldErrors(state.fieldMeta.lineItems?.errors ?? [])
@@ -98,53 +100,65 @@ export function SalesOrderCreateLineItemTable({
                         inquiryLocked,
                         skuImages.images,
                     )
+                    const hasUnresolvedOwner =
+                        values.nature === "physical_service" &&
+                        values.lineItems.some((line) => line.sku.trim()) &&
+                        !procurementFetching &&
+                        values.lineItems.some(
+                            (line) =>
+                                line.sku.trim() &&
+                                !procurementOwners?.get(line.rowKey)?.resolved,
+                        )
                     return (
                         <>
                             {values.lineItems.length > 0 ? (
-                                <EditableLineItemTable
-                                    id="sales-orders-create-line-items"
-                                    className="[&_tbody_td]:align-top [&_tbody_td:last-child>div]:min-h-control [&_tbody_td:last-child>div]:items-center"
-                                    items={values.lineItems}
-                                    columns={columns}
-                                    getRowId={(item) => item.rowKey}
-                                    caption="销售单创建明细"
-                                    emptyContent="至少需要一条销售明细。"
-                                    onRemoveItem={(_item, _rowId, rowIndex) => {
-                                        void form.removeFieldValue(
-                                            "lineItems",
-                                            rowIndex,
-                                        )
-                                    }}
-                                    getRemoveDisabledReason={() =>
-                                        values.nature === "card_voucher"
-                                            ? "卡券销售单必须保留唯一明细"
-                                            : undefined
+                                <div
+                                    data-slot="detail-inline-table"
+                                    className={
+                                        detailWorkspaceStyles.inlineTableWrapper
                                     }
-                                />
+                                >
+                                    <EditableLineItemTable
+                                        id="sales-orders-create-line-items"
+                                        className="[&_table]:[--table-cell-inline:0.625rem] [&_tbody_td]:py-2.5 [&_tbody_td]:align-top [&_tbody_td:last-child>div]:min-h-control [&_tbody_td:last-child>div]:items-center"
+                                        items={values.lineItems}
+                                        columns={columns}
+                                        getRowId={(item) => item.rowKey}
+                                        caption="销售单创建明细"
+                                        emptyContent="至少需要一条销售明细。"
+                                        onRemoveItem={(
+                                            _item,
+                                            _rowId,
+                                            rowIndex,
+                                        ) => {
+                                            void form.removeFieldValue(
+                                                "lineItems",
+                                                rowIndex,
+                                            )
+                                        }}
+                                        getRemoveDisabledReason={() =>
+                                            values.nature === "card_voucher"
+                                                ? "卡券销售单必须保留唯一明细"
+                                                : undefined
+                                        }
+                                    />
+                                </div>
                             ) : null}
 
-                            {values.nature === "physical_service" &&
-                            values.lineItems.some((line) => line.sku.trim()) &&
-                            !procurementFetching &&
-                            values.lineItems.some(
-                                (line) =>
-                                    line.sku.trim() &&
-                                    !procurementOwners?.get(line.rowKey)
-                                        ?.resolved,
-                            ) ? (
+                            {hasUnresolvedOwner ? (
                                 <p
                                     role="status"
-                                    className="mt-3 text-destructive"
+                                    className="text-xs text-destructive"
                                 >
                                     {procurementError
                                         ? "采购负责人暂时无法匹配，请稍后重试。"
                                         : "部分商品尚未匹配采购负责人，请联系管理员维护采购责任规则。"}
-                                    可以保存草稿，完成匹配后才能提交审批。
+                                    可先保存草稿，完成匹配后再提交审批。
                                 </p>
                             ) : null}
+
                             {lineItemIssues.length > 0 ? (
                                 <ValidationSummary
-                                    className="mt-4"
                                     issues={lineItemIssues}
                                     title={`明细共 ${lineItemIssues.length} 项待处理`}
                                 />
