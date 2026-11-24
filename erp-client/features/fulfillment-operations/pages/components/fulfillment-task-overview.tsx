@@ -2,7 +2,12 @@
 
 import Link from "next/link"
 import { ArrowDownIcon, CircleAlertIcon } from "lucide-react"
-import { BusinessStatusBadge, MoneyValue } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    MoneyValue,
+    WorkspaceFactGrid,
+    WorkspaceFactItem,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { StatusTone } from "@/components/ui/status-badge"
 import {
@@ -392,7 +397,7 @@ export function FulfillmentSourceContext({
     if (fields.length === 0) return null
     return (
         <section aria-label="来源单据">
-            <dl className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
+            <WorkspaceFactGrid columns={3}>
                 {fields.map((field) => {
                     const purchaseLink =
                         field.label === "采购单" &&
@@ -404,37 +409,33 @@ export function FulfillmentSourceContext({
                         purchaseLink || (canViewSales ? field.href : undefined)
                     const isDocument =
                         field.label === "销售单" || field.label === "采购单"
+                    const isLong = /地址|备注|说明/.test(field.label)
                     return (
-                        <div
+                        <WorkspaceFactItem
                             key={field.label}
-                            className="flex min-w-0 items-baseline gap-3"
+                            label={field.label}
+                            numeric={isDocument}
+                            selectable={isDocument}
+                            span={isLong ? "full" : 1}
                         >
-                            <dt className="shrink-0 text-xs text-muted-foreground">
-                                {field.label}
-                            </dt>
-                            <dd
-                                title={isDocument ? field.value : undefined}
-                                className={cn(
-                                    "min-w-0 wrap-anywhere font-medium",
-                                    isDocument && "num select-all",
-                                )}
-                            >
-                                {href ? (
-                                    <Link
-                                        id={`${task?.id ?? "fulfillment-operations-work-surface"}-source-${toAutomationIdSegment(field.label)}`}
-                                        href={href}
-                                        className="text-primary underline underline-offset-4"
-                                    >
-                                        {field.value}
-                                    </Link>
-                                ) : (
-                                    field.value
-                                )}
-                            </dd>
-                        </div>
+                            {href ? (
+                                <Link
+                                    id={`${task?.id ?? "fulfillment-operations-work-surface"}-source-${toAutomationIdSegment(field.label)}`}
+                                    href={href}
+                                    title={isDocument ? field.value : undefined}
+                                    className="text-primary underline underline-offset-4"
+                                >
+                                    {field.value}
+                                </Link>
+                            ) : isDocument ? (
+                                <span title={field.value}>{field.value}</span>
+                            ) : (
+                                field.value
+                            )}
+                        </WorkspaceFactItem>
                     )
                 })}
-            </dl>
+            </WorkspaceFactGrid>
         </section>
     )
 }

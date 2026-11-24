@@ -22,6 +22,9 @@ import {
     MoneyValue,
     RateValue,
     SensitiveValue,
+    WorkspaceFactGrid,
+    WorkspaceFactGroup,
+    WorkspaceFactItem,
     WorkspaceTaskFooter,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -50,16 +53,14 @@ import {
     isCommandOutcomeUnknown,
     type FormalCommandIdentity,
 } from "@/lib/formal-command"
-import {
-    paymentRequestKeys,
-    useAccountRevealMutation,
-    useRequestPaymentMutation,
-} from "../hooks/queries"
+import { paymentRequestKeys, useRequestPaymentMutation } from "../hooks/queries"
+import { revealPaymentRecipient } from "../api"
 import type {
     PaymentInput,
     PaymentRecipient,
     PaymentRequest,
     PaymentTaskContext,
+    RevealedPaymentRecipient,
 } from "../types"
 
 type PaymentIdempotencySlot = FormalCommandIdentity<{
@@ -82,8 +83,11 @@ function BankRequestPaymentForm({
     onTaskCompleted?: () => void
 }) {
     const payment = useRequestPaymentMutation(onTaskCompleted)
-    const reveal = useAccountRevealMutation()
     const profile = useAccountProfileQuery()
+    const [revealedState, setRevealedState] = useState<{
+        key: string
+        recipient: RevealedPaymentRecipient
+    } | null>(null)
     const [unknown, setUnknown] = useState(false)
     const [result, setResult] = useState<string>()
     const [ledger] = useState(() => new FormalCommandKeyLedger())
@@ -97,6 +101,31 @@ function BankRequestPaymentForm({
     const id = "ppr-pay"
     const formId = `${id}-form`
     const account = request.payment_recipient
+    const recipientKey = `${account.bank_account_id}:${account.version}`
+    const revealedRecipient =
+        revealedState?.key === recipientKey ? revealedState.recipient : null
+    const paymentTerms = [
+        ...new Set(
+            request.lines
+                .map((line) => line.payment_term_name.trim())
+                .filter(Boolean),
+        ),
+    ].join("、")
+    const bankName =
+        revealedRecipient?.bank_name?.trim() || account.bank_name?.trim() || ""
+    const branchName =
+        revealedRecipient?.bank_branch_name?.trim() ||
+        account.bank_branch_name?.trim() ||
+        ""
+    const bankDisplay =
+        bankName && bankName !== "未记录"
+            ? branchName && branchName !== bankName
+                ? `${bankName} · ${branchName}`
+                : bankName
+            : branchName || "未记录"
+    const recipientAccountName = account.account_name?.trim() || ""
+    const recipientAccountNameMissing =
+        !recipientAccountName || recipientAccountName === "未记录"
     const blocked =
         !account.bank_account_id ||
         !account.version ||
@@ -475,31 +504,38 @@ function BankRequestPaymentForm({
                     <span>{blocked}</span>
                 </div>
             )}
-            <h2 className="text-section-title font-semibold">付款与收款信息</h2>
-            <dl className="grid gap-x-5 gap-y-3 text-body-compact @[480px]/payment-request:grid-cols-2 @[840px]/payment-request:grid-cols-4">
-                <div className="min-w-0">
-                    <dt className="text-xs text-muted-foreground">
-                        我方付款主体
-                    </dt>
-                    <dd className="mt-1 wrap-anywhere font-medium">
-                        {request.our_company_name}
-                    </dd>
-                </div>
-                <div className="min-w-0">
-                    <dt className="text-xs text-muted-foreground">收款户名</dt>
-                    <dd className="mt-1 wrap-anywhere font-medium">
-                        {account.account_name}
-                    </dd>
-                </div>
-                <div className="min-w-0">
-                    <dt className="text-xs text-muted-foreground">开户行</dt>
-                    <dd className="mt-1 wrap-anywhere">{account.bank_name}</dd>
-                </div>
-                <div className="min-w-0">
-                    <dt className="text-xs text-muted-foreground">收款账号</dt>
-                    <dd className="mt-1">
+            <WorkspaceFactGroup title="付款与收款账户">
+                <WorkspaceFactGrid columns={3} ariaLabel="付款与收款账户">
+                    <WorkspaceFactItem
+                        label="我方付款主体"
+                        value={request.our_company_name}
+                    />
+                    <WorkspaceFactItem label="付款方式" value="银行转账" />
+                    <WorkspaceFactItem
+                        label="希望付款日"
+                        value={request.desired_payment_date}
+                        numeric
+                        selectable
+                    />
+                    <WorkspaceFactItem
+                        label="收款户名"
+                        value={recipientAccountName || "未记录"}
+                        tone={
+                            recipientAccountNameMissing
+                                ? "destructive"
+                                : "default"
+                        }
+                    />
+                    <WorkspaceFactItem
+                        label="开户行"
+                        value={bankDisplay}
+                        tone={
+                            bankDisplay === "未记录" ? "destructive" : "default"
+                        }
+                    />
+                    <WorkspaceFactItem label="收款账号" numeric>
                         <SensitiveValue
-                            key={`${account.bank_account_id}:${account.version}`}
+                            key={recipientKey}
                             id={`${id}-recipient-account`}
                             label="收款账号"
                             maskedValue={account.account_number_masked}
@@ -510,34 +546,62 @@ function BankRequestPaymentForm({
                                     profile.data?.permissions,
                                     "party_bank_account:reveal",
                                 )
-                                    ? () =>
-                                          reveal.mutateAsync({ request, task })
+                                    ? async () => {
+                                          const revealed =
+                                              await revealPaymentRecipient(
+                                                  request,
+                                                  task,
+                                              )
+                                          setRevealedState({
+                                              key: recipientKey,
+                                              recipient: revealed,
+                                          })
+                                          return revealed.account_number
+                                      }
                                     : undefined
                             }
                         />
-                    </dd>
-                </div>
-            </dl>
-            <dl className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
-                <div className="flex gap-2">
-                    <dt className="text-muted-foreground">申请人</dt>
-                    <dd>{request.applicant_name}</dd>
-                </div>
-                <div className="flex gap-2">
-                    <dt className="text-muted-foreground">希望付款日</dt>
-                    <dd className="num">{request.desired_payment_date}</dd>
-                </div>
-                {request.description && (
-                    <div className="flex min-w-0 gap-2">
-                        <dt className="shrink-0 text-muted-foreground">
-                            申请说明
-                        </dt>
-                        <dd className="whitespace-pre-wrap wrap-anywhere">
-                            {request.description}
-                        </dd>
-                    </div>
-                )}
-            </dl>
+                    </WorkspaceFactItem>
+                    {revealedRecipient ? (
+                        <WorkspaceFactItem
+                            label="联行号"
+                            value={
+                                revealedRecipient.bank_routing_number ||
+                                "未填写"
+                            }
+                            numeric
+                            selectable
+                            tone={
+                                !revealedRecipient.bank_routing_number
+                                    ? "warning"
+                                    : "default"
+                            }
+                        />
+                    ) : null}
+                </WorkspaceFactGrid>
+            </WorkspaceFactGroup>
+            <WorkspaceFactGroup divider title="申请信息">
+                <WorkspaceFactGrid columns={3} ariaLabel="申请信息">
+                    <WorkspaceFactItem
+                        label="供应商"
+                        value={request.supplier_name}
+                    />
+                    <WorkspaceFactItem
+                        label="申请人"
+                        value={request.applicant_name}
+                    />
+                    <WorkspaceFactItem
+                        label="付款条件"
+                        value={paymentTerms || "未标注付款条件"}
+                        tone={paymentTerms ? "default" : "muted"}
+                    />
+                    <WorkspaceFactItem
+                        label="申请说明"
+                        value={request.description}
+                        span="full"
+                    />
+                </WorkspaceFactGrid>
+            </WorkspaceFactGroup>
             {unknown && (
                 <Alert variant="warning" role="status">
                     <AlertTitle>付款登记结果待核对</AlertTitle>

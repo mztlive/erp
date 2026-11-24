@@ -16,6 +16,9 @@ import {
     MoneyValue,
     QuantityValue,
     RateValue,
+    WorkspaceFactGrid,
+    WorkspaceFactGroup,
+    WorkspaceFactItem,
     detailWorkspaceStyles,
 } from "@/components/business"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -399,55 +402,55 @@ export function WorkspaceSalesApproval({
             />
 
             {commercialFacts.length > 0 || showAttachmentShortcut ? (
-                <section aria-label="销售单商业信息" className="pt-3">
-                    <dl className="flex flex-wrap items-baseline gap-x-5 gap-y-1.5 text-xs">
-                        {commercialFacts.map(
-                            ({ label, value, numeric, selectable }) => (
-                                <div
-                                    key={label}
-                                    className="inline-flex max-w-full items-baseline gap-1.5"
-                                >
-                                    <dt className="shrink-0 text-muted-foreground">
-                                        {label}
-                                    </dt>
-                                    <dd
-                                        className={cn(
-                                            "min-w-0 font-medium whitespace-pre-wrap wrap-anywhere",
-                                            numeric && "num",
-                                            selectable && "select-all",
-                                        )}
-                                    >
-                                        {value}
-                                    </dd>
-                                </div>
-                            ),
-                        )}
-                        {showAttachmentShortcut ? (
-                            <div className="inline-flex items-baseline">
-                                <dt className="sr-only">附件</dt>
-                                <dd>
-                                    <Button
-                                        id={`${prefix}-kpi-open-materials`}
-                                        type="button"
-                                        variant="ghost"
-                                        size="xs"
-                                        className={cn(
-                                            "num",
-                                            detailWorkspaceStyles.subtleButton,
-                                        )}
-                                        onClick={openMaterialsShortcut}
-                                    >
-                                        <PaperclipIcon
-                                            aria-hidden="true"
-                                            data-icon="inline-start"
+                <WorkspaceFactGroup
+                    ariaLabel="销售单商业信息"
+                    className="pt-3.5 pb-1"
+                    actions={
+                        showAttachmentShortcut ? (
+                            <Button
+                                id={`${prefix}-kpi-open-materials`}
+                                type="button"
+                                variant="ghost"
+                                size="xs"
+                                className={cn(
+                                    "num",
+                                    detailWorkspaceStyles.subtleButton,
+                                )}
+                                onClick={openMaterialsShortcut}
+                            >
+                                <PaperclipIcon
+                                    aria-hidden="true"
+                                    data-icon="inline-start"
+                                />
+                                附件（{attachments.length} 份）
+                            </Button>
+                        ) : undefined
+                    }
+                >
+                    {commercialFacts.length > 0 ? (
+                        <WorkspaceFactGrid columns={3}>
+                            {commercialFacts.map(
+                                ({ label, value, numeric, selectable }) => {
+                                    const text = value ?? ""
+                                    const isLong =
+                                        text.length > 30 ||
+                                        text.includes("\n") ||
+                                        /(?:说明|备注|地址)/.test(label)
+                                    return (
+                                        <WorkspaceFactItem
+                                            key={label}
+                                            label={label}
+                                            value={text}
+                                            numeric={numeric}
+                                            selectable={selectable}
+                                            span={isLong ? "full" : 1}
                                         />
-                                        附件（{attachments.length} 份）
-                                    </Button>
-                                </dd>
-                            </div>
-                        ) : null}
-                    </dl>
-                </section>
+                                    )
+                                },
+                            )}
+                        </WorkspaceFactGrid>
+                    ) : null}
+                </WorkspaceFactGroup>
             ) : null}
 
             <WorkspaceSalesComparisonTable

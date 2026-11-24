@@ -16,6 +16,7 @@ import {
     SearchIcon,
     XIcon,
 } from "lucide-react"
+import { WorkspaceFactGrid, WorkspaceFactItem } from "@/components/business"
 import { MoneyValue } from "@/components/business/values"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -355,45 +356,44 @@ export function ReturnFinanceSummary({
                 </dl>
             </TooltipProvider>
 
-            <dl className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
-                {targetGross !== undefined && (
-                    <div className="inline-flex min-w-0 flex-wrap gap-x-1.5">
-                        <dt className="text-muted-foreground">
-                            退货后采购含税目标额
-                        </dt>
-                        <dd>
+            {targetGross !== undefined ||
+            refundPlan.length > 0 ||
+            returnNumbers.length > 0 ||
+            Boolean(confirmation) ? (
+                <WorkspaceFactGrid columns={3} ariaLabel="退货方案与单据依据">
+                    {targetGross !== undefined ? (
+                        <WorkspaceFactItem label="退货后采购含税目标额" numeric>
                             <FinanceMoney value={targetGross} />
-                        </dd>
-                    </div>
-                )}
-                {refundPlan.map(({ label, value }) => (
-                    <div
-                        key={label}
-                        className="inline-flex min-w-0 flex-wrap gap-x-1.5"
-                    >
-                        <dt className="text-muted-foreground">{label}</dt>
-                        <dd>
+                        </WorkspaceFactItem>
+                    ) : null}
+                    {refundPlan.map(({ label, value }) => (
+                        <WorkspaceFactItem key={label} label={label} numeric>
                             <FinanceMoney value={value} />
-                        </dd>
-                    </div>
-                ))}
-                {returnNumbers.length > 0 && (
-                    <div className="inline-flex min-w-0 flex-wrap gap-x-1.5">
-                        <dt className="text-muted-foreground">退货单</dt>
-                        <dd className="num wrap-anywhere select-all">
-                            {returnNumbers.join("、")}
-                        </dd>
-                    </div>
-                )}
-                {confirmation && (
-                    <div className="flex min-w-0 flex-wrap gap-x-1.5">
-                        <dt className="text-muted-foreground">供应商确认</dt>
-                        <dd className="min-w-0 wrap-anywhere whitespace-pre-wrap">
-                            {confirmation}
-                        </dd>
-                    </div>
-                )}
-            </dl>
+                        </WorkspaceFactItem>
+                    ))}
+                    {returnNumbers.length > 0 ? (
+                        <WorkspaceFactItem
+                            label="退货单"
+                            value={returnNumbers.join("、")}
+                            numeric
+                            selectable
+                            span={returnNumbers.length > 2 ? "full" : 1}
+                        />
+                    ) : null}
+                    {confirmation ? (
+                        <WorkspaceFactItem
+                            label="供应商确认"
+                            value={confirmation}
+                            span={
+                                confirmation.length > 30 ||
+                                confirmation.includes("\n")
+                                    ? "full"
+                                    : 1
+                            }
+                        />
+                    ) : null}
+                </WorkspaceFactGrid>
+            ) : null}
         </section>
     )
 }

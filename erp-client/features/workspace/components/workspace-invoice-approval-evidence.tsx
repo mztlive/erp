@@ -3,7 +3,12 @@
 import { useState, type ReactNode } from "react"
 import { FileTextIcon } from "lucide-react"
 
-import { MoneyValue, detailWorkspaceStyles } from "@/components/business"
+import {
+    MoneyValue,
+    WorkspaceFactGrid,
+    WorkspaceFactItem,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -216,31 +221,6 @@ function EvidenceTable({
     )
 }
 
-export function InvoiceApprovalFact({
-    label,
-    value,
-    numeric,
-}: {
-    label: string
-    value: ReactNode
-    numeric?: boolean
-}) {
-    if (value == null || value === "") return null
-    return (
-        <span className="max-w-full whitespace-pre-wrap wrap-anywhere">
-            <span className="mr-1.5 text-muted-foreground">{label}</span>
-            <span
-                className={cn(
-                    "font-medium text-foreground",
-                    numeric && "num select-all",
-                )}
-            >
-                {value}
-            </span>
-        </span>
-    )
-}
-
 function EvidenceAmount({ value }: { value?: string | null }) {
     return (
         <MoneyValue
@@ -360,20 +340,35 @@ export function InvoiceSourceEvidence({
                     {frozen ? "提交时版本" : "当前生效版本"}
                 </Badge>
             </div>
-            <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
-                <InvoiceApprovalFact
-                    label="销售客户"
-                    value={displayName(source.source.customer)}
-                />
-                {source.source.extra_sections.map((field, index) => (
-                    <InvoiceApprovalFact
-                        key={`${field.label}:${index}`}
-                        label={field.label}
-                        value={field.value}
-                        numeric={field.numeric}
+            <WorkspaceFactGrid
+                columns={3}
+                ariaLabel={frozen ? "提交时销售单信息" : "当前销售单信息"}
+            >
+                {displayName(source.source.customer) ? (
+                    <WorkspaceFactItem
+                        label="销售客户"
+                        value={displayName(source.source.customer)}
                     />
-                ))}
-            </div>
+                ) : null}
+                {source.source.extra_sections
+                    .filter((field) => field.value.trim() !== "")
+                    .map((field, index) => {
+                        const isLong =
+                            field.value.length > 30 ||
+                            field.value.includes("\n") ||
+                            /(?:说明|原因|备注|事由|地址)/.test(field.label)
+                        return (
+                            <WorkspaceFactItem
+                                key={`${field.label}:${index}`}
+                                label={field.label}
+                                value={field.value}
+                                numeric={field.numeric}
+                                selectable={field.numeric}
+                                span={isLong ? "full" : 1}
+                            />
+                        )
+                    })}
+            </WorkspaceFactGrid>
             <EvidenceTable
                 id={`${id}-lines`}
                 title="销售单明细"
@@ -421,24 +416,29 @@ export function InvoiceReceiptEvidence({
 }) {
     return (
         <>
-            <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
-                <InvoiceApprovalFact
-                    label="本笔未回款"
-                    value={<EvidenceAmount value={review.open_total} />}
-                />
-                <InvoiceApprovalFact
-                    label="销售状态"
-                    value={review.sales_status}
-                />
-                <InvoiceApprovalFact
-                    label="履约进度"
-                    value={review.fulfillment_status}
-                />
-                <InvoiceApprovalFact
-                    label="负责销售"
-                    value={displayName(review.sales_owner)}
-                />
-            </div>
+            <WorkspaceFactGrid columns={3} ariaLabel="销售与回款概览">
+                <WorkspaceFactItem label="本笔未回款" numeric>
+                    <EvidenceAmount value={review.open_total} />
+                </WorkspaceFactItem>
+                {review.sales_status ? (
+                    <WorkspaceFactItem
+                        label="销售状态"
+                        value={review.sales_status}
+                    />
+                ) : null}
+                {review.fulfillment_status ? (
+                    <WorkspaceFactItem
+                        label="履约进度"
+                        value={review.fulfillment_status}
+                    />
+                ) : null}
+                {displayName(review.sales_owner) ? (
+                    <WorkspaceFactItem
+                        label="负责销售"
+                        value={displayName(review.sales_owner)}
+                    />
+                ) : null}
+            </WorkspaceFactGrid>
             <p className="text-xs text-muted-foreground">
                 回款按本笔应收核销金额统计。开票时点请核对合同约定。
             </p>

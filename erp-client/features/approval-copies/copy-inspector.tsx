@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ArrowUpRightIcon, ChevronDownIcon, RefreshCwIcon } from "lucide-react"
 
-import { BusinessFailureState } from "@/components/business"
+import {
+    BusinessFailureState,
+    WorkspaceFactGrid,
+    WorkspaceFactItem,
+} from "@/components/business"
 import { PaperDocumentViewport } from "@/components/business/paper-document-viewport"
 import { UnifiedMaterialViewer } from "@/components/business/unified-material-viewer"
 import { Button } from "@/components/ui/button"
@@ -397,60 +401,51 @@ export function CopyInspector({
         )
     }
 
+    const copyNodeLabel = `${COPY_TRIGGER_LABELS[receipt.trigger]}${receipt.node_name ? ` · ${receipt.node_name}` : ""}`
+
     return (
         <div
             data-slot="copy-inspector"
             className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card"
         >
-            <div className={cn("shrink-0 space-y-2 pt-3", padClass)}>
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg bg-surface-sunken px-3.5 py-2.5 text-xs wrap-anywhere">
-                    <dl className="flex min-w-0 flex-1 flex-wrap items-center gap-x-5 gap-y-2">
-                        <div>
-                            <dt className="text-muted-foreground">阅读状态</dt>
-                            <dd className="text-body-compact font-medium">
-                                {isRead ? "已读" : "未读"}
-                            </dd>
-                        </div>
-                        <div>
-                            <dt className="text-muted-foreground">抄送节点</dt>
-                            <dd className="text-body-compact font-medium">
-                                {COPY_TRIGGER_LABELS[receipt.trigger]}
-                                {receipt.node_name
-                                    ? ` · ${receipt.node_name}`
-                                    : ""}
-                            </dd>
-                        </div>
-                        <div>
-                            <dt className="text-muted-foreground">审批轮次</dt>
-                            <dd className="num text-body-compact font-medium">
-                                第 {receipt.round_no} 轮
-                            </dd>
-                        </div>
-                        {copiedAt ? (
-                            <div>
-                                <dt className="text-muted-foreground">
-                                    抄送时间
-                                </dt>
-                                <dd className="num text-body-compact font-medium">
+            <div className={cn("shrink-0 space-y-2 pt-3 pb-2", padClass)}>
+                <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                        <WorkspaceFactGrid columns={3} ariaLabel="抄送信息">
+                            <WorkspaceFactItem
+                                label="阅读状态"
+                                value={isRead ? "已读" : "未读"}
+                            />
+                            <WorkspaceFactItem
+                                label="抄送节点"
+                                value={copyNodeLabel}
+                                span={copyNodeLabel.length > 30 ? "full" : 1}
+                            />
+                            <WorkspaceFactItem
+                                label="审批轮次"
+                                value={`第 ${receipt.round_no} 轮`}
+                                numeric
+                            />
+                            {copiedAt ? (
+                                <WorkspaceFactItem label="抄送时间" numeric>
                                     <time dateTime={copiedAt.dateTime}>
                                         {copiedAt.label}
                                     </time>
-                                </dd>
-                            </div>
-                        ) : null}
-                        <div>
-                            <dt className="text-muted-foreground">附件</dt>
-                            <dd className="num text-body-compact font-medium">
-                                {attachments.length} 份
-                            </dd>
-                        </div>
-                    </dl>
+                                </WorkspaceFactItem>
+                            ) : null}
+                            <WorkspaceFactItem
+                                label="附件"
+                                value={`${attachments.length} 份`}
+                                numeric
+                            />
+                        </WorkspaceFactGrid>
+                    </div>
                     <Button
                         id={`${idPrefix}-refresh`}
                         type="button"
                         variant="ghost"
                         size="xs"
-                        className="ml-auto shrink-0 text-muted-foreground"
+                        className="shrink-0 text-muted-foreground"
                         disabled={query.isFetching}
                         onClick={() => void query.refetch()}
                     >

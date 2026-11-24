@@ -1,6 +1,10 @@
 import type { ReactNode } from "react"
 import { CircleHelpIcon } from "lucide-react"
-import { MoneyValue } from "@/components/business"
+import {
+    MoneyValue,
+    WorkspaceFactGrid,
+    WorkspaceFactItem,
+} from "@/components/business"
 import {
     Tooltip,
     TooltipContent,
@@ -192,27 +196,63 @@ export function PortalReviewOverview({
                     </ReviewKpi>
                 </dl>
             </TooltipProvider>
-            <dl className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
-                <ReviewFact label="申请内容" value={overview.title} />
-                <ReviewFact label="提交说明" value={overview.reason} />
-                <ReviewFact label="品牌" value={overview.brand} />
-                <ReviewFact label="建议商品分类" value={overview.category} />
-                <ReviewFact
-                    label="供应商订货编码"
-                    value={overview.orderingCode}
-                    numeric
-                />
-                <ReviewFact
-                    label="拟生效日期"
-                    value={overview.validFrom}
-                    numeric
-                />
-                <ReviewFact
-                    label="拟失效日期"
-                    value={overview.validTo}
-                    numeric
-                />
-            </dl>
+            {overview.title ||
+            overview.brand ||
+            overview.category ||
+            overview.orderingCode ||
+            overview.validFrom ||
+            overview.validTo ||
+            overview.reason ? (
+                <WorkspaceFactGrid columns={3}>
+                    {overview.title ? (
+                        <WorkspaceFactItem
+                            label="申请内容"
+                            value={overview.title}
+                        />
+                    ) : null}
+                    {overview.brand ? (
+                        <WorkspaceFactItem
+                            label="品牌"
+                            value={overview.brand}
+                        />
+                    ) : null}
+                    {overview.category ? (
+                        <WorkspaceFactItem
+                            label="建议商品分类"
+                            value={overview.category}
+                        />
+                    ) : null}
+                    {overview.orderingCode ? (
+                        <WorkspaceFactItem
+                            label="供应商订货编码"
+                            value={overview.orderingCode}
+                            numeric
+                            selectable
+                        />
+                    ) : null}
+                    {overview.validFrom ? (
+                        <WorkspaceFactItem
+                            label="拟生效日期"
+                            value={overview.validFrom}
+                            numeric
+                        />
+                    ) : null}
+                    {overview.validTo ? (
+                        <WorkspaceFactItem
+                            label="拟失效日期"
+                            value={overview.validTo}
+                            numeric
+                        />
+                    ) : null}
+                    {overview.reason ? (
+                        <WorkspaceFactItem
+                            label="提交说明"
+                            value={overview.reason}
+                            span="full"
+                        />
+                    ) : null}
+                </WorkspaceFactGrid>
+            ) : null}
         </>
     )
 }
@@ -260,32 +300,6 @@ function ReviewKpi({
             </dt>
             <dd className="mt-1 min-w-0 space-y-0.5 wrap-anywhere text-foreground">
                 {children}
-            </dd>
-        </div>
-    )
-}
-
-function ReviewFact({
-    label,
-    value,
-    numeric,
-}: {
-    label: string
-    value: string
-    numeric?: boolean
-}) {
-    if (!value) return null
-    return (
-        <div className="flex min-w-0 items-baseline gap-1.5">
-            <dt className="shrink-0 text-muted-foreground">{label}</dt>
-            <dd
-                className={
-                    numeric
-                        ? "num min-w-0 wrap-anywhere font-medium"
-                        : "min-w-0 wrap-anywhere font-medium"
-                }
-            >
-                {value}
             </dd>
         </div>
     )

@@ -7,6 +7,8 @@ import {
     BusinessFailureState,
     BusinessStatusBadge,
     MoneyValue,
+    WorkspaceFactGrid,
+    WorkspaceFactItem,
     detailWorkspaceStyles,
 } from "@/components/business"
 import { DetailHint } from "@/components/business/detail-presentation"
@@ -81,39 +83,46 @@ export function PurchaseOrderDetailPayableSection({
 
     return (
         <>
-            <section
-                aria-label="采购票款口径与收票进度"
-                className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-5 pb-1 text-xs text-muted-foreground"
-            >
-                <span className="inline-flex items-center gap-1.5">
-                    <span>进项票进度</span>
-                    <StatusBadge
-                        tone={invoiceStatus.tone}
-                        label={invoiceStatus.label}
-                        appearance="text"
-                    />
-                    <DetailHint
-                        id="purchase-order-invoice-hint"
-                        label="收票核销"
-                    >
-                        仅统计已核销到本单的采购发票金额。
-                    </DetailHint>
-                </span>
-                <span
-                    aria-hidden="true"
-                    className="select-none text-muted-foreground/40"
+            <section aria-label="采购票款口径与收票进度" className="pt-5 pb-1">
+                <WorkspaceFactGrid
+                    columns={2}
+                    ariaLabel="采购票款口径与收票进度"
                 >
-                    ·
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                    <span>付款核销口径</span>
-                    <DetailHint
-                        id="purchase-order-payment-hint"
-                        label="付款核销"
+                    <WorkspaceFactItem
+                        label={
+                            <span className="inline-flex items-center gap-1">
+                                <span>进项票进度</span>
+                                <DetailHint
+                                    id="purchase-order-invoice-hint"
+                                    label="收票核销"
+                                >
+                                    仅统计已核销到本单的采购发票金额。
+                                </DetailHint>
+                            </span>
+                        }
                     >
-                        仅统计已核销到本单的付款金额，审批中的付款不计入。
-                    </DetailHint>
-                </span>
+                        <StatusBadge
+                            tone={invoiceStatus.tone}
+                            label={invoiceStatus.label}
+                            appearance="text"
+                        />
+                    </WorkspaceFactItem>
+                    <WorkspaceFactItem
+                        label={
+                            <span className="inline-flex items-center gap-1">
+                                <span>付款核销口径</span>
+                                <DetailHint
+                                    id="purchase-order-payment-hint"
+                                    label="付款核销"
+                                >
+                                    仅统计已核销到本单的付款金额，审批中的付款不计入。
+                                </DetailHint>
+                            </span>
+                        }
+                        value="仅计已核销付款（审批中不计入）"
+                        tone="muted"
+                    />
+                </WorkspaceFactGrid>
             </section>
 
             <DetailRecordSection

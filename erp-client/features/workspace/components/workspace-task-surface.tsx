@@ -4,6 +4,7 @@ import { WorkspaceInspectorModeProvider } from "@/components/business/workspace-
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import { SalesInquiryDetailPage } from "@/features/sales-inquiries/pages/sales-inquiry-detail-page"
+import { hasPermission } from "@/lib/permissions"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceAcceptanceTask } from "./workspace-acceptance-task"
 import { WorkspaceDocumentTaskDetail } from "./workspace-document-task-detail"
@@ -63,6 +64,22 @@ function WorkspaceTaskSurfaceContent({
     inspectorMode = false,
 }: WorkspaceTaskDetailProps) {
     if (item.workItemType === "APPROVAL_REWORK") {
+        if (
+            item.businessObjectType === "purchase_payment_request" &&
+            canReadSensitive &&
+            hasPermission(grantedPermissions, "purchase_payment_request:detail")
+        ) {
+            return (
+                <WorkspacePurchasePaymentRequestSurface
+                    item={item}
+                    reworkTask={item}
+                    canReadSensitive={canReadSensitive}
+                    inspectorMode={inspectorMode}
+                    onDecisionApplied={onDecisionApplied}
+                    onTaskCompleted={onTaskCompleted}
+                />
+            )
+        }
         return (
             <WorkspaceDocumentTaskDetail
                 item={item}

@@ -17,6 +17,9 @@ import {
     QuantityValue,
     RateValue,
     SensitiveValue,
+    WorkspaceFactGrid,
+    WorkspaceFactGroup,
+    WorkspaceFactItem,
     WorkspaceTaskFooter,
     detailWorkspaceStyles,
 } from "@/components/business"
@@ -84,18 +87,18 @@ import { isCommandOutcomeUnknown } from "@/lib/formal-command"
 import { hasPermission } from "@/lib/permissions"
 import { charLimitSchema } from "@/lib/validation/reason-length"
 import {
-    useAccountRevealMutation,
     usePaymentMaterialsQuery,
     useRequestCommandMutation,
     useRequestDownloadMutation,
 } from "../hooks/queries"
-import { fetchMaterialPreview } from "../api"
+import { fetchMaterialPreview, revealPaymentRecipient } from "../api"
 import { requestStatusLabel, requestStatusTone } from "../lib/display"
 import { fulfillmentLabel, paymentReviewBasis } from "../lib/review"
 import type {
     PaymentRequest,
     PaymentTaskContext,
     RequestCommand,
+    RevealedPaymentRecipient,
 } from "../types"
 import { RequestDraftDialog } from "./request-draft-dialog"
 import { RequestMaterials } from "./request-materials"
@@ -147,8 +150,11 @@ export function RequestDetail({
         useState<DestructiveActionKind | null>(null)
     const [unknownReasonAction, setUnknownReasonAction] =
         useState<DestructiveActionKind | null>(null)
+    const [revealedState, setRevealedState] = useState<{
+        key: string
+        recipient: RevealedPaymentRecipient
+    } | null>(null)
     const command = useRequestCommandMutation()
-    const reveal = useAccountRevealMutation()
     const profile = useAccountProfileQuery()
     const submitIdentity = useRef<RequestCommand | null>(null)
     const reasonIdentities = useRef<
@@ -161,6 +167,7 @@ export function RequestDetail({
         request.allowed_actions.map((action) => action.toUpperCase()),
     )
     const reviewId = `ppr-review-${toAutomationIdSegment(task?.workItemId ?? request.id)}`
+    const isReworkTask = task?.workItemType === "APPROVAL_REWORK"
     const isApprovalTask =
         task?.workItemType === "DOCUMENT_APPROVAL" &&
         (task.allowedActions.includes("APPROVE") ||
@@ -194,6 +201,11 @@ export function RequestDetail({
         )
     }
 
+    const recipientKey = request.payment_recipient
+        ? `${request.payment_recipient.bank_account_id}:${request.payment_recipient.version}`
+        : ""
+    const revealedRecipient =
+        revealedState?.key === recipientKey ? revealedState.recipient : null
     const account =
         request.execution_method.type === "bank_transfer" &&
         request.payment_recipient?.bank_account_id &&
@@ -205,13 +217,17 @@ export function RequestDetail({
             "party_bank_account:reveal",
         ) ? (
             <SensitiveValue
-                key={`${request.payment_recipient.bank_account_id}:${request.payment_recipient.version}`}
+                key={recipientKey}
                 id={`${reviewId}-recipient-account`}
                 label="收款账号"
                 maskedValue={
                     request.payment_recipient?.account_number_masked ?? "—"
                 }
-                onReveal={() => reveal.mutateAsync({ request, task })}
+                onReveal={async () => {
+                    const revealed = await revealPaymentRecipient(request, task)
+                    setRevealedState({ key: recipientKey, recipient: revealed })
+                    return revealed.account_number
+                }}
             />
         ) : (
             <span className="num">
@@ -376,6 +392,7 @@ export function RequestDetail({
         <PaymentRequestTaskReview
             request={request}
             account={account}
+            revealedRecipient={revealedRecipient}
             approval={approvalHistory}
             idPrefix={reviewId}
             approvalRoundNo={approvalRoundNo}
@@ -452,14 +469,17 @@ export function RequestDetail({
                     />
                 </WorkspaceTaskFooter>
             )}
-            {!renderChrome && !isPaymentTask && hasManageActions && (
-                <WorkspaceTaskFooter>
-                    <div className="flex flex-wrap justify-end gap-2">
-                        {secondaryActions}
-                        {primaryAction}
-                    </div>
-                </WorkspaceTaskFooter>
-            )}
+            {!renderChrome &&
+                !isPaymentTask &&
+                !isReworkTask &&
+                hasManageActions && (
+                    <WorkspaceTaskFooter>
+                        <div className="flex flex-wrap justify-end gap-2">
+                            {secondaryActions}
+                            {primaryAction}
+                        </div>
+                    </WorkspaceTaskFooter>
+                )}
             <RequestDraftDialog
                 open={editOpen}
                 onOpenChange={setEditOpen}
@@ -1018,6 +1038,7 @@ const LOCATE_HIGHLIGHT_MS = 2200
 export function PaymentRequestTaskReview({
     request,
     account,
+    revealedRecipient,
     approval,
     idPrefix,
     submissionVersion,
@@ -1031,6 +1052,7 @@ export function PaymentRequestTaskReview({
 }: {
     request: PaymentRequest
     account: ReactNode
+    revealedRecipient?: RevealedPaymentRecipient | null
     approval: ReactNode
     idPrefix: string
     review?: ReturnType<typeof buildPaymentReview>
@@ -1066,6 +1088,24 @@ export function PaymentRequestTaskReview({
     }, [])
 
     const bank = request.execution_method.type === "bank_transfer"
+    const recipientAccountName =
+        request.payment_recipient?.account_name?.trim() || ""
+    const recipientAccountNameMissing =
+        !recipientAccountName || recipientAccountName === "未记录"
+    const bankName =
+        revealedRecipient?.bank_name?.trim() ||
+        request.payment_recipient?.bank_name?.trim() ||
+        ""
+    const branchName =
+        revealedRecipient?.bank_branch_name?.trim() ||
+        request.payment_recipient?.bank_branch_name?.trim() ||
+        ""
+    const bankDisplay =
+        bankName && bankName !== "未记录"
+            ? branchName && branchName !== bankName
+                ? `${bankName} · ${branchName}`
+                : bankName
+            : branchName || "未记录"
     const paymentTerms = [
         ...new Set(request.lines.map((line) => line.payment_term_name)),
     ].join("、")
@@ -1228,7 +1268,7 @@ export function PaymentRequestTaskReview({
             )}
 
             <TooltipProvider>
-                <dl className="grid min-w-0 gap-x-5 gap-y-3 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/payment-request:grid-cols-2 @[840px]/payment-request:grid-cols-4">
+                <dl className="grid min-w-0 grid-cols-1 gap-x-5 gap-y-3 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/payment-request:grid-cols-2 @[480px]/payment-request:[&>*:last-child]:col-span-2 @[760px]/payment-request:grid-cols-3 @[760px]/payment-request:[&>*:last-child]:col-span-1">
                     <PaymentKpi
                         id={`${idPrefix}-amount`}
                         label="本次申请付款金额"
@@ -1309,73 +1349,116 @@ export function PaymentRequestTaskReview({
                             )}
                         </p>
                     </PaymentKpi>
-                    <PaymentKpi
-                        id={`${idPrefix}-account`}
-                        label={
-                            bank ? "收款账户与付款条件" : "预存款账户与付款条件"
-                        }
-                        basis={bank ? "银行转账" : "供应商预存款"}
-                        highlighted={locatedId === `${idPrefix}-account`}
-                    >
-                        <div className="wrap-anywhere text-body-compact font-medium">
-                            {bank
-                                ? (request.payment_recipient?.account_name ??
-                                  "未记录")
-                                : "供应商预存款"}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                            {bank ? (
-                                <>
-                                    {request.payment_recipient?.bank_name}
-                                    {account}
-                                </>
-                            ) : (
-                                request.deposit_account?.identity
-                                    .external_account_ref && (
-                                    <span className="num">
-                                        ****
-                                        {request.deposit_account.identity.external_account_ref.slice(
-                                            -4,
-                                        )}
-                                    </span>
-                                )
-                            )}
-                        </div>
-                        <p className="wrap-anywhere text-tiny text-muted-foreground">
-                            {paymentTerms || "未标注付款条件"}
-                        </p>
-                    </PaymentKpi>
                 </dl>
             </TooltipProvider>
 
-            <dl className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
-                {[
-                    ["付款主体", request.our_company_name],
-                    ["申请人", request.applicant_name],
-                    [
-                        "希望付款日",
-                        <span key="date" className="num">
-                            {request.desired_payment_date}
-                        </span>,
-                    ],
-                    ["申请说明", request.description],
-                    ["关闭原因", request.close_reason],
-                ].map(([label, value]) =>
-                    value ? (
-                        <div
-                            key={String(label)}
-                            className="flex min-w-0 items-baseline gap-2"
-                        >
-                            <dt className="shrink-0 text-muted-foreground">
-                                {label}
-                            </dt>
-                            <dd className="min-w-0 whitespace-pre-wrap wrap-anywhere">
-                                {value}
-                            </dd>
-                        </div>
-                    ) : null,
-                )}
-            </dl>
+            <WorkspaceFactGroup
+                id={`${idPrefix}-account`}
+                highlighted={locatedId === `${idPrefix}-account`}
+                title={bank ? "付款与收款账户" : "付款与预存款账户"}
+            >
+                <WorkspaceFactGrid
+                    columns={3}
+                    ariaLabel={bank ? "付款与收款账户" : "付款与预存款账户"}
+                >
+                    <WorkspaceFactItem
+                        label="我方付款主体"
+                        value={request.our_company_name}
+                    />
+                    <WorkspaceFactItem
+                        label="付款方式"
+                        value={bank ? "银行付款" : "供应商预存款"}
+                    />
+                    <WorkspaceFactItem
+                        label="希望付款日"
+                        value={request.desired_payment_date}
+                        numeric
+                        selectable
+                    />
+                    {bank ? (
+                        <>
+                            <WorkspaceFactItem
+                                label="收款户名"
+                                value={recipientAccountName || "未记录"}
+                                tone={
+                                    recipientAccountNameMissing
+                                        ? "destructive"
+                                        : "default"
+                                }
+                            />
+                            <WorkspaceFactItem
+                                label="开户行"
+                                value={bankDisplay}
+                                tone={
+                                    bankDisplay === "未记录"
+                                        ? "destructive"
+                                        : "default"
+                                }
+                            />
+                            <WorkspaceFactItem label="收款账号" numeric>
+                                {account}
+                            </WorkspaceFactItem>
+                            {revealedRecipient ? (
+                                <WorkspaceFactItem
+                                    label="联行号"
+                                    value={
+                                        revealedRecipient.bank_routing_number ||
+                                        "未填写"
+                                    }
+                                    numeric
+                                    selectable
+                                    tone={
+                                        !revealedRecipient.bank_routing_number
+                                            ? "warning"
+                                            : "default"
+                                    }
+                                />
+                            ) : null}
+                        </>
+                    ) : (
+                        <WorkspaceFactItem
+                            label="预存款账户"
+                            numeric
+                            value={
+                                request.deposit_account?.identity
+                                    .external_account_ref
+                                    ? `人民币预存款 · ****${request.deposit_account.identity.external_account_ref.slice(-4)}`
+                                    : "账户已冻结"
+                            }
+                        />
+                    )}
+                </WorkspaceFactGrid>
+            </WorkspaceFactGroup>
+
+            <WorkspaceFactGroup divider title="申请信息">
+                <WorkspaceFactGrid columns={3} ariaLabel="申请信息">
+                    <WorkspaceFactItem
+                        label="供应商"
+                        value={request.supplier_name}
+                    />
+                    <WorkspaceFactItem
+                        label="申请人"
+                        value={request.applicant_name}
+                    />
+                    <WorkspaceFactItem
+                        label="付款条件"
+                        value={paymentTerms || "未标注付款条件"}
+                        tone={paymentTerms ? "default" : "muted"}
+                    />
+                    <WorkspaceFactItem
+                        label="申请说明"
+                        value={request.description}
+                        span="full"
+                    />
+                    {request.close_reason ? (
+                        <WorkspaceFactItem
+                            label="关闭原因"
+                            value={request.close_reason}
+                            span="full"
+                        />
+                    ) : null}
+                </WorkspaceFactGrid>
+            </WorkspaceFactGroup>
 
             <section
                 id={sourceId}

@@ -1,56 +1,65 @@
 # ERP 任务页设计系统（Task Page Design System）
 
 > **设计基准标杆**：
-> - **原型 A（决策审查与双屏对照型）**：采购单审批页 [`erp-client/features/workspace/components/workspace-purchase-approval.tsx`](../erp-client/features/workspace/components/workspace-purchase-approval.tsx) × [`workspace-purchase-source-comparison.tsx`](../erp-client/features/workspace/components/workspace-purchase-source-comparison.tsx) × [`workspace-document-task-detail.tsx`](../erp-client/features/workspace/components/workspace-document-task-detail.tsx) × [`approval-action-bar.tsx`](../erp-client/features/approval-workflow/components/approval-action-bar.tsx)
-> - **原型 B（渐进式高密度编制与配平型）**：供给分配页 [`erp-client/features/workspace/components/workspace-procurement-task.tsx`](../erp-client/features/workspace/components/workspace-procurement-task.tsx) × [`purchase-order-create-page.tsx`](../erp-client/features/purchase-orders/pages/purchase-order-create-page.tsx) × [`sourcing-product-adjust-dialog.tsx`](../erp-client/features/purchase-orders/components/sourcing-product-adjust-dialog.tsx) × [`purchase-order-create-preview.tsx`](../erp-client/features/purchase-orders/components/purchase-order-create-preview.tsx)
+> - **原型 A（决策审查与双屏对照型）**：
+>   - **A1 多行明细对照型**：采购单审批页 [`erp-client/features/workspace/components/workspace-purchase-approval.tsx`](../erp-client/features/workspace/components/workspace-purchase-approval.tsx) × [`workspace-purchase-source-comparison.tsx`](../erp-client/features/workspace/components/workspace-purchase-source-comparison.tsx) × [`approval-action-bar.tsx`](../erp-client/features/approval-workflow/components/approval-action-bar.tsx)
+>   - **A2 核心要素与凭证核验型（财务 / 票据 / 资金 / 主数据审查）**：以结构化核心信息网格 + 关联业务依据 + 右轨凭证对照为核心，适用于付款申请、回款审批、开票审批、退款、红字冲正与主数据准入审核
+> - **原型 B（业务编制与执行登记型）**：
+>   - **B1 渐进式高密度编制与配平型**：供给分配页 [`erp-client/features/workspace/components/workspace-procurement-task.tsx`](../erp-client/features/workspace/components/workspace-procurement-task.tsx) × [`purchase-order-create-page.tsx`](../erp-client/features/purchase-orders/pages/purchase-order-create-page.tsx) × [`sourcing-product-adjust-dialog.tsx`](../erp-client/features/purchase-orders/components/sourcing-product-adjust-dialog.tsx) × [`purchase-order-create-preview.tsx`](../erp-client/features/purchase-orders/components/purchase-order-create-preview.tsx)
+>   - **B2 单笔核验与执行登记型**：适用于出纳付款执行、销项开票登记、退货退款/红票登记与付款安排（上部结构化只读核验区 + 下部录入表单 + 按需对照右轨）
 >
 > **主题体系**：飞书 Universe Design / 纯白通栏工作面（与 [`docs/typography-design-system.md`](./typography-design-system.md)、[`docs/list-table-design-system.md`](./list-table-design-system.md)、[`docs/detail-page-design-system.md`](./detail-page-design-system.md) 100% 同源）  
-> **适用范围**：工作台（`/workspace/*`）下所有审批决策、业务编制、异常处理与速览任务页，以及嵌入分栏队列检查器（SplitQueue）、768px 抽屉（`TaskActionSheet`）和全屏办理页的多载体作业面。
+> **适用范围**：工作台（`/workspace/*`）下所有审批决策、财务核验、业务编制、执行登记、驳回重办、异常处理与速览任务页，以及嵌入分栏队列检查器（SplitQueue）、768px 抽屉（`TaskActionSheet`）和全屏办理页的多载体作业面。
 
 ---
 
-## 1. 设计哲学与双标杆原型模型
+## 1. 设计哲学与多场景原型模型
 
 任务页（Task Page）与列表页、主数据详情页有本质区别：列表页追求「批量扫描与路由」，详情页追求「完整档案读写」，而**任务页的核心目标是让经办人在最短认知路径内完成一次高确定性的业务判断或状态推进**。
 
-采购单审批页与供给分配页之所以成为当前系统中体验最出色的两个任务页，是因为它们分别把企业级任务的两极推到了极致，同时共享同一套纯白通栏骨架与语义令牌：
+不同业务任务的**信息重心**存在本质差异：多行商品类任务重心在「逐行比价/配平」，财务/票据/资金类任务重心在「单据核心要素、账户/税票信息与原始凭证核验」。因此，全站任务页共享同一套**纯白通栏骨架与语义令牌**，但**内容区组织方式按任务信息重心分为 4 个子原型**（绝不拿多行商品表的局部布局强套所有任务）：
 
-| 维度 | 原型 A：决策审查与双屏对照型（标杆：采购单审批页） | 原型 B：渐进式高密度编制与配平型（标杆：供给分配页） |
-| --- | --- | --- |
-| **工作台原型值** | `archetype="decision"` | `archetype="action"`（`fullWidth: true`） |
-| **核心认知闭环** | 一秒识风险 → 指标定口径 → 逐行核明细 → 右轨对依据 → 底栏低摩擦拍板 | 系统预配兜底 → 主表就地微调 → 原地批量提效 → 全屏双栏精调 → 分单预览与回改提交 |
-| **主画布拓扑** | 72/28（可拖至 48/52）常驻可折叠双栏；右轨依页签自动扩宽 | 100% 全宽主表；右轨「对照销售单」默认折叠，按需展开（38%）或窄屏回退弹窗 |
-| **复杂度消解方式** | **异常优先聚合 + 按需深挖**（顶部风险条直达筛选、合规项默认折叠、多地址收入弹窗） | **四级渐进披露（L0 → L1 → L2 → L3）**（轻检查器 → 主表就地微调 → 全屏精调 → 分单预览） |
-| **交互密度控制** | 阈值化显隐控件（`> 8` 行才显筛选，`> 20` 行才分页）；健康行极净，仅风险行附着紧贴风险条 | 7 列零横滚主表预算；上下文变形单行工具栏（筛选态 ↔ 勾选批量态原地替换） |
-| **防错与风控哲学** | **分级风控（ADR-1）**：低风险零弹窗一键通过，高风险触发同源风控确认框；驳回自带动态上下文短语 | **实时守恒与自愈**：总量/余额实时配平、一键自动补配/缩减、撤销快照、提交前预览可一键回改任意异常商品 |
-| **适用业务场景** | 采购审批、销售审批、付款/收款审批、开票/退票审批、冲销与单据变更审批 | 供给分配与建采购单、批次配货/发运排程、收款核销配平、入库/质检分配、对账勾稽 |
+| 维度 | 原型 A1：多行明细对照审查型 | 原型 A2：核心要素与凭证核验型 | 原型 B1：高密度多行编制配平型 | 原型 B2：单笔核验与执行登记型 |
+| --- | --- | --- | --- | --- |
+| **工作台原型值** | `archetype="decision"` | `archetype="decision"` | `archetype="action"`（`fullWidth: true`） | `archetype="action"` |
+| **信息重心** | 多行 SKU 价格/毛利/条款对照为主，头部信息为辅 | **主信息、资金账户、税票要素与原始凭证为主**，关联明细通常 0~3 行 | 多行来源选择、数量守恒配平与拆单预览 | **上部清晰只读执行依据 + 下部单笔录入表单** |
+| **核心认知闭环** | 识风险 → 定口径 → 核主信息 → 逐行核明细 → 右轨对照 → 底栏拍板 | 识风险 → 看核心金额/余额 → **逐项核对结构化业务/账户要素** → 查关联单据依据 → 右轨核凭证 → 底栏拍板 | 系统预配 → 主表就地微调 → 原地批量 → 全屏精调 → 分单预览提交 | 核余额与账户/税票要素（支持显文/复制） → 填写实付/发票表单 → 按需对照原单/回单 → 底栏提交 |
+| **主画布拓扑** | 72/28（可拖至 48/52）常驻可折叠双栏；右轨依页签自动扩宽 | 同 A1 常驻可折叠双栏；存在回单/合同/发票附件时强化左字段 ↔ 右凭证对照 | 100% 全宽主表；右轨参照单默认折叠，按需展开（38%）或窄屏弹窗 | 上部结构化只读核验区 + 限宽（`max-w-4xl`）表单区；参照单/凭证右轨默认折叠按需展开 |
+| **主信息呈现铁律** | **结构化 2~3 列键值网格（12px 标签 + 13px 正文值）**，严禁压成一行 12px 小字 | **分组结构化键值网格为主视觉**（如收付款账户独立成组，完整呈现户名/开户行/联行号/账号） | 页头交代单据身份；核心业务背景以结构化网格或清晰摘要呈现 | 账户/开票抬头/税号等关键执行要素独立分组、带显文与一键复制 |
+| **适用业务场景** | 采购单审批、销售单审批、单据变更 Diff 审批 | 付款申请审批、回款审批、开票审批、客户/供应商退款审批、收付款红字冲正审批、供应商准入审核 | 供给分配建采购单、询价处理、采购货源更新、发货打包、验收登记、供应商结算复核 | 出纳付款执行、销项开票登记、退货退款登记、退货进项红票登记、采购付款安排 |
 
-> **与其他两个原型的衔接**：`UnifiedTaskWorkbench` 共定义 4 个工作台原型——除上述两大主战场 `decision` 与 `action` 外，`investigation`（异常排查型，如同步失败/单据异常）复用原型 A 的可折叠右轨架构，将右轨替换为「诊断载荷与重放日志」；`informational`（速览型，如通知确认/轻量确认）复用原型 B 的无右轨精简画布与 L0 检查器模式，常驻分栏队列或 `TaskActionSheet` 内完成闭环。
+> **与其他两个原型的衔接**：`UnifiedTaskWorkbench` 共定义 4 个工作台原型——除上述 `decision`（A1/A2）与 `action`（B1/B2）外，`investigation`（异常排查型，如同步失败/单据异常/履约调查）复用原型 A 的可折叠右轨架构，主区采用结构化故障事实网格 + 影响对象表，右轨替换为「诊断载荷与重放日志」；`informational`（速览型，如通知确认/轻量确认）采用无右轨精简画布，同样遵守核心信息结构化展示规范。
 
-### 七条黄金法则
+### 八条黄金法则
 
 1. **纯白通栏零套娃，空间只服务业务判断**
    - 作业面铺满 `bg-card` 纯白通栏，取消浅灰背景画布与多层嵌套白卡边框；页头、分区、双栏分界、底栏统一仅靠 `1px` `border-border/60` 细线与 `--scaffold-px`（`<768px: 16px` / `768~1199px: 20px` / `≥1200px: 24px`）左沿对齐建立秩序。
-   - 顶部页头压缩至 `56px` 单行（`min-h-14`），底部操作栏压缩至 `48px` 单行（`min-h-12`）；全宽审批页直接隐藏顶部审批路线进度条（已停靠右侧 `审批记录` 轨），把首屏 100% 让位给风险横幅、决策 KPI 与业务明细。
+   - 顶部页头压缩至 `56px` 单行（`min-h-14`），底部操作栏压缩至 `48px` 单行（`min-h-12`）；全宽审批页直接隐藏顶部审批路线进度条（已停靠右侧 `审批记录` 轨），把首屏 100% 让位给风险横幅、核心决策信息与业务内容。
+   - **去套娃绝不等于削弱信息可读性**：去掉的是冗余灰底和外框，不是把核心业务字段压缩成难以扫视的小字。
 2. **首屏即真相：异常前置、合规退后、重提讲变化**
-   - 没有风险时不占一像素（零空态横幅）；有风险时在最上方以 `border-l-2` 左色条聚合计数，并提供**一键过滤跳转按钮**（如 `仅看风险项（N）›`、`N 项待完善 · 定位`）。
+   - 没有风险时不占一像素（零空态横幅）；有风险时在最上方以 `border-l-2` 左色条聚合计数，并提供**一键过滤/定位按钮**（如 `仅看风险项（N）›`、`N 项待完善 · 定位`）。
    - 多轮重提任务必须前置 `WorkspaceApprovalResubmissionBanner`，以「上轮驳回原因 + 本轮字段 diff 胶囊（`旧值 → 新值`）」两句话闭环解释「上次为什么打回、这次改了什么」。
-   - 核对类清单（如采销商业条款对照）按严重度降序排列，所有 `ok` 合规项自动折叠为单行静音摘要（`✓ 已匹配：资金 · 履约 ∨`）。
-3. **渐进式复杂度披露（L0 / L1 / L2 / L3），拒绝一屏堆砌**
-   - 80% 的常规操作必须在主表原地完成（单元格内联选源、改量、改交期、选目标仓），无需打开任何弹窗。
+   - 核对类清单（如采销商业条款对照、变更单未变更字段）按严重度降序排列，所有 `ok` 合规项自动折叠为单行静音摘要（`✓ 已匹配：资金 · 履约 ∨`）。
+3. **核心业务信息结构化呈现，禁止压成一行小字（全任务铁律）**
+   - **每个任务的主单据事实都是核心决策信息**——包括但不限于往来单位、我方主体、申请人/经办人、付款/结算方式、收付款账户（户名、开户行、联行号、账号）、开票抬头与税号、金额与日期、付款条件、申请说明/事由/原因、来源单据等。
+   - **严禁将上述核心业务信息塞进 `flex-wrap gap-x-5 text-xs` 一行碎字流**。所有任务页一律使用纯白无框的**结构化 2~3 列键值网格**（`12px` 柔灰标签 `dt` + `13px` 正文值 `dd`，严格对齐 [`docs/typography-design-system.md`](./typography-design-system.md)），长文本自动通栏，银行账户/税务资料等复合核验对象拆字段成组展示，支持 `.num select-all`、一键复制与权限内显文。
+   - KPI 指标带仅承载真正具备决策价值的量化金额/余额/毛利/进度；**严禁为凑格把「明细行数：1 行」升格为主 KPI**，也严禁把复杂银行账户或开票资料硬塞进 KPI 窄格里截断。
+4. **渐进式复杂度披露（L0 / L1 / L2 / L3），拒绝一屏堆砌**
+   - 80% 的常规操作必须在主工作面原地完成（单元格内联选源、改量、改交期、选目标仓，或单笔执行表单直接提交），无需打开任何弹窗。
    - 20% 的复杂长尾场景（多地址拆单、多供应商比价、50 处收货地址核对）下沉至全屏双栏精调工作台（`Dialog size="full"`）或双视角专题弹窗（`Dialog size="lg"`），且弹窗内必须支持连续切换上下项、原地预览，彻底禁止 Dialog 叠 Sheet 或弹窗套弹窗。
-4. **同源色彩与双编码，不靠单一颜色或隐性符号传意**
+5. **同源色彩与双编码，不靠单一颜色或隐性符号传意**
    - 盈亏金额同时使用中文前缀与语义色（`赚 ¥120.00` 绿色 / `亏 ¥50.00` 红色 / `¥0.00` 中性），不靠极小的 `-` 号赌视力。
    - 多来源编制场景建立「路径色（4 种履约模式）× 来源序号色（5 档 `chart-1..5`）」同源色标体系（[`source-palette.ts`](../erp-client/features/purchase-orders/lib/sourcing/source-palette.ts)），顶部配平堆叠条、左侧来源卡、右侧地址过滤胶囊与行内分配按钮 100% 共用同一索引色，视线扫过即可瞬时建立空间映射。
-   - 所有数字、金额、单号、日期、百分比一律挂载 `.num`（`tabular-nums lining-nums slashed-zero`），并使用 `MoneyValue` / `QuantityValue` / `RateValue` 原语输出。
-5. **跨区双向定位与原地闭环，拒绝人工肉眼找行**
-   - 任何存在「主视图 ↔ 对照视图」或「告警/汇总 ↔ 细项」关系的任务页，必须提供程序化定位能力：点击来源对照行直接定位并脉冲高亮主表对应行（`2.2s` 高亮，自动清筛选、自动切页、平滑滚动）；点击底栏异常胶囊或预览弹窗「回改」按钮直达问题商品。
+   - 所有数字、金额、单号、税号、账号、联行号、日期、百分比一律挂载 `.num`（`tabular-nums lining-nums slashed-zero`），并使用 `MoneyValue` / `QuantityValue` / `RateValue` 原语输出。
+6. **跨区双向定位与原地闭环，拒绝人工肉眼找行**
+   - 任何存在「主视图 ↔ 对照视图」或「告警/汇总 ↔ 细项/要素」关系的任务页，必须提供程序化定位能力：点击风险项或来源对照行直接定位并脉冲高亮目标行或目标核验区块（`2.2s` 高亮，自动清筛选、自动切页、平滑滚动）；点击底栏异常胶囊或预览弹窗「回改」按钮直达问题项。
    - 关联字段修改支持**上下文传播**（如在某行修改目标仓后，就地浮现 `同步目标仓到其余 N 个入仓项`）与**原地自愈**（如供给超配/缺配时直接提供 `自动缩减多余直发 -X` / `直发自动补配 +X`）。
-6. **低摩擦队列流转与分级风控**
+7. **低摩擦队列流转与分级风控**
    - 底部操作栏统一提供 `☑ 处理后自动下一项`（`localStorage` 持久化），配合全局键盘引擎（`J`/`K` 切项、`A` 通过、`R` 驳回、`P` 附件、`H` 记录、`]` 开关右轨、`?` 快捷键面板、`Ctrl/Cmd+Enter` 提交），让高频审单/配货形成无停顿的流水线。
    - 审批通过按风险分级（ADR-1）：常规低风险单零弹窗直接执行并支持自动跳下一项；命中风控规则时才弹出唯一确认弹窗，并复用同一套风控计算引擎列出逐条风险原因。
-7. **多宿主同构与确定性容错**
+8. **多宿主同构、驳回不降级与确定性容错**
    - 同一业务任务必须优雅适配三种宿主：分栏队列检查器（`SplitQueue`）、768px 抽屉（`TaskActionSheet`）与完整全屏办理页；通过 `WorkspaceInspectorModeProvider` 抑制重复页头，通过专属轻检查器（如 `WorkspaceProcurementInspector`）保证 768px 内零横滚且共享同一份 Query 缓存与草稿状态。
+   - **驳回重办与查看态绝不降级**：`APPROVAL_REWORK`（驳回待处理）与只读审批查看必须复用对应业务单据的专用专业视图（完整保留金额余额、结构化账户/要素与业务依据），仅叠加顶部驳回说明横幅与底部修改/重提操作栏，禁止统一回落到丢字段、错表头的通用兜底摘要。
    - 所有正式提交必须具备草稿自动持久化、幂等键锁死（`IdempotencySlot`）、`OUTCOME_UNKNOWN` 核对恢复条与乐观锁冲突刷新，确保网络抖动时不丢数、不重复建单。
 
 ---
@@ -75,9 +84,10 @@
 │  • archetype="decision"：默认占 72%（右轨 28%），可拖拽至 48%     │  • 1px 竖细线 + 拖拽手柄 (Resizable) │
 │  • archetype="action"  ：默认占 100% 全宽；右轨按需展开（38%）    │  • decision 默认展开，action 默认折叠 │
 │                                                                   │  • storageKey 持久化拖拽后宽度        │
-│  1. 条件横幅层（重提对比条 / 风险聚合跳转条）                      │  • 切入对照页签自动扩宽至 38% / 42%   │
-│  2. 决策指标层（4 格柔底 KPI 栏，或精简摘要槽位）                  │  • 切回审批记录时自动恢复原宽度       │
-│  3. 业务核心层（高密度对照表 / 可编辑主表 + 变形工具栏）           │  • <960px 自动降级为底部区块或弹窗    │
+│  1. 条件横幅层（驳回/重提对比条 / 风险聚合跳转条）                 │  • 切入对照页签自动扩宽至 38% / 42%   │
+│  2. 决策指标层（有价值金额/余额/毛利 KPI 带，严禁低价值计数凑格）  │  • 切回审批记录时自动恢复原宽度       │
+│  3. 核心业务信息层（结构化 2~3 列键值网格 · 12px标签 + 13px正文值）│  • <960px 自动降级为底部区块或弹窗    │
+│  4. 业务核心层（高密度对照表 / 关联单据依据表 / 可编辑主表 / 表单）│                                      │
 │                                                                   │                                      │
 ├───────────────────────────────────────────────────────────────────┴──────────────────────────────────────┤
 │ [Sticky Footer Dock · min-h-12 (48px) · bg-card · border-t border-border/60 · shadow-footer]              │
@@ -164,8 +174,8 @@ ERP 任务页同时运行于大屏、中屏、768px 抽屉和分栏队列检查�
 | 顶级摘要 KPI（如整单含税总额） | `text-value-section` | `24px / 30px` | `font-semibold tracking-tight num`，全页至多 1 个，确立第一视觉锚点 |
 | 次级决策 KPI（如毛利额、账期、拆单数） | `text-value-compact` | `20px / 26px` | `font-semibold num`，紧随主 KPI 形成清晰主次梯度 |
 | 任务页头标题 / 弹窗主标题 | `text-section-title` | `15px / 22px` | `font-semibold tracking-tight text-foreground` |
-| 主表正文 / 商品名 / 金额 / 按钮 / 输入值 | `text-body-compact` | `13px / 20px` | 默认作业面字号；所有数值、单号、日期追加 `.num` |
-| 字段标签 / 表头 / 商业元数据 / 风险说明 / 辅助提示 | `text-xs` | `12px / 18px` | 标签退后为 `text-muted-foreground` 或 `text-foreground/75` |
+| 主表正文 / **核心业务信息键值（`dd`）** / 商品名 / 金额 / 按钮 / 输入值 | `text-body-compact` | `13px / 20px` | 默认作业面字号；**所有单据核心事实（主体、账户、开户行、联行号、税号、日期、说明等）的值必须使用 `13px` 正文**；所有数值、单号、账号、税号、日期追加 `.num` |
+| 字段标签（`dt`） / 表头 / 页头次要元信息 / 风险说明 / 辅助提示 | `text-xs` | `12px / 18px` | 标签退后为 `text-muted-foreground` 或 `text-foreground/75`；**严禁用于承接单据核心业务事实的值** |
 | 微胶囊 / 指标口径副标 / 序号标签 / 价格梯度注脚 | `text-tiny` | `11px / 16px` | 用于 `含税`、`供给 − 采购`、`源1`、`第 2 轮重提` 等超轻辅助标注 |
 
 ### 3.3 高信噪比信息编码规范
@@ -199,15 +209,19 @@ ERP 任务页同时运行于大屏、中屏、768px 抽屉和分栏队列检查�
 
 ---
 
-## 4. 原型 A 规范：决策审查与双屏对照型任务页
+## 4. 原型 A 规范：决策审查与双屏对照型任务页（A1 多行对照 × A2 要素核验）
 
-> **设计标杆**：采购单审批页（[`workspace-purchase-approval.tsx`](../erp-client/features/workspace/components/workspace-purchase-approval.tsx)、[`workspace-purchase-comparison-table.tsx`](../erp-client/features/workspace/components/workspace-purchase-comparison-table.tsx)、[`workspace-purchase-source-comparison.tsx`](../erp-client/features/workspace/components/workspace-purchase-source-comparison.tsx)、[`workspace-approval-context-rail.tsx`](../erp-client/features/workspace/components/workspace-approval-context-rail.tsx)、[`approval-action-bar.tsx`](../erp-client/features/approval-workflow/components/approval-action-bar.tsx)）
+> **设计标杆**：
+> - **A1 多行明细对照型**：采购单审批页（[`workspace-purchase-approval.tsx`](../erp-client/features/workspace/components/workspace-purchase-approval.tsx)、[`workspace-purchase-comparison-table.tsx`](../erp-client/features/workspace/components/workspace-purchase-comparison-table.tsx)、[`workspace-purchase-source-comparison.tsx`](../erp-client/features/workspace/components/workspace-purchase-source-comparison.tsx)、[`workspace-approval-context-rail.tsx`](../erp-client/features/workspace/components/workspace-approval-context-rail.tsx)、[`approval-action-bar.tsx`](../erp-client/features/approval-workflow/components/approval-action-bar.tsx)）
+> - **A2 核心要素与凭证核验型**：付款申请审批/驳回重办、回款审批、开票审批、退款审批、红字冲正审批、供应商准入审核（突出结构化核心要素网格 + 业务依据 + 右轨凭证核验）
 
 ### 4.1 垂直解剖与认知流
 
+#### A1：多行明细对照审查型（如采购/销售审批）
+
 ```text
 ┌────────────────────────────────────────────────────────────────┬────────────────────────────────────┐
-│ [Left Main Canvas · 默认 72% · @container/purchase-lines]       │ [Right Context Rail · 默认 28%]    │
+│ [Left Main Canvas · 默认 72% · @container/document]            │ [Right Context Rail · 默认 28%]    │
 │                                                                │  TabsList variant="line" (单层页签)│
 │ 1. [条件层] 重提对照横幅 (Round >= 2 才渲染)                    │  审批记录 | 附件对照(3) | 采销对照(1)│
 │    [第 2 轮重提] 对比基准 V1 · 重提说明：已与供应商重议单价       │  ────────────────────────────────  │
@@ -219,16 +233,18 @@ ERP 任务页同时运行于大屏、中屏、768px 抽屉和分栏队列检查�
 │    ▌ 发现 3 处异常：对外负毛利 1 · 超来源需求 1 · 交期晚 1       │       ✓ 已匹配项折叠为单行静音条   │
 │                                        [仅看风险项（3）›]       │    2) 采销覆盖条 + 成本结构条      │
 │                                                                │    3) 税前/税后双毛利卡片(税损pp)  │
-│ 3. [决策指标层] 柔底 4 格 KPI 带 (bg-surface-sunken rounded-lg) │    4) 逐行价格链 + [采#2 ⌖ 定位]   │
+│ 3. [决策指标层] 柔底 KPI 带 (bg-surface-sunken rounded-lg)     │    4) 逐行价格链 + [采#2 ⌖ 定位]   │
 │    ┌────────────┬────────────┬────────────┬─────────────────┐  │                                    │
 │    │ 采购含税总额│ 对比供给价 │ 对比销售价  │ 付款与交付      │  │                                    │
 │    │ ¥52,400.00 │ 赚 ¥1,200  │ 赚 ¥8,600  │ 月结30天 [先款] │  │                                    │
 │    │ 含税 · ?   │ +2.3% · 4/4│ +16.4% · ? │ [配送地址(12处)]│  │                                    │
 │    └────────────┴────────────┴────────────┴─────────────────┘  │                                    │
 │                                                                │                                    │
-│ 4. [商业元数据流] 极平折行流 (flex-wrap gap-x-5 text-xs)        │                                    │
-│    供应商评级 ★★★★☆ 4.8 · 采购员 张三 · 税率 13%专票           │                                    │
-│    来源销售单：SO-2026-0188 · XX科技 · V1 [采销对照] [预览销售单]│                                    │
+│ 4. [核心业务信息层] 无框结构化 2~3 列键值网格 (12px标签+13px值) │                                    │
+│    供应商评级        采购员 / 申请人     税率与开票              │                                    │
+│    ★★★★☆ 4.8       张三               13% 增值税专票          │                                    │
+│    来源销售单 (col-span-full)                                   │                                    │
+│    SO-2026-0188 · XX科技 · V1   [采销对照] [预览销售单]         │                                    │
 │                                                                │                                    │
 │ 5. [明细核对层] 阈值化过滤条 + 无框圆角表头 + 双层风险行         │                                    │
 │    [全部 12] [仅看风险项 3]                        [搜索商品…] │                                    │
@@ -243,27 +259,78 @@ ERP 任务页同时运行于大屏、中屏、768px 抽屉和分栏队列检查�
 └─────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+#### A2：核心要素与凭证核验型（如付款申请、回款审批、开票审批、退款/冲正）
+
+```text
+┌────────────────────────────────────────────────────────────────┬────────────────────────────────────┐
+│ [Left Main Canvas · 默认 72% · @container/document]            │ [Right Context Rail · 默认 28%]    │
+│                                                                │  审批记录 | 附件对照(1) | 单据全动态│
+│ 1. [条件层] 驳回说明 / 重提 diff / 财务风险聚合条 (按需渲染)     │  ────────────────────────────────  │
+│    ▌ 发现 1 处风险：缺少联行号 · 超过可申请余额   [定位核验 ›]  │  • 与左侧结构化核心信息形成        │
+│                                                                │    「左字段 ↔ 右回单/合同/发票」   │
+│ 2. [核心金额带] 柔底资金 KPI 带 (仅放高价值金额/余额/进度)       │    双屏逐项交叉核验                │
+│    ┌───────────────┬───────────────────┬─────────────────────┐ │  • 切入附件对照自动扩宽至 42%      │
+│    │ 本次申请金额   │ 采购可申请余额     │ 本申请已付 / 待付   │ │                                    │
+│    │ ¥52.00        │ ¥52.00            │ 待付 ¥52.00         │ │                                    │
+│    │ 含税 · 1张PO  │ 总额¥52 · 进度0%   │ 已付 ¥0.00          │ │                                    │
+│    └───────────────┴───────────────────┴─────────────────────┘ │                                    │
+│                                                                │                                    │
+│ 3. [核心业务信息层 · 分组结构化 2~3 列键值网格 · 主核验区]       │                                    │
+│    ▸ 付款与收款账户（border-t border-border/60 分组，逐项对齐）  │                                    │
+│      我方付款主体             付款方式           希望付款日      │                                    │
+│      广东福尚云科技有限公司   银行付款           2026-11-04      │                                    │
+│      收款户名                 开户行             联行号          │                                    │
+│      广州市燕联食品有限公司   农行广州燕岭支行    103581000...   │                                    │
+│      收款账号 (支持权限内显文与复制)                             │                                    │
+│      ********1241 [查看完整账号] [复制]                          │                                    │
+│    ▸ 申请信息                                                   │                                    │
+│      供应商                   申请人             付款条件        │                                    │
+│      广州市燕联食品有限公司   潘丽萍             货到验收付款    │                                    │
+│      申请说明 (col-span-full)                                   │                                    │
+│      申请支付采购款                                             │                                    │
+│                                                                │                                    │
+│ 4. [关联业务依据层] 语义化列头（绝不硬编码采购商品列头）         │                                    │
+│    来源采购与应付依据                                    共 1 项│                                    │
+│    采购单与履约状态      付款条件     采购总额 / 已付   本次申请 │                                    │
+│    ▸ PO-3185... (V1)     月结30天     ¥52 / ¥0          ¥52.00  │                                    │
+│      ↳ 展开/直显商品摘要、验收入库/发票依据与可申请余额          │                                    │
+├────────────────────────────────────────────────────────────────┴────────────────────────────────────┤
+│ [Footer] 审批态：ApprovalActionBar  |  驳回重办态：[☑ 处理后自动下一项]          [修改或重新提交 ↗]  │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
 ### 4.2 六大核心模式详解
 
 #### 模式 A1：零浪费条件顶栏（重提对照 + 风险聚合直达）
 1. **重提对照横幅（[`WorkspaceApprovalResubmissionBanner`](../erp-client/features/workspace/components/workspace-approval-resubmission-banner.tsx)）**：
    - 仅在第 `>= 2` 轮提交时出现；将「轮次徽章 + 对比基准版本号 + 经办人重提说明 + 字段级 diff 胶囊（`旧值` 删除线 `→` `新值` 加粗）+ 上轮驳回人及原文」收敛在一个轻量柔底条内。
    - 目的：审批人**无需先翻看历史审批日志**就能确认驳回意见是否已落实。
-2. **可操作风险聚合条（`purchase-approval-risk-strip`）**：
-   - 仅在 `riskCount > 0` 时渲染；使用 `border-l-2` 区分严重级（`destructive`）与警示级（`warning`），单行汇总分类计数（如 `对外负毛利 2 · 超需求 1 · 交期晚 3`）。
-   - 右侧内嵌动作按钮 **`仅看风险项（N）›`**，点击后自动将下方明细表切换为「仅看风险项」过滤态并平滑滚动至表格区域，零额外操作直达病灶。
+2. **可操作风险聚合条（`purchase-approval-risk-strip` / 各类财务风险条）**：
+   - 仅在 `riskCount > 0` 时渲染；使用 `border-l-2` 区分严重级（`destructive`）与警示级（`warning`），单行汇总分类计数（如 `对外负毛利 2 · 超需求 1 · 交期晚 3`，或财务类 `超出可申请余额 · 缺少联行号 · 缺少银行回单`）。
+   - 右侧内嵌动作按钮 **`仅看风险项（N）›`** 或风险项直达按钮，点击后自动过滤或滚动定位到对应明细行/核验区块并触发脉冲高亮，零额外操作直达病灶。
 
-#### 模式 A2：口径透明的 4 格柔底决策 KPI 栏
-- 容器采用 `bg-surface-sunken rounded-lg px-4 py-3.5`，通过 `@[480px]/purchase-lines:grid-cols-2 @[840px]/purchase-lines:grid-cols-4` 响应布局；若为纯费用单（`isPureExpenseOrder`）自动收缩为 3 列，避免出现空白占位格。
-- **字号主次分明**：主金额用 `text-value-section`（`24px`），利润/毛利率等辅助决策值用 `text-value-compact`（`20px`），条款类用 `text-body-compact`（`13px`）。
-- **强制口径透明**：每个计算类指标必须附带极轻口径副标（`text-tiny`，如 `含税`、`供给 − 采购`、`销售 − 采购`）、`?` 悬浮 `Tooltip` 展示精确公式与明细分解，以及覆盖率脚注（如 `3/5 项`、`不含费用`、`暂无法核算`），杜绝审批人对数字口径产生怀疑。
-- **第 4 格收口条款与动作**：聚合付款条件、`先款门禁` 徽章、履约方式，并将多处收货地址收敛为可点击触发器 `配送地址（N 处）`（弹出双视角地址弹窗，绝不把 50 个地址直接铺在主画布上）。
+#### 模式 A2：口径透明且宁缺毋滥的决策 KPI 栏
+- 容器采用 `bg-surface-sunken rounded-lg px-4 py-3.5`，通过 `@container` 查询按实际有效指标数自适应列数（`2 / 3 / 4` 列；纯费用单收缩为 3 列，仅 2 项金额指标时按 2 列或 3 列布局，不留空白死格）。
+- **字号主次分明**：主金额用 `text-value-section`（`24px`），利润/毛利率/余额等辅助决策值用 `text-value-compact`（`20px`），条款摘要用 `text-body-compact`（`13px`）。
+- **强制口径透明**：每个计算类指标必须附带极轻口径副标（`text-tiny`，如 `含税`、`供给 − 采购`、`采购未结 − 占用`）、`?` 悬浮 `Tooltip` 展示精确公式与明细分解，以及覆盖率脚注（如 `3/5 项`、`不含费用`、`暂无法核算`），杜绝审批人对数字口径产生怀疑。
+- **指标价值门禁（严禁凑数与硬塞）**：
+  - **严禁把低信息量计数升格为主 KPI**：如未匹配到金额时，绝不能把「`明细行数：1 行`」放进大号柔底 KPI 横幅充当视觉焦点；
+  - **严禁把需要逐项核对的复合资料硬挤进 KPI 窄格**：银行账户（户名/开户行/联行号/账号）、税务开票资料（购销方抬头/税号/开票类型/地址电话）等核心核验对象必须放入下方「模式 A3 结构化核心业务信息区」拆字段清晰展示，不在 KPI 栏角落拼接截断。
 
-#### 模式 A3：极平商业元数据流（替代沉重双栏属性表）
-- 放弃占高度的边框卡片或 `DescriptionList` 网格，改为 `flex-wrap gap-x-5 gap-y-1.5 text-xs` 水平折行流：
-  - 集成紧凑供应商星级评分（[`WorkspaceSupplierRating`](../erp-client/features/workspace/components/workspace-supplier-rating.tsx) `compact`）；
-  - 自动去重：已在页头或 KPI 栏展示的字段绝不在元数据流重复出现；
-  - 来源单据单起一行内联操作：`SO单号 · 客户名 · V1` 紧跟 **`[采销对照]`**（唤起右轨并自动扩宽）与 **`[预览销售单]`**（纸面预览），让跨单溯源只需一次点击。
+#### 模式 A3：全任务通用的结构化核心业务信息区（Structured Fact Grid）
+> **全站统一原则**：无论多行商品审批、财务审批、单笔执行登记还是异常排查，单据核心业务信息（往来单位、我方主体、申请人、付款/结算方式、收付款账户与联行号、开票抬头与税号、期望/到账/交付日期、申请说明/事由、来源单据等）都是经办人核验与判断的关键事实，**一律禁止压成 `flex-wrap gap-x-5 text-xs` 一行小字流**。
+
+- **无套娃的结构化栅格**：
+  - 铺在纯白 `bg-card` 画布上，**不包外层灰底与多余白卡边框**；若字段按业务职责拆为多组（如「付款与收款账户」与「申请信息」），组间用 `border-t border-border/60 pt-4` 细线和 `13px font-semibold` 小节标题（或 `15px` 分区标题）自然隔开。
+  - 采用容器查询驱动的 2~3 列键值网格（推荐基于 [`DetailWorkspaceFacts`](../erp-client/components/business/detail-workspace.tsx) 语义规范并挂载 `@container/*` 断点：`grid-cols-1 @[480px]/document:grid-cols-2 @[800px]/document:grid-cols-3`，`gap-x-6 gap-y-3`），确保在 768px 抽屉、72% 双栏主画布与全宽页均能稳定对齐、绝不出现无序折行。
+- **清晰的标签/正文双层排版**：
+  - 标签 `<dt>`：`text-xs font-medium text-muted-foreground`（`12px` 退后）；
+  - 值 `<dd>`：**`text-body-compact font-medium text-foreground`（`13px / 20px` 正文）**，所有编号、金额、日期、账号、税号、联行号追加 `.num select-all`；空值统一显示弱化 `—` 或醒目缺失提示（若该字段命中风控缺失，如缺少联行号/银行流水，附着语义警示态）。
+- **长文本与复合核验对象的强制展开规则**：
+  - **长文本通栏**：申请说明、退款/冲正原因、关闭原因、备注等超过单列舒适宽度的内容，统一 `col-span-full` 占满整行并保留换行（`whitespace-pre-wrap`）；
+  - **资金账户与税票拆项成组**：严禁把 `收款户名 · 开户行 · 脱敏账号` 拼成一条字符串。银行付款必须拆列展示 `我方付款主体`、`付款方式`、`收款户名`、`开户行`、`联行号`、`收款账号`（配合 `SensitiveValue` 权限内显文与一键复制）；开票任务必须拆列展示 `购方抬头`、`购方税号（带复制）`、`销方主体`、`销方税号`、`开票类型`、`税点`、`开票时点`；
+  - **关联单据与内联动作**：来源销售单/采购单/原资金单据同样按结构化事实位呈现（可跨列 `col-span-full`），紧贴单号提供 **`[采销对照]`**、**`[预览单据]`** 或 **`[查看原单]`**，一键溯源；
+  - **克制去重但不破坏核验完整性**：仅避免在主区无意义重复吸顶页头里的单号/版本号；对于财务核验成组字段（如收付款完整要素），以「成组好核对」优先，不为机械去重而拆散核心上下文。
 
 #### 模式 A4：阈值化高密度明细表与附着式行风险条
 - **控件按阈值出现（[`workspace-approval-table-controls.tsx`](../erp-client/features/workspace/components/workspace-approval-table-controls.tsx)）**：
@@ -298,9 +365,26 @@ ERP 任务页同时运行于大屏、中屏、768px 抽屉和分栏队列检查�
   - **动态上下文驳回短语**：基于单据风险状态动态生成高频驳回理由（`buildPurchaseDynamicRejectPhrases`，如命中负毛利自动置顶「部分商品低于销售价或负毛利，请重新核价」），前置在默认通用短语之前，总计上限 6 枚胶囊，一键填入。
   - **肌肉记忆按钮顺序与 ADR-1 风控**：右侧固定 `[驳回]`（`destructive` 描边）→ `[通过审批]`（唯一实心飞书蓝；高风险时自动附加 `ShieldAlertIcon`）。低风险直接提交 + `3s` Toast + 自动下一项；高风险复用同一 `purchaseApprovalRiskReasons` 计算结果，弹出唯一确认框 `FormalActionConfirmDialog`（绝不重复确认）。
 
+### 4.3 财务 / 票据核验型（A2）、驳回重办与通用兜底契约
+
+为避免财务类任务或驳回任务再次出现「信息过少、重心错位、术语串台」问题，必须同时满足以下四条契约：
+
+1. **财务与票据核验信息完整度底线**：
+   - **付款申请**：完整分组展示「付款与收款账户（我方付款主体、付款方式、希望付款日、收款户名、开户行、联行号、收款账号及显文/复制）」+「申请信息（供应商、申请人、付款条件、申请说明）」+「来源采购与应付依据（采购单号、履约/验收状态、商品摘要、采购总额、已付/待付/可申请余额、本次申请）」。
+   - **回款审批**：完整分组展示「到账与账户信息（客户、到账日期、银行流水及显文/复制、收款/付款账户、提交人、备注）」+「拟核销明细（关联销售单、本次拟核销金额、待核销余额与配平率）」。
+   - **开票审批**：完整分组展示「开票抬头与税务要素（购方抬头、购方税号带复制、销方主体、销方税号、开票类型、约定税点、开票时点、付款条件、申请事由）」+「可开票额度与票款进度」+「关联销售单/回款/历史开票依据」。
+   - **退款与红字冲正**：完整分组展示「往来与原单依据（往来单位、原关联单据号、结算/退款方式、冲正/退款原因、提交人）」+「本次金额 / 原单金额 / 冲正后余额」+「原单核销明细」。
+2. **关联依据表头严格语义化**：明细区列头必须与业务对象一致（如「采购单与履约 / 申请与余额」、「关联销售单 / 拟核销金额」），严禁在通用组件中硬编码「数量、单价及交期」套用于财务或非商品单据。
+3. **驳回重办（`APPROVAL_REWORK`）复用专用业务视图**：`WorkspaceTaskSurface` 路由分发时，驳回待处理任务必须沿用对应业务对象自身的专用审查画布（例如付款申请驳回待处理继续走付款申请专用视图，叠加顶部驳回原因横幅与底部 `WorkspaceApprovalReworkActions`），绝不退化到简陋的通用快照摘要。
+4. **通用兜底摘要（`ApprovalSubmittedSummary`）底线**：对于暂未建专用页面的单据类型，通用审批摘要同样必须遵守：
+   - 核心字段以 **2~3 列结构化键值网格（12px 标签 + 13px 正文值，长字段通栏）** 呈现；
+   - 金额提取覆盖 `source.amount_label` 及各类常见金额字段（`含税金额`、`申请金额`、`退款金额`、`冲正金额`、`回款金额` 等）；
+   - 未命中有效金额指标时，不把「明细行数」升格为大号 KPI 栏；
+   - 通用明细表头使用中性语义（如 `明细项目` / `说明与金额`），绝不硬编码特定行业列头。
+
 ---
 
-## 5. 原型 B 规范：渐进式高密度编制与配平型任务页
+## 5. 原型 B 规范：业务编制、配平与单笔执行登记型任务页（B1 多行配平 × B2 单笔登记）
 
 > **设计标杆**：供给分配页（[`workspace-procurement-task.tsx`](../erp-client/features/workspace/components/workspace-procurement-task.tsx)、[`workspace-procurement-inspector.tsx`](../erp-client/features/workspace/components/workspace-procurement-inspector.tsx)、[`purchase-order-create-page.tsx`](../erp-client/features/purchase-orders/pages/purchase-order-create-page.tsx)、[`sourcing-product-list.tsx`](../erp-client/features/purchase-orders/components/sourcing-product-list.tsx)、[`sourcing-product-adjust-dialog.tsx`](../erp-client/features/purchase-orders/components/sourcing-product-adjust-dialog.tsx)、[`sourcing-address-editor.tsx`](../erp-client/features/purchase-orders/components/sourcing-address-editor.tsx)、[`purchase-order-create-preview.tsx`](../erp-client/features/purchase-orders/components/purchase-order-create-preview.tsx)）
 
@@ -404,6 +488,20 @@ flowchart LR
   - **一键回改回路**：左轨每一条异常提醒与暂不分配项均配备 **`回改 / 纳入`** 按钮，点击关闭预览并直接定位/打开对应商品，形成无痛修改闭环。
   - **同层三视角切换（零弹窗套娃）**：右侧用同层 Tab 切换 `采购单纸面` | `收货地址明细（N）` | `分单总览（N）`，彻底杜绝 Dialog 内再弹 Sheet；底部提供供应商版 PNG / 伴随 Excel 地址表 ZIP 打包下载与进度显示。
 
+### 5.4 原型 B2：单笔核验与执行登记型任务页（财务执行 / 票款登记）
+
+出纳付款执行（`SUPPLIER_PAYMENT_EXECUTION`）、销项开票登记（`SALES_INVOICE_EXECUTION`）、退货退款与进项红票登记（`PURCHASE_RETURN_REFUND` / `PURCHASE_RETURN_INVOICE`）等任务属于**“先核对关键业务要素，再完成一次高准确度单笔登记”**的作业形态，不应强行套用 7 列全宽编辑表，而应采用 B2 规范：
+
+1. **上部：只读核心余额带 + 结构化执行依据区（复用模式 A2 / A3）**：
+   - 突出当前待执行金额与进度（如「本申请剩余待付 / 已付 / 申请总额」、「待开票余额 / 批复总额」）；
+   - 以 **2~3 列结构化键值网格（12px 标签 + 13px 正文值）** 分组呈现执行时必须反复核对与复制的要素——如收款户名、开户行、联行号、收款账号（显文 + 复制），或购方抬头、购方税号（复制）、销方税号、开票类型、税点与开票明细；
+   - 严禁把上述执行依据缩进 12px 碎字流或塞在角落。
+2. **下部：纯白通栏限宽录入表单（`max-w-4xl`）**：
+   - 紧接执行依据区下方，用 `border-t border-border/60 pt-5` 分隔，对齐 [`docs/detail-page-design-system.md`](./detail-page-design-system.md) 的表单网格规范（12px 标签 + 柔底控件 + 13px 输入值），承载实付金额、付款时间、银行流水、发票号/开票日期、回单或发票附件上传；
+   - 提交动作与幂等核对通过 `WorkspaceTaskFooter` 落入 `48px` 吸底栏，并支持 `Ctrl/Cmd + Enter` 提交与 `OUTCOME_UNKNOWN` 恢复。
+3. **右侧：默认折叠、按需展开的凭证 / 原单对照轨**：
+   - 通过 `contextRail.allowOnFullWidth: true` 按需展开来源销售单/采购单纸面或付款审批附件（`defaultWidthPercent: 38`），窄屏平滑回退为预览弹窗，方便边看回单/订单边登记。
+
 ---
 
 ## 6. 多载体流转、键盘效率引擎与健壮性契约
@@ -465,6 +563,7 @@ ERP 任务项会出现在三种界面载体中，必须通过统一的上下文�
 | **骨架层** | `UnifiedTaskWorkbench` & `UnifiedTaskWorkbenchRailToggle` | [`erp-client/components/business/unified-task-workbench.tsx`](../erp-client/components/business/unified-task-workbench.tsx) | 4 原型容器查询布局、56px 头/48px 底、可拖拽/自动扩宽/持久化右轨 |
 | **适配层** | `WorkspaceTaskPane` / `WorkspaceTaskFooter` / `WorkspaceInspectorModeProvider` | [`erp-client/components/business/workspace-task-pane.tsx`](../erp-client/components/business/workspace-task-pane.tsx) | 页面级与嵌入式宿主适配、底栏 Portal 注入、检查器去重 |
 | **页头层** | `WorkspaceCompactTaskHeader` / `WorkspaceTaskIdentityHeader` / `WorkspaceTaskHeaderActions` | [`erp-client/features/workspace/components/workspace-task-identity-header.tsx`](../erp-client/features/workspace/components/workspace-task-identity-header.tsx)<br>[`erp-client/features/workspace/components/workspace-task-context.tsx`](../erp-client/features/workspace/components/workspace-task-context.tsx) | 56px 单行标题、状态与单据徽章、元信息流、转派/关闭/说明/右轨开关 |
+| **核心信息层** | `WorkspaceFactGrid` / `WorkspaceFactItem` / `WorkspaceFactGroup` / `DetailWorkspaceFacts` / `SensitiveValue` | [`erp-client/components/business/detail-workspace.tsx`](../erp-client/components/business/detail-workspace.tsx)<br>[`erp-client/components/business/values.tsx`](../erp-client/components/business/values.tsx) | 自带 `@container/facts` 的纯白无框 2~4 列结构化键值网格（12px 柔灰标签 + 13px 正文值、长文本通栏、语义分组与定位高亮）、敏感账号/流水显文与复制 |
 | **审批右轨** | `WorkspaceApprovalContextRail` / `UnifiedMaterialViewer` / `ApprovalRouteStepper` | [`erp-client/features/workspace/components/workspace-approval-context-rail.tsx`](../erp-client/features/workspace/components/workspace-approval-context-rail.tsx)<br>[`erp-client/components/business/unified-material-viewer.tsx`](../erp-client/components/business/unified-material-viewer.tsx)<br>[`erp-client/features/approval-workflow/components/approval-route-stepper.tsx`](../erp-client/features/approval-workflow/components/approval-route-stepper.tsx) | 单层页签右轨（审批记录 / 附件对照 / 来源单据对照 / 单据全动态） |
 | **审批决策** | `ApprovalActionBar` / `WorkspaceApprovalResubmissionBanner` / `WorkspaceApprovalTableControls` | [`erp-client/features/approval-workflow/components/approval-action-bar.tsx`](../erp-client/features/approval-workflow/components/approval-action-bar.tsx)<br>[`erp-client/features/workspace/components/workspace-approval-resubmission-banner.tsx`](../erp-client/features/workspace/components/workspace-approval-resubmission-banner.tsx)<br>[`erp-client/features/workspace/components/workspace-approval-table-controls.tsx`](../erp-client/features/workspace/components/workspace-approval-table-controls.tsx) | ADR-1 分级通过、原地展开驳回与动态短语、重提 diff 横幅、阈值化表格筛选与分页 |
 | **编制色标与配平** | `source-palette.ts` / `SourcingAllocationSummary` / `SourcingInlineOptionPicker` | [`erp-client/features/purchase-orders/lib/sourcing/source-palette.ts`](../erp-client/features/purchase-orders/lib/sourcing/source-palette.ts)<br>[`erp-client/features/purchase-orders/components/sourcing-allocation-summary.tsx`](../erp-client/features/purchase-orders/components/sourcing-allocation-summary.tsx)<br>[`erp-client/features/purchase-orders/components/sourcing-inline-option-picker.tsx`](../erp-client/features/purchase-orders/components/sourcing-inline-option-picker.tsx) | 4 路径色 + 5 源序号色、实时守恒配平卡与自愈按钮、富信息单元格内联选择器 |
@@ -522,14 +621,14 @@ ERP 任务项会出现在三种界面载体中，必须通过统一的上下文�
     {/* 2. 条件层：风险聚合跳转条（一键切至「仅看风险项」并滚至表格） */}
     {riskSummary.total > 0 ? <RiskAggregationStrip onJumpRiskOnly={handleJumpRiskOnly} /> : null}
 
-    {/* 3. 决策指标层：bg-surface-sunken 4 格 KPI 带（带口径副标与 ? 公式 Tooltip） */}
+    {/* 3. 决策指标层：bg-surface-sunken 柔底 KPI 带（仅放有决策价值的金额/余额/毛利，带口径副标与 ? 公式 Tooltip） */}
     <DecisionKpiBand />
 
-    {/* 4. 极平商业元数据流（去重 + 来源单据快捷联动） */}
-    <FlatCommercialMetaStream onOpenSourceComparison={handleOpenSourceComparison} />
+    {/* 4. 核心业务信息层：无框结构化 2~3 列键值网格（12px 标签 + 13px 正文值；账户/税票按组拆字段，长文本通栏） */}
+    <StructuredBusinessFactsGrid onOpenSourceComparison={handleOpenSourceComparison} />
 
-    {/* 5. 阈值化明细对照表（>8行显筛选、>20行显分页、风险行附着紧贴风险条 + 对照本行） */}
-    <LineComparisonTable onLocateSourceLine={handleLocateSourceLine} />
+    {/* 5. 业务核心层：A1 多行对照表（阈值筛选/分页/附着风险条）或 A2 语义化关联单据依据表 */}
+    <LineComparisonOrBasisTable onLocateSourceLine={handleLocateSourceLine} />
 </WorkspaceProcessingPane>
 ```
 
@@ -592,6 +691,10 @@ ERP 任务项会出现在三种界面载体中，必须通过统一的上下文�
 
 | 反模式（严禁出现） | 标杆正确做法 |
 | --- | --- |
+| 把核心业务信息（往来单位、付款主体、收款账户、开户行、联行号、税号、日期、申请说明、申请人等）压成 `flex-wrap gap-x-5 text-xs` 一行小字流 | **所有任务统一采用纯白无框的 2~3 列结构化键值网格**（12px 柔灰标签 + 13px 正文值，`@container/*` 响应列数，长文本 `col-span-full` 通栏） |
+| 把收款户名、开户行、脱敏账号拼成一长串字符串，或把账户/税票要素硬塞进 KPI 窄格里挤压省略联行号 | 银行账户与税务开票资料按字段拆列、分组展示（户名 / 开户行 / 联行号 / 账号显文与复制；抬头 / 税号复制 / 票种 / 税点），确保逐项可核对 |
+| 财务单据或通用摘要未匹配到金额时，把「明细行数：1 行」放进主 KPI 横幅，或明细表头硬编码「数量、单价及交期」 | KPI 带仅放高价值金额/余额/毛利/进度指标，无有效指标时不强行渲染占位格；明细列头严格按单据类型语义化 |
+| 驳回待处理（`APPROVAL_REWORK`）绕过专用作业面，退化进丢失余额/账户/业务依据的通用简报摘要页 | 驳回重办必须复用该业务对象自身的专用视图，仅顶部叠加驳回原因横幅、底部切换为修改/重提动作栏 |
 | 在纯白作业面外包浅灰底色 + 多层 `Card` 套娃边框 | 全程 `bg-card` 通栏，仅用 `border-border/60` 1px 细线与 `bg-surface-sunken` 区分层次 |
 | 全宽任务页常驻 `20rem` 无用右侧静态信息栏 | 原型 B 使用 `fullWidth: true`，参考单据轨默认折叠（`allowOnFullWidth: true`）按需展开 |
 | 全屏双栏审批页同时在顶部放 `ApprovalRouteStepper` 又在右侧放 `审批记录` | 全屏审批页右轨已承接审批记录时，自动隐藏顶部冗余进度条，省出垂直首屏 |
@@ -618,7 +721,9 @@ ERP 任务项会出现在三种界面载体中，必须通过统一的上下文�
 
 ### 8.2 信息层次与视觉编码
 - [ ] 严格遵守 5+4 字号体系与 `.num` 数字排版；全页至多 1 个 `text-value-section`（`24px`）主 KPI、底栏至多 1 个实心飞书蓝主按钮。
-- [ ] 条件横幅（重提 diff、风险聚合、办理限制）在无异常时零占位；所有计算 KPI 具备口径副标、公式 `Tooltip` 与覆盖率注脚。
+- [ ] **核心业务信息结构化呈现**：所有任务的主单据事实均采用无框 2~3 列键值网格（12px 标签 + 13px 正文值，长说明通栏），零 `12px flex-wrap` 碎字流水账；银行账户（含联行号、账号显文/复制）与开票税号等复合核验对象拆字段成组展示。
+- [ ] 条件横幅（重提 diff、风险聚合、办理限制）在无异常时零占位；所有计算 KPI 具备口径副标、公式 `Tooltip` 与覆盖率注脚；**严禁出现「明细行数：1 行」等低价值凑数 KPI**，明细表头严格匹配业务语义。
+- [ ] 驳回待处理（`APPROVAL_REWORK`）与只读审批视图复用业务专用作业面，不退化至丢失字段的通用兜底页。
 - [ ] 盈亏、倒挂与状态采用双编码（显式中文前缀/图标 + 语义色）；多源编制任务全域统一复用 `source-palette.ts` 路径色与序号色。
 - [ ] 表格筛选条与分页条按阈值显隐（常规小单不显冗余筛选与分页）；筛选态表尾明确标注整单合计口径。
 

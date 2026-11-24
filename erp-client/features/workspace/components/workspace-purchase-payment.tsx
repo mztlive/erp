@@ -2,7 +2,12 @@
 
 import { useState } from "react"
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react"
-import { BusinessFailureState, MoneyValue } from "@/components/business"
+import {
+    BusinessFailureState,
+    MoneyValue,
+    WorkspaceFactGrid,
+    WorkspaceFactItem,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { PurchasePaymentReceipts } from "@/features/fulfillment-operations/components/purchase-payment-receipts"
@@ -99,41 +104,32 @@ export function WorkspacePurchasePayment({
                     正在加载采购付款信息…
                 </p>
             ) : (
-                <>
-                    <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
+                <div className="mt-3 space-y-3">
+                    <WorkspaceFactGrid columns={3} ariaLabel="采购付款金额">
                         {[
                             { label: "采购总额", value: payment.gross_amount },
                             { label: "累计已付", value: payment.paid_amount },
                             { label: "剩余应付", value: payment.open_amount },
                         ].map(({ label, value }) => (
-                            <div
+                            <WorkspaceFactItem
                                 key={label}
-                                className="flex min-w-0 flex-wrap items-baseline gap-x-1.5"
+                                label={label}
+                                numeric
                             >
-                                <dt className="text-xs text-muted-foreground">
-                                    {label}
-                                </dt>
-                                <dd className="min-w-0 wrap-anywhere">
-                                    <MoneyValue
-                                        value={value}
-                                        className="font-semibold"
-                                    />
-                                </dd>
-                            </div>
+                                <MoneyValue
+                                    value={value}
+                                    className="font-semibold"
+                                />
+                            </WorkspaceFactItem>
                         ))}
-                    </dl>
-                    <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
-                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
-                            <dt className="text-xs text-muted-foreground">
-                                付款条件
-                            </dt>
-                            <dd>{payment.payment_term_label}</dd>
-                        </div>
-                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
-                            <dt className="text-xs text-muted-foreground">
-                                付款申请
-                            </dt>
-                            <dd className="flex flex-wrap items-center gap-2">
+                    </WorkspaceFactGrid>
+                    <WorkspaceFactGrid columns={3} ariaLabel="付款条件与申请">
+                        <WorkspaceFactItem
+                            label="付款条件"
+                            value={payment.payment_term_label}
+                        />
+                        <WorkspaceFactItem label="付款申请" span={2}>
+                            <div className="flex flex-wrap items-center gap-2">
                                 {summary ? (
                                     <StatusBadge
                                         {...summary}
@@ -182,13 +178,13 @@ export function WorkspacePurchasePayment({
                                         )}
                                     </Button>
                                 ) : null}
-                            </dd>
-                        </div>
-                    </dl>
+                            </div>
+                        </WorkspaceFactItem>
+                    </WorkspaceFactGrid>
                     {expanded ? (
                         <div
                             id={`${id}-requests`}
-                            className="mt-2 divide-y divide-border"
+                            className="divide-y divide-border"
                         >
                             {payment.requests.map((request) => (
                                 <RequestRow
@@ -198,7 +194,7 @@ export function WorkspacePurchasePayment({
                             ))}
                         </div>
                     ) : null}
-                </>
+                </div>
             )}
             <div className="mt-3">
                 <PurchasePaymentReceipts

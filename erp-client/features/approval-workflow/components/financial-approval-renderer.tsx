@@ -10,7 +10,14 @@ import {
     XIcon,
 } from "lucide-react"
 
-import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
+import {
+    MoneyValue,
+    QuantityValue,
+    RateValue,
+    WorkspaceFactGrid,
+    WorkspaceFactGroup,
+    WorkspaceFactItem,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -327,7 +334,17 @@ function KpiHelp({
     )
 }
 
-function FinancialMetaStream({ facts }: { facts: BriefSection[] }) {
+function FinancialMetaStream({
+    supplier,
+    counterparty,
+    originalDocument,
+    facts,
+}: {
+    supplier: boolean
+    counterparty?: string
+    originalDocument?: BriefSection
+    facts: BriefSection[]
+}) {
     const seen = new Set<string>()
     const uniqueFacts = facts.filter(({ label, value }) => {
         const key = `${label}\0${value}`
@@ -335,42 +352,46 @@ function FinancialMetaStream({ facts }: { facts: BriefSection[] }) {
         seen.add(key)
         return true
     })
-    if (uniqueFacts.length === 0) return null
 
     return (
-        <dl className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
-            {uniqueFacts.map(({ label, value, numeric }) => {
-                const longReason =
-                    LONG_REASON_PATTERN.test(label) &&
-                    (value.length > 30 || value.includes("\n"))
-                return (
-                    <div
-                        key={`${label}\0${value}`}
-                        className={cn(
-                            "flex min-w-0 items-baseline gap-x-1.5",
-                            longReason &&
-                                "basis-full flex-col gap-y-0.5 border-l-2 border-border/60 pl-3",
-                        )}
-                    >
-                        <dt className="shrink-0 text-muted-foreground">
-                            {label}
-                        </dt>
-                        <dd
-                            className={cn(
-                                "font-medium whitespace-pre-wrap wrap-anywhere",
-                                (numeric ||
-                                    /日期|发生日|时间|单号|流水|金额|数量|比例|笔数/.test(
-                                        label,
-                                    )) &&
-                                    "num",
-                            )}
-                        >
-                            {value}
-                        </dd>
-                    </div>
-                )
-            })}
-        </dl>
+        <WorkspaceFactGroup title="核心业务与原单依据" className="pt-1">
+            <WorkspaceFactGrid columns={3} ariaLabel="核心业务与原单依据">
+                <WorkspaceFactItem
+                    label={supplier ? "往来供应商" : "往来客户"}
+                    value={counterparty ?? "未记录往来单位"}
+                    tone={counterparty ? "default" : "muted"}
+                />
+                <WorkspaceFactItem
+                    label="原关联单据"
+                    value={originalDocument?.value ?? "原单号待补全"}
+                    numeric
+                    selectable={Boolean(originalDocument)}
+                    tone={originalDocument ? "default" : "warning"}
+                />
+                {uniqueFacts.map(({ label, value, numeric }) => {
+                    const longReason =
+                        LONG_REASON_PATTERN.test(label) ||
+                        value.length > 30 ||
+                        value.includes("\n")
+                    const isNumeric = Boolean(
+                        numeric ||
+                        /日期|发生日|时间|单号|流水|金额|数量|比例|笔数/.test(
+                            label,
+                        ),
+                    )
+                    return (
+                        <WorkspaceFactItem
+                            key={`${label}\0${value}`}
+                            label={label}
+                            value={value}
+                            numeric={isNumeric}
+                            selectable={isNumeric}
+                            span={longReason ? "full" : 1}
+                        />
+                    )
+                })}
+            </WorkspaceFactGrid>
+        </WorkspaceFactGroup>
     )
 }
 
@@ -628,9 +649,7 @@ function FinancialApprovalContent({
                     aria-label="财务审批决策指标"
                     className={cn(
                         "grid grid-cols-1 gap-x-6 gap-y-3.5 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/financial-approval:grid-cols-2",
-                        balance
-                            ? "@[840px]/financial-approval:grid-cols-4"
-                            : "@[840px]/financial-approval:grid-cols-3",
+                        balance && "@[840px]/financial-approval:grid-cols-3",
                     )}
                 >
                     <div className="min-w-0">
@@ -691,7 +710,7 @@ function FinancialApprovalContent({
                     </div>
 
                     {balance ? (
-                        <div className="min-w-0">
+                        <div className="min-w-0 @[480px]/financial-approval:col-span-2 @[840px]/financial-approval:col-span-1">
                             <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
                                 <span>{balance.label}</span>
                                 <span className="text-tiny">快照余额</span>
@@ -729,34 +748,15 @@ function FinancialApprovalContent({
                             ) : null}
                         </div>
                     ) : null}
-
-                    <div
-                        className={cn(
-                            "min-w-0",
-                            !balance &&
-                                "@[480px]/financial-approval:col-span-2 @[840px]/financial-approval:col-span-1",
-                        )}
-                    >
-                        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
-                            <span>{supplier ? "往来供应商" : "往来客户"}</span>
-                            <span className="text-tiny">往来与原单</span>
-                        </div>
-                        <p className="mt-1 text-body-compact font-semibold wrap-anywhere">
-                            {counterparty ?? "未记录往来单位"}
-                        </p>
-                        <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5 text-xs">
-                            <span className="text-muted-foreground">
-                                原关联单据
-                            </span>
-                            <span className="num min-w-0 font-medium wrap-anywhere select-all">
-                                {originalDocument?.value ?? "原单号待补全"}
-                            </span>
-                        </p>
-                    </div>
                 </section>
             </TooltipProvider>
 
-            <FinancialMetaStream facts={metadata} />
+            <FinancialMetaStream
+                supplier={supplier}
+                counterparty={counterparty}
+                originalDocument={originalDocument}
+                facts={metadata}
+            />
 
             {totalLineCount > 0 || riskLabels.length > 0 ? (
                 <section

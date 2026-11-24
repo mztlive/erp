@@ -62,9 +62,9 @@ export function SalesOrderSubmitConfirmDialog({
             }}
         >
             <DialogContent
-                size="2xl"
+                size="xl"
                 scroll="body"
-                className="h-[92dvh]"
+                className="h-[84dvh]"
                 closeButtonId="sales-orders-submit-confirm-close"
                 showCloseButton={!pending}
             >

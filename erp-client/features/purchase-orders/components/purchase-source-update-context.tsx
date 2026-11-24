@@ -1,9 +1,13 @@
 "use client"
 
-import type { ReactNode } from "react"
 import Link from "next/link"
 import { ChevronDownIcon, ChevronRightIcon, CircleHelpIcon } from "lucide-react"
-import { MoneyValue, QuantityValue } from "@/components/business"
+import {
+    MoneyValue,
+    QuantityValue,
+    WorkspaceFactGrid,
+    WorkspaceFactItem,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Collapsible,
@@ -469,8 +473,8 @@ export function PurchaseSourceUpdateContext({
                 </div>
             </dl>
 
-            <dl className="flex flex-wrap items-baseline gap-x-5 gap-y-1.5 text-xs">
-                <CommercialFact label="来源销售单">
+            <WorkspaceFactGrid columns={3}>
+                <WorkspaceFactItem label="来源销售单">
                     {header.salesOrderId && header.salesOrderNo ? (
                         <Link
                             id={`${idPrefix}-sales`}
@@ -482,19 +486,21 @@ export function PurchaseSourceUpdateContext({
                     ) : (
                         "—"
                     )}
-                </CommercialFact>
-                <CommercialFact label="采购状态">
+                </WorkspaceFactItem>
+                <WorkspaceFactItem label="采购状态">
                     <StatusBadge
                         label={order.identity.statusLabel}
                         tone={order.identity.statusTone}
                     />
-                </CommercialFact>
+                </WorkspaceFactItem>
                 {update?.lastMaintainNote && !hasRisk ? (
-                    <CommercialFact label="维持原因">
-                        {update.lastMaintainNote}
-                    </CommercialFact>
+                    <WorkspaceFactItem
+                        label="维持原因"
+                        value={update.lastMaintainNote}
+                        span="full"
+                    />
                 ) : null}
-            </dl>
+            </WorkspaceFactGrid>
             <Collapsible>
                 <CollapsibleTrigger
                     id={`${idPrefix}-commercial-context`}
@@ -507,44 +513,44 @@ export function PurchaseSourceUpdateContext({
                     采购条款 · 付款条件、采购类型、履约责任
                     {header.targetWarehouseName ? "、目标仓" : ""}
                 </CollapsibleTrigger>
-                <CollapsibleContent>
-                    <dl className="flex flex-wrap items-baseline gap-x-5 gap-y-1.5 pt-2 text-xs">
-                        <CommercialFact label="付款条件">
-                            {header.paymentTermLabel}
-                        </CommercialFact>
-                        <CommercialFact label="采购类型">
-                            {PURCHASE_TYPE_LABEL[header.purchaseType]}
-                        </CommercialFact>
-                        <CommercialFact label="履约责任">
-                            {
+                <CollapsibleContent className="pt-2.5">
+                    <WorkspaceFactGrid columns={3}>
+                        <WorkspaceFactItem
+                            label="付款条件"
+                            value={header.paymentTermLabel}
+                            span={
+                                header.paymentTermLabel &&
+                                header.paymentTermLabel.length > 30
+                                    ? "full"
+                                    : 1
+                            }
+                        />
+                        <WorkspaceFactItem
+                            label="采购类型"
+                            value={PURCHASE_TYPE_LABEL[header.purchaseType]}
+                        />
+                        <WorkspaceFactItem
+                            label="履约责任"
+                            value={
                                 FULFILLMENT_RESPONSIBILITY_LABEL[
                                     header.fulfillmentResponsibility
                                 ]
                             }
-                        </CommercialFact>
+                        />
                         {header.targetWarehouseName ? (
-                            <CommercialFact label="目标仓">
-                                {header.targetWarehouseName}
-                            </CommercialFact>
+                            <WorkspaceFactItem
+                                label="目标仓"
+                                value={header.targetWarehouseName}
+                                span={
+                                    header.targetWarehouseName.length > 30
+                                        ? "full"
+                                        : 1
+                                }
+                            />
                         ) : null}
-                    </dl>
+                    </WorkspaceFactGrid>
                 </CollapsibleContent>
             </Collapsible>
-        </div>
-    )
-}
-
-function CommercialFact({
-    label,
-    children,
-}: {
-    label: string
-    children: ReactNode
-}) {
-    return (
-        <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
-            <dt className="text-muted-foreground">{label}</dt>
-            <dd className="min-w-0 wrap-anywhere">{children || "—"}</dd>
         </div>
     )
 }

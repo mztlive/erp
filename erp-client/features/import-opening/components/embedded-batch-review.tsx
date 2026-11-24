@@ -10,6 +10,8 @@ import {
 import {
     BusinessFailureState,
     BusinessStatusBadge,
+    WorkspaceFactGrid,
+    WorkspaceFactItem,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
@@ -448,25 +450,27 @@ export function EmbeddedBatchReview({
                 </dl>
             </TooltipProvider>
 
-            <div
-                className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-muted-foreground wrap-anywhere"
-                aria-label="批次资料"
-            >
-                <span>来源系统 {batch.sourceSystem.name}</span>
-                <span>
-                    基准日 <span className="num">{batch.baselineDate}</span>
-                </span>
-                <span>
-                    导入规则{" "}
-                    <span className="num">{batch.importRuleVersion}</span>
-                </span>
-                <span>
-                    预检版本{" "}
-                    <span className="num">
-                        {confirmation?.trialVersion ?? batch.trialVersion}
-                    </span>
-                </span>
-            </div>
+            <WorkspaceFactGrid columns={3} ariaLabel="批次资料">
+                <WorkspaceFactItem
+                    label="来源系统"
+                    value={batch.sourceSystem.name}
+                />
+                <WorkspaceFactItem
+                    label="基准日"
+                    value={batch.baselineDate}
+                    numeric
+                />
+                <WorkspaceFactItem
+                    label="导入规则"
+                    value={batch.importRuleVersion}
+                    numeric
+                />
+                <WorkspaceFactItem
+                    label="预检版本"
+                    value={confirmation?.trialVersion ?? batch.trialVersion}
+                    numeric
+                />
+            </WorkspaceFactGrid>
 
             {canReview && rows ? (
                 <BatchReviewTable

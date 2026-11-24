@@ -5,7 +5,11 @@ import { DeliveryPackingDetails } from "@/features/fulfillment-operations/compon
 
 import Link from "next/link"
 import { CircleAlertIcon } from "lucide-react"
-import { MoneyValue } from "@/components/business"
+import {
+    MoneyValue,
+    WorkspaceFactGrid,
+    WorkspaceFactItem,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import {
@@ -81,33 +85,45 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
                 <p className="num mt-2 text-xs text-muted-foreground">
                     发货批次：{value("履约批次") ?? "未提供"}
                 </p>
-                <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
-                    <Fact
+                <WorkspaceFactGrid columns={3} className="mt-3">
+                    <WorkspaceFactItem
                         label={mode === "供应商直发" ? "供应商" : "发货仓库"}
                         value={value(
                             mode === "供应商直发" ? "供应商" : "发货仓库",
                         )}
+                        emptyText="未提供"
                     />
-                    <Fact label="履约责任人" value={item.ownerUserLabel} />
-                    <Fact label="销售负责人" value={value("销售负责人")} />
-                    <Fact
+                    <WorkspaceFactItem
+                        label="履约责任人"
+                        value={item.ownerUserLabel}
+                        emptyText="未提供"
+                    />
+                    <WorkspaceFactItem
+                        label="销售负责人"
+                        value={value("销售负责人")}
+                        emptyText="未提供"
+                    />
+                    <WorkspaceFactItem
                         label="客户最早交付日"
                         value={deadlineLabel(value("最早客户交付日"))}
                         numeric
+                        emptyText="未提供"
                     />
                     {mode === "供应商直发" ? (
-                        <Fact
+                        <WorkspaceFactItem
                             label="采购最早交付日"
                             value={deadlineLabel(value("最早预计交付日"))}
                             numeric
+                            emptyText="未提供"
                         />
                     ) : null}
-                    <Fact
+                    <WorkspaceFactItem
                         label="任务截止时间"
-                        value={item.dueAt ? item.dueAtLabel : "未设置"}
+                        value={item.dueAt ? item.dueAtLabel : undefined}
                         numeric={Boolean(item.dueAt)}
+                        emptyText="未设置"
                     />
-                </dl>
+                </WorkspaceFactGrid>
             </section>
             {item.businessObjectType === "delivery" && (
                 <div className={sectionClass}>
@@ -119,7 +135,13 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
             )}
             <section className={sectionClass} aria-label="收货信息">
                 <h4 className="text-body-compact font-semibold">收货信息</h4>
-                <p className="mt-2 text-xs text-muted-foreground">
+                <p
+                    className={
+                        value("收货信息")
+                            ? "mt-2 text-body-compact font-medium text-foreground wrap-anywhere whitespace-pre-wrap"
+                            : "mt-2 text-xs text-muted-foreground"
+                    }
+                >
                     {value("收货信息") ??
                         "收货信息暂不可用，请联系销售负责人核对"}
                 </p>
@@ -229,63 +251,43 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
             ) : null}
             <section className={sectionClass} aria-label="关联单据">
                 <h4 className="text-body-compact font-semibold">关联单据</h4>
-                <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
+                <WorkspaceFactGrid columns={3} className="mt-2">
                     {links.map((field) => {
                         const isSales = field.label === "来源销售单"
                         const canLink =
                             Boolean(field.objectId) &&
                             (isSales ? canViewSales : canViewPurchase)
                         return (
-                            <div
+                            <WorkspaceFactItem
                                 key={field.label}
-                                className="flex min-w-0 items-baseline gap-1.5"
+                                label={field.label}
+                                numeric
+                                selectable
+                                emptyText="未提供"
                             >
-                                <dt className="shrink-0 text-muted-foreground">
-                                    {field.label}
-                                </dt>
-                                <dd className="num min-w-0 wrap-anywhere select-all">
-                                    {canLink && field.objectId ? (
-                                        <Link
-                                            id={`workspace-delivery-${identity}-${isSales ? "sales" : "purchase"}`}
-                                            href={`/${isSales ? "sales" : "procurement"}/orders/${encodeURIComponent(field.objectId)}`}
-                                            className="text-primary underline underline-offset-4"
-                                        >
-                                            {field.value}
-                                        </Link>
-                                    ) : (
-                                        field.value
-                                    )}
-                                </dd>
-                            </div>
+                                {canLink && field.objectId ? (
+                                    <Link
+                                        id={`workspace-delivery-${identity}-${isSales ? "sales" : "purchase"}`}
+                                        href={`/${isSales ? "sales" : "procurement"}/orders/${encodeURIComponent(field.objectId)}`}
+                                        className="text-primary underline underline-offset-4"
+                                    >
+                                        {field.value}
+                                    </Link>
+                                ) : (
+                                    field.value
+                                )}
+                            </WorkspaceFactItem>
                         )
                     })}
-                    <Fact
+                    <WorkspaceFactItem
                         label="来源销售单金额"
                         value={value("来源销售单金额")}
                         numeric
+                        emptyText="未提供"
                     />
-                </dl>
+                </WorkspaceFactGrid>
             </section>
         </>
-    )
-}
-
-function Fact({
-    label,
-    value,
-    numeric = false,
-}: {
-    label: string
-    value?: string
-    numeric?: boolean
-}) {
-    return (
-        <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-xs">
-            <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd className={cn("min-w-0 wrap-anywhere", numeric && "num")}>
-                {value || "未提供"}
-            </dd>
-        </div>
     )
 }
 

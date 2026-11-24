@@ -644,6 +644,174 @@ const factsColumnsClass: Record<2 | 3 | 4, string> = {
     4: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
 }
 
+const workspaceFactColumnsClass: Record<2 | 3 | 4, string> = {
+    2: "grid-cols-1 @[440px]/facts:grid-cols-2",
+    3: "grid-cols-1 @[440px]/facts:grid-cols-2 @[740px]/facts:grid-cols-3",
+    4: "grid-cols-1 @[440px]/facts:grid-cols-2 @[740px]/facts:grid-cols-3 @[960px]/facts:grid-cols-4",
+}
+
+const workspaceFactToneClass: Record<
+    "default" | "muted" | "warning" | "destructive" | "success",
+    string
+> = {
+    default: "text-foreground",
+    muted: "font-normal text-muted-foreground",
+    warning: "text-warning-soft-foreground",
+    destructive: "text-destructive-soft-foreground",
+    success: "text-success-soft-foreground",
+}
+
+/**
+ * 任务页核心业务信息结构化栅格：
+ * 自带 `@container/facts` 容器查询，按 2~4 列自适应排布，统一 12px 柔灰标签与 13px 正文值，
+ * 避免将单据核心事实压缩为单行 12px 折行流。
+ */
+export function WorkspaceFactGrid({
+    columns = 3,
+    ariaLabel,
+    children,
+    className,
+}: {
+    columns?: 2 | 3 | 4
+    ariaLabel?: string
+    children: React.ReactNode
+    className?: string
+}) {
+    return (
+        <div
+            data-slot="workspace-fact-grid"
+            className="@container/facts min-w-0"
+        >
+            <dl
+                aria-label={ariaLabel}
+                className={cn(
+                    "grid gap-x-6 gap-y-3",
+                    workspaceFactColumnsClass[columns],
+                    className,
+                )}
+            >
+                {children}
+            </dl>
+        </div>
+    )
+}
+
+/** 任务页核心业务信息单项：12px 标签退后，13px 正文值清晰可读，支持跨列、`.num`、可选中与定位高亮。 */
+export function WorkspaceFactItem({
+    id,
+    label,
+    value,
+    children,
+    numeric = false,
+    selectable = false,
+    span = 1,
+    tone = "default",
+    emptyText = "—",
+    highlighted = false,
+    className,
+}: {
+    id?: string
+    label: React.ReactNode
+    value?: React.ReactNode
+    children?: React.ReactNode
+    numeric?: boolean
+    selectable?: boolean
+    span?: 1 | 2 | "full"
+    tone?: "default" | "muted" | "warning" | "destructive" | "success"
+    emptyText?: string
+    highlighted?: boolean
+    className?: string
+}) {
+    const content = children !== undefined ? children : value
+    const empty = content === null || content === undefined || content === ""
+    return (
+        <div
+            id={id}
+            tabIndex={id ? -1 : undefined}
+            data-slot="workspace-fact-item"
+            className={cn(
+                "min-w-0 scroll-mt-16 space-y-0.5 rounded-md transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-ring",
+                span === 2 && "@[440px]/facts:col-span-2",
+                span === "full" && "col-span-full",
+                highlighted &&
+                    "-mx-1.5 -my-1 bg-info-soft/25 px-1.5 py-1 ring-1 ring-info-border motion-safe:animate-pulse",
+                className,
+            )}
+        >
+            <dt className="text-xs font-medium text-muted-foreground">
+                {label}
+            </dt>
+            <dd
+                className={cn(
+                    "min-w-0 text-body-compact font-medium wrap-anywhere whitespace-pre-wrap",
+                    numeric && "num",
+                    selectable && "select-all",
+                    empty
+                        ? "font-normal text-muted-foreground"
+                        : workspaceFactToneClass[tone],
+                )}
+            >
+                {empty ? emptyText : content}
+            </dd>
+        </div>
+    )
+}
+
+/** 任务页核心业务信息分组：纯白无外框，以 1px 细线与 13px 小节标题区分业务语义组（如收付款账户 / 申请信息）。 */
+export function WorkspaceFactGroup({
+    id,
+    title,
+    ariaLabel,
+    actions,
+    divider = false,
+    highlighted = false,
+    children,
+    className,
+}: {
+    id?: string
+    title?: React.ReactNode
+    ariaLabel?: string
+    actions?: React.ReactNode
+    divider?: boolean
+    highlighted?: boolean
+    children: React.ReactNode
+    className?: string
+}) {
+    return (
+        <section
+            id={id}
+            tabIndex={id ? -1 : undefined}
+            aria-label={
+                ariaLabel ?? (typeof title === "string" ? title : undefined)
+            }
+            data-slot="workspace-fact-group"
+            className={cn(
+                "min-w-0 scroll-mt-16 space-y-2.5 rounded-md transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-ring",
+                divider && "border-t border-border/60 pt-3.5",
+                highlighted &&
+                    "-mx-2 bg-info-soft/25 px-2 py-2 ring-1 ring-info-border motion-safe:animate-pulse",
+                className,
+            )}
+        >
+            {title != null || actions != null ? (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    {title != null ? (
+                        <h3 className="text-body-compact font-semibold text-foreground">
+                            {title}
+                        </h3>
+                    ) : null}
+                    {actions != null ? (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            {actions}
+                        </div>
+                    ) : null}
+                </div>
+            ) : null}
+            {children}
+        </section>
+    )
+}
+
 /**
  * 详情工作面纯白通栏只读信息栅格：统一 12px 柔灰标签与 13px 正文值，
  * 消除全站上百处手写 `<dl>` / `Fact` 的字号、间距与缺省值差异。

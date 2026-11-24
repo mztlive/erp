@@ -14,7 +14,12 @@ import {
     XIcon,
 } from "lucide-react"
 
-import { detailWorkspaceStyles, MoneyValue } from "@/components/business"
+import {
+    detailWorkspaceStyles,
+    MoneyValue,
+    WorkspaceFactGrid,
+    WorkspaceFactItem,
+} from "@/components/business"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -897,17 +902,28 @@ function StructuredDiffReview({
                                     className="size-3.5 shrink-0 transition-transform group-data-panel-open:rotate-180"
                                 />
                             </CollapsibleTrigger>
-                            <CollapsibleContent className="pt-1.5">
-                                <dl className="flex flex-wrap gap-x-5 gap-y-1.5 px-2.5 text-xs">
+                            <CollapsibleContent className="pt-2.5">
+                                <WorkspaceFactGrid
+                                    columns={3}
+                                    className="px-2.5"
+                                >
                                     {unchanged.map((field, index) => (
-                                        <CommercialFact
+                                        <WorkspaceFactItem
                                             key={`${field.label}-${index}`}
                                             label={field.label}
-                                            numeric={field.numeric}
                                             value={field.after}
+                                            numeric={field.numeric}
+                                            span={
+                                                isLongFact(
+                                                    field.label,
+                                                    field.after,
+                                                )
+                                                    ? "full"
+                                                    : 1
+                                            }
                                         />
                                     ))}
-                                </dl>
+                                </WorkspaceFactGrid>
                             </CollapsibleContent>
                         </Collapsible>
                     ) : null}
@@ -917,28 +933,31 @@ function StructuredDiffReview({
             {applicant ||
             (!counterpartyShown && counterparty) ||
             commercialFacts.length > 0 ? (
-                <dl
-                    aria-label="单据资料"
-                    className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs"
-                >
+                <WorkspaceFactGrid columns={3} ariaLabel="单据资料">
                     {applicant ? (
-                        <CommercialFact label="申请人" value={applicant} />
+                        <WorkspaceFactItem label="申请人" value={applicant} />
                     ) : null}
                     {!counterpartyShown && counterparty ? (
-                        <CommercialFact
+                        <WorkspaceFactItem
                             label={meta.counterpartyTitle}
                             value={counterparty}
                         />
                     ) : null}
-                    {commercialFacts.map((field, index) => (
-                        <CommercialFact
-                            key={`${field.label}-${index}`}
-                            label={field.label}
-                            value={sectionValue(field)}
-                            numeric={field.numeric}
-                        />
-                    ))}
-                </dl>
+                    {commercialFacts.map((field, index) => {
+                        const value = sectionValue(field)
+                        return (
+                            <WorkspaceFactItem
+                                key={`${field.label}-${index}`}
+                                label={field.label}
+                                value={value}
+                                numeric={field.numeric}
+                                span={
+                                    isLongFact(field.label, value) ? "full" : 1
+                                }
+                            />
+                        )
+                    })}
+                </WorkspaceFactGrid>
             ) : null}
 
             <section
@@ -1205,27 +1224,11 @@ function DiffKpi({
     )
 }
 
-function CommercialFact({
-    label,
-    value,
-    numeric,
-}: {
-    label: string
-    value: string
-    numeric?: boolean
-}) {
+function isLongFact(label: string, value: string) {
     return (
-        <div className="flex min-w-0 flex-wrap gap-x-1.5">
-            <dt className="text-muted-foreground">{label}</dt>
-            <dd
-                className={cn(
-                    "min-w-0 whitespace-pre-wrap wrap-anywhere text-foreground",
-                    numeric && "num",
-                )}
-            >
-                {value}
-            </dd>
-        </div>
+        value.length > 30 ||
+        value.includes("\n") ||
+        /(?:说明|备注|原因|事由|地址)/.test(label)
     )
 }
 

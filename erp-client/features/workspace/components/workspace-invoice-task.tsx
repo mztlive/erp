@@ -17,6 +17,9 @@ import {
     MoneyValue,
     PaperDocumentViewport,
     RateValue,
+    WorkspaceFactGrid,
+    WorkspaceFactGroup,
+    WorkspaceFactItem,
     useWorkspaceInspectorMode,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -589,16 +592,16 @@ function InvoiceExecutionWorkbench({
                                     idPrefix={idPrefix}
                                     request={taskRequest}
                                     amount={amount}
-                                    invoiceType={currentRevision?.invoiceType}
-                                    taxPoint={
-                                        currentRevision?.taxPoint ||
-                                        salesOrder?.taxRatePercent
-                                    }
                                 />
                                 <InvoiceCommercialDetails
                                     idPrefix={idPrefix}
                                     request={taskRequest}
                                     canOpenRequest={canOpenRequest}
+                                    invoiceType={currentRevision?.invoiceType}
+                                    taxPoint={
+                                        currentRevision?.taxPoint ||
+                                        salesOrder?.taxRatePercent
+                                    }
                                 />
                             </>
                         ) : null}
@@ -644,14 +647,10 @@ function InvoiceKpiBand({
     idPrefix,
     request,
     amount,
-    invoiceType,
-    taxPoint,
 }: {
     idPrefix: string
     request: InvoiceRequest
     amount: string | null
-    invoiceType?: string
-    taxPoint?: string
 }) {
     const ratio = registeredRatio(request.data.amount, request.invoiced_amount)
     const ratioPercent =
@@ -662,13 +661,11 @@ function InvoiceKpiBand({
                   outputScale: 1,
               })
             : null
-    const taxRate = taxPoint?.replace(/[%％]$/, "").trim()
-    const taxNumber = request.data.tax_number.trim()
 
     return (
         <dl
             aria-label="本申请开票指标"
-            className="grid min-w-0 grid-cols-1 gap-x-4 gap-y-3 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/invoice-task:grid-cols-2 @[840px]/invoice-task:grid-cols-4"
+            className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-3 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/invoice-task:grid-cols-2"
         >
             <div className="min-w-0">
                 <dt className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -736,66 +733,6 @@ function InvoiceKpiBand({
                     </dd>
                 ) : null}
             </div>
-            <div className="min-w-0">
-                <dt className="text-xs text-muted-foreground">
-                    开票抬头与税号
-                </dt>
-                <dd className="mt-0.5 wrap-anywhere text-body-compact font-semibold select-all">
-                    {request.data.invoice_title || "—"}
-                </dd>
-                {taxNumber ? (
-                    <dd className="flex min-w-0 flex-wrap items-center gap-x-2">
-                        <span className="num min-w-0 wrap-anywhere text-xs select-all">
-                            {taxNumber}
-                        </span>
-                        <Button
-                            id={`${idPrefix}-copy-tax-number`}
-                            type="button"
-                            variant="ghost"
-                            size="xs"
-                            aria-label="复制购方税号"
-                            onClick={async () => {
-                                try {
-                                    await navigator.clipboard.writeText(
-                                        taxNumber,
-                                    )
-                                    toast.add({
-                                        title: "已复制购方税号",
-                                        type: "success",
-                                    })
-                                } catch {
-                                    toast.add({
-                                        title: "复制失败，请选中税号手动复制",
-                                        type: "error",
-                                    })
-                                }
-                            }}
-                        >
-                            <CopyIcon
-                                aria-hidden="true"
-                                data-icon="inline-start"
-                            />
-                            复制
-                        </Button>
-                    </dd>
-                ) : null}
-            </div>
-            <div className="min-w-0">
-                <dt className="text-xs text-muted-foreground">
-                    销售单开票要求
-                </dt>
-                <dd className="mt-0.5 wrap-anywhere text-body-compact font-semibold">
-                    {invoiceType || "—"}
-                </dd>
-                <dd className="mt-0.5 flex flex-wrap gap-x-1.5 text-xs text-muted-foreground">
-                    <span>税点</span>
-                    {taxRate ? (
-                        <RateValue value={taxRate} precision={2} />
-                    ) : (
-                        "—"
-                    )}
-                </dd>
-            </div>
         </dl>
     )
 }
@@ -804,62 +741,115 @@ function InvoiceCommercialDetails({
     idPrefix,
     request,
     canOpenRequest,
+    invoiceType,
+    taxPoint,
 }: {
     idPrefix: string
     request: InvoiceRequest
     canOpenRequest: boolean
+    invoiceType?: string
+    taxPoint?: string
 }) {
     const { data } = request
     const lines = resolveInvoiceRequestLines(data)
     const lineTotal = lines.length ? invoiceLinesTotal(lines) : null
+    const taxRate = taxPoint?.replace(/[%％]$/, "").trim()
+    const taxNumber = data.tax_number.trim()
+    const sellerTaxNumber = data.seller_tax_number?.trim()
     const requestNumber = (
         <span className="num select-all">{request.request_no}</span>
     )
 
-    const fields = [
-        {
-            label: "开票申请",
-            value:
-                request.request_no &&
-                (canOpenRequest ? (
-                    <Link
-                        id={`${idPrefix}-linked-request-${toAutomationIdSegment(request.id)}`}
-                        href={`/finance/customer-accounts/invoice-requests/${encodeURIComponent(request.id)}`}
-                        className="underline decoration-border underline-offset-4 hover:decoration-foreground"
-                    >
-                        {requestNumber}
-                    </Link>
-                ) : (
-                    requestNumber
-                )),
-        },
-        { label: "销方开票主体", value: data.seller_name },
-        {
-            label: "销方税号",
-            value: data.seller_tax_number && (
-                <span className="num select-all">{data.seller_tax_number}</span>
-            ),
-        },
-        { label: "申请事由", value: data.reason },
-    ]
-
     return (
-        <section aria-label="开票申请资料" className="min-w-0 space-y-3">
-            <dl className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
-                {fields.map(({ label, value }) =>
-                    value ? (
-                        <div
-                            key={label}
-                            className="flex min-w-0 flex-wrap gap-x-1.5"
-                        >
-                            <dt className="text-muted-foreground">{label}</dt>
-                            <dd className="min-w-0 wrap-anywhere whitespace-pre-wrap">
-                                {value}
-                            </dd>
-                        </div>
-                    ) : null,
-                )}
-            </dl>
+        <section aria-label="开票申请资料" className="min-w-0 space-y-4">
+            <WorkspaceFactGroup title="开票资料与抬头">
+                <WorkspaceFactGrid columns={3} ariaLabel="开票资料与抬头">
+                    <WorkspaceFactItem
+                        label="购方抬头"
+                        value={data.invoice_title || undefined}
+                        selectable={Boolean(data.invoice_title)}
+                    />
+                    <WorkspaceFactItem label="购方税号" numeric>
+                        {taxNumber ? (
+                            <span className="inline-flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                                <span className="num min-w-0 wrap-anywhere select-all">
+                                    {taxNumber}
+                                </span>
+                                <Button
+                                    id={`${idPrefix}-copy-tax-number`}
+                                    type="button"
+                                    variant="ghost"
+                                    size="xs"
+                                    aria-label="复制购方税号"
+                                    onClick={async () => {
+                                        try {
+                                            await navigator.clipboard.writeText(
+                                                taxNumber,
+                                            )
+                                            toast.add({
+                                                title: "已复制购方税号",
+                                                type: "success",
+                                            })
+                                        } catch {
+                                            toast.add({
+                                                title: "复制失败，请选中税号手动复制",
+                                                type: "error",
+                                            })
+                                        }
+                                    }}
+                                >
+                                    <CopyIcon
+                                        aria-hidden="true"
+                                        data-icon="inline-start"
+                                    />
+                                    复制
+                                </Button>
+                            </span>
+                        ) : null}
+                    </WorkspaceFactItem>
+                    <WorkspaceFactItem
+                        label="开票类型"
+                        value={invoiceType || undefined}
+                    />
+                    <WorkspaceFactItem label="约定税点" numeric>
+                        {taxRate ? (
+                            <RateValue value={taxRate} precision={2} />
+                        ) : null}
+                    </WorkspaceFactItem>
+                    <WorkspaceFactItem
+                        label="销方开票主体"
+                        value={data.seller_name || undefined}
+                    />
+                    <WorkspaceFactItem
+                        label="销方税号"
+                        value={sellerTaxNumber || undefined}
+                        numeric
+                        selectable={Boolean(sellerTaxNumber)}
+                    />
+                    {request.request_no ? (
+                        <WorkspaceFactItem label="开票申请" numeric>
+                            {canOpenRequest ? (
+                                <Link
+                                    id={`${idPrefix}-linked-request-${toAutomationIdSegment(request.id)}`}
+                                    href={`/finance/customer-accounts/invoice-requests/${encodeURIComponent(request.id)}`}
+                                    className="underline decoration-border underline-offset-4 hover:decoration-foreground"
+                                >
+                                    {requestNumber}
+                                </Link>
+                            ) : (
+                                requestNumber
+                            )}
+                        </WorkspaceFactItem>
+                    ) : null}
+                    {data.reason ? (
+                        <WorkspaceFactItem
+                            label="申请事由"
+                            value={data.reason}
+                            span="full"
+                        />
+                    ) : null}
+                </WorkspaceFactGrid>
+            </WorkspaceFactGroup>
             {lines.length ? (
                 <Table
                     aria-label="开票明细"

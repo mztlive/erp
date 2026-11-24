@@ -11,6 +11,8 @@ import {
 import {
     IconActionButton,
     MoneyValue,
+    WorkspaceFactGrid,
+    WorkspaceFactItem,
     surfaceClassName,
     surfaceInsetClassName,
     workspaceTaskSurfacePadClassName,
@@ -92,23 +94,28 @@ export function PurchaseOrderCreateSourcePanel({
     if (flat && disabled) {
         return selectedOrder &&
             (selectedOrder.contractNumber || selectedOrder.salesOwnerName) ? (
-            <div className="flex flex-wrap gap-x-5 gap-y-1 border-b border-border/60 px-5 py-3 text-xs text-muted-foreground">
-                {selectedOrder.contractNumber ? (
-                    <span>
-                        合同{" "}
-                        <span className="text-foreground">
-                            {selectedOrder.contractNumber}
-                        </span>
-                    </span>
-                ) : null}
-                {selectedOrder.salesOwnerName ? (
-                    <span>
-                        销售负责人{" "}
-                        <span className="text-foreground">
-                            {selectedOrder.salesOwnerName}
-                        </span>
-                    </span>
-                ) : null}
+            <div
+                className={cn(
+                    "border-b border-border/60 py-3",
+                    workspaceTaskSurfacePadClassName,
+                )}
+            >
+                <WorkspaceFactGrid columns={3} ariaLabel="来源销售单信息">
+                    {selectedOrder.contractNumber ? (
+                        <WorkspaceFactItem
+                            label="合同"
+                            value={selectedOrder.contractNumber}
+                            numeric
+                            selectable
+                        />
+                    ) : null}
+                    {selectedOrder.salesOwnerName ? (
+                        <WorkspaceFactItem
+                            label="销售负责人"
+                            value={selectedOrder.salesOwnerName}
+                        />
+                    ) : null}
+                </WorkspaceFactGrid>
             </div>
         ) : null
     }

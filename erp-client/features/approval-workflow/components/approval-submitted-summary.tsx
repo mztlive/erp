@@ -12,7 +12,11 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 
-import { MoneyValue } from "@/components/business"
+import {
+    MoneyValue,
+    WorkspaceFactGrid,
+    WorkspaceFactItem,
+} from "@/components/business"
 import {
     TableToolbar,
     TableToolbarScope,
@@ -67,6 +71,24 @@ const CHANGE_ARROW = " → "
 const SEGMENT_SEPARATOR = " · "
 const LINE_DIFF_LABEL = "明细差异"
 const GROSS_AMOUNT_LABEL = "含税金额"
+const PRIMARY_AMOUNT_LABELS = [
+    GROSS_AMOUNT_LABEL,
+    "申请金额",
+    "本次申请金额",
+    "本次申请付款金额",
+    "回款金额",
+    "本次退款金额",
+    "本次冲正金额",
+    "退款金额",
+    "冲正金额",
+    "总金额",
+    "金额",
+] as const
+const APPLICATION_AMOUNT_LABELS = new Set<string>([
+    "申请金额",
+    "本次申请金额",
+    "本次申请付款金额",
+])
 const FILTER_THRESHOLD = 8
 const DEFAULT_PAGE_SIZE = 20
 
@@ -292,6 +314,15 @@ function SummaryMetrics({
     )
 }
 
+type NormalizedFactItem = {
+    key: string
+    label: string
+    value: string
+    numeric?: boolean
+    selectable?: boolean
+    span?: 1 | 2 | "full"
+}
+
 function Metadata({
     facts,
     submitterName,
@@ -300,34 +331,75 @@ function Metadata({
     submitterName?: string
 }) {
     if (!facts.length && !submitterName) return null
+    const items: NormalizedFactItem[] = []
+    if (submitterName) {
+        items.push({
+            key: "submitter",
+            label: "申请人",
+            value: submitterName,
+        })
+    }
+    facts.forEach((section, index) => {
+        const value = sectionValue(section)
+        if (section.label === "收款账户") {
+            const parts = value
+                .split(SEGMENT_SEPARATOR)
+                .map((part) => part.trim())
+                .filter(Boolean)
+            if (parts.length === 3) {
+                items.push(
+                    {
+                        key: `${section.label}:${index}:name`,
+                        label: "收款户名",
+                        value: parts[0],
+                    },
+                    {
+                        key: `${section.label}:${index}:bank`,
+                        label: "开户行",
+                        value: parts[1],
+                    },
+                    {
+                        key: `${section.label}:${index}:account`,
+                        label: "收款账号",
+                        value: parts[2],
+                        numeric: true,
+                        selectable: true,
+                    },
+                )
+                return
+            }
+        }
+        const isLong =
+            value.length > 30 ||
+            value.includes("\n") ||
+            /(?:说明|原因|备注|事由)/.test(section.label)
+        const isSelectable =
+            section.numeric ||
+            /(?:单号|编号|账号|账户|税号|联行号|流水号|合同号)/.test(
+                section.label,
+            )
+        items.push({
+            key: `${section.label}:${index}`,
+            label: section.label,
+            value,
+            numeric: section.numeric,
+            selectable: isSelectable,
+            span: isLong ? "full" : 1,
+        })
+    })
     return (
-        <dl
-            aria-label="提交信息"
-            className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs"
-        >
-            {submitterName && (
-                <div className="inline-flex items-baseline gap-x-1.5">
-                    <dt className="text-muted-foreground">申请人</dt>
-                    <dd className="font-medium">{submitterName}</dd>
-                </div>
-            )}
-            {facts.map((section, index) => (
-                <div
-                    key={`${section.label}:${index}`}
-                    className="flex min-w-0 flex-wrap items-baseline gap-x-1.5"
-                >
-                    <dt className="text-muted-foreground">{section.label}</dt>
-                    <dd
-                        className={cn(
-                            "min-w-0 wrap-anywhere font-medium",
-                            section.numeric && "num",
-                        )}
-                    >
-                        {sectionValue(section)}
-                    </dd>
-                </div>
+        <WorkspaceFactGrid columns={3} ariaLabel="提交信息">
+            {items.map((item) => (
+                <WorkspaceFactItem
+                    key={item.key}
+                    label={item.label}
+                    value={item.value}
+                    numeric={item.numeric}
+                    selectable={item.selectable}
+                    span={item.span}
+                />
             ))}
-        </dl>
+        </WorkspaceFactGrid>
     )
 }
 
@@ -583,6 +655,14 @@ function SummaryLines({
         ? visible.find((line) => changedLines.has(line))
         : undefined
     const totalCount = lines.length + moreCount
+    const hasOrderScheduleOrQuantity = lines.some(
+        (line) =>
+            Boolean(line.due_label?.trim()) ||
+            /(?:数量|单价|交期|×)/.test(line.quantity ?? ""),
+    )
+    const detailColumnLabel = hasOrderScheduleOrQuantity
+        ? "数量、金额及说明"
+        : "金额与摘要"
 
     return (
         <>
@@ -602,7 +682,7 @@ function SummaryLines({
                             <Input
                                 id={`${id}-search`}
                                 value={search}
-                                placeholder="搜索名称、数量或交期"
+                                placeholder="搜索明细项目或摘要"
                                 aria-label="搜索明细"
                                 className="h-control-sm w-52 max-w-full text-xs"
                                 onChange={(event) =>
@@ -688,7 +768,7 @@ function SummaryLines({
                                 scope="col"
                                 className="rounded-r-md bg-surface-sunken hover:bg-surface-sunken"
                             >
-                                数量、单价及交期
+                                {detailColumnLabel}
                             </TableHead>
                         </TableRow>
                     </TableHeader>
@@ -915,24 +995,46 @@ export function ApprovalSubmittedSummary({
         ? source.lines.length + source.more_count
         : changedLines.size
     const showLineChanges = Boolean(lineDiff) || hasLineChanges
-    const grossComparison = comparisons.find(
-        (item) => item.label === GROSS_AMOUNT_LABEL,
-    )
-    const grossFact = facts.find(
-        (fact) => fact.label === GROSS_AMOUNT_LABEL && fact.numeric,
-    )
+    const primaryComparison = PRIMARY_AMOUNT_LABELS.map((label) =>
+        comparisons.find((item) => item.label === label),
+    ).find((item): item is Comparison => Boolean(item))
+    const primaryFact = PRIMARY_AMOUNT_LABELS.map((label) =>
+        facts.find(
+            (fact) =>
+                fact.label === label &&
+                fact.value.trim() !== "" &&
+                (fact.numeric || currencyDecimal(fact.value) !== null),
+        ),
+    ).find((item): item is BriefSection => Boolean(item))
     const amount =
         source.amount_label ||
-        grossFact?.value ||
-        (currencyDecimal(grossComparison?.after)
-            ? grossComparison?.after
+        primaryFact?.value ||
+        (currencyDecimal(primaryComparison?.after)
+            ? primaryComparison?.after
             : null)
-    const isGrossAmount = Boolean(
-        amount &&
-        (amount === grossComparison?.after || amount === grossFact?.value),
-    )
-    const delta = grossComparison?.changed
-        ? grossAmountDelta(grossComparison.before, grossComparison.after)
+    const matchesAmount = (candidate?: string | null) => {
+        if (!amount || !candidate) return false
+        if (candidate === amount) return true
+        const candidateDecimal = currencyDecimal(candidate)
+        const amountDecimal = currencyDecimal(amount)
+        return Boolean(
+            candidateDecimal &&
+            amountDecimal &&
+            candidateDecimal === amountDecimal,
+        )
+    }
+    const matchedFact =
+        primaryFact && matchesAmount(primaryFact.value)
+            ? primaryFact
+            : undefined
+    const matchedComparison =
+        primaryComparison && matchesAmount(primaryComparison.after)
+            ? primaryComparison
+            : undefined
+    const matchedAmountLabel = matchedFact?.label ?? matchedComparison?.label
+    const isGrossAmount = matchedAmountLabel === GROSS_AMOUNT_LABEL
+    const delta = primaryComparison?.changed
+        ? grossAmountDelta(primaryComparison.before, primaryComparison.after)
         : null
     const metrics: Metric[] = []
 
@@ -953,21 +1055,26 @@ export function ApprovalSubmittedSummary({
     if (amount) {
         metrics.push({
             key: "amount",
-            label: "提交金额",
+            label: matchedFact?.label ?? matchedComparison?.label ?? "提交金额",
             basis: isGrossAmount ? "含税" : "提交口径",
             formula: isGrossAmount
                 ? "取本次审批提交资料记录的整单含税金额。"
-                : "取本次审批提交资料记录的金额。",
+                : matchedAmountLabel
+                  ? `取本次审批提交资料记录的${matchedAmountLabel}。`
+                  : "取本次审批提交资料记录的金额。",
             value: renderMetricMoney(amount),
         })
     }
-    if (delta && grossComparison) {
+    if (delta && primaryComparison) {
         const DirectionIcon = delta.direction > 0 ? ArrowUpIcon : ArrowDownIcon
         metrics.push({
             key: "amount-change",
             label: "金额变化",
-            basis: "含税",
-            formula: `变更后含税金额（${grossComparison.after}）减去变更前含税金额（${grossComparison.before}）。`,
+            basis:
+                primaryComparison.label === GROSS_AMOUNT_LABEL
+                    ? "含税"
+                    : primaryComparison.label,
+            formula: `变更后${primaryComparison.label}（${primaryComparison.after}）减去变更前${primaryComparison.label}（${primaryComparison.before}）。`,
             value: (
                 <span
                     className={cn(
@@ -994,13 +1101,27 @@ export function ApprovalSubmittedSummary({
     }
 
     const promotedFacts = new Set<BriefSection>()
-    if (grossFact && isGrossAmount) promotedFacts.add(grossFact)
-    for (const [label, key, basis] of [
+    if (matchedFact) promotedFacts.add(matchedFact)
+    const hasApplicationAmount =
+        (matchedFact != null &&
+            APPLICATION_AMOUNT_LABELS.has(matchedFact.label)) ||
+        (matchedComparison != null &&
+            APPLICATION_AMOUNT_LABELS.has(matchedComparison.label)) ||
+        facts.some((fact) => APPLICATION_AMOUNT_LABELS.has(fact.label))
+    const secondaryMetrics: readonly (readonly [string, string, string])[] = [
         ["不含税金额", "net", "未税"],
         ["税额", "tax", "整单"],
-    ] as const) {
+        ...(hasApplicationAmount
+            ? ([["待付金额", "unpaid", "剩余待付"]] as const)
+            : []),
+    ]
+    for (const [label, key, basis] of secondaryMetrics) {
+        if (metrics.length >= 4) break
         const fact = facts.find(
-            (item) => item.label === label && item.numeric && item.value.trim(),
+            (item) =>
+                item.label === label &&
+                item.value.trim() !== "" &&
+                (item.numeric || currencyDecimal(item.value) !== null),
         )
         const comparison = comparisons.find((item) => item.label === label)
         const value =
@@ -1017,7 +1138,13 @@ export function ApprovalSubmittedSummary({
         })
     }
     const lineCount = source.lines.length + source.more_count
-    if (lineDetails == null && lineCount > 0 && metrics.length < 4) {
+    if (
+        lineDetails == null &&
+        metrics.length > 0 &&
+        metrics.length < 4 &&
+        lineCount > 0 &&
+        (knownLineChanges || lineCount > 1)
+    ) {
         metrics.push({
             key: "line-count",
             label: knownLineChanges ? "变更明细" : "明细行数",

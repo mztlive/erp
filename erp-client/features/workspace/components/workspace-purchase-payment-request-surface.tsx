@@ -99,6 +99,7 @@ function PaymentRequestSurface({
     const isPaymentExecution =
         item.workItemType === "SUPPLIER_PAYMENT_EXECUTION"
     const isApprovalInstance = item.workItemType === "APPROVAL_INSTANCE"
+    const isRework = item.workItemType === "APPROVAL_REWORK"
     const instanceId =
         item.approvalProcessInstanceId ?? item.approval?.instanceId
     const canUseDecisionRail = Boolean(
@@ -222,6 +223,7 @@ function PaymentRequestSurface({
     const loadFiles = showDecisionRail || hasExecutionReference
     const scopedWorkItemId =
         !isApprovalInstance &&
+        !isRework &&
         item.allowedActions.some(
             (action) =>
                 action === "PROCESS" ||
@@ -551,10 +553,12 @@ function PaymentRequestSurface({
                             title={title}
                             primaryStatus={{
                                 label:
-                                    isApprovalInstance &&
-                                    !item.statusLabel.startsWith("审批")
-                                        ? `审批${item.statusLabel}`
-                                        : item.statusLabel,
+                                    isRework && item.status === "OPEN"
+                                        ? item.workItemTypeLabel
+                                        : isApprovalInstance &&
+                                            !item.statusLabel.startsWith("审批")
+                                          ? `审批${item.statusLabel}`
+                                          : item.statusLabel,
                                 tone: item.statusTone,
                             }}
                             documentNumber={documentNumber}
@@ -611,14 +615,15 @@ function PaymentRequestSurface({
                                     : undefined
                             }
                             hideRejectionBanner={
-                                item.approval?.status === "REJECTED"
+                                isRework || item.approval?.status === "REJECTED"
                             }
                             idPrefix={`${id}-compact-stepper`}
                         />
                     ) : null
                 }
                 alertBanner={
-                    canReadSensitive && item.approval?.status === "REJECTED" ? (
+                    canReadSensitive &&
+                    (isRework || item.approval?.status === "REJECTED") ? (
                         <WorkspaceRejectionNotice
                             item={item}
                             actionable={Boolean(

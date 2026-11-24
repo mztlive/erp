@@ -9,6 +9,11 @@ import {
     CircleAlertIcon,
 } from "lucide-react"
 
+import {
+    WorkspaceFactGrid,
+    WorkspaceFactGroup,
+    WorkspaceFactItem,
+} from "@/components/business"
 import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
 import { Button } from "@/components/ui/button"
 import {
@@ -524,70 +529,76 @@ export function SettlementReviewWorkspace({
                     </div>
                 )}
                 {visibleRecord === "overview" && (
-                    <dl className="flex flex-wrap gap-x-5 gap-y-2 text-xs">
-                        {[
-                            [
-                                "供应商账单",
-                                detail.statement.externalBillNo ?? "尚未同步",
-                                Boolean(detail.statement.externalBillNo),
-                            ],
-                            [
-                                "账单版本",
-                                detail.statement.externalBillVersion ?? "—",
-                                true,
-                            ],
-                            [
-                                "业务记录截至",
-                                formatDateTime(
+                    <WorkspaceFactGroup title="结算单概览">
+                        <WorkspaceFactGrid columns={3} ariaLabel="结算单概览">
+                            <WorkspaceFactItem
+                                label="供应商账单"
+                                value={
+                                    detail.statement.externalBillNo ??
+                                    "尚未同步"
+                                }
+                                numeric={Boolean(
+                                    detail.statement.externalBillNo,
+                                )}
+                                selectable={Boolean(
+                                    detail.statement.externalBillNo,
+                                )}
+                                tone={
+                                    detail.statement.externalBillNo
+                                        ? "default"
+                                        : "muted"
+                                }
+                            />
+                            <WorkspaceFactItem
+                                label="账单版本"
+                                value={detail.statement.externalBillVersion}
+                                numeric
+                                selectable={Boolean(
+                                    detail.statement.externalBillVersion,
+                                )}
+                            />
+                            <WorkspaceFactItem
+                                label="业务记录截至"
+                                value={formatDateTime(
                                     detail.freshness.immutableFactsAsOf,
                                     "default",
-                                ),
-                                true,
-                            ],
-                            [
-                                "经办",
-                                detail.statement.preparedBy?.displayName ?? "—",
-                                false,
-                            ],
-                            [
-                                "订单结算价",
-                                settlementMoney(detail.totals.orderAmountGross),
-                                true,
-                            ],
-                            [
-                                "运费",
-                                settlementMoney(detail.totals.freightGross),
-                                true,
-                            ],
-                            [
-                                "服务费",
-                                settlementMoney(detail.totals.serviceFeeGross),
-                                true,
-                            ],
-                            [
-                                "退款",
-                                settlementMoney(detail.totals.refundGross),
-                                true,
-                            ],
-                        ].map(([label, value, numeric]) => (
-                            <div
-                                key={String(label)}
-                                className="flex min-w-0 items-baseline gap-1"
-                            >
-                                <dt className="shrink-0 text-muted-foreground">
-                                    {label}
-                                </dt>
-                                <dd
-                                    className={cn(
-                                        "min-w-0 wrap-anywhere",
-                                        numeric && "num",
-                                    )}
-                                >
-                                    {value}
-                                </dd>
-                            </div>
-                        ))}
-                    </dl>
+                                )}
+                                numeric
+                            />
+                            <WorkspaceFactItem
+                                label="经办"
+                                value={detail.statement.preparedBy?.displayName}
+                            />
+                            <WorkspaceFactItem
+                                label="订单结算价"
+                                value={settlementMoney(
+                                    detail.totals.orderAmountGross,
+                                )}
+                                numeric
+                            />
+                            <WorkspaceFactItem
+                                label="运费"
+                                value={settlementMoney(
+                                    detail.totals.freightGross,
+                                )}
+                                numeric
+                            />
+                            <WorkspaceFactItem
+                                label="服务费"
+                                value={settlementMoney(
+                                    detail.totals.serviceFeeGross,
+                                )}
+                                numeric
+                            />
+                            <WorkspaceFactItem
+                                label="退款"
+                                value={settlementMoney(
+                                    detail.totals.refundGross,
+                                )}
+                                numeric
+                            />
+                        </WorkspaceFactGrid>
+                    </WorkspaceFactGroup>
                 )}
                 {visibleRecord === "review" && (
                     <SettlementCenterReview detail={detail} embedded />

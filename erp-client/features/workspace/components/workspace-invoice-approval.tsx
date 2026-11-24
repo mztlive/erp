@@ -1,17 +1,28 @@
 "use client"
 
 import { useEffect, useState, type ReactNode } from "react"
-import { ChevronRightIcon, FileTextIcon, TriangleAlertIcon } from "lucide-react"
+import {
+    ChevronRightIcon,
+    FileTextIcon,
+    PaperclipIcon,
+    RefreshCwIcon,
+    TriangleAlertIcon,
+} from "lucide-react"
 
 import {
     BusinessFailureState,
     DetailWorkspaceSection,
     MoneyValue,
+    RateValue,
+    WorkspaceFactGrid,
+    WorkspaceFactGroup,
+    WorkspaceFactItem,
     detailWorkspaceStyles,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { ApprovalMaterialFiles } from "@/features/approval-workflow/components/approval-material-files"
+import { displayUnixSeconds } from "@/features/approval-workflow/display"
 import { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-approval-materials"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
@@ -21,7 +32,6 @@ import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceApprovalResubmissionBanner } from "./workspace-approval-resubmission-banner"
 import type { WorkspacePaperTarget } from "./workspace-document-paper-dialog"
 import {
-    InvoiceApprovalFact,
     InvoiceHistoryEvidence,
     InvoiceReceiptEvidence,
     InvoiceRequestEvidence,
@@ -146,11 +156,11 @@ export function WorkspaceInvoiceApproval({
                 : "开票记录",
         },
     ]
-    const buyerTitle =
-        submission.buyerTitle === item.counterpartyName?.trim() ||
-        submission.buyerTitle === item.objectTitle.trim()
-            ? undefined
-            : submission.buyerTitle
+    const readAt = review.data && displayUnixSeconds(review.data.read_at)
+    const decimalTaxPoint =
+        submission.taxPoint && /^\d+(?:\.\d+)?%$/.test(submission.taxPoint)
+            ? submission.taxPoint.slice(0, -1)
+            : null
 
     const preview = (
         view: "source-sales" | "current-source-sales",
@@ -170,6 +180,8 @@ export function WorkspaceInvoiceApproval({
         !hideEmbeddedMaterials && attachmentCount > 0
             ? () => locateRisk("materials")
             : undefined
+    const openMaterialsAction = onOpenMaterials ?? openEmbeddedMaterials
+    const isFetching = review.isFetching || materials.isFetching
 
     const activeTabSegment = toAutomationIdSegment(activeTab)
 
@@ -243,13 +255,8 @@ export function WorkspaceInvoiceApproval({
             <InvoiceApprovalKpis
                 prefix={prefix}
                 submission={submission}
-                buyerTitle={buyerTitle}
                 review={review.data}
                 shortage={shortage}
-                isFetching={review.isFetching || materials.isFetching}
-                onRefresh={refresh}
-                attachmentCount={attachmentCount}
-                onOpenMaterials={onOpenMaterials ?? openEmbeddedMaterials}
             />
             {review.isPending ? (
                 <Loading>正在读取开票额度与回款…</Loading>
@@ -262,63 +269,150 @@ export function WorkspaceInvoiceApproval({
                 />
             ) : null}
 
-            <div
-                role="region"
-                aria-label="开票申请信息"
-                className="flex flex-wrap items-baseline gap-x-5 gap-y-1.5 text-xs"
+            <WorkspaceFactGroup
+                title="开票申请与票税要素"
+                ariaLabel="开票申请信息"
+                className="pt-1"
+                actions={
+                    <>
+                        {readAt ? (
+                            <time
+                                className="num text-tiny text-muted-foreground"
+                                dateTime={readAt.dateTime}
+                            >
+                                核对于 {readAt.label}
+                            </time>
+                        ) : null}
+                        <Button
+                            id={`${prefix}-refresh`}
+                            type="button"
+                            size="xs"
+                            variant="ghost"
+                            className={cn(
+                                detailWorkspaceStyles.inlineLinkButton,
+                                "h-control-xs px-1.5 text-xs",
+                            )}
+                            disabled={isFetching}
+                            onClick={refresh}
+                        >
+                            <RefreshCwIcon
+                                aria-hidden="true"
+                                className={cn(
+                                    isFetching && "motion-safe:animate-spin",
+                                )}
+                            />
+                            刷新票款
+                        </Button>
+                        {openMaterialsAction ? (
+                            <Button
+                                id={`${prefix}-open-materials`}
+                                type="button"
+                                size="xs"
+                                variant="ghost"
+                                className={cn(
+                                    detailWorkspaceStyles.inlineLinkButton,
+                                    "num h-control-xs px-1.5 text-xs",
+                                )}
+                                onClick={openMaterialsAction}
+                            >
+                                <PaperclipIcon aria-hidden="true" />
+                                凭证（{attachmentCount}）
+                            </Button>
+                        ) : null}
+                    </>
+                }
             >
-                <InvoiceApprovalFact
-                    label="购方税号"
-                    value={submission.buyerTaxNumber}
-                    numeric
-                />
-                <InvoiceApprovalFact
-                    label="销方税号"
-                    value={submission.sellerTaxNumber}
-                    numeric
-                />
-                <InvoiceApprovalFact
-                    label="开票类型"
-                    value={submission.invoiceType}
-                />
-                <InvoiceApprovalFact
-                    label="申请事由"
-                    value={submission.reason}
-                />
-                <InvoiceApprovalFact
-                    label="申请人"
-                    value={submission.submitter}
-                />
-                {primarySource ? (
-                    <Button
-                        id={`${prefix}-primary-source-preview-${toAutomationIdSegment(primarySource.revision_id)}`}
-                        type="button"
-                        size="xs"
-                        variant="ghost"
-                        className={cn(
-                            detailWorkspaceStyles.inlineLinkButton,
-                            "h-auto max-w-full px-1.5 text-left text-xs whitespace-normal wrap-anywhere",
-                        )}
-                        onClick={() =>
-                            preview(
-                                submittedSales.length
-                                    ? "source-sales"
-                                    : "current-source-sales",
-                                primarySource.revision_id,
+                <WorkspaceFactGrid columns={3} ariaLabel="开票申请信息">
+                    <WorkspaceFactItem
+                        label="购方抬头"
+                        value={submission.buyerTitle}
+                        selectable={Boolean(submission.buyerTitle)}
+                    />
+                    <WorkspaceFactItem
+                        label="购方税号"
+                        value={submission.buyerTaxNumber}
+                        numeric
+                        selectable={Boolean(submission.buyerTaxNumber)}
+                    />
+                    <WorkspaceFactItem
+                        label="开票类型"
+                        value={submission.invoiceType}
+                    />
+                    <WorkspaceFactItem
+                        label="销方主体"
+                        value={submission.sellerName}
+                    />
+                    <WorkspaceFactItem
+                        label="销方税号"
+                        value={submission.sellerTaxNumber}
+                        numeric
+                        selectable={Boolean(submission.sellerTaxNumber)}
+                    />
+                    <WorkspaceFactItem label="约定税点" numeric>
+                        {submission.taxPoint ? (
+                            decimalTaxPoint === null ? (
+                                submission.taxPoint
+                            ) : (
+                                <RateValue
+                                    value={decimalTaxPoint}
+                                    precision={2}
+                                    className="font-medium text-foreground"
+                                />
                             )
-                        }
-                    >
-                        <FileTextIcon aria-hidden="true" />
-                        <span>
-                            预览销售单{" "}
-                            <span className="num">
-                                {invoiceSourceNumber(primarySource)} · V
-                                {primarySource.revision_no}
-                            </span>
-                        </span>
-                    </Button>
-                ) : null}
-            </div>
+                        ) : null}
+                    </WorkspaceFactItem>
+                    <WorkspaceFactItem
+                        label="开票时点"
+                        value={submission.invoiceTiming}
+                    />
+                    <WorkspaceFactItem
+                        label="付款条件"
+                        value={submission.paymentTerm}
+                    />
+                    <WorkspaceFactItem
+                        label="申请人"
+                        value={submission.submitter}
+                    />
+                    {submission.reason ? (
+                        <WorkspaceFactItem
+                            label="申请事由"
+                            value={submission.reason}
+                            span="full"
+                        />
+                    ) : null}
+                    {primarySource ? (
+                        <WorkspaceFactItem label="来源销售单" span="full">
+                            <Button
+                                id={`${prefix}-primary-source-preview-${toAutomationIdSegment(primarySource.revision_id)}`}
+                                type="button"
+                                size="xs"
+                                variant="ghost"
+                                className={cn(
+                                    detailWorkspaceStyles.inlineLinkButton,
+                                    "-ml-1.5 h-auto max-w-full px-1.5 text-left text-body-compact whitespace-normal wrap-anywhere",
+                                )}
+                                onClick={() =>
+                                    preview(
+                                        submittedSales.length
+                                            ? "source-sales"
+                                            : "current-source-sales",
+                                        primarySource.revision_id,
+                                    )
+                                }
+                            >
+                                <FileTextIcon aria-hidden="true" />
+                                <span>
+                                    预览销售单{" "}
+                                    <span className="num">
+                                        {invoiceSourceNumber(primarySource)} · V
+                                        {primarySource.revision_no}
+                                    </span>
+                                </span>
+                            </Button>
+                        </WorkspaceFactItem>
+                    ) : null}
+                </WorkspaceFactGrid>
+            </WorkspaceFactGroup>
 
             <section aria-label="开票核对依据" className="min-w-0 space-y-3">
                 <h2 className="sr-only">开票核对依据</h2>
@@ -607,62 +701,43 @@ function QuotaEvidence({
     const { amounts } = review
     return (
         <RiskEvidence id={id} title="开票额度说明" pulse={pulse}>
-            <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
-                <InvoiceApprovalFact
-                    label="可开票总额"
-                    value={
-                        <MoneyValue
-                            value={review.invoiceable_total}
-                            display="exact"
-                        />
-                    }
-                />
-                <InvoiceApprovalFact
-                    label="已开票净额"
-                    value={
-                        <MoneyValue
-                            value={review.invoiced_total}
-                            display="exact"
-                        />
-                    }
-                />
-                <InvoiceApprovalFact
-                    label="其他审批中占用"
-                    value={
-                        <MoneyValue
-                            value={amounts.other_pending}
-                            display="exact"
-                        />
-                    }
-                />
-                <InvoiceApprovalFact
-                    label="其他已批准待开票"
-                    value={
-                        <MoneyValue
-                            value={amounts.other_approved}
-                            display="exact"
-                        />
-                    }
-                />
-                <InvoiceApprovalFact
-                    label="本次有效占用"
-                    value={
-                        <MoneyValue
-                            value={amounts.current_reserved}
-                            display="exact"
-                        />
-                    }
-                />
-                <InvoiceApprovalFact
+            <WorkspaceFactGrid columns={3} ariaLabel="开票额度说明">
+                <WorkspaceFactItem label="可开票总额" numeric>
+                    <MoneyValue
+                        value={review.invoiceable_total}
+                        display="exact"
+                    />
+                </WorkspaceFactItem>
+                <WorkspaceFactItem label="已开票净额" numeric>
+                    <MoneyValue value={review.invoiced_total} display="exact" />
+                </WorkspaceFactItem>
+                <WorkspaceFactItem label="其他审批中占用" numeric>
+                    <MoneyValue value={amounts.other_pending} display="exact" />
+                </WorkspaceFactItem>
+                <WorkspaceFactItem label="其他已批准待开票" numeric>
+                    <MoneyValue
+                        value={amounts.other_approved}
+                        display="exact"
+                    />
+                </WorkspaceFactItem>
+                <WorkspaceFactItem label="本次有效占用" numeric>
+                    <MoneyValue
+                        value={amounts.current_reserved}
+                        display="exact"
+                    />
+                </WorkspaceFactItem>
+                <WorkspaceFactItem
                     label={shortage ? "超额" : "扣除本次后可再申请"}
-                    value={
-                        <MoneyValue
-                            value={shortage ?? amounts.available}
-                            display="exact"
-                        />
-                    }
-                />
-            </div>
+                    numeric
+                    tone={shortage ? "destructive" : "default"}
+                >
+                    <MoneyValue
+                        value={shortage ?? amounts.available}
+                        display="exact"
+                        inheritColor={Boolean(shortage)}
+                    />
+                </WorkspaceFactItem>
+            </WorkspaceFactGrid>
             <p className="text-xs text-muted-foreground">
                 可开票总额扣除已开票净额及全部有效占用后，余额为正时可继续申请，余额为负时计为超额。已批准申请按未开票金额占用。
             </p>

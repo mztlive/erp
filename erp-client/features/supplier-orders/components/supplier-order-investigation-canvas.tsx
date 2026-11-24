@@ -7,7 +7,12 @@ import {
     TriangleAlertIcon,
 } from "lucide-react"
 
-import { MoneyValue, QuantityValue } from "@/components/business"
+import {
+    MoneyValue,
+    QuantityValue,
+    WorkspaceFactGrid,
+    WorkspaceFactItem,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import {
@@ -381,44 +386,36 @@ export function SupplierInvestigationCanvas({
                 </dl>
             </TooltipProvider>
 
-            <dl className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
-                <div className="flex flex-wrap gap-x-1.5">
-                    <dt className="text-muted-foreground">外部单号</dt>
-                    <dd className="num select-all">
-                        {order.externalOrderNo ??
-                            investigation?.externalOrderNo ??
-                            "尚未返回"}
-                    </dd>
-                </div>
+            <WorkspaceFactGrid columns={3}>
+                <WorkspaceFactItem
+                    label="外部单号"
+                    value={
+                        order.externalOrderNo ?? investigation?.externalOrderNo
+                    }
+                    emptyText="尚未返回"
+                    numeric
+                    selectable
+                />
                 {detail.purchaseOrderNo ? (
-                    <div className="flex flex-wrap gap-x-1.5">
-                        <dt className="text-muted-foreground">采购单</dt>
-                        <dd className="num select-all">
-                            {detail.purchaseOrderNo}
-                        </dd>
-                    </div>
+                    <WorkspaceFactItem
+                        label="采购单"
+                        value={detail.purchaseOrderNo}
+                        numeric
+                        selectable
+                    />
                 ) : null}
-                <div className="flex flex-wrap gap-x-1.5">
-                    <dt className="text-muted-foreground">创建时间</dt>
-                    <dd>
-                        <InvestigationTime value={order.createdAt} />
-                    </dd>
-                </div>
-                <div className="flex flex-wrap items-center gap-x-1.5">
-                    <dt className="text-muted-foreground">取消</dt>
-                    <dd>{order.cancelLabel}</dd>
-                </div>
-                <div className="flex flex-wrap items-center gap-x-1.5">
-                    <dt className="text-muted-foreground">退款</dt>
-                    <dd>{order.refundLabel}</dd>
-                </div>
+                <WorkspaceFactItem label="创建时间" numeric selectable>
+                    <InvestigationTime value={order.createdAt} />
+                </WorkspaceFactItem>
+                <WorkspaceFactItem label="取消" value={order.cancelLabel} />
+                <WorkspaceFactItem label="退款" value={order.refundLabel} />
                 {detail.workItem?.ownerUser ? (
-                    <div className="flex flex-wrap gap-x-1.5">
-                        <dt className="text-muted-foreground">处理人</dt>
-                        <dd>{detail.workItem.ownerUser.displayName}</dd>
-                    </div>
+                    <WorkspaceFactItem
+                        label="处理人"
+                        value={detail.workItem.ownerUser.displayName}
+                    />
                 ) : null}
-            </dl>
+            </WorkspaceFactGrid>
 
             {detail.workItemBlocker ? (
                 <p

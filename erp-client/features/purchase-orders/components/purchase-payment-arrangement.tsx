@@ -11,6 +11,8 @@ import {
     BusinessStatusBadge,
     MoneyValue,
     SensitiveValue,
+    WorkspaceFactGrid,
+    WorkspaceFactItem,
     WorkspaceTaskFooter,
     useWorkspaceInspectorMode,
 } from "@/components/business"
@@ -1001,42 +1003,42 @@ function PaymentArrangementSurface({
                 </div>
             </dl>
 
-            <dl className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs empty:hidden">
-                {!identityInHeader && purchaseOrderNo && (
-                    <div className="flex min-w-0 items-baseline gap-1.5">
-                        <dt className="shrink-0 text-muted-foreground">
-                            采购单
-                        </dt>
-                        <dd className="num select-all wrap-anywhere">
-                            {purchaseOrderNo}
-                        </dd>
-                    </div>
-                )}
-                {candidate?.our_company_name && canStart && (
-                    <div className="flex min-w-0 items-baseline gap-1.5">
-                        <dt className="shrink-0 text-muted-foreground">
-                            付款主体
-                        </dt>
-                        <dd className="wrap-anywhere">
-                            {candidate.our_company_name}
-                        </dd>
-                    </div>
-                )}
-                {followUp && (
-                    <div className="flex min-w-0 items-baseline gap-1.5">
-                        <dt className="shrink-0 text-muted-foreground">
-                            下次跟进
-                        </dt>
-                        <dd className="num">{followUp}</dd>
-                    </div>
-                )}
-                {arrangement.state !== "available" && (
-                    <div className="flex items-baseline gap-1.5">
-                        <dt className="text-muted-foreground">安排状态</dt>
-                        <dd>{titles[arrangement.state]}</dd>
-                    </div>
-                )}
-            </dl>
+            {Boolean(
+                (!identityInHeader && purchaseOrderNo) ||
+                (candidate?.our_company_name && canStart) ||
+                followUp ||
+                arrangement.state !== "available",
+            ) && (
+                <WorkspaceFactGrid columns={3} ariaLabel="付款安排核对信息">
+                    {!identityInHeader && purchaseOrderNo ? (
+                        <WorkspaceFactItem
+                            label="采购单"
+                            value={purchaseOrderNo}
+                            numeric
+                            selectable
+                        />
+                    ) : null}
+                    {candidate?.our_company_name && canStart ? (
+                        <WorkspaceFactItem
+                            label="付款主体"
+                            value={candidate.our_company_name}
+                        />
+                    ) : null}
+                    {followUp ? (
+                        <WorkspaceFactItem
+                            label="下次跟进"
+                            value={followUp}
+                            numeric
+                        />
+                    ) : null}
+                    {arrangement.state !== "available" ? (
+                        <WorkspaceFactItem
+                            label="安排状态"
+                            value={titles[arrangement.state]}
+                        />
+                    ) : null}
+                </WorkspaceFactGrid>
+            )}
 
             {canStart && !candidate && !candidates.isError && (
                 <p role="status" className="text-xs text-muted-foreground">

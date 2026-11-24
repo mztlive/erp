@@ -52,6 +52,7 @@ function CurrentPaymentTask({
     const [completed, setCompleted] = useState(false)
     const scoped =
         item.workItemType !== "APPROVAL_INSTANCE" &&
+        item.workItemType !== "APPROVAL_REWORK" &&
         item.allowedActions.some(
             (action) =>
                 action === "PROCESS" ||

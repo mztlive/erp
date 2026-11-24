@@ -4,6 +4,8 @@ import { SearchIcon, TriangleAlertIcon } from "lucide-react"
 import {
     DetailWorkspaceFact,
     DetailWorkspaceFacts,
+    WorkspaceFactGrid,
+    WorkspaceFactItem,
     detailWorkspaceStyles,
 } from "@/components/business/detail-workspace"
 import { withForm } from "@/components/form"
@@ -70,33 +72,26 @@ export const BasicDuplicateSection = withForm({
         return (
             <div className="max-w-4xl space-y-5">
                 {compact ? (
-                    <dl
-                        aria-label="审核责任与提报概览"
-                        className="flex flex-wrap gap-x-5 gap-y-1.5 border-b border-border/60 pb-3 text-xs"
+                    <WorkspaceFactGrid
+                        columns={3}
+                        ariaLabel="审核责任与提报概览"
+                        className="border-b border-border/60 pb-3"
                     >
-                        <div className="inline-flex items-baseline gap-1.5">
-                            <dt className="text-muted-foreground">
-                                当前处理人
-                            </dt>
-                            <dd className="font-medium text-foreground">
-                                {task.owner_user?.display_name ?? "待核对"}
-                            </dd>
-                        </div>
+                        <WorkspaceFactItem
+                            label="当前处理人"
+                            value={task.owner_user?.display_name}
+                            emptyText="待核对"
+                        />
                         {rawProduct ? (
-                            <div className="inline-flex items-baseline gap-1.5">
-                                <dt className="text-muted-foreground">
-                                    商品类型与规格数
-                                </dt>
-                                <dd className="font-medium text-foreground">
-                                    {productKindLabel} ·{" "}
-                                    <span className="num">
-                                        {rawProduct.skus.length}
-                                    </span>{" "}
-                                    个规格
-                                </dd>
-                            </div>
+                            <WorkspaceFactItem label="商品类型与规格数">
+                                {productKindLabel} ·{" "}
+                                <span className="num">
+                                    {rawProduct.skus.length}
+                                </span>{" "}
+                                个规格
+                            </WorkspaceFactItem>
                         ) : null}
-                    </dl>
+                    </WorkspaceFactGrid>
                 ) : (
                     <DetailWorkspaceFacts
                         columns={3}

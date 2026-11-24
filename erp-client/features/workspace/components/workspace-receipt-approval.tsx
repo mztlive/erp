@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useImperativeHandle, useRef, useState } from "react"
-import type { ReactNode, RefObject } from "react"
+import type { RefObject } from "react"
 import {
     ChevronRightIcon,
     CircleQuestionMarkIcon,
@@ -15,8 +15,10 @@ import {
     MoneyValue,
     RateValue,
     SensitiveValue,
+    WorkspaceFactGrid,
+    WorkspaceFactGroup,
+    WorkspaceFactItem,
     detailWorkspaceStyles,
-    useWorkspaceInspectorMode,
 } from "@/components/business"
 import { useUnifiedTaskWorkbenchRail } from "@/components/business/unified-task-workbench"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -328,7 +330,6 @@ export function WorkspaceReceiptApproval({
     )
     const materials = useApprovalMaterials(instanceId, true, item)
     const rail = useUnifiedTaskWorkbenchRail()
-    const inspectorMode = useWorkspaceInspectorMode()
     const workItemSegment = toAutomationIdSegment(item.workItemId)
     const prefix = `workspace-receipt-approval-${workItemSegment}`
     const source = materials.data?.display.source
@@ -372,12 +373,6 @@ export function WorkspaceReceiptApproval({
         readField(fields, "往来主体") ??
         materials.data?.display.counterparty_label ??
         item.counterpartyName
-    const headerCounterparty =
-        materials.data?.display.counterparty_label ??
-        item.counterpartyName ??
-        item.objectTitle
-    const showCounterparty =
-        !rail || inspectorMode || counterparty !== headerCounterparty
     const submitter = displayActorName(
         source?.submitter_name ?? readField(fields, "提交人"),
     )
@@ -596,7 +591,7 @@ export function WorkspaceReceiptApproval({
                         ? async () => value
                         : undefined
                 }
-                className="min-w-0 [&_code]:max-w-full [&_code]:select-all [&_code]:wrap-anywhere [&_code]:bg-transparent [&_code]:p-0"
+                className="min-w-0 [&_code]:max-w-full [&_code]:select-all [&_code]:wrap-anywhere [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-body-compact [&_code]:font-medium"
             />
         )
     }
@@ -711,7 +706,7 @@ export function WorkspaceReceiptApproval({
                 <div
                     role="region"
                     aria-label="回款审批关键决策指标"
-                    className="mt-3 grid grid-cols-1 gap-x-6 gap-y-3.5 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/receipt-approval:grid-cols-2 @[840px]/receipt-approval:grid-cols-4"
+                    className="mt-3 grid grid-cols-1 gap-x-6 gap-y-3.5 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/receipt-approval:grid-cols-2"
                 >
                     <div className="min-w-0">
                         <ReceiptKpiLabel
@@ -774,127 +769,112 @@ export function WorkspaceReceiptApproval({
                         </div>
                         <ReceiptCoverage totals={totals} />
                     </div>
-
-                    <div
-                        id={arrivalSectionId}
-                        tabIndex={-1}
-                        className={cn(
-                            "min-w-0 scroll-mt-16 rounded-md outline-none transition-colors",
-                            arrivalHighlighted &&
-                                "-m-1.5 bg-info-soft/25 p-1.5 ring-1 ring-info-border motion-safe:animate-pulse",
-                        )}
-                    >
-                        <p className="text-xs text-muted-foreground">
-                            到账日期
-                        </p>
-                        <p
-                            className={cn(
-                                "num mt-1 wrap-anywhere text-body-compact tracking-tight",
-                                arrivalDate
-                                    ? "font-semibold text-foreground select-all"
-                                    : "font-medium text-muted-foreground",
-                            )}
-                        >
-                            {arrivalDate ?? "未记录"}
-                        </p>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
-                            <span>银行流水</span>
-                            {bankReference ? (
-                                renderSensitiveBankField(
-                                    "bank-reference",
-                                    "银行流水",
-                                    bankReference,
-                                )
-                            ) : (
-                                <span>未记录</span>
-                            )}
-                        </div>
-                    </div>
-
-                    <div
-                        id={accountsSectionId}
-                        tabIndex={-1}
-                        className={cn(
-                            "min-w-0 scroll-mt-16 rounded-md outline-none transition-colors",
-                            accountsHighlighted &&
-                                "-m-1.5 bg-info-soft/25 p-1.5 ring-1 ring-info-border motion-safe:animate-pulse",
-                        )}
-                    >
-                        <p className="text-xs text-muted-foreground">
-                            收付款账户
-                        </p>
-                        {bankAccounts.size > 0 ? (
-                            <ul className="mt-1 space-y-1">
-                                {[...bankAccounts].map(([kind, account]) => (
-                                    <li
-                                        key={kind}
-                                        className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5"
-                                    >
-                                        <span className="text-tiny text-muted-foreground">
-                                            {account.label}
-                                        </span>
-                                        <div className="min-w-0 [&_code]:text-body-compact [&_code]:font-semibold">
-                                            {renderSensitiveBankField(
-                                                `bank-account-${kind}`,
-                                                account.label,
-                                                account.value,
-                                            )}
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <p className="mt-1 text-body-compact font-medium text-muted-foreground">
-                                未记录
-                            </p>
-                        )}
-                    </div>
                 </div>
             </TooltipProvider>
 
-            <dl className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 border-b border-border/60 pb-3 text-xs">
-                {showCounterparty ? (
-                    <ReceiptMeta label="往来主体">
-                        {redactBankText(counterparty ?? "未记录")}
-                    </ReceiptMeta>
-                ) : null}
-                <ReceiptMeta label="提交人">
-                    {submitter || "未记录姓名"}
-                </ReceiptMeta>
-                {extraFields.map((field) => (
-                    <ReceiptMeta
-                        key={field.label}
-                        label={field.label}
-                        numeric={field.numeric}
+            <WorkspaceFactGroup
+                title="到账与账户信息"
+                className="mt-4 border-b border-border/60 pb-4"
+                actions={
+                    attachments.length > 0 ? (
+                        <Button
+                            id={`${prefix}-open-materials`}
+                            type="button"
+                            variant="ghost"
+                            size="xs"
+                            className={cn(
+                                detailWorkspaceStyles.inlineLinkButton,
+                                "h-control-xs px-1.5 text-xs",
+                            )}
+                            onClick={openMaterials}
+                        >
+                            <PaperclipIcon aria-hidden="true" />
+                            <span className="num">
+                                查看凭证（{attachments.length}）
+                            </span>
+                            <ChevronRightIcon aria-hidden="true" />
+                        </Button>
+                    ) : undefined
+                }
+            >
+                <WorkspaceFactGrid columns={3} ariaLabel="到账与账户信息">
+                    <WorkspaceFactItem
+                        id={arrivalSectionId}
+                        label="到账日期"
+                        value={arrivalDate ?? "未记录"}
+                        numeric
+                        selectable={Boolean(arrivalDate)}
+                        tone={arrivalDate ? "default" : "muted"}
+                        highlighted={arrivalHighlighted}
+                    />
+                    <WorkspaceFactItem
+                        label="银行流水"
+                        numeric
+                        tone={bankReference ? "default" : "warning"}
+                        highlighted={arrivalHighlighted}
                     >
-                        {redactBankText(field.value)}
-                    </ReceiptMeta>
-                ))}
-                {attachments.length > 0 ? (
-                    <div>
-                        <dt className="sr-only">到账凭证</dt>
-                        <dd>
-                            <Button
-                                id={`${prefix}-open-materials`}
-                                type="button"
-                                variant="ghost"
-                                size="xs"
-                                className={cn(
-                                    detailWorkspaceStyles.inlineLinkButton,
-                                    "h-control-xs px-1.5 text-xs",
-                                )}
-                                onClick={openMaterials}
+                        {bankReference
+                            ? renderSensitiveBankField(
+                                  "bank-reference",
+                                  "银行流水",
+                                  bankReference,
+                              )
+                            : "未记录"}
+                    </WorkspaceFactItem>
+                    {bankAccounts.size > 0 ? (
+                        [...bankAccounts].map(([kind, account], index) => (
+                            <WorkspaceFactItem
+                                key={kind}
+                                id={index === 0 ? accountsSectionId : undefined}
+                                label={account.label}
+                                numeric
+                                highlighted={accountsHighlighted}
                             >
-                                <PaperclipIcon aria-hidden="true" />
-                                <span className="num">
-                                    查看凭证（{attachments.length}）
-                                </span>
-                                <ChevronRightIcon aria-hidden="true" />
-                            </Button>
-                        </dd>
-                    </div>
-                ) : null}
-            </dl>
+                                {renderSensitiveBankField(
+                                    `bank-account-${kind}`,
+                                    account.label,
+                                    account.value,
+                                )}
+                            </WorkspaceFactItem>
+                        ))
+                    ) : (
+                        <WorkspaceFactItem
+                            id={accountsSectionId}
+                            label="收付款账户"
+                            value="未记录"
+                            tone="warning"
+                            highlighted={accountsHighlighted}
+                        />
+                    )}
+                    <WorkspaceFactItem
+                        label="往来主体"
+                        value={redactBankText(counterparty ?? "未记录")}
+                        tone={counterparty ? "default" : "muted"}
+                    />
+                    <WorkspaceFactItem
+                        label="提交人"
+                        value={submitter || "未记录姓名"}
+                        tone={submitter ? "default" : "muted"}
+                    />
+                    {extraFields.map((field) => {
+                        const redacted = redactBankText(field.value)
+                        const isLong =
+                            redacted.length > 30 ||
+                            redacted.includes("\n") ||
+                            /(?:说明|原因|备注|事由)/.test(field.label)
+                        return (
+                            <WorkspaceFactItem
+                                key={field.label}
+                                label={field.label}
+                                value={redacted}
+                                numeric={field.numeric}
+                                selectable={field.numeric}
+                                span={isLong ? "full" : 1}
+                            />
+                        )
+                    })}
+                </WorkspaceFactGrid>
+            </WorkspaceFactGroup>
 
             <DetailWorkspaceSection
                 id={allocationSectionId}
@@ -1242,30 +1222,6 @@ function ReceiptCoverage({
                     "覆盖率待核对"
                 )}
             </p>
-        </div>
-    )
-}
-
-function ReceiptMeta({
-    label,
-    numeric,
-    children,
-}: {
-    label: string
-    numeric?: boolean
-    children: ReactNode
-}) {
-    return (
-        <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
-            <dt className="text-muted-foreground">{label}</dt>
-            <dd
-                className={cn(
-                    "min-w-0 font-medium wrap-anywhere text-foreground",
-                    numeric && "num select-all",
-                )}
-            >
-                {children}
-            </dd>
         </div>
     )
 }

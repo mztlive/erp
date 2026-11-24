@@ -23,6 +23,8 @@ import {
     BusinessFailureState,
     DetailWorkspaceSection,
     MoneyValue,
+    WorkspaceFactGrid,
+    WorkspaceFactItem,
     detailWorkspaceStyles,
 } from "@/components/business"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -86,13 +88,13 @@ export function WorkspacePurchaseApprovalSources({
 }) {
     if (!sources.length) {
         return (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs font-normal text-muted-foreground">
                 本次提交未保留来源销售资料，请联系申请人核对。
             </p>
         )
     }
     return (
-        <ul className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
+        <ul className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-body-compact font-normal">
             {sources.map((sales) => {
                 const documentNo =
                     displayBusinessText(sales.document_no, sales.document_id) ||
@@ -108,7 +110,7 @@ export function WorkspacePurchaseApprovalSources({
                         <span className="num font-medium text-foreground">
                             {documentNo}
                         </span>
-                        <span className="text-muted-foreground">
+                        <span className="text-xs text-muted-foreground">
                             {displayName(sales.source.customer) ||
                                 "未记录客户名称"}{" "}
                             · V{sales.revision_no}
@@ -153,7 +155,7 @@ export function WorkspacePurchaseApprovalSources({
                         {contractNotices.map((field) => (
                             <span
                                 key={`${field.label}-${field.value}`}
-                                className="text-warning-soft-foreground"
+                                className="text-xs text-warning-soft-foreground"
                             >
                                 （{field.value}）
                             </span>
@@ -937,69 +939,52 @@ export function WorkspacePurchaseApproval({
             {submission ? (
                 <section
                     aria-label="采购单商业与来源信息"
-                    className="space-y-2 pt-3.5 pb-1"
+                    className="space-y-3 pt-3.5 pb-1"
                 >
-                    <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs">
-                        <div className="inline-flex items-center gap-1.5">
-                            <span className="shrink-0 text-muted-foreground">
-                                供应商评估
-                            </span>
+                    <WorkspaceFactGrid columns={3}>
+                        <WorkspaceFactItem label="供应商评估">
                             <WorkspaceSupplierRating
                                 rating={submission.latest_supplier_rating}
                                 compact
                             />
-                        </div>
+                        </WorkspaceFactItem>
                         {parsedExtras.staticFacts.map((fact) => (
-                            <div
+                            <WorkspaceFactItem
                                 key={fact.label}
-                                className="inline-flex items-baseline gap-1.5"
-                            >
-                                <span className="shrink-0 text-muted-foreground">
-                                    {fact.label}
-                                </span>
-                                <span
-                                    className={cn(
-                                        "font-medium text-foreground",
-                                        fact.numeric && "num",
-                                    )}
-                                >
-                                    {fact.value}
-                                </span>
-                            </div>
+                                label={fact.label}
+                                value={fact.value}
+                                numeric={fact.numeric}
+                                span={
+                                    fact.value.length > 30 ||
+                                    fact.value.includes("\n") ||
+                                    /(?:说明|备注|地址)/.test(fact.label)
+                                        ? "full"
+                                        : 1
+                                }
+                            />
                         ))}
                         {submitter ? (
-                            <div className="inline-flex items-baseline gap-1.5">
-                                <span className="shrink-0 text-muted-foreground">
-                                    申请人
-                                </span>
-                                <span className="font-medium text-foreground">
-                                    {submitter}
-                                </span>
-                            </div>
+                            <WorkspaceFactItem
+                                label="申请人"
+                                value={submitter}
+                            />
                         ) : null}
                         {item.enteredAtLabel ? (
-                            <div className="inline-flex items-baseline gap-1.5">
-                                <span className="shrink-0 text-muted-foreground">
-                                    进入时间
-                                </span>
-                                <span className="num font-medium text-foreground">
-                                    {item.enteredAtLabel}
-                                </span>
-                            </div>
+                            <WorkspaceFactItem
+                                label="进入时间"
+                                value={item.enteredAtLabel}
+                                numeric
+                            />
                         ) : null}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs">
-                        <span className="shrink-0 text-muted-foreground">
-                            来源销售单
-                        </span>
-                        <WorkspacePurchaseApprovalSources
-                            instanceId={instanceId}
-                            sources={sources}
-                            onPreview={onPreview}
-                            onCompareSource={onCompareSource}
-                        />
-                    </div>
+                        <WorkspaceFactItem label="来源销售单" span="full">
+                            <WorkspacePurchaseApprovalSources
+                                instanceId={instanceId}
+                                sources={sources}
+                                onPreview={onPreview}
+                                onCompareSource={onCompareSource}
+                            />
+                        </WorkspaceFactItem>
+                    </WorkspaceFactGrid>
 
                     {extraCost && metrics.goodsLineCount > 0 ? (
                         <div className="flex items-center gap-2 rounded-md bg-info-soft/45 px-3 py-1.5 text-xs text-info-soft-foreground">

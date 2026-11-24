@@ -14,6 +14,8 @@ import {
     FormalActionConfirmDialog,
     MoneyValue,
     QuantityValue,
+    WorkspaceFactGrid,
+    WorkspaceFactItem,
 } from "@/components/business"
 import { ReasonTextareaField } from "@/components/business/reason-textarea-field"
 import {
@@ -908,7 +910,12 @@ function CommercialMeta({
     showCosts: boolean
     standalone: boolean
 }) {
-    const fields = [
+    const fields: Array<{
+        label: string
+        value: ReactNode
+        numeric?: boolean
+        span?: 1 | 2 | "full"
+    }> = [
         {
             label: "受影响供给",
             value: standalone
@@ -920,6 +927,7 @@ function CommercialMeta({
                       .filter(Boolean)
                       .join(" · ") || task.businessObjectLabel
                 : undefined,
+            span: "full",
         },
         {
             label: "责任人",
@@ -938,6 +946,7 @@ function CommercialMeta({
                 showCosts && offering?.dropship_supply_price_gross != null ? (
                     <MoneyValue value={offering.dropship_supply_price_gross} />
                 ) : undefined,
+            numeric: true,
         },
         {
             label: "集采含税价",
@@ -945,22 +954,25 @@ function CommercialMeta({
                 showCosts && offering?.bulk_supply_price_gross != null ? (
                     <MoneyValue value={offering.bulk_supply_price_gross} />
                 ) : undefined,
+            numeric: true,
         },
     ]
 
+    const visibleFields = fields.filter((field) => Boolean(field.value))
+    if (visibleFields.length === 0) return null
+
     return (
-        <dl className="flex min-w-0 flex-wrap gap-x-5 gap-y-1.5 text-xs">
-            {fields.map(({ label, value }) =>
-                value ? (
-                    <div
-                        key={label}
-                        className="flex min-w-0 flex-wrap gap-x-1.5"
-                    >
-                        <dt className="text-muted-foreground">{label}</dt>
-                        <dd className="min-w-0 wrap-anywhere">{value}</dd>
-                    </div>
-                ) : null,
-            )}
-        </dl>
+        <WorkspaceFactGrid columns={3}>
+            {visibleFields.map(({ label, value, numeric, span }) => (
+                <WorkspaceFactItem
+                    key={label}
+                    label={label}
+                    numeric={numeric}
+                    span={span}
+                >
+                    {value}
+                </WorkspaceFactItem>
+            ))}
+        </WorkspaceFactGrid>
     )
 }

@@ -7,7 +7,13 @@ import {
     RefreshCwIcon,
     TriangleAlertIcon,
 } from "lucide-react"
-import { BusinessFailureState, MoneyValue } from "@/components/business"
+import {
+    BusinessFailureState,
+    MoneyValue,
+    WorkspaceFactGrid,
+    WorkspaceFactGroup,
+    WorkspaceFactItem,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -120,10 +126,10 @@ export function WorkspaceSupplierPortalInspector({
         qualifiedTotal > 0 && qualifiedCount >= qualifiedTotal
     const deltaTone =
         overview?.priceDelta?.direction === "up"
-            ? "text-warning-soft-foreground"
+            ? "warning"
             : overview?.priceDelta?.direction === "down"
-              ? "text-success-soft-foreground"
-              : undefined
+              ? "success"
+              : "default"
 
     return (
         <div
@@ -350,74 +356,84 @@ export function WorkspaceSupplierPortalInspector({
                                 </span>
                             </InspectorKpi>
                         </dl>
-                        <dl className="grid min-w-0 gap-x-5 gap-y-2 text-xs @[420px]/supplier-portal-inspector:grid-cols-2">
-                            <InspectorFact
-                                label="申请单号"
-                                value={application.application_no}
-                                numeric
-                                selectable
-                            />
-                            <InspectorFact
-                                label="供应商"
-                                value={
-                                    overview.supplier || item.counterpartyName
-                                }
-                            />
-                            <InspectorFact
-                                label="申请类型"
-                                value={overview.kind}
-                            />
-                            <InspectorFact
-                                label="提报商品或供货内容"
-                                value={overview.title || overview.orderingCode}
-                            />
-                            <InspectorFact
-                                label="提交时间"
-                                value={
-                                    overview.submittedAt != null
-                                        ? timeLabel(overview.submittedAt)
-                                        : undefined
-                                }
-                                numeric
-                            />
-                            <InspectorFact
-                                label="生效影响"
-                                value={overview.impact}
-                                numeric={Boolean(overview.priceDelta)}
-                                valueClassName={deltaTone}
-                            />
-                            <InspectorFact
-                                label="任务截止"
-                                value={item.dueAt ? item.dueAtLabel : undefined}
-                                numeric
-                            />
-                        </dl>
-                        <div className="border-t border-border/60 pt-3">
-                            <h3 className="text-body-compact font-medium">
-                                资料核对
-                            </h3>
-                            <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
+                        <WorkspaceFactGrid columns={2}>
+                            {application.application_no ? (
+                                <WorkspaceFactItem
+                                    label="申请单号"
+                                    value={application.application_no}
+                                    numeric
+                                    selectable
+                                />
+                            ) : null}
+                            {overview.supplier || item.counterpartyName ? (
+                                <WorkspaceFactItem
+                                    label="供应商"
+                                    value={
+                                        overview.supplier ||
+                                        item.counterpartyName
+                                    }
+                                />
+                            ) : null}
+                            {overview.kind ? (
+                                <WorkspaceFactItem
+                                    label="申请类型"
+                                    value={overview.kind}
+                                />
+                            ) : null}
+                            {overview.title || overview.orderingCode ? (
+                                <WorkspaceFactItem
+                                    label="提报商品或供货内容"
+                                    value={
+                                        overview.title || overview.orderingCode
+                                    }
+                                />
+                            ) : null}
+                            {overview.submittedAt != null ? (
+                                <WorkspaceFactItem
+                                    label="提交时间"
+                                    value={timeLabel(overview.submittedAt)}
+                                    numeric
+                                />
+                            ) : null}
+                            {overview.impact ? (
+                                <WorkspaceFactItem
+                                    label="生效影响"
+                                    value={overview.impact}
+                                    numeric={Boolean(overview.priceDelta)}
+                                    tone={deltaTone}
+                                />
+                            ) : null}
+                            {item.dueAt && item.dueAtLabel ? (
+                                <WorkspaceFactItem
+                                    label="任务截止"
+                                    value={item.dueAtLabel}
+                                    numeric
+                                />
+                            ) : null}
+                            {overview.reason ? (
+                                <WorkspaceFactItem
+                                    label="提交说明"
+                                    value={overview.reason}
+                                    span="full"
+                                />
+                            ) : null}
+                        </WorkspaceFactGrid>
+                        <WorkspaceFactGroup title="资料核对" divider>
+                            <WorkspaceFactGrid columns={2}>
                                 {overview.qualificationChecks.map(
                                     ({ label, value }) => (
-                                        <InspectorFact
+                                        <WorkspaceFactItem
                                             key={label}
                                             label={label}
                                             value={value || "待补充"}
-                                            valueClassName={
-                                                !value
-                                                    ? "text-warning-soft-foreground"
-                                                    : undefined
+                                            tone={
+                                                !value ? "warning" : "default"
                                             }
                                         />
                                     ),
                                 )}
-                            </dl>
-                        </div>
-                        {overview.reason ? (
-                            <p className="wrap-anywhere text-xs text-muted-foreground">
-                                {overview.reason}
-                            </p>
-                        ) : null}
+                            </WorkspaceFactGrid>
+                        </WorkspaceFactGroup>
                     </>
                 ) : (
                     <p className="text-xs text-muted-foreground">
@@ -474,37 +490,6 @@ function InspectorKpi({
             <dt className="text-xs text-muted-foreground">{label}</dt>
             <dd className="mt-1 min-w-0 wrap-anywhere text-body-compact font-semibold">
                 {children}
-            </dd>
-        </div>
-    )
-}
-
-function InspectorFact({
-    label,
-    value,
-    numeric,
-    selectable,
-    valueClassName,
-}: {
-    label: string
-    value?: string
-    numeric?: boolean
-    selectable?: boolean
-    valueClassName?: string
-}) {
-    if (!value) return null
-    return (
-        <div className="min-w-0 text-xs">
-            <dt className="text-muted-foreground">{label}</dt>
-            <dd
-                className={cn(
-                    "mt-0.5 min-w-0 wrap-anywhere font-medium",
-                    numeric && "num",
-                    selectable && "select-all",
-                    valueClassName,
-                )}
-            >
-                {value}
             </dd>
         </div>
     )

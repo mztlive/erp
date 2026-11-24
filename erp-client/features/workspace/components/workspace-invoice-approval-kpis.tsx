@@ -1,25 +1,15 @@
 "use client"
 
 import type { ReactNode } from "react"
-import {
-    CircleQuestionMarkIcon,
-    PaperclipIcon,
-    RefreshCwIcon,
-} from "lucide-react"
+import { CircleQuestionMarkIcon } from "lucide-react"
 
-import {
-    MoneyValue,
-    RateValue,
-    detailWorkspaceStyles,
-} from "@/components/business"
-import { Button } from "@/components/ui/button"
+import { MoneyValue, RateValue } from "@/components/business"
 import {
     Tooltip,
     TooltipContent,
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { displayUnixSeconds } from "@/features/approval-workflow/display"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 import type { InvoiceApprovalReview } from "../api/invoice-review"
@@ -33,26 +23,15 @@ import {
 export function InvoiceApprovalKpis({
     prefix,
     submission,
-    buyerTitle,
     review,
     shortage,
-    isFetching,
-    onRefresh,
-    attachmentCount,
-    onOpenMaterials,
 }: {
     prefix: string
     submission: ReturnType<typeof invoiceApprovalSubmission>
-    buyerTitle?: string
     review?: InvoiceApprovalReview
     shortage?: string
-    isFetching: boolean
-    onRefresh: () => void
-    attachmentCount: number
-    onOpenMaterials?: () => void
 }) {
     const quota = review && invoiceApprovalQuota(review)
-    const readAt = review && displayUnixSeconds(review.read_at)
     const availablePositive = (() => {
         if (!review || shortage) return false
         try {
@@ -61,17 +40,13 @@ export function InvoiceApprovalKpis({
             return false
         }
     })()
-    const decimalTaxPoint =
-        submission.taxPoint && /^\d+(?:\.\d+)?%$/.test(submission.taxPoint)
-            ? submission.taxPoint.slice(0, -1)
-            : null
 
     return (
         <TooltipProvider>
             <div
                 role="region"
                 aria-label="开票审批关键指标"
-                className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-3.5 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/invoice-approval:grid-cols-2 @[840px]/invoice-approval:grid-cols-4"
+                className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-3.5 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/invoice-approval:grid-cols-2 @[840px]/invoice-approval:grid-cols-3"
             >
                 <div className="min-w-0 space-y-1">
                     <KpiLabel
@@ -177,7 +152,7 @@ export function InvoiceApprovalKpis({
                     ) : null}
                 </div>
 
-                <div className="min-w-0 space-y-1.5">
+                <div className="min-w-0 space-y-1.5 @[480px]/invoice-approval:col-span-2 @[840px]/invoice-approval:col-span-1">
                     <KpiLabel
                         label="票款进度"
                         basis="本笔应收"
@@ -214,109 +189,6 @@ export function InvoiceApprovalKpis({
                         amount={review?.invoiced_total}
                         total={review?.invoiceable_total}
                     />
-                </div>
-
-                <div className="min-w-0 space-y-1">
-                    {buyerTitle ? (
-                        <>
-                            <p className="text-xs text-muted-foreground">
-                                购方抬头
-                            </p>
-                            <p className="text-body-compact font-semibold wrap-anywhere">
-                                {buyerTitle}
-                            </p>
-                        </>
-                    ) : (
-                        <p className="text-xs text-muted-foreground">
-                            票税条款
-                        </p>
-                    )}
-                    {submission.sellerName ? (
-                        <p className="text-xs wrap-anywhere text-muted-foreground">
-                            销方{" "}
-                            <span className="font-medium text-foreground">
-                                {submission.sellerName}
-                            </span>
-                        </p>
-                    ) : null}
-                    {submission.paymentTerm ? (
-                        <p className="text-xs wrap-anywhere text-muted-foreground">
-                            付款条件{" "}
-                            <span className="font-medium text-foreground">
-                                {submission.paymentTerm}
-                            </span>
-                        </p>
-                    ) : null}
-                    {submission.taxPoint ? (
-                        <p className="text-xs text-muted-foreground">
-                            约定税点{" "}
-                            {decimalTaxPoint === null ? (
-                                <span className="num font-medium text-foreground">
-                                    {submission.taxPoint}
-                                </span>
-                            ) : (
-                                <RateValue
-                                    value={decimalTaxPoint}
-                                    precision={2}
-                                    className="font-medium text-foreground"
-                                />
-                            )}
-                        </p>
-                    ) : null}
-                    {submission.invoiceTiming ? (
-                        <p className="text-xs wrap-anywhere text-muted-foreground">
-                            开票时点{" "}
-                            <span className="font-medium text-foreground">
-                                {submission.invoiceTiming}
-                            </span>
-                        </p>
-                    ) : null}
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                        {readAt ? (
-                            <time
-                                className="num text-tiny text-muted-foreground"
-                                dateTime={readAt.dateTime}
-                            >
-                                核对于 {readAt.label}
-                            </time>
-                        ) : null}
-                        <Button
-                            id={`${prefix}-refresh`}
-                            type="button"
-                            size="xs"
-                            variant="ghost"
-                            className={cn(
-                                detailWorkspaceStyles.inlineLinkButton,
-                                "h-control-xs px-1.5 text-xs",
-                            )}
-                            disabled={isFetching}
-                            onClick={onRefresh}
-                        >
-                            <RefreshCwIcon
-                                aria-hidden="true"
-                                className={cn(
-                                    isFetching && "motion-safe:animate-spin",
-                                )}
-                            />
-                            刷新票款
-                        </Button>
-                        {onOpenMaterials ? (
-                            <Button
-                                id={`${prefix}-open-materials`}
-                                type="button"
-                                size="xs"
-                                variant="ghost"
-                                className={cn(
-                                    detailWorkspaceStyles.inlineLinkButton,
-                                    "num h-control-xs px-1.5 text-xs",
-                                )}
-                                onClick={onOpenMaterials}
-                            >
-                                <PaperclipIcon aria-hidden="true" />
-                                凭证（{attachmentCount}）
-                            </Button>
-                        ) : null}
-                    </div>
                 </div>
             </div>
         </TooltipProvider>

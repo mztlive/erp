@@ -6,7 +6,11 @@ import {
     TriangleAlertIcon,
 } from "lucide-react"
 
-import { MoneyValue } from "@/components/business"
+import {
+    MoneyValue,
+    WorkspaceFactGrid,
+    WorkspaceFactItem,
+} from "@/components/business"
 import { useUnifiedTaskWorkbenchRail } from "@/components/business/unified-task-workbench"
 import { Button, buttonVariants } from "@/components/ui/button"
 import {
@@ -165,15 +169,6 @@ function safeNextStep(item: IntegrationResolutionItemView, canQuery: boolean) {
         return "核对来源资料和编码映射后再处理。"
     if (errorClass === "rate-limited") return "查看最近执行结果和重试安排。"
     return "先核对最近执行结果与关联凭证。"
-}
-
-function Meta({ label, children }: { label: string; children: ReactNode }) {
-    return (
-        <div className="min-w-0 wrap-anywhere">
-            <dt className="mr-1.5 inline text-muted-foreground">{label}</dt>
-            <dd className="inline">{children}</dd>
-        </div>
-    )
 }
 
 export function InvestigationCanvas({
@@ -406,38 +401,63 @@ export function InvestigationCanvas({
                     </Kpi>
                 </dl>
             </TooltipProvider>
-            <dl className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
-                {failure?.operation ? (
-                    <Meta label="来源操作">{failure.operation}</Meta>
-                ) : null}
-                {failure?.jobNumber ? (
-                    <Meta label="执行批次">
-                        <span className="num select-all">
-                            {failure.jobNumber}
-                        </span>
-                    </Meta>
-                ) : null}
-                {item.environment ? (
-                    <Meta label="环境">{item.environmentLabel}</Meta>
-                ) : null}
-                {item.ownerUser || item.ownerRole ? (
-                    <Meta label="责任人">
-                        {item.ownerUser || item.ownerRole}
-                    </Meta>
-                ) : null}
-                {item.compensationOpen ? (
-                    <Meta label="补救进度">待完成</Meta>
-                ) : null}
-                {!titleInHeader && reviewerRequirement ? (
-                    <Meta label="复核要求">{reviewerRequirement}</Meta>
-                ) : null}
-                {difference?.watermark &&
-                difference.watermark !== occurredAt ? (
-                    <Meta label="对账时点">
-                        <DateValue date={difference.watermark} />
-                    </Meta>
-                ) : null}
-            </dl>
+            {failure?.operation ||
+            failure?.jobNumber ||
+            item.environment ||
+            item.ownerUser ||
+            item.ownerRole ||
+            item.compensationOpen ||
+            (!titleInHeader && reviewerRequirement) ||
+            (difference?.watermark && difference.watermark !== occurredAt) ? (
+                <WorkspaceFactGrid columns={3}>
+                    {failure?.operation ? (
+                        <WorkspaceFactItem
+                            label="来源操作"
+                            value={failure.operation}
+                        />
+                    ) : null}
+                    {failure?.jobNumber ? (
+                        <WorkspaceFactItem
+                            label="执行批次"
+                            value={failure.jobNumber}
+                            numeric
+                            selectable
+                        />
+                    ) : null}
+                    {item.environment ? (
+                        <WorkspaceFactItem
+                            label="环境"
+                            value={item.environmentLabel}
+                        />
+                    ) : null}
+                    {item.ownerUser || item.ownerRole ? (
+                        <WorkspaceFactItem
+                            label="责任人"
+                            value={item.ownerUser || item.ownerRole}
+                        />
+                    ) : null}
+                    {item.compensationOpen ? (
+                        <WorkspaceFactItem
+                            label="补救进度"
+                            value="待完成"
+                            tone="warning"
+                        />
+                    ) : null}
+                    {difference?.watermark &&
+                    difference.watermark !== occurredAt ? (
+                        <WorkspaceFactItem label="对账时点" numeric selectable>
+                            <DateValue date={difference.watermark} />
+                        </WorkspaceFactItem>
+                    ) : null}
+                    {!titleInHeader && reviewerRequirement ? (
+                        <WorkspaceFactItem
+                            label="复核要求"
+                            value={reviewerRequirement}
+                            span="full"
+                        />
+                    ) : null}
+                </WorkspaceFactGrid>
+            ) : null}
             {canOpenSettings
                 ? item.repairLinks
                       .filter((link) => link.workspaceId === "W20")
