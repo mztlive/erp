@@ -5,6 +5,7 @@ import type { TaskWorkbenchArchetype } from "@/components/business/unified-task-
 import {
     WorkspaceTaskPageProvider,
     WorkspaceTaskPane,
+    type WorkspaceTaskBackLink,
     type WorkspaceTaskPaneProps,
 } from "@/components/business/workspace-task-pane"
 import { NativeCheckbox } from "@/components/ui/checkbox"
@@ -52,8 +53,7 @@ export function WorkspaceProcessingLayout({
     autoNext,
     allowAutoNext,
     onAutoNextChange,
-    onBack,
-    backLabel,
+    back,
     queueNavigation,
     onRefresh,
     refreshing = false,
@@ -64,8 +64,7 @@ export function WorkspaceProcessingLayout({
     autoNext: boolean
     allowAutoNext: boolean
     onAutoNextChange: (value: boolean) => void
-    onBack: () => void
-    backLabel: string
+    back?: WorkspaceTaskBackLink
     queueNavigation?: ReactNode
     onRefresh?: () => void
     refreshing?: boolean
@@ -117,12 +116,7 @@ export function WorkspaceProcessingLayout({
             flat
             archetype={archetype}
             navigation={{
-                back: {
-                    id: "workspace-processing-back",
-                    label: backLabel,
-                    onClick: onBack,
-                    visibility: "always",
-                },
+                back,
                 meta: queueNavigation,
                 onRefresh,
                 refreshing,

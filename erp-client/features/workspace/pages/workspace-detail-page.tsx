@@ -47,6 +47,7 @@ import {
 } from "../lib/url-state"
 
 const AUTO_NEXT_STORAGE_KEY = "erp.workspace.autoNext"
+const APPROVAL_QUEUE_BACK_LABEL = "返回审批队列"
 
 function readStoredAutoNext(param: string | null): boolean {
     if (param === "1") return true
@@ -151,7 +152,6 @@ function WorkspaceDetailContent({
         profile.data,
         canReadQueue && !hasCachedSequence,
     )
-    const backLabel = approval ? "返回审批队列" : "返回任务队列"
     const back = useCallback(
         () => router.replace(returnTo, { scroll: false }),
         [returnTo, router],
@@ -322,16 +322,22 @@ function WorkspaceDetailContent({
                         {autoNext && queue.isError ? (
                             <BusinessFailureState
                                 title="当前任务已处理，后续任务读取失败"
-                                description="无需重复审批或提交，请重试读取下一项，或返回任务队列。"
+                                description={
+                                    approval
+                                        ? "无需重复审批或提交，请重试读取下一项，或返回审批队列。"
+                                        : "无需重复审批或提交，请重试读取下一项。"
+                                }
                                 error={queue.error}
                                 onRetry={() => void queue.refetch()}
                                 action={
-                                    <Button
-                                        id="workspace-completed-back"
-                                        onClick={back}
-                                    >
-                                        {backLabel}
-                                    </Button>
+                                    approval ? (
+                                        <Button
+                                            id="workspace-completed-back"
+                                            onClick={back}
+                                        >
+                                            {APPROVAL_QUEUE_BACK_LABEL}
+                                        </Button>
+                                    ) : undefined
                                 }
                             />
                         ) : (
@@ -347,18 +353,20 @@ function WorkspaceDetailContent({
                                             : "当前任务已处理，正在返回队列…"}
                                     </span>
                                 </div>
-                                <Button
-                                    id="workspace-completed-back"
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    className={
-                                        detailWorkspaceStyles.quietButton
-                                    }
-                                    onClick={back}
-                                >
-                                    {backLabel}
-                                </Button>
+                                {approval && (
+                                    <Button
+                                        id="workspace-completed-back"
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className={
+                                            detailWorkspaceStyles.quietButton
+                                        }
+                                        onClick={back}
+                                    >
+                                        {APPROVAL_QUEUE_BACK_LABEL}
+                                    </Button>
+                                )}
                             </div>
                         )}
                     </DetailWorkspaceSection>
@@ -383,12 +391,14 @@ function WorkspaceDetailContent({
                                     : detail.refetch())
                             }
                             action={
-                                <Button
-                                    id="workspace-detail-failure-back"
-                                    onClick={back}
-                                >
-                                    {backLabel}
-                                </Button>
+                                approval ? (
+                                    <Button
+                                        id="workspace-detail-failure-back"
+                                        onClick={back}
+                                    >
+                                        {APPROVAL_QUEUE_BACK_LABEL}
+                                    </Button>
+                                ) : undefined
                             }
                         />
                     </DetailWorkspaceSection>
@@ -403,7 +413,11 @@ function WorkspaceDetailContent({
                 <DetailWorkspaceSection className="shrink-0 last:pb-5">
                     <BusinessFailureState
                         title="后续任务读取失败"
-                        description="当前任务可继续办理；完成后可重试读取下一项，或返回队列。"
+                        description={
+                            approval
+                                ? "当前任务可继续办理。完成后可重试读取下一项，或返回审批队列。"
+                                : "当前任务可继续办理。完成后可重试读取下一项。"
+                        }
                         error={queue.error}
                         onRetry={() => void queue.refetch()}
                     />
@@ -415,8 +429,16 @@ function WorkspaceDetailContent({
                 allowAutoNext
                 autoNext={autoNext}
                 onAutoNextChange={setAutoNext}
-                onBack={back}
-                backLabel={backLabel}
+                back={
+                    approval
+                        ? {
+                              id: "workspace-processing-back",
+                              label: APPROVAL_QUEUE_BACK_LABEL,
+                              onClick: back,
+                              visibility: "always",
+                          }
+                        : undefined
+                }
                 queueNavigation={queueNavigation}
                 onRefresh={handleRefresh}
                 refreshing={detail.isFetching}
