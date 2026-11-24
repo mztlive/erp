@@ -10,7 +10,12 @@ import { SalesOrderCreateDueDateBatchBar } from "@/features/sales-orders/compone
 import { SalesOrderCreateLineItemTable } from "@/features/sales-orders/components/sales-order-create-line-item-table"
 import { SellableSkuSelectDialog } from "@/features/sales-orders/components/sellable-sku-select-dialog"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
-import { applyDueDateToLines } from "@/features/sales-orders/lib/sales-order-create-model"
+import { summarizeOrderDelivery } from "../lib/sales-delivery-pool"
+import {
+    applyDeliveryAddressToLines,
+    applyDueDateToLines,
+    type UnifiedDeliveryAddress,
+} from "@/features/sales-orders/lib/sales-order-create-model"
 import { applySellablePicksToLines } from "@/features/sales-orders/lib/sales-order-create-sku-picks"
 import type { SellableSkuPick } from "@/features/sales-orders/lib/sellable-sku-pick"
 import type {
@@ -27,11 +32,13 @@ import type { SalesLineSkuDetails } from "../hooks/use-sales-line-images-query"
 import type { SalesLineFilterKey } from "../lib/sales-order-create-line-health"
 import { supplyReferencePrice } from "../lib/sales-procurement-price"
 import { SalesDeliverySummaryBar } from "./sales-delivery-allocation-editor"
+import { useSalesDeliveryWorkbook } from "./sales-delivery-workbook-actions"
 import {
     SalesDeliveryWorkspaceSheet,
     type DeliveryWorkspaceTab,
 } from "./sales-delivery-workspace-sheet"
-import { SalesOrderCreatePriceBasisBatchMenu } from "./sales-order-create-price-basis-batch-menu"
+import { SalesOrderCreateMoreActionsMenu } from "./sales-order-create-more-actions-menu"
+import { SalesOrderCreateUnifiedAddressDialog } from "./sales-order-create-unified-address-dialog"
 
 export type SalesOrderCreateLineItemsSectionProps = {
     form: SalesOrderCreateFormApi
@@ -269,6 +276,7 @@ function LineItemsSectionInner({
     onOpenProductDelivery: (rowKey: string) => void
     onOpenOverviewDelivery: () => void
 }) {
+    const [unifiedAddressOpen, setUnifiedAddressOpen] = React.useState(false)
     const coverageHint = useDeliveryCoverage(
         nature === "physical_service" && !inquiryLocked ? lines : [],
     )
@@ -280,6 +288,40 @@ function LineItemsSectionInner({
         () => new Set(inquiryDelivery?.keys()),
         [inquiryDelivery],
     )
+    const deliveryOverview = React.useMemo(
+        () => summarizeOrderDelivery(lines),
+        [lines],
+    )
+    const firstAddress =
+        deliveryOverview.unified ??
+        (deliveryOverview.groups[0]
+            ? {
+                  recipient: deliveryOverview.groups[0].recipient,
+                  phone: deliveryOverview.groups[0].phone,
+                  region_code: deliveryOverview.groups[0].region_code,
+                  address: deliveryOverview.groups[0].address,
+              }
+            : undefined)
+    const applyUnifiedAddress = (address: UnifiedDeliveryAddress) => {
+        const next = applyDeliveryAddressToLines(
+            form.getFieldValue("lineItems"),
+            address,
+        )
+        form.setFieldValue("lineItems", next)
+        toast.add({
+            title: "已设置统一收货地址",
+            description: `${next.length} 项商品均按全部数量送到该地址。`,
+            type: "success",
+            timeout: 3000,
+        })
+    }
+    const workbook = useSalesDeliveryWorkbook({
+        form,
+        lines,
+        unitNames: skuDetails.unitNames,
+        draftId,
+        onApplied: onOpenOverviewDelivery,
+    })
     const skuCount = lines.filter((line) => line.sku.trim()).length
 
     return (
@@ -320,9 +362,44 @@ function LineItemsSectionInner({
                                         lineCount={lines.length}
                                         onApply={onApplyDueDate}
                                     />
-                                    <SalesOrderCreatePriceBasisBatchMenu
+                                    <SalesOrderCreateUnifiedAddressDialog
+                                        open={unifiedAddressOpen}
+                                        onOpenChange={setUnifiedAddressOpen}
                                         lineCount={lines.length}
-                                        onApply={onApplyPriceBasis}
+                                        allocatedLineCount={
+                                            deliveryOverview.allocatedLineCount
+                                        }
+                                        initialAddress={firstAddress}
+                                        existingAddresses={
+                                            deliveryOverview.groups
+                                        }
+                                        triggerLabel={
+                                            deliveryOverview.unified
+                                                ? "修改统一地址"
+                                                : "统一地址"
+                                        }
+                                        onApply={applyUnifiedAddress}
+                                    />
+                                    <SalesOrderCreateMoreActionsMenu
+                                        lineCount={lines.length}
+                                        uniqueAddressCount={
+                                            deliveryOverview.uniqueAddressCount
+                                        }
+                                        hasWorkbookProduct={
+                                            workbook.hasWorkbookProduct
+                                        }
+                                        exporting={workbook.exporting}
+                                        exportDisabled={workbook.exportDisabled}
+                                        onApplyPriceBasis={onApplyPriceBasis}
+                                        onOpenOverview={onOpenOverviewDelivery}
+                                        onExportWorkbook={workbook.onExport}
+                                        onOpenImportWorkbook={
+                                            workbook.onOpenImport
+                                        }
+                                    />
+                                    <span
+                                        aria-hidden="true"
+                                        className="mx-0.5 h-4 w-px bg-border/80"
                                     />
                                 </>
                             ) : null}
@@ -331,6 +408,7 @@ function LineItemsSectionInner({
                                 type="button"
                                 variant="outline"
                                 size="sm"
+                                className="border-primary/35 bg-sidebar-accent/45 font-medium text-primary hover:bg-sidebar-accent/80 hover:text-primary"
                                 onClick={() => onPickerChange({ mode: "add" })}
                             >
                                 <PlusIcon
@@ -345,13 +423,11 @@ function LineItemsSectionInner({
             >
                 {nature === "physical_service" && lines.length > 0 ? (
                     <SalesDeliverySummaryBar
-                        unitNames={skuDetails.unitNames}
-                        form={form}
                         lines={lines}
-                        draftId={draftId}
                         inquiryLocked={inquiryLocked}
                         coverageHint={coverageHint}
                         onOpenOverview={onOpenOverviewDelivery}
+                        onEditUnifiedAddress={() => setUnifiedAddressOpen(true)}
                         onFilterLines={onActiveFilterChange}
                     />
                 ) : null}
@@ -420,6 +496,7 @@ function LineItemsSectionInner({
                     }
                     onConfirm={onConfirmPicks}
                 />
+                {workbook.dialog}
             </DetailWorkspaceSection>
 
             {nature === "physical_service" ? (

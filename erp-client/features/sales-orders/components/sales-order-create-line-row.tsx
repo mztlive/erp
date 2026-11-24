@@ -2,6 +2,8 @@
 
 import * as React from "react"
 import {
+    CheckIcon,
+    ChevronDownIcon,
     ChevronRightIcon,
     CopyIcon,
     MapPinIcon,
@@ -19,8 +21,21 @@ import { TableRowActions } from "@/components/business/table-row-actions"
 import { toFieldErrors } from "@/components/form"
 import { NativeCheckbox } from "@/components/ui/checkbox"
 import { DatePicker } from "@/components/ui/date-picker"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuGroup,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+    InputGroup,
+    InputGroupAddon,
+    InputGroupInput,
+} from "@/components/ui/input-group"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { TableCell, TableRow } from "@/components/ui/table"
 import { RegionName } from "@/features/regions"
@@ -485,11 +500,14 @@ export const SalesOrderCreateLineRow = React.memo(
                     </div>
                 </TableCell>
 
-                {/* 5. 采购供给（单价 + 一键切集采/代发 + 供给总额） */}
-                <TableCell data-align="end" className="w-36 py-2.5 align-top">
+                {/* 5. 采购供给（前置代发/集采下拉 + 单价输入） */}
+                <TableCell data-align="end" className="w-44 py-2.5 align-top">
                     <div className="space-y-1">
                         {inquiryLocked ? (
-                            <div className="flex h-control-sm items-center justify-end">
+                            <div className="flex h-control-sm items-center justify-end gap-1.5">
+                                <span className="text-xs text-muted-foreground">
+                                    询价覆盖
+                                </span>
                                 <MoneyValue
                                     value={line.procurementSupplyPrice || null}
                                 />
@@ -502,6 +520,44 @@ export const SalesOrderCreateLineRow = React.memo(
                                     const invalid =
                                         field.state.meta.isTouched &&
                                         !field.state.meta.isValid
+                                    const basisShortLabel =
+                                        line.procurementPriceBasis === "BULK"
+                                            ? "集采"
+                                            : line.procurementPriceBasis ===
+                                                "DROPSHIP"
+                                              ? "代发"
+                                              : "取价"
+                                    const basisFullLabel =
+                                        line.procurementPriceBasis === "BULK"
+                                            ? "集采"
+                                            : line.procurementPriceBasis ===
+                                                "DROPSHIP"
+                                              ? "一件代发"
+                                              : "未选择"
+                                    const bulkMinQty =
+                                        line.referencePrices?.bulkMinQuantity?.trim()
+                                    const basisOptions = [
+                                        {
+                                            value: "DROPSHIP" as const,
+                                            label: "一件代发",
+                                            hint: undefined,
+                                            refPrice: supplyReferencePrice(
+                                                line.referencePrices,
+                                                "DROPSHIP",
+                                            ),
+                                        },
+                                        {
+                                            value: "BULK" as const,
+                                            label: "集采",
+                                            hint: bulkMinQty
+                                                ? `满 ${bulkMinQty}${displayUnit || ""}起`
+                                                : undefined,
+                                            refPrice: supplyReferencePrice(
+                                                line.referencePrices,
+                                                "BULK",
+                                            ),
+                                        },
+                                    ]
                                     return (
                                         <Field
                                             className="gap-0.5"
@@ -513,24 +569,127 @@ export const SalesOrderCreateLineRow = React.memo(
                                             >
                                                 采购供给单价
                                             </FieldLabel>
-                                            <Input
-                                                id={`${linePrefix}-supply-price`}
-                                                name={field.name}
-                                                type="text"
-                                                inputMode="decimal"
-                                                value={field.state.value ?? ""}
-                                                placeholder="请填写"
-                                                aria-invalid={
-                                                    invalid || undefined
-                                                }
-                                                className="h-control-sm num text-right"
-                                                onBlur={field.handleBlur}
-                                                onChange={(event) =>
-                                                    field.handleChange(
-                                                        event.target.value,
-                                                    )
-                                                }
-                                            />
+                                            <InputGroup className="h-control-sm">
+                                                <InputGroupAddon
+                                                    align="inline-start"
+                                                    className="h-full cursor-default border-r border-border/85 p-0 has-[>button]:ml-0"
+                                                >
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger
+                                                            id={`${linePrefix}-supply-basis`}
+                                                            render={
+                                                                <button
+                                                                    type="button"
+                                                                    aria-label={`取价方式：${basisFullLabel}，点击切换`}
+                                                                    className={cn(
+                                                                        "inline-flex h-full shrink-0 cursor-pointer items-center gap-0.5 rounded-l-md px-2 text-xs font-medium transition-colors hover:bg-card/85 hover:text-primary focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground",
+                                                                        line.procurementPriceBasis
+                                                                            ? "text-foreground/85"
+                                                                            : "text-muted-foreground",
+                                                                    )}
+                                                                />
+                                                            }
+                                                        >
+                                                            <span>
+                                                                {
+                                                                    basisShortLabel
+                                                                }
+                                                            </span>
+                                                            <ChevronDownIcon
+                                                                className="size-3 shrink-0 opacity-70"
+                                                                aria-hidden="true"
+                                                            />
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent
+                                                            align="start"
+                                                            className="w-60 max-w-[calc(100vw-2rem)]"
+                                                        >
+                                                            <DropdownMenuGroup>
+                                                                <DropdownMenuLabel>
+                                                                    切换取价方式（自动带入参考价）
+                                                                </DropdownMenuLabel>
+                                                                {basisOptions.map(
+                                                                    (
+                                                                        option,
+                                                                    ) => {
+                                                                        const active =
+                                                                            line.procurementPriceBasis ===
+                                                                            option.value
+                                                                        return (
+                                                                            <DropdownMenuItem
+                                                                                key={
+                                                                                    option.value
+                                                                                }
+                                                                                id={`${linePrefix}-supply-basis-${option.value.toLowerCase()}`}
+                                                                                onClick={() =>
+                                                                                    setPriceBasis(
+                                                                                        option.value,
+                                                                                    )
+                                                                                }
+                                                                            >
+                                                                                <CheckIcon
+                                                                                    className={cn(
+                                                                                        "size-3.5 shrink-0 text-primary",
+                                                                                        active
+                                                                                            ? "opacity-100"
+                                                                                            : "opacity-0",
+                                                                                    )}
+                                                                                    aria-hidden="true"
+                                                                                />
+                                                                                <div className="flex min-w-0 flex-1 flex-col">
+                                                                                    <span className="text-body-compact font-medium">
+                                                                                        {
+                                                                                            option.label
+                                                                                        }
+                                                                                    </span>
+                                                                                    {option.hint ? (
+                                                                                        <span className="num text-tiny text-muted-foreground">
+                                                                                            {
+                                                                                                option.hint
+                                                                                            }
+                                                                                        </span>
+                                                                                    ) : null}
+                                                                                </div>
+                                                                                <span className="num ml-2 shrink-0 text-xs text-muted-foreground">
+                                                                                    {option.refPrice ? (
+                                                                                        <MoneyValue
+                                                                                            value={
+                                                                                                option.refPrice
+                                                                                            }
+                                                                                        />
+                                                                                    ) : (
+                                                                                        "未配置"
+                                                                                    )}
+                                                                                </span>
+                                                                            </DropdownMenuItem>
+                                                                        )
+                                                                    },
+                                                                )}
+                                                            </DropdownMenuGroup>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </InputGroupAddon>
+                                                <InputGroupInput
+                                                    id={`${linePrefix}-supply-price`}
+                                                    name={field.name}
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    value={
+                                                        field.state.value ?? ""
+                                                    }
+                                                    placeholder="请填写"
+                                                    aria-invalid={
+                                                        invalid || undefined
+                                                    }
+                                                    className="num pr-2 text-right"
+                                                    onBlur={field.handleBlur}
+                                                    onChange={(event) =>
+                                                        field.handleChange(
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                />
+                                            </InputGroup>
                                             {invalid ? (
                                                 <FieldError
                                                     errors={toFieldErrors(
@@ -544,65 +703,22 @@ export const SalesOrderCreateLineRow = React.memo(
                             </form.AppField>
                         )}
 
-                        <div className="flex flex-wrap items-center justify-end gap-1 text-xs">
-                            {inquiryLocked ? (
-                                <span className="text-muted-foreground">
-                                    询价覆盖
-                                </span>
-                            ) : (
-                                <div
-                                    id={`${linePrefix}-supply-basis`}
-                                    role="group"
-                                    aria-label="取价方式"
-                                    className="inline-flex items-center rounded-sm bg-muted/70 p-0.5"
-                                >
-                                    {(
-                                        [
-                                            {
-                                                value: "DROPSHIP",
-                                                label: "代发",
-                                            },
-                                            { value: "BULK", label: "集采" },
-                                        ] as const
-                                    ).map((option) => {
-                                        const active =
-                                            line.procurementPriceBasis ===
-                                            option.value
-                                        return (
-                                            <button
-                                                key={option.value}
-                                                id={`${linePrefix}-supply-basis-${option.value.toLowerCase()}`}
-                                                type="button"
-                                                aria-pressed={active}
-                                                className={cn(
-                                                    "cursor-pointer rounded-xs px-1.5 py-0 text-tiny leading-4 transition-colors",
-                                                    active
-                                                        ? "bg-card font-medium text-foreground shadow-2xs"
-                                                        : "text-muted-foreground hover:text-foreground",
-                                                )}
-                                                onClick={() =>
-                                                    setPriceBasis(option.value)
-                                                }
-                                            >
-                                                {option.label}
-                                            </button>
-                                        )
-                                    })}
-                                </div>
-                            )}
-                            {missingReference ? (
-                                <span
-                                    className="text-tiny text-warning-soft-foreground"
-                                    title={`未配置${missingReferenceLabel}，请手填供给单价`}
-                                >
-                                    缺{missingReferenceLabel}
-                                </span>
-                            ) : showSupplyTotal ? (
-                                <span className="num text-tiny text-muted-foreground">
-                                    额 <MoneyValue value={supplyTotal} />
-                                </span>
-                            ) : null}
-                        </div>
+                        {missingReference || showSupplyTotal ? (
+                            <div className="flex flex-wrap items-center justify-end gap-1.5 text-xs">
+                                {missingReference ? (
+                                    <span
+                                        className="text-tiny text-warning-soft-foreground"
+                                        title={`未配置${missingReferenceLabel}，请手填供给单价`}
+                                    >
+                                        缺{missingReferenceLabel}
+                                    </span>
+                                ) : showSupplyTotal ? (
+                                    <span className="num text-tiny text-muted-foreground">
+                                        额 <MoneyValue value={supplyTotal} />
+                                    </span>
+                                ) : null}
+                            </div>
+                        ) : null}
                     </div>
                 </TableCell>
 

@@ -1,7 +1,8 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 import {
+    ArrowRightIcon,
     CheckIcon,
     ChevronDownIcon,
     PackageCheckIcon,
@@ -52,6 +53,7 @@ export function SourcingInlineOptionPicker({
     line,
     index,
     onOpenDetail,
+    warehouseSlot,
 }: {
     form: PurchaseOrderCreateFormApi
     order: SourcingSalesOrder
@@ -59,6 +61,7 @@ export function SourcingInlineOptionPicker({
     line: SourcingLineInput
     index: number
     onOpenDetail: () => void
+    warehouseSlot?: ReactNode
 }) {
     const [open, setOpen] = useState(false)
     const [query, setQuery] = useState("")
@@ -93,7 +96,51 @@ export function SourcingInlineOptionPicker({
         )
     }, [product.options, query])
 
-    return (
+    const lineOne = (
+        <span className="flex w-full min-w-0 items-center justify-between gap-1.5">
+            <span
+                className={cn(
+                    "min-w-0 truncate text-body-compact font-medium",
+                    currentOption ? "text-foreground" : "text-destructive",
+                )}
+                title={currentName}
+            >
+                {currentName}
+            </span>
+            <span className="flex shrink-0 items-center gap-1">
+                {product.options.length > 1 ? (
+                    <span className="num text-tiny text-muted-foreground">
+                        {product.options.length}源
+                    </span>
+                ) : null}
+                <ChevronDownIcon
+                    aria-hidden="true"
+                    className="size-3.5 shrink-0 text-muted-foreground/70 transition-transform group-hover/opt:text-foreground group-data-[popup-open]/opt:rotate-180"
+                />
+            </span>
+        </span>
+    )
+
+    const routeAndMeta = (
+        <>
+            {currentRoute ? (
+                <Badge
+                    variant={isStock ? "info" : "neutral"}
+                    className="h-5 px-1.5 text-tiny"
+                >
+                    {isStock ? <PackageCheckIcon aria-hidden="true" /> : null}
+                    {currentRoute}
+                </Badge>
+            ) : null}
+            {currentOption?.inquirySource ? (
+                <Badge variant="violet" className="h-5 px-1.5 text-tiny">
+                    询价
+                </Badge>
+            ) : null}
+        </>
+    )
+
+    const popover = (
         <Popover
             open={open}
             onOpenChange={(next) => {
@@ -109,68 +156,34 @@ export function SourcingInlineOptionPicker({
                         onClick={(event) => event.stopPropagation()}
                         aria-label={`切换 ${product.itemName} 供给来源，当前 ${currentName}`}
                         className={cn(
-                            "group/opt flex w-full min-w-0 cursor-pointer flex-col items-start gap-1 rounded-md border border-transparent px-1.5 py-1 text-left transition-colors outline-none hover:border-border/80 hover:bg-surface-sunken focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring",
+                            "group/opt flex w-full min-w-0 cursor-pointer flex-col items-start rounded-md border border-transparent px-1.5 text-left transition-colors outline-none hover:border-border/80 hover:bg-surface-sunken focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring data-[popup-open]:border-primary/45 data-[popup-open]:bg-surface-sunken",
+                            warehouseSlot ? "py-0.5" : "gap-1 py-1",
                             !currentOption &&
                                 "border-dashed border-destructive-border bg-destructive-soft/30",
                         )}
                     />
                 }
             >
-                <span className="flex w-full min-w-0 items-center justify-between gap-1.5">
-                    <span
-                        className={cn(
-                            "min-w-0 truncate text-body-compact font-medium",
-                            currentOption
-                                ? "text-foreground"
-                                : "text-destructive",
-                        )}
-                        title={currentName}
-                    >
-                        {currentName}
+                {lineOne}
+                {warehouseSlot ? null : (
+                    <span className="flex w-full flex-wrap items-center gap-1 text-xs">
+                        {routeAndMeta}
+                        {hasDeliveryAlert ? (
+                            <span
+                                className="inline-flex max-w-full items-center gap-0.5 truncate text-tiny text-warning-soft-foreground"
+                                title={currentDelivery}
+                            >
+                                <TriangleAlertIcon
+                                    aria-hidden="true"
+                                    className="size-3 shrink-0"
+                                />
+                                <span className="truncate">
+                                    {currentDelivery}
+                                </span>
+                            </span>
+                        ) : null}
                     </span>
-                    <ChevronDownIcon
-                        aria-hidden="true"
-                        className="size-3.5 shrink-0 text-muted-foreground/70 transition-transform group-hover/opt:text-foreground group-data-[popup-open]/opt:rotate-180"
-                    />
-                </span>
-                <span className="flex w-full flex-wrap items-center gap-1 text-xs">
-                    {currentRoute ? (
-                        <Badge
-                            variant={isStock ? "info" : "neutral"}
-                            className="h-4.5 px-1.5 text-tiny"
-                        >
-                            {isStock ? (
-                                <PackageCheckIcon aria-hidden="true" />
-                            ) : null}
-                            {currentRoute}
-                        </Badge>
-                    ) : null}
-                    {currentOption?.inquirySource ? (
-                        <Badge
-                            variant="violet"
-                            className="h-4.5 px-1.5 text-tiny"
-                        >
-                            询价
-                        </Badge>
-                    ) : null}
-                    {product.options.length > 1 ? (
-                        <span className="num text-tiny text-muted-foreground">
-                            共 {product.options.length} 源
-                        </span>
-                    ) : null}
-                    {hasDeliveryAlert ? (
-                        <span
-                            className="inline-flex max-w-full items-center gap-0.5 truncate text-tiny text-warning-soft-foreground"
-                            title={currentDelivery}
-                        >
-                            <TriangleAlertIcon
-                                aria-hidden="true"
-                                className="size-3 shrink-0"
-                            />
-                            <span className="truncate">{currentDelivery}</span>
-                        </span>
-                    ) : null}
-                </span>
+                )}
             </PopoverTrigger>
 
             <PopoverContent
@@ -447,5 +460,23 @@ export function SourcingInlineOptionPicker({
                 </div>
             </PopoverContent>
         </Popover>
+    )
+
+    if (!warehouseSlot) return popover
+
+    return (
+        <div className="min-w-0 space-y-1">
+            {popover}
+            <div className="flex min-w-0 items-center gap-1.5 px-1.5">
+                {routeAndMeta}
+                <ArrowRightIcon
+                    aria-hidden="true"
+                    className="size-3 shrink-0 text-muted-foreground/55"
+                />
+                <div className="flex min-w-0 flex-1 items-center">
+                    {warehouseSlot}
+                </div>
+            </div>
+        </div>
     )
 }

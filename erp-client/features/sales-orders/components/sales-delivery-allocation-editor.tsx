@@ -5,60 +5,41 @@ import { ListChecksIcon, MapPinIcon, TriangleAlertIcon } from "lucide-react"
 import { detailWorkspaceStyles } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
-import { toast } from "@/components/ui/toast"
 import { RegionName } from "@/features/regions"
 import type { DeliveryCoverageHint as CoverageCode } from "../api/delivery-coverage"
 import { summarizeOrderDelivery } from "../lib/sales-delivery-pool"
-import type { SalesOrderCreateFormApi } from "../lib/sales-order-create-form-types"
 import type { SalesLineFilterKey } from "../lib/sales-order-create-line-health"
-import {
-    applyDeliveryAddressToLines,
-    type UnifiedDeliveryAddress,
-} from "../lib/sales-order-create-model"
 import type { SalesOrderDraftLineInput } from "../types"
-import { SalesDeliveryWorkbookActions } from "./sales-delivery-workbook-actions"
-import { SalesOrderCreateUnifiedAddressDialog } from "./sales-order-create-unified-address-dialog"
 
 // 改单页面继续复用相同的数量与完整性摘要。
 export { allocationSummary } from "../lib/sales-delivery-allocation-summary"
 
 /**
- * 紧凑单行收货安排条：嵌入销售明细工作区上方，彻底消除下方重复的 100 行地址表。
- * 统一地址一行呈现，多地址给出总览与问题快捷跳转；按商品编辑直接在明细表「收货地址」列点开右侧工作台。
+ * 紧凑单行收货状态摘要条：
+ * - 非询价且尚未填写任何地址时隐藏，避免 0 地址空态与分区工具栏重复；
+ * - 已配置地址（或询价锁定）时呈现在线摘要，提供地址问题快捷跳转与地址总览入口。
  */
 export function SalesDeliverySummaryBar({
-    form,
     lines,
-    unitNames,
-    draftId,
     inquiryLocked = false,
     coverageHint,
     onOpenOverview,
+    onEditUnifiedAddress,
     onFilterLines,
 }: {
-    form: SalesOrderCreateFormApi
     lines: SalesOrderDraftLineInput[]
-    unitNames: ReadonlyMap<string, string>
-    draftId?: string
     inquiryLocked?: boolean
     coverageHint?: (sku: string, regionCode: string) => CoverageCode
     onOpenOverview: () => void
+    onEditUnifiedAddress?: () => void
     onFilterLines?: (filter: SalesLineFilterKey) => void
 }) {
     if (lines.length === 0) return null
 
     const overview = summarizeOrderDelivery(lines)
+    if (!inquiryLocked && overview.allocatedLineCount === 0) return null
+
     const common = overview.unified
-    const firstAddress =
-        common ??
-        (overview.groups[0]
-            ? {
-                  recipient: overview.groups[0].recipient,
-                  phone: overview.groups[0].phone,
-                  region_code: overview.groups[0].region_code,
-                  address: overview.groups[0].address,
-              }
-            : undefined)
 
     const coverageWarningCount =
         coverageHint && !inquiryLocked
@@ -70,20 +51,6 @@ export function SalesDeliverySummaryBar({
                   ),
               ).length
             : 0
-
-    const applyUnifiedAddress = (address: UnifiedDeliveryAddress) => {
-        const next = applyDeliveryAddressToLines(
-            form.getFieldValue("lineItems"),
-            address,
-        )
-        form.setFieldValue("lineItems", next)
-        toast.add({
-            title: "已设置统一收货地址",
-            description: `${next.length} 项商品均按全部数量送到该地址。`,
-            type: "success",
-            timeout: 3000,
-        })
-    }
 
     return (
         <div
@@ -161,16 +128,9 @@ export function SalesDeliverySummaryBar({
                         ) : null}
                     </>
                 ) : (
-                    <>
-                        <span className="rounded-sm bg-muted px-1.5 py-0.5 text-tiny font-medium text-muted-foreground">
-                            选填
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                            {inquiryLocked
-                                ? "按原询价交付要求办理，无实物配送地址。"
-                                : "可设统一地址、勾选部分商品分批设置，或点明细行「收货地址」逐项配置"}
-                        </span>
-                    </>
+                    <span className="text-xs text-muted-foreground">
+                        按原询价交付要求办理，无实物配送地址。
+                    </span>
                 )}
 
                 {coverageWarningCount > 0 ? (
@@ -188,21 +148,25 @@ export function SalesDeliverySummaryBar({
             </div>
 
             {!inquiryLocked ? (
-                <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                    <SalesOrderCreateUnifiedAddressDialog
-                        lineCount={lines.length}
-                        allocatedLineCount={overview.allocatedLineCount}
-                        initialAddress={firstAddress}
-                        existingAddresses={overview.groups}
-                        triggerLabel={common ? "修改统一地址" : "设置统一地址"}
-                        onApply={applyUnifiedAddress}
-                    />
+                <div className="flex shrink-0 flex-wrap items-center gap-1">
+                    {common && onEditUnifiedAddress ? (
+                        <Button
+                            id="sales-delivery-summary-edit-unified"
+                            type="button"
+                            variant="ghost"
+                            size="xs"
+                            className={detailWorkspaceStyles.inlineLinkButton}
+                            onClick={onEditUnifiedAddress}
+                        >
+                            修改地址
+                        </Button>
+                    ) : null}
                     <Button
-                        id="sales-delivery-overview-open"
+                        id="sales-delivery-summary-overview"
                         type="button"
                         variant="ghost"
-                        size="sm"
-                        className={detailWorkspaceStyles.subtleButton}
+                        size="xs"
+                        className={detailWorkspaceStyles.quietButton}
                         onClick={onOpenOverview}
                     >
                         <ListChecksIcon
@@ -211,19 +175,7 @@ export function SalesDeliverySummaryBar({
                             aria-hidden="true"
                         />
                         地址总览
-                        {overview.uniqueAddressCount > 0 ? (
-                            <span className="num">
-                                （{overview.uniqueAddressCount}）
-                            </span>
-                        ) : null}
                     </Button>
-                    <SalesDeliveryWorkbookActions
-                        unitNames={unitNames}
-                        form={form}
-                        lines={lines}
-                        draftId={draftId}
-                        onApplied={onOpenOverview}
-                    />
                 </div>
             ) : (
                 <Button

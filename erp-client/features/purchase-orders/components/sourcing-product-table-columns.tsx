@@ -23,7 +23,6 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { WarehouseSearchCombobox } from "@/features/entity-selectors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { compareDecimal, multiplyFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
@@ -36,6 +35,7 @@ import type { SourcingEditorRow } from "../lib/sourcing/editor-rows"
 import { summarizeRowPricing } from "../lib/sourcing/pricing"
 import type { SourcingSalesOrder } from "../lib/sourcing/types"
 import { SourcingInlineOptionPicker } from "./sourcing-inline-option-picker"
+import { SourcingInlineWarehousePicker } from "./sourcing-inline-warehouse-picker"
 
 /** 摘要优先展示实际参与的来源；暂停商品仍可核对保留的方案。 */
 function sourceFacts(row: SourcingEditorRow) {
@@ -298,7 +298,7 @@ export function sourcingProductColumns({
                 return (
                     <div
                         className={cn(
-                            "min-w-56 max-w-80 space-y-1.5 whitespace-normal",
+                            "min-w-56 max-w-80 space-y-1 whitespace-normal",
                             !included && "opacity-60",
                         )}
                     >
@@ -309,51 +309,64 @@ export function sourcingProductColumns({
                             line={line}
                             index={index}
                             onOpenDetail={() => onEdit(productId, "compare")}
-                        />
-                        {needsWarehouse ? (
-                            <div className="space-y-1 px-1.5">
-                                <WarehouseSearchCombobox
-                                    id={`${inlineId}-warehouse`}
-                                    value={line.targetWarehouseId || undefined}
-                                    onValueChange={(warehouseId) =>
-                                        form.setFieldValue(
-                                            `lines[${index}].targetWarehouseId`,
-                                            warehouseId ?? "",
-                                        )
-                                    }
-                                    onItemChange={(warehouse) =>
-                                        form.setFieldValue(
-                                            `lines[${index}].targetWarehouseName`,
-                                            warehouse
-                                                ? `${warehouse.warehouseCode} · ${warehouse.warehouseName}`
-                                                : "",
-                                        )
-                                    }
-                                    purpose="purchase-receipt"
-                                    placeholder="选择入库目标仓 *"
-                                    emptyLabel="没有可用仓库"
-                                    aria-label={`选择 ${row.product.itemName} 的入库目标仓`}
-                                    aria-invalid={missingWarehouse || undefined}
-                                    className="h-control-sm text-xs"
-                                />
-                                {otherWarehouseTargets > 0 &&
-                                line.targetWarehouseId ? (
-                                    <button
-                                        id={`${inlineId}-sync-warehouse`}
-                                        type="button"
-                                        className="cursor-pointer text-tiny text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                                        onClick={() =>
+                            warehouseSlot={
+                                needsWarehouse ? (
+                                    <SourcingInlineWarehousePicker
+                                        id={`${inlineId}-warehouse`}
+                                        value={
+                                            line.targetWarehouseId || undefined
+                                        }
+                                        option={option}
+                                        productName={row.product.itemName}
+                                        missing={missingWarehouse}
+                                        otherWarehouseTargets={
+                                            otherWarehouseTargets
+                                        }
+                                        onSelect={(warehouse) => {
+                                            form.setFieldValue(
+                                                `lines[${index}].targetWarehouseId`,
+                                                warehouse.warehouseId,
+                                            )
+                                            form.setFieldValue(
+                                                `lines[${index}].targetWarehouseName`,
+                                                warehouse.warehouseCode
+                                                    ? `${warehouse.warehouseCode} · ${warehouse.warehouseName}`
+                                                    : warehouse.warehouseName,
+                                            )
+                                        }}
+                                        onSyncToOthers={(resolvedName) =>
                                             onSyncWarehouseToOthers(
                                                 line.targetWarehouseId ?? "",
-                                                line.targetWarehouseName ?? "",
+                                                resolvedName ||
+                                                    line.targetWarehouseName ||
+                                                    "",
                                                 productId,
                                             )
                                         }
-                                    >
-                                        同步目标仓到其余 {otherWarehouseTargets}{" "}
-                                        个入仓项
-                                    </button>
-                                ) : null}
+                                    />
+                                ) : undefined
+                            }
+                        />
+                        {needsWarehouse &&
+                        otherWarehouseTargets > 0 &&
+                        line.targetWarehouseId ? (
+                            <div className="px-1.5">
+                                <button
+                                    id={`${inlineId}-sync-warehouse`}
+                                    type="button"
+                                    className="cursor-pointer text-tiny text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                    onClick={(event) => {
+                                        event.stopPropagation()
+                                        onSyncWarehouseToOthers(
+                                            line.targetWarehouseId ?? "",
+                                            line.targetWarehouseName ?? "",
+                                            productId,
+                                        )
+                                    }}
+                                >
+                                    同步目标仓到其余 {otherWarehouseTargets}{" "}
+                                    个入仓项
+                                </button>
                             </div>
                         ) : null}
                     </div>

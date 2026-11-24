@@ -45,7 +45,7 @@ export function SalesOrderCreateDueDateBatchBar({
                     className="size-3.5"
                     aria-hidden="true"
                 />
-                设置统一交付日
+                统一交付日
             </PopoverTrigger>
             <PopoverContent
                 align="end"

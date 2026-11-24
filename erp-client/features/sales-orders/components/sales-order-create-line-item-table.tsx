@@ -552,12 +552,17 @@ export function SalesOrderCreateLineItemTable({
     ]
 
     const showFilterToolbar =
-        lines.length > 3 ||
-        counts.incomplete > 0 ||
+        lines.length > 5 ||
         counts.addressIssue > 0 ||
         counts.negativeProfit > 0 ||
         Boolean(searchQuery) ||
         filter !== "all"
+
+    const showInlineAdd = Boolean(
+        !inquiryLocked && onAddProducts && lines.length > 5,
+    )
+    const showPagination =
+        lines.length > 20 || filteredEntries.length > pageSize
 
     const useBoundedScroll = pageEntries.length > 8
 
@@ -722,7 +727,7 @@ export function SalesOrderCreateLineItemTable({
                                 className="size-3.5"
                                 aria-hidden="true"
                             />
-                            批量设收货地址
+                            设地址
                         </Button>
 
                         <Popover
@@ -745,7 +750,7 @@ export function SalesOrderCreateLineItemTable({
                                     className="size-3.5"
                                     aria-hidden="true"
                                 />
-                                批量设交期
+                                设交期
                             </PopoverTrigger>
                             <PopoverContent align="start" className="w-72">
                                 <PopoverTitle>
@@ -789,7 +794,7 @@ export function SalesOrderCreateLineItemTable({
                                     />
                                 }
                             >
-                                批量设取价
+                                设取价
                                 <ChevronDownIcon
                                     data-icon="inline-end"
                                     className="size-3.5"
@@ -898,7 +903,7 @@ export function SalesOrderCreateLineItemTable({
             >
                 <Table
                     id="sales-orders-create-line-items"
-                    className="min-w-[66rem] [--table-cell-inline:0.5rem]"
+                    className="min-w-[68rem] [--table-cell-inline:0.5rem]"
                 >
                     <caption className="sr-only">销售单创建明细</caption>
                     <TableHeader>
@@ -956,7 +961,7 @@ export function SalesOrderCreateLineItemTable({
                                     </DetailHint>
                                 </span>
                             </TableHead>
-                            <TableHead data-align="end" className="w-36">
+                            <TableHead data-align="end" className="w-44">
                                 <span className="inline-flex items-center justify-end gap-0.5">
                                     采购供给价
                                     <RequiredMark />
@@ -972,7 +977,7 @@ export function SalesOrderCreateLineItemTable({
                                     >
                                         {inquiryLocked
                                             ? "由询价结果覆盖，不可修改；按单价乘数量估算含税毛利。"
-                                            : "下方可一键切换一件代发或集采参考价，也可直接手填；用于估算含税毛利。"}
+                                            : "左侧可下拉切换一件代发或集采参考价，也可直接手填；用于估算含税毛利。"}
                                     </DetailHint>
                                 </span>
                             </TableHead>
@@ -1056,90 +1061,94 @@ export function SalesOrderCreateLineItemTable({
                 </Table>
             </div>
 
-            {/* 底部快捷添加 + 分页条（20+ 商品时自然呈现） */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
-                <div className="flex items-center gap-3">
-                    {!inquiryLocked && onAddProducts ? (
-                        <Button
-                            id="sales-orders-create-line-items-inline-add"
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className={detailWorkspaceStyles.inlineLinkButton}
-                            onClick={onAddProducts}
-                        >
-                            <PlusIcon
-                                data-icon="inline-start"
-                                className="size-3.5"
-                                aria-hidden="true"
-                            />
-                            继续添加商品
-                        </Button>
-                    ) : null}
-                </div>
+            {/* 底部快捷添加 + 分页条（多行时自然呈现） */}
+            {showInlineAdd || showPagination ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+                    <div className="flex items-center gap-3">
+                        {showInlineAdd ? (
+                            <Button
+                                id="sales-orders-create-line-items-inline-add"
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className={
+                                    detailWorkspaceStyles.inlineLinkButton
+                                }
+                                onClick={onAddProducts}
+                            >
+                                <PlusIcon
+                                    data-icon="inline-start"
+                                    className="size-3.5"
+                                    aria-hidden="true"
+                                />
+                                继续添加商品
+                            </Button>
+                        ) : null}
+                    </div>
 
-                {lines.length > 20 || filteredEntries.length > pageSize ? (
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        <div className="inline-flex items-center gap-1">
-                            <span>每页</span>
-                            <div className="inline-flex items-center rounded-md bg-muted/65 p-0.5">
-                                {PAGE_SIZE_OPTIONS.map((size) => (
-                                    <button
-                                        key={size}
-                                        id={`sales-orders-create-lines-pagesize-${size}`}
-                                        type="button"
-                                        aria-pressed={pageSize === size}
-                                        onClick={() => setPageSize(size)}
-                                        className={cn(
-                                            "num cursor-pointer rounded-sm px-2 py-0.5 text-xs transition-colors",
-                                            pageSize === size
-                                                ? "bg-card font-medium text-foreground shadow-2xs"
-                                                : "text-muted-foreground hover:text-foreground",
-                                        )}
-                                    >
-                                        {size}
-                                    </button>
-                                ))}
+                    {showPagination ? (
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <div className="inline-flex items-center gap-1">
+                                <span>每页</span>
+                                <div className="inline-flex items-center rounded-md bg-muted/65 p-0.5">
+                                    {PAGE_SIZE_OPTIONS.map((size) => (
+                                        <button
+                                            key={size}
+                                            id={`sales-orders-create-lines-pagesize-${size}`}
+                                            type="button"
+                                            aria-pressed={pageSize === size}
+                                            onClick={() => setPageSize(size)}
+                                            className={cn(
+                                                "num cursor-pointer rounded-sm px-2 py-0.5 text-xs transition-colors",
+                                                pageSize === size
+                                                    ? "bg-card font-medium text-foreground shadow-2xs"
+                                                    : "text-muted-foreground hover:text-foreground",
+                                            )}
+                                        >
+                                            {size}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <span className="num">
+                                第 {safePage} / {totalPages} 页
+                            </span>
+                            <div className="flex items-center gap-1">
+                                <Button
+                                    id="sales-orders-create-lines-page-prev"
+                                    type="button"
+                                    variant="outline"
+                                    size="icon-sm"
+                                    aria-label="上一页"
+                                    disabled={safePage <= 1}
+                                    onClick={() =>
+                                        setPage((current) =>
+                                            Math.max(1, current - 1),
+                                        )
+                                    }
+                                >
+                                    <ChevronLeftIcon aria-hidden="true" />
+                                </Button>
+                                <Button
+                                    id="sales-orders-create-lines-page-next"
+                                    type="button"
+                                    variant="outline"
+                                    size="icon-sm"
+                                    aria-label="下一页"
+                                    disabled={safePage >= totalPages}
+                                    onClick={() =>
+                                        setPage((current) =>
+                                            Math.min(totalPages, current + 1),
+                                        )
+                                    }
+                                >
+                                    <ChevronRightIcon aria-hidden="true" />
+                                </Button>
                             </div>
                         </div>
-                        <span className="num">
-                            第 {safePage} / {totalPages} 页
-                        </span>
-                        <div className="flex items-center gap-1">
-                            <Button
-                                id="sales-orders-create-lines-page-prev"
-                                type="button"
-                                variant="outline"
-                                size="icon-sm"
-                                aria-label="上一页"
-                                disabled={safePage <= 1}
-                                onClick={() =>
-                                    setPage((current) =>
-                                        Math.max(1, current - 1),
-                                    )
-                                }
-                            >
-                                <ChevronLeftIcon aria-hidden="true" />
-                            </Button>
-                            <Button
-                                id="sales-orders-create-lines-page-next"
-                                type="button"
-                                variant="outline"
-                                size="icon-sm"
-                                aria-label="下一页"
-                                disabled={safePage >= totalPages}
-                                onClick={() =>
-                                    setPage((current) =>
-                                        Math.min(totalPages, current + 1),
-                                    )
-                                }
-                            >
-                                <ChevronRightIcon aria-hidden="true" />
-                            </Button>
-                        </div>
-                    </div>
-                ) : null}
-            </div>
+                    ) : null}
+                </div>
+            ) : null}
 
             {hasUnresolvedOwner ? (
                 <p role="status" className="text-xs text-destructive">

@@ -1,8 +1,6 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { DownloadIcon, UploadIcon } from "lucide-react"
-import { detailWorkspaceStyles } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
@@ -41,7 +39,7 @@ import { SalesDeliveryImportPreview } from "./sales-delivery-import-preview"
 
 const prefix = "sales-delivery-workbook"
 
-export function SalesDeliveryWorkbookActions({
+export function useSalesDeliveryWorkbook({
     form,
     lines,
     unitNames,
@@ -58,6 +56,8 @@ export function SalesDeliveryWorkbookActions({
     const editorScope = useRef("")
     const [open, setOpen] = useState(false)
     const [exporting, setExporting] = useState(false)
+    const hasWorkbookProduct = lines.some(isWorkbookProduct)
+
     const getContext = () => ({
         scope: draftId ? `draft:${draftId}` : editorScope.current,
         customerId: form.getFieldValue("customerId"),
@@ -86,92 +86,67 @@ export function SalesDeliveryWorkbookActions({
             setExporting(false)
         }
     }
-    if (!lines.some(isWorkbookProduct)) return null
-    return (
-        <>
-            <Button
-                id={`${prefix}-export`}
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={detailWorkspaceStyles.subtleButton}
-                disabled={exporting || regions.isPending}
-                onClick={() => {
-                    if (regions.data) void download(regions.data)
-                    else {
-                        toast.add({
-                            title: "正在重试加载地区资料，请稍后重新导出",
-                            type: "error",
-                        })
-                        void regions.refetch()
-                    }
-                }}
-            >
-                <DownloadIcon
-                    data-icon="inline-start"
-                    className="size-3.5"
-                    aria-hidden="true"
-                />
-                {exporting ? "正在导出…" : "导出收货安排"}
-            </Button>
-            <Button
-                id={`${prefix}-import`}
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={detailWorkspaceStyles.subtleButton}
-                onClick={() => {
-                    prepare()
-                    setOpen(true)
-                }}
-            >
-                <UploadIcon
-                    data-icon="inline-start"
-                    className="size-3.5"
-                    aria-hidden="true"
-                />
-                批量导入地址
-            </Button>
-            {open && (
-                <SalesDeliveryWorkbookDialog
-                    lines={lines}
-                    regions={regions.data}
-                    regionsError={regions.isError}
-                    onRetryRegions={() => void regions.refetch()}
-                    getContext={getContext}
-                    onClose={() => setOpen(false)}
-                    onApply={(preview) => {
-                        const byLine = new Map(
-                            preview.groups
-                                .filter((group) => group.changes.length)
-                                .map((group) => [
-                                    group.line.rowKey,
-                                    group.allocations,
-                                ]),
-                        )
-                        form.setFieldValue(
-                            "lineItems",
-                            form.getFieldValue("lineItems").map((line) => {
-                                const allocations = byLine.get(line.rowKey)
-                                return allocations
-                                    ? {
-                                          ...line,
-                                          deliveryAllocations: allocations,
-                                      }
-                                    : line
-                            }),
-                        )
-                        onApplied()
-                        setOpen(false)
-                        toast.add({
-                            title: `已更新 ${byLine.size} 项商品的收货安排`,
-                            type: "success",
-                        })
-                    }}
-                />
-            )}
-        </>
-    )
+
+    const onExport = () => {
+        if (regions.data) void download(regions.data)
+        else {
+            toast.add({
+                title: "正在重试加载地区资料，请稍后重新导出",
+                type: "error",
+            })
+            void regions.refetch()
+        }
+    }
+
+    const onOpenImport = () => {
+        prepare()
+        setOpen(true)
+    }
+
+    const dialog = open ? (
+        <SalesDeliveryWorkbookDialog
+            lines={lines}
+            regions={regions.data}
+            regionsError={regions.isError}
+            onRetryRegions={() => void regions.refetch()}
+            getContext={getContext}
+            onClose={() => setOpen(false)}
+            onApply={(preview) => {
+                const byLine = new Map(
+                    preview.groups
+                        .filter((group) => group.changes.length)
+                        .map((group) => [group.line.rowKey, group.allocations]),
+                )
+                form.setFieldValue(
+                    "lineItems",
+                    form.getFieldValue("lineItems").map((line) => {
+                        const allocations = byLine.get(line.rowKey)
+                        return allocations
+                            ? {
+                                  ...line,
+                                  deliveryAllocations: allocations,
+                              }
+                            : line
+                    }),
+                )
+                onApplied()
+                setOpen(false)
+                toast.add({
+                    title: `已更新 ${byLine.size} 项商品的收货安排`,
+                    type: "success",
+                })
+            }}
+        />
+    ) : null
+
+    return {
+        hasWorkbookProduct,
+        exporting,
+        exportDisabled: exporting || regions.isPending,
+        onExport,
+        onOpenImport,
+        dialog,
+    }
 }
 
 type LoadedPreview = {
@@ -283,7 +258,12 @@ function SalesDeliveryWorkbookDialog({
                 size="xl"
                 scroll="body"
                 closeButtonId={`${prefix}-close`}
-                finalFocus={() => document.getElementById(`${prefix}-import`)}
+                finalFocus={() =>
+                    document.getElementById(`${prefix}-import`) ??
+                    document.getElementById(
+                        "sales-orders-create-lines-more-actions",
+                    )
+                }
             >
                 <DialogHeader>
                     <DialogTitle>批量导入地址</DialogTitle>
