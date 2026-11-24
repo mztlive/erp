@@ -48,6 +48,7 @@ export function WorkspacePurchasePaymentSummary({
             )}
             <Button
                 id={`${paymentSectionId(workItemId)}-jump`}
+                type="button"
                 variant="link"
                 size="sm"
                 className="h-auto px-0 text-xs text-info"
@@ -63,7 +64,7 @@ export function WorkspacePurchasePaymentSummary({
                 }}
             >
                 查看付款详情
-                <ChevronDownIcon data-icon="inline-end" />
+                <ChevronDownIcon aria-hidden="true" data-icon="inline-end" />
             </Button>
         </div>
     )
@@ -86,7 +87,7 @@ export function WorkspacePurchasePayment({
             aria-label="采购付款"
             className="min-w-0 scroll-m-4 outline-none"
         >
-            <h3 className="font-semibold">采购付款</h3>
+            <h3 className="text-body-compact font-semibold">采购付款</h3>
             {query.isError ? (
                 <BusinessFailureState
                     title="付款信息加载失败"
@@ -99,33 +100,36 @@ export function WorkspacePurchasePayment({
                 </p>
             ) : (
                 <>
-                    <dl className="mt-3 grid grid-cols-3 gap-3 divide-x divide-border">
+                    <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
                         {[
                             { label: "采购总额", value: payment.gross_amount },
                             { label: "累计已付", value: payment.paid_amount },
                             { label: "剩余应付", value: payment.open_amount },
                         ].map(({ label, value }) => (
-                            <div key={label} className="min-w-0 not-first:pl-3">
+                            <div
+                                key={label}
+                                className="flex min-w-0 flex-wrap items-baseline gap-x-1.5"
+                            >
                                 <dt className="text-xs text-muted-foreground">
                                     {label}
                                 </dt>
-                                <dd className="mt-1 break-all">
+                                <dd className="min-w-0 wrap-anywhere">
                                     <MoneyValue
                                         value={value}
-                                        className="text-value-compact font-semibold tracking-tight"
+                                        className="font-semibold"
                                     />
                                 </dd>
                             </div>
                         ))}
                     </dl>
-                    <dl className="mt-4 space-y-3 text-body-compact">
-                        <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-3">
+                    <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
+                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
                             <dt className="text-xs text-muted-foreground">
                                 付款条件
                             </dt>
                             <dd>{payment.payment_term_label}</dd>
                         </div>
-                        <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-3">
+                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
                             <dt className="text-xs text-muted-foreground">
                                 付款申请
                             </dt>
@@ -147,16 +151,17 @@ export function WorkspacePurchasePayment({
                                         />
                                     </span>
                                 ) : payment.requests.length > 1 ? (
-                                    <span className="text-xs text-muted-foreground">
+                                    <span className="num text-xs text-muted-foreground">
                                         共 {payment.requests.length} 份申请
                                     </span>
                                 ) : null}
                                 {payment.requests.length ? (
                                     <Button
                                         id={`${id}-requests-toggle`}
+                                        type="button"
                                         variant="link"
                                         size="sm"
-                                        className="ml-auto h-auto px-0 text-xs text-info"
+                                        className="h-auto px-0 text-xs text-info"
                                         aria-expanded={expanded}
                                         aria-controls={`${id}-requests`}
                                         onClick={() => setExpanded(!expanded)}
@@ -165,9 +170,15 @@ export function WorkspacePurchasePayment({
                                             ? "收起付款申请"
                                             : "查看付款申请"}
                                         {expanded ? (
-                                            <ChevronUpIcon data-icon="inline-end" />
+                                            <ChevronUpIcon
+                                                aria-hidden="true"
+                                                data-icon="inline-end"
+                                            />
                                         ) : (
-                                            <ChevronDownIcon data-icon="inline-end" />
+                                            <ChevronDownIcon
+                                                aria-hidden="true"
+                                                data-icon="inline-end"
+                                            />
                                         )}
                                     </Button>
                                 ) : null}
@@ -177,11 +188,8 @@ export function WorkspacePurchasePayment({
                     {expanded ? (
                         <div
                             id={`${id}-requests`}
-                            className="mt-3 divide-y divide-border border-t border-border"
+                            className="mt-2 divide-y divide-border"
                         >
-                            <p className="py-2 text-xs text-muted-foreground">
-                                仅显示本采购单对应的申请金额与付款进度
-                            </p>
                             {payment.requests.map((request) => (
                                 <RequestRow
                                     key={request.request_id}
@@ -192,7 +200,7 @@ export function WorkspacePurchasePayment({
                     ) : null}
                 </>
             )}
-            <div className="mt-4 border-t border-border pt-3">
+            <div className="mt-3">
                 <PurchasePaymentReceipts
                     workItemId={workItemId}
                     embedded
@@ -210,7 +218,7 @@ function RequestRow({ request }: { request: FulfillmentPaymentRequest }) {
             <div className="flex flex-wrap items-center gap-2">
                 <span className="num font-medium">{request.request_no}</span>
                 <StatusBadge {...purchaseRequestStatus(request)} />
-                <span className="ml-auto text-muted-foreground">
+                <span className="num ml-auto text-muted-foreground">
                     希望付款日：{request.desired_payment_date}
                 </span>
             </div>

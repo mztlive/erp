@@ -104,11 +104,11 @@ export function FulfillmentDeliveryDialogSurface({
         operation.actionBlockers.find((item) => item.action === "POST")?.message
 
     return (
-        <div className="space-y-4 px-5 py-4">
+        <div className="@container/fulfillment-dialog space-y-4 px-5 py-4">
             <h3 ref={headingRef} tabIndex={-1} className="sr-only">
                 登记发货
             </h3>
-            <dl className="grid gap-x-6 gap-y-3 rounded-lg border border-grid px-4 py-3 sm:grid-cols-2">
+            <dl className="grid gap-x-6 gap-y-3 rounded-lg bg-surface-sunken px-4 py-3 @[480px]/fulfillment-dialog:grid-cols-2">
                 {fields.map((field) => (
                     <div
                         key={field.label}
@@ -140,7 +140,10 @@ export function FulfillmentDeliveryDialogSurface({
                                 }
                             >
                                 查看付款情况
-                                <ChevronDownIcon data-icon="inline-end" />
+                                <ChevronDownIcon
+                                    aria-hidden="true"
+                                    data-icon="inline-end"
+                                />
                             </CollapsibleTrigger>
                         </AlertTitle>
                     </Alert>

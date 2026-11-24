@@ -6,10 +6,16 @@ import { REASON_CODE_LABEL } from "@/features/supplier-settlements/types"
 import type { SettlementDetailView } from "@/features/supplier-settlements/types"
 import { formatDateTime } from "@/lib/datetime"
 
-function SettlementCenterReview({ detail }: { detail: SettlementDetailView }) {
+function SettlementCenterReview({
+    detail,
+    embedded = false,
+}: {
+    detail: SettlementDetailView
+    embedded?: boolean
+}) {
     return (
         <DetailWorkspaceSection title="复核记录" width="form">
-            {detail.workItem ? (
+            {!embedded && detail.workItem ? (
                 <Alert variant="info">
                     <AlertTitle>复核任务</AlertTitle>
                     <AlertDescription>

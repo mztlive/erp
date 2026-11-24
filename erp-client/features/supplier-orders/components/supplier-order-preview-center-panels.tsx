@@ -222,7 +222,7 @@ export function StatusAlertsPanel({
 
             {isResultUnknown ? (
                 <Alert variant="warning" aria-live="polite">
-                    <TriangleAlertIcon />
+                    <TriangleAlertIcon aria-hidden="true" />
                     <AlertTitle>结果未知 — 请先查询原下单结果</AlertTitle>
                     <AlertDescription>
                         不得把结果未知直接改成成功，也不得在未查询前直接再次下单。

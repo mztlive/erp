@@ -200,7 +200,7 @@ function SettlementList({
                                 result.w12Href ? (
                                     <Button
                                         id="supplier-settlements-list-result-w12"
-                                        type="button"
+                                        nativeButton={false}
                                         size="sm"
                                         render={<Link href={result.w12Href} />}
                                     >

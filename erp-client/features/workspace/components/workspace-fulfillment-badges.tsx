@@ -20,6 +20,11 @@ const PAYMENT_STATUS: Record<
     NOT_REQUIRED: { label: "无需付款", tone: "neutral" },
 }
 
+export function fulfillmentPaymentStatus(item: WorkspaceWorkItem) {
+    const state = item.fulfillmentStatus?.payment_state
+    return state ? PAYMENT_STATUS[state] : undefined
+}
+
 /** 仅消费服务端列表摘要，不为每行发起付款或履约详情请求。 */
 export function WorkspaceFulfillmentBadges({
     item,
@@ -28,8 +33,7 @@ export function WorkspaceFulfillmentBadges({
 }) {
     const descriptor = workspaceFulfillmentDescriptor(item)
     if (!descriptor || descriptor.operationTypes[0] === "RECEIPT") return null
-    const paymentState = item.fulfillmentStatus?.payment_state
-    const payment = paymentState ? PAYMENT_STATUS[paymentState] : undefined
+    const payment = fulfillmentPaymentStatus(item)
 
     return (
         <span className="flex flex-wrap items-center gap-1.5">

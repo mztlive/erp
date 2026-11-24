@@ -68,7 +68,10 @@ export function SupplierOrdersListPreviewSheet({
                         {preview.order.fulfillmentStatus ===
                         "RESULT_UNKNOWN" ? (
                             <Badge variant="outline" className="gap-1">
-                                <TriangleAlertIcon className="size-3" />
+                                <TriangleAlertIcon
+                                    className="size-3"
+                                    aria-hidden="true"
+                                />
                                 须先查询
                             </Badge>
                         ) : null}

@@ -59,7 +59,7 @@ export const BrandCategorySection = withForm({
 
         return (
             <div className="max-w-4xl space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 @[600px]/supplier-portal-review:grid-cols-2">
                     <div
                         className={fieldHighlightClass(
                             highlightedFieldId,

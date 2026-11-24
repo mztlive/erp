@@ -1,6 +1,9 @@
 "use client"
 import { useQuery } from "@tanstack/react-query"
-import { portalAdminKeys } from "@/features/supplier-portal/hooks/admin"
+import {
+    portalAdminKeys,
+    usePortalAdminAccess,
+} from "@/features/supplier-portal/hooks/admin"
 export {
     portalAdminKeys,
     usePortalAdminAccess,
@@ -8,9 +11,12 @@ export {
     usePortalAdminCommand,
 } from "@/features/supplier-portal/hooks/admin"
 import * as api from "./api"
+export const portalAdminApplicationKey = (id: string) =>
+    [...portalAdminKeys.all, "application", id] as const
+
 export const usePortalAdminApplication = (id: string, enabled: boolean) =>
     useQuery({
-        queryKey: [...portalAdminKeys.all, "application", id],
+        queryKey: portalAdminApplicationKey(id),
         queryFn: () => api.getPortalApplication(id),
         enabled: enabled && !!id,
     })
@@ -48,3 +54,15 @@ export const usePortalReviewFile = (applicationId: string, fileId: string) =>
         queryFn: () => api.portalReviewFile(applicationId, fileId),
         retry: false,
     })
+
+export function usePortalReviewApplication(applicationId: string) {
+    const access = usePortalAdminAccess()
+    const canRead = access.can("supplier_portal_request:detail")
+    const query = usePortalAdminApplication(applicationId, canRead)
+    return {
+        access,
+        canRead,
+        query,
+        application: canRead ? query.data : undefined,
+    }
+}

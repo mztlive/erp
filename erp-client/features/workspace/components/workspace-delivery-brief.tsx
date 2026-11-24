@@ -16,17 +16,28 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useFulfillmentQueueQuery } from "@/features/fulfillment-operations/hooks/queries"
 import { compareDecimal, subtractFixed } from "@/lib/fixed-decimal"
+import { hasPermission } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { workspaceFulfillmentDescriptor } from "../lib/workspace-fulfillment"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspacePurchasePaymentSummary } from "./workspace-purchase-payment"
 
-const sectionClass = "border-b border-grid py-3"
+const sectionClass = "min-w-0 pb-3"
 
 export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
+    const profile = useAccountProfileQuery()
+    const canViewSales = hasPermission(
+        profile.data?.permissions,
+        "sales_order:detail",
+    )
+    const canViewPurchase = hasPermission(
+        profile.data?.permissions,
+        "purchase_order:detail",
+    )
     const fields = item.summarySections ?? []
     const value = (label: string) =>
         fields.find((field) => field.label === label)?.value
@@ -57,7 +68,7 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
                     <span className="text-body-compact font-medium">
                         {mode}
                     </span>
-                    <span className="text-body-compact text-muted-foreground">
+                    <span className="num text-body-compact text-muted-foreground">
                         {lines.length} 项商品 · {pending} 项待发
                     </span>
                     {workspaceFulfillmentDescriptor(item)?.role ===
@@ -70,7 +81,7 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
                 <p className="num mt-2 text-xs text-muted-foreground">
                     发货批次：{value("履约批次") ?? "未提供"}
                 </p>
-                <dl className="mt-4 grid grid-cols-1 gap-x-8 gap-y-3 @min-[640px]/delivery-brief:grid-cols-2">
+                <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
                     <Fact
                         label={mode === "供应商直发" ? "供应商" : "发货仓库"}
                         value={value(
@@ -82,16 +93,19 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
                     <Fact
                         label="客户最早交付日"
                         value={deadlineLabel(value("最早客户交付日"))}
+                        numeric
                     />
                     {mode === "供应商直发" ? (
                         <Fact
                             label="采购最早交付日"
                             value={deadlineLabel(value("最早预计交付日"))}
+                            numeric
                         />
                     ) : null}
                     <Fact
                         label="任务截止时间"
                         value={item.dueAt ? item.dueAtLabel : "未设置"}
+                        numeric={Boolean(item.dueAt)}
                     />
                 </dl>
             </section>
@@ -115,24 +129,28 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
                     <h4 className="text-body-compact font-semibold">
                         本批次发货明细
                     </h4>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="num text-xs text-muted-foreground">
                         {lines.length} 项 · 数量仅统计当前批次
                     </span>
                 </div>
-                <Table>
-                    <TableHeader>
+                <Table className="table-fixed [&_th]:whitespace-normal [&_th]:bg-surface-sunken [&_th]:px-2 [&_td]:px-2 [&_td]:whitespace-normal">
+                    <TableHeader className="bg-transparent [&_tr]:border-0">
                         <TableRow>
-                            <TableHead>商品／规格</TableHead>
+                            <TableHead className="w-[34%] rounded-l-md">
+                                商品／规格
+                            </TableHead>
                             <TableHead className="text-right">本批次</TableHead>
                             <TableHead className="text-right">已发</TableHead>
                             <TableHead className="text-right">待发</TableHead>
-                            <TableHead>交付期限</TableHead>
+                            <TableHead className="w-[25%] rounded-r-md">
+                                交付期限
+                            </TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {lines.map((line) => (
                             <TableRow key={line.id}>
-                                <TableCell className="min-w-36 max-w-64 whitespace-normal">
+                                <TableCell className="wrap-anywhere">
                                     <p className="break-words font-medium">
                                         {line.title}
                                     </p>
@@ -143,20 +161,20 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
                                         </p>
                                     ) : null}
                                 </TableCell>
-                                <TableCell className="num text-right">
+                                <TableCell className="num wrap-anywhere text-right">
                                     {line.quantity}{" "}
                                     {names.get(line.unit?.trim() ?? "")}
                                 </TableCell>
-                                <TableCell className="num text-right">
+                                <TableCell className="num wrap-anywhere text-right">
                                     {line.shipped_quantity}{" "}
                                     {names.get(line.unit?.trim() ?? "")}
                                 </TableCell>
-                                <TableCell className="num text-right font-semibold">
+                                <TableCell className="num wrap-anywhere text-right font-semibold">
                                     {line.pending_quantity}{" "}
                                     {names.get(line.unit?.trim() ?? "")}
                                 </TableCell>
                                 <TableCell>
-                                    <p className="num text-xs">
+                                    <p className="num wrap-anywhere text-xs">
                                         客户：
                                         {line.customer_due_date ?? "未提供"}
                                     </p>
@@ -204,40 +222,47 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
                             尚未登记物流
                         </p>
                     )}
-                    <p className="mt-2 text-xs text-muted-foreground">
+                    <p className="num mt-2 text-xs text-muted-foreground">
                         发货时间：{shippedAt ?? "未登记"}
                     </p>
                 </section>
             ) : null}
             <section className={sectionClass} aria-label="关联单据">
                 <h4 className="text-body-compact font-semibold">关联单据</h4>
-                <dl className="mt-3 grid grid-cols-1 gap-3 @min-[640px]/delivery-brief:grid-cols-2">
-                    {links.map((field) => (
-                        <div
-                            key={field.label}
-                            className="min-w-0 text-body-compact"
-                        >
-                            <dt className="mb-1 text-xs text-muted-foreground">
-                                {field.label}
-                            </dt>
-                            <dd className="num break-all">
-                                {field.objectId ? (
-                                    <Link
-                                        id={`workspace-delivery-${identity}-${field.label === "来源销售单" ? "sales" : "purchase"}`}
-                                        href={`/${field.label === "来源销售单" ? "sales" : "procurement"}/orders/${encodeURIComponent(field.objectId)}`}
-                                        className="underline underline-offset-4"
-                                    >
-                                        {field.value}
-                                    </Link>
-                                ) : (
-                                    field.value
-                                )}
-                            </dd>
-                        </div>
-                    ))}
+                <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
+                    {links.map((field) => {
+                        const isSales = field.label === "来源销售单"
+                        const canLink =
+                            Boolean(field.objectId) &&
+                            (isSales ? canViewSales : canViewPurchase)
+                        return (
+                            <div
+                                key={field.label}
+                                className="flex min-w-0 items-baseline gap-1.5"
+                            >
+                                <dt className="shrink-0 text-muted-foreground">
+                                    {field.label}
+                                </dt>
+                                <dd className="num min-w-0 wrap-anywhere select-all">
+                                    {canLink && field.objectId ? (
+                                        <Link
+                                            id={`workspace-delivery-${identity}-${isSales ? "sales" : "purchase"}`}
+                                            href={`/${isSales ? "sales" : "procurement"}/orders/${encodeURIComponent(field.objectId)}`}
+                                            className="text-primary underline underline-offset-4"
+                                        >
+                                            {field.value}
+                                        </Link>
+                                    ) : (
+                                        field.value
+                                    )}
+                                </dd>
+                            </div>
+                        )
+                    })}
                     <Fact
                         label="来源销售单金额"
                         value={value("来源销售单金额")}
+                        numeric
                     />
                 </dl>
             </section>
@@ -245,11 +270,21 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
     )
 }
 
-function Fact({ label, value }: { label: string; value?: string }) {
+function Fact({
+    label,
+    value,
+    numeric = false,
+}: {
+    label: string
+    value?: string
+    numeric?: boolean
+}) {
     return (
-        <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] items-baseline gap-3 text-body-compact">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-xs">
             <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd className="min-w-0 break-words">{value || "未提供"}</dd>
+            <dd className={cn("min-w-0 wrap-anywhere", numeric && "num")}>
+                {value || "未提供"}
+            </dd>
         </div>
     )
 }
@@ -301,7 +336,7 @@ export function WorkspaceDeliveryGate({ item }: { item: WorkspaceWorkItem }) {
                 "flex min-w-0 flex-1 flex-wrap items-center gap-2 text-xs text-muted-foreground",
                 blocked &&
                     !query.isError &&
-                    "rounded-md bg-warning-soft px-3 py-2 text-warning-soft-foreground",
+                    "rounded-r-md border-l-2 border-l-warning bg-warning-soft px-3 py-2 text-warning-soft-foreground",
             )}
             role="status"
         >

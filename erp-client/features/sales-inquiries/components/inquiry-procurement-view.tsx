@@ -1,11 +1,19 @@
 "use client"
 
 import * as React from "react"
+import { createPortal } from "react-dom"
+import Link from "next/link"
 import {
+    ArrowLeftIcon,
     ChevronDownIcon,
+    CircleHelpIcon,
     DownloadIcon,
+    FileTextIcon,
     FileSpreadsheetIcon,
+    PanelRightCloseIcon,
+    TriangleAlertIcon,
     UploadIcon,
+    XIcon,
 } from "lucide-react"
 import {
     DetailWorkspaceBody,
@@ -19,13 +27,22 @@ import {
     MoneyValue,
     detailWorkspaceStyles,
 } from "@/components/business"
+import { useWorkspaceTab } from "@/components/layout/workspace-tab-context"
 import {
     WorkspaceTaskFooter,
     WorkspaceTaskPane,
+    useWorkspaceTaskNavigation,
     type WorkspaceTaskPaneProps,
 } from "@/components/business/workspace-task-pane"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
+import {
+    Dialog,
+    DialogBody,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -33,9 +50,16 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { StatusBadge } from "@/components/ui/status-badge"
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { hasPermission } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 import { useWorkspaceDirtyState } from "@/lib/workspace-form-guard"
+import { subscribeWorkspaceHotkeyAction } from "@/lib/workspace-hotkeys"
 import { summarizeFeedback } from "../lib/feedback-summary"
 import { inquiryDeadlineMeta } from "../lib/format"
 import { resolveInquiryBackLink } from "../lib/navigation"
@@ -48,6 +72,7 @@ import {
 import { InquiryActions } from "./inquiry-actions"
 import { InquiryDemandOverview } from "./inquiry-demand-header"
 import { InquiryDetailTabs, InquiryHistoryButton } from "./inquiry-detail-tabs"
+import { InquiryDemandReference } from "./inquiry-feedback-demand"
 import {
     InquiryFeedbackEditor,
     type InquiryFeedbackEditorHandle,
@@ -60,6 +85,87 @@ import { InquiryReinquiryNotice } from "./inquiry-reinquiry-notice"
 import { InquiryRequirementTable } from "./inquiry-requirement-table"
 import { SupplierQuoteExportButton } from "./supplier-quote-export-dialog"
 import { SupplierQuoteImportButton } from "./supplier-quote-import-dialog"
+
+export function InquiryTaskHeader({
+    title,
+    status,
+    meta,
+    actions,
+}: {
+    title: string
+    status?: React.ComponentProps<typeof StatusBadge>
+    meta?: React.ReactNode
+    actions?: React.ReactNode
+}) {
+    const navigation = useWorkspaceTaskNavigation()
+    const inWorkspaceTab = useWorkspaceTab()
+    const back =
+        !inWorkspaceTab || navigation?.back?.visibility === "always"
+            ? navigation?.back
+            : undefined
+
+    return (
+        <header
+            data-slot="detail-workspace-chrome"
+            className="flex min-h-14 min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border/60 bg-card py-1.5"
+        >
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+                {back?.href ? (
+                    <>
+                        <Link
+                            id={back.id}
+                            href={back.href}
+                            className={cn(
+                                buttonVariants({
+                                    variant: "ghost",
+                                    size: "xs",
+                                }),
+                                "-ml-1.5 shrink-0 text-muted-foreground hover:text-foreground",
+                            )}
+                        >
+                            <ArrowLeftIcon aria-hidden="true" />
+                            {back.label}
+                        </Link>
+                        <span
+                            aria-hidden="true"
+                            className="h-4 w-px shrink-0 bg-border/70"
+                        />
+                    </>
+                ) : back?.onClick ? (
+                    <>
+                        <Button
+                            id={back.id}
+                            type="button"
+                            variant="ghost"
+                            size="xs"
+                            className="-ml-1.5 shrink-0 text-muted-foreground hover:text-foreground"
+                            onClick={back.onClick}
+                        >
+                            <ArrowLeftIcon aria-hidden="true" />
+                            {back.label}
+                        </Button>
+                        <span
+                            aria-hidden="true"
+                            className="h-4 w-px shrink-0 bg-border/70"
+                        />
+                    </>
+                ) : null}
+                <h1
+                    className="min-w-0 truncate text-section-title font-semibold tracking-tight"
+                    title={title}
+                >
+                    {title}
+                </h1>
+                {status && <StatusBadge {...status} />}
+                {meta}
+            </div>
+            <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+                {navigation?.meta}
+                {actions}
+            </div>
+        </header>
+    )
+}
 
 function ProgressBar({
     complete,
@@ -116,7 +222,28 @@ export function InquiryProcurementView({
     const [publishing, setPublishing] = React.useState(false)
     const [exportQuotesOpen, setExportQuotesOpen] = React.useState(false)
     const [importQuotesOpen, setImportQuotesOpen] = React.useState(false)
+    const [referenceOpen, setReferenceOpen] = React.useState(false)
+    const [wide, setWide] = React.useState(false)
+    const embeddedRoot = React.useRef<HTMLDivElement>(null)
+    const [bodyHost, setBodyHost] = React.useState<HTMLDivElement | null>(null)
+    const bodyHostRef = React.useRef<HTMLDivElement>(null)
+    const referenceTrigger = React.useRef<HTMLButtonElement>(null)
+    const feedbackPanelVisible = React.useRef(true)
+    const locationFrame = React.useRef(0)
+    const referencePrefix = `procurement-inquiry-reference-${toAutomationIdSegment(taskId ?? inquiry.id)}`
     const feedbackEditor = React.useRef<InquiryFeedbackEditorHandle>(null)
+    const mountBodyHost = React.useCallback((slot: HTMLDivElement | null) => {
+        if (!slot) return
+        // 共享壳切换单栏和双栏时重建槽位，编辑器继续使用同一个挂载点。
+        if (!bodyHostRef.current) {
+            const host = document.createElement("div")
+            host.className =
+                "min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain"
+            bodyHostRef.current = host
+            setBodyHost(host)
+        }
+        slot.append(bodyHostRef.current)
+    }, [])
     const [quoteLineId, setQuoteLineId] = React.useState<string | null>(null)
     const [feedbackLines, setFeedbackLines] = React.useState<
         readonly InquiryFeedbackLine[]
@@ -140,6 +267,60 @@ export function InquiryProcurementView({
             saved: false,
         })
 
+    React.useEffect(() => {
+        const root = embeddedRoot.current
+        if (!root) return
+        const viewport = window.matchMedia("(min-width: 960px)")
+        const canvas = root.closest<HTMLElement>("#main-content") ?? root
+        const sync = () => {
+            const canSplit = viewport.matches && canvas.clientWidth >= 960
+            setWide(canSplit)
+            if (!canSplit) setReferenceOpen(false)
+        }
+        sync()
+        const observer =
+            typeof ResizeObserver === "undefined"
+                ? null
+                : new ResizeObserver(sync)
+        observer?.observe(canvas)
+        viewport.addEventListener("change", sync)
+        return () => {
+            observer?.disconnect()
+            viewport.removeEventListener("change", sync)
+        }
+    }, [])
+
+    React.useEffect(() => {
+        if (!embedded) return
+        return subscribeWorkspaceHotkeyAction((action) => {
+            if (action === "toggle-rail") setReferenceOpen((open) => !open)
+        })
+    }, [embedded])
+
+    React.useEffect(() => {
+        if (!bodyHostRef.current) return
+        bodyHostRef.current.className = cn(
+            "min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain",
+            wide && referenceOpen && "pr-4",
+        )
+    }, [wide, referenceOpen])
+
+    React.useEffect(() => () => cancelAnimationFrame(locationFrame.current), [])
+
+    const onFeedbackVisibilityChange = React.useCallback((visible: boolean) => {
+        feedbackPanelVisible.current = visible
+    }, [])
+
+    const inFeedbackPanel = (locate: () => void) => {
+        if (feedbackPanelVisible.current) {
+            locate()
+            return
+        }
+        document.getElementById("sales-inquiry-tab-feedback")?.click()
+        cancelAnimationFrame(locationFrame.current)
+        locationFrame.current = requestAnimationFrame(locate)
+    }
+
     const roundContext = `${inquiry.requirement_version}:${inquiry.feedback_round}:${inquiry.status}`
     const [roundSelection, setRoundSelection] = React.useState<{
         context: string
@@ -157,10 +338,14 @@ export function InquiryProcurementView({
         )[0]
     const selectedRound = selectedFeedback?.round ?? inquiry.feedback_round
 
+    const matchingOpenTask = inquiry.work_items.find(
+        (item) => item.id === taskId && item.status === "OPEN",
+    )
     const task =
-        inquiry.work_items.find(
-            (item) => item.id === taskId && item.status === "OPEN",
-        ) ?? inquiry.work_items.find((item) => item.status === "OPEN")
+        embedded && taskId
+            ? matchingOpenTask
+            : (matchingOpenTask ??
+              inquiry.work_items.find((item) => item.status === "OPEN"))
     const completedTask = inquiry.work_items.find(
         (item) => item.id === taskId && item.status === "COMPLETED",
     )
@@ -648,11 +833,10 @@ export function InquiryProcurementView({
                     <>
                         <InquiryHistoryButton
                             inquiry={inquiry}
-                            variant="outline"
+                            variant={embedded ? "ghost" : "outline"}
                         />
                         {assignmentActions}
-                        {secondaryActions}
-                        {embedded ? taskHeaderActions : null}
+                        {!embedded && secondaryActions}
                     </>
                 )
 
@@ -688,6 +872,7 @@ export function InquiryProcurementView({
                             <>
                                 <InquiryFeedbackEditor
                                     ref={feedbackEditor}
+                                    workbench={embedded}
                                     publishing={publishing}
                                     onDirtyChange={setFeedbackDirty}
                                     onStatusChange={setFeedbackStatus}
@@ -734,14 +919,22 @@ export function InquiryProcurementView({
                         )}
                         {!canProcess &&
                             (showReadonlyDemand ? (
-                                <InquiryRequirementTable
-                                    idPrefix="sales-inquiry-requirement"
-                                    requirement={inquiry.draft}
-                                    procurement
-                                />
+                                embedded ? (
+                                    <InquiryDemandReference
+                                        idPrefix={`${referencePrefix}-readonly`}
+                                        requirement={inquiry.draft}
+                                    />
+                                ) : (
+                                    <InquiryRequirementTable
+                                        idPrefix="sales-inquiry-requirement"
+                                        requirement={inquiry.draft}
+                                        procurement
+                                    />
+                                )
                             ) : (
                                 <InquiryFeedbackResults
                                     content="products"
+                                    workbench={embedded}
                                     inquiry={inquiry}
                                     selectedRound={selectedRound}
                                     onRoundChange={setChosenRound}
@@ -755,6 +948,7 @@ export function InquiryProcurementView({
                     inquiry.feedbacks.length > 0 ? (
                         <InquiryFeedbackResults
                             content="products"
+                            workbench={embedded}
                             inquiry={inquiry}
                             selectedRound={selectedRound}
                             onRoundChange={setChosenRound}
@@ -772,134 +966,429 @@ export function InquiryProcurementView({
                     feedbackStatus.totalCount - feedbackStatus.completeCount,
                 )
 
-                const taskFooterSummary = canProcess ? (
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                        <span className="inline-flex items-center gap-2">
-                            <ProgressBar
-                                complete={feedbackStatus.completeCount}
-                                total={feedbackStatus.totalCount}
-                                className="w-16"
-                            />
-                            {remainingCount === 0 &&
-                            feedbackStatus.totalCount > 0 ? (
-                                <span className="font-medium text-success-soft-foreground">
-                                    全部{" "}
-                                    <span className="num">
-                                        {feedbackStatus.totalCount}
-                                    </span>{" "}
-                                    项已完善
+                const embeddedAnomalyCount = Math.max(
+                    0,
+                    remainingCount - feedbackStatus.pendingCount,
+                )
+                const embeddedKpiBand = embedded ? (
+                    <dl
+                        aria-label="询价处理关键指标"
+                        className="grid min-w-0 grid-cols-1 gap-x-5 gap-y-3 rounded-lg bg-surface-sunken px-4 py-3 @[480px]/inquiry-workbench:grid-cols-2 @[840px]/inquiry-workbench:grid-cols-4"
+                    >
+                        <div className="min-w-0 space-y-1">
+                            <dt className="flex items-center gap-1 text-xs text-muted-foreground">
+                                {canProcess ? "报价进度" : "商品与反馈"}
+                                <Tooltip>
+                                    <TooltipTrigger
+                                        render={
+                                            <Button
+                                                id={`${referencePrefix}-kpi-progress-help`}
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon-xs"
+                                                aria-label="报价进度口径"
+                                            />
+                                        }
+                                    >
+                                        <CircleHelpIcon aria-hidden="true" />
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        已完善项数 =
+                                        已确定供给结论且价格、数量与原因无缺漏的商品行数。
+                                    </TooltipContent>
+                                </Tooltip>
+                            </dt>
+                            <dd className="flex items-baseline gap-1.5">
+                                <span className="num text-value-section font-semibold tracking-tight text-foreground">
+                                    {canProcess
+                                        ? feedbackStatus.completeCount
+                                        : scopeLineCount}
                                 </span>
+                                <span className="text-xs text-muted-foreground">
+                                    {canProcess ? (
+                                        <>
+                                            /{" "}
+                                            <span className="num">
+                                                {feedbackStatus.totalCount}
+                                            </span>{" "}
+                                            项
+                                        </>
+                                    ) : (
+                                        "项"
+                                    )}
+                                </span>
+                            </dd>
+                            {canProcess && feedbackStatus.totalCount > 0 ? (
+                                <dd className="space-y-1">
+                                    <div
+                                        aria-hidden="true"
+                                        className="flex h-1.5 overflow-hidden rounded-full bg-border"
+                                    >
+                                        {feedbackStatus.completeCount > 0 ? (
+                                            <span
+                                                className="bg-success"
+                                                style={{
+                                                    flexGrow:
+                                                        feedbackStatus.completeCount,
+                                                }}
+                                            />
+                                        ) : null}
+                                        {feedbackStatus.pendingCount > 0 ? (
+                                            <span
+                                                className="bg-warning"
+                                                style={{
+                                                    flexGrow:
+                                                        feedbackStatus.pendingCount,
+                                                }}
+                                            />
+                                        ) : null}
+                                        {embeddedAnomalyCount > 0 ? (
+                                            <span
+                                                className="bg-destructive"
+                                                style={{
+                                                    flexGrow:
+                                                        embeddedAnomalyCount,
+                                                }}
+                                            />
+                                        ) : null}
+                                    </div>
+                                    <p className="text-tiny text-muted-foreground">
+                                        可供{" "}
+                                        <span className="num text-foreground">
+                                            {feedbackStatus.availableCount}
+                                        </span>
+                                        {feedbackStatus.partialCount > 0 ? (
+                                            <>
+                                                {" · "}部分{" "}
+                                                <span className="num text-warning-soft-foreground">
+                                                    {
+                                                        feedbackStatus.partialCount
+                                                    }
+                                                </span>
+                                            </>
+                                        ) : null}
+                                        {feedbackStatus.unavailableCount > 0 ? (
+                                            <>
+                                                {" · "}不供{" "}
+                                                <span className="num">
+                                                    {
+                                                        feedbackStatus.unavailableCount
+                                                    }
+                                                </span>
+                                            </>
+                                        ) : null}
+                                    </p>
+                                </dd>
                             ) : (
-                                <>
-                                    <span className="num font-medium text-foreground">
-                                        {feedbackStatus.completeCount} /{" "}
-                                        {feedbackStatus.totalCount}
-                                    </span>
-                                    <span>项完整</span>
-                                    {remainingCount > 0 ? (
-                                        <button
-                                            id="procurement-inquiry-focus-incomplete"
-                                            type="button"
-                                            className="cursor-pointer font-medium text-warning-soft-foreground underline-offset-4 hover:underline"
-                                            onClick={() =>
-                                                feedbackEditor.current?.focusFirstIncomplete()
-                                            }
-                                        >
-                                            定位缺漏
-                                        </button>
-                                    ) : null}
-                                </>
+                                <dd className="text-tiny text-muted-foreground">
+                                    {publishedSummary
+                                        ? `可供 ${publishedSummary.availableCount} · 部分 ${publishedSummary.partialCount} · 不供应 ${publishedSummary.unavailableCount}`
+                                        : "等待报价处理"}
+                                </dd>
                             )}
-                        </span>
-                        {footerTotal !== null && (
-                            <span className="border-l border-border/75 pl-3">
-                                {feedbackStatus.feeCount > 0
-                                    ? "含税总计 "
-                                    : "含税合计 "}
-                                <MoneyValue
-                                    value={footerTotal}
-                                    display="exact"
-                                    showHint={false}
-                                    className="font-semibold text-foreground"
-                                />
-                                {feedbackStatus.feeCount > 0 &&
-                                feedbackStatus.feesTotal !== null ? (
-                                    <span className="ml-1.5 text-muted-foreground">
-                                        （含额外成本{" "}
+                        </div>
+
+                        <div className="min-w-0 space-y-1">
+                            <dt className="flex items-center gap-1 text-xs text-muted-foreground">
+                                含税供给合计
+                                <Tooltip>
+                                    <TooltipTrigger
+                                        render={
+                                            <Button
+                                                id={`${referencePrefix}-kpi-total-help`}
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon-xs"
+                                                aria-label="含税供给合计计算公式"
+                                            />
+                                        }
+                                    >
+                                        <CircleHelpIcon aria-hidden="true" />
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        含税供给合计 = ∑(可供数量 ×
+                                        含税供给单价)，不含整单额外成本。
+                                    </TooltipContent>
+                                </Tooltip>
+                            </dt>
+                            <dd className="num text-value-compact font-semibold text-foreground">
+                                {displayGoodsTotal !== null ? (
+                                    <MoneyValue
+                                        value={displayGoodsTotal}
+                                        display="exact"
+                                        showHint={false}
+                                    />
+                                ) : (
+                                    <span className="text-muted-foreground">
+                                        —
+                                    </span>
+                                )}
+                            </dd>
+                            <dd className="text-tiny text-muted-foreground">
+                                {canProcess
+                                    ? feedbackStatus.pricedCount > 0
+                                        ? `已定价 ${feedbackStatus.pricedCount} / ${feedbackStatus.totalCount} 项 · 含税`
+                                        : "填写单价后自动汇总"
+                                    : selectedFeedback
+                                      ? `第 ${selectedFeedback.round} 轮商品供给小计`
+                                      : "暂无商品报价"}
+                            </dd>
+                        </div>
+
+                        <div className="min-w-0 space-y-1">
+                            <dt className="text-xs text-muted-foreground">
+                                额外成本
+                            </dt>
+                            <dd className="num text-value-compact font-semibold text-foreground">
+                                {displayFeeTotal !== null ? (
+                                    <MoneyValue
+                                        value={displayFeeTotal}
+                                        display="exact"
+                                        showHint={false}
+                                    />
+                                ) : (
+                                    <span className="text-muted-foreground">
+                                        —
+                                    </span>
+                                )}
+                            </dd>
+                            <dd className="flex flex-wrap items-center gap-x-2 text-tiny text-muted-foreground">
+                                <span>
+                                    {displayFeeCount > 0
+                                        ? `共 ${displayFeeCount} 项`
+                                        : "暂无额外成本"}
+                                </span>
+                                {canProcess ? (
+                                    <button
+                                        id="procurement-inquiry-metric-fees"
+                                        type="button"
+                                        className="cursor-pointer text-primary underline-offset-4 hover:underline"
+                                        onClick={() =>
+                                            feedbackEditor.current?.openFees()
+                                        }
+                                    >
+                                        {displayFeeCount > 0
+                                            ? "管理"
+                                            : "去登记"}
+                                    </button>
+                                ) : null}
+                            </dd>
+                        </div>
+
+                        <div className="min-w-0 space-y-1">
+                            <dt className="text-xs text-muted-foreground">
+                                询价截止与轮次
+                            </dt>
+                            <dd className="num text-body-compact font-semibold text-foreground">
+                                {deadline.label}
+                            </dd>
+                            <dd className="flex flex-wrap items-center gap-x-1.5 text-tiny text-muted-foreground">
+                                {deadline.hint ? (
+                                    <span
+                                        className={cn(
+                                            deadline.tone === "destructive" &&
+                                                "font-medium text-destructive",
+                                            deadline.tone === "warning" &&
+                                                "font-medium text-warning-soft-foreground",
+                                        )}
+                                    >
+                                        {deadline.hint}
+                                    </span>
+                                ) : null}
+                                {deadline.hint ? (
+                                    <span
+                                        aria-hidden="true"
+                                        className="text-muted-foreground/40"
+                                    >
+                                        ·
+                                    </span>
+                                ) : null}
+                                <span className="num">
+                                    {inquiry.feedback_round > 0
+                                        ? `第 ${inquiry.feedback_round} 轮反馈`
+                                        : `需求第 ${inquiry.requirement_version} 版`}
+                                </span>
+                            </dd>
+                        </div>
+                    </dl>
+                ) : null
+
+                const footerMetrics = canProcess
+                    ? [
+                          { label: "商品", value: feedbackStatus.totalCount },
+                          {
+                              label: "已完善",
+                              value: feedbackStatus.completeCount,
+                          },
+                          {
+                              label: "待回复",
+                              value: feedbackStatus.pendingCount,
+                          },
+                          {
+                              label: "异常",
+                              value: embeddedAnomalyCount,
+                          },
+                      ]
+                    : publishedSummary
+                      ? [{ label: "商品", value: publishedSummary.totalCount }]
+                      : []
+                const estimatedTotal = canProcess
+                    ? footerTotal
+                    : publishedSummary?.goodsTotal
+                const taskFooterSummary =
+                    footerMetrics.length > 0 ? (
+                        <dl className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                            {footerMetrics.map(({ label, value }) => (
+                                <div
+                                    key={label}
+                                    className="flex items-baseline gap-1"
+                                >
+                                    <dt>{label}</dt>
+                                    <dd
+                                        className={cn(
+                                            "num font-medium text-foreground",
+                                            label === "异常" &&
+                                                value > 0 &&
+                                                "text-destructive",
+                                            label === "待回复" &&
+                                                value > 0 &&
+                                                "text-warning-soft-foreground",
+                                        )}
+                                    >
+                                        {value}
+                                    </dd>
+                                </div>
+                            ))}
+                            {estimatedTotal != null && (
+                                <div className="flex items-baseline gap-1 border-l border-border/60 pl-3">
+                                    <dt>
+                                        {canProcess
+                                            ? "预估含税总计"
+                                            : "含税合计"}
+                                    </dt>
+                                    <dd className="font-semibold text-foreground">
                                         <MoneyValue
-                                            value={feedbackStatus.feesTotal}
+                                            value={estimatedTotal}
                                             display="exact"
                                             showHint={false}
                                         />
-                                        ）
-                                    </span>
-                                ) : null}
-                            </span>
-                        )}
-                    </div>
-                ) : publishedSummary ? (
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                        <span>
-                            共{" "}
-                            <span className="num font-medium text-foreground">
-                                {publishedSummary.totalCount}
-                            </span>{" "}
-                            项商品
-                        </span>
-                        {publishedSummary.goodsTotal !== null && (
-                            <span className="border-l border-border/75 pl-3">
-                                含税合计{" "}
-                                <MoneyValue
-                                    value={publishedSummary.goodsTotal}
-                                    display="exact"
-                                    showHint={false}
-                                    className="font-semibold text-foreground"
-                                />
-                            </span>
-                        )}
-                    </div>
-                ) : undefined
+                                    </dd>
+                                </div>
+                            )}
+                        </dl>
+                    ) : undefined
 
                 const taskFooterActions = canProcess ? (
-                    <>
+                    feedbackStatus.unresolved ? (
                         <Button
-                            id="procurement-inquiry-save-feedback"
+                            id="procurement-inquiry-footer-recover"
                             type="button"
                             size="sm"
-                            variant={feedbackDirty ? "outline" : "ghost"}
-                            className={
-                                feedbackDirty
-                                    ? undefined
-                                    : detailWorkspaceStyles.quietButton
-                            }
-                            disabled={feedbackStatus.disabled}
-                            onClick={() => feedbackEditor.current?.save()}
+                            variant="default"
+                            disabled={feedbackStatus.saving}
+                            onClick={() => feedbackEditor.current?.recover()}
                         >
                             {feedbackStatus.saving
-                                ? "正在保存…"
-                                : "保存处理进度"}
+                                ? "正在核对…"
+                                : "核对提交结果"}
                         </Button>
+                    ) : (
+                        <>
+                            {remainingCount > 0 && (
+                                <Button
+                                    id="procurement-inquiry-focus-incomplete"
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-warning-soft-foreground hover:bg-warning-soft hover:text-warning-soft-foreground"
+                                    onClick={() =>
+                                        inFeedbackPanel(() =>
+                                            feedbackEditor.current?.focusFirstIncomplete(),
+                                        )
+                                    }
+                                >
+                                    <TriangleAlertIcon aria-hidden="true" />
+                                    <span>
+                                        <span className="num">
+                                            {remainingCount}
+                                        </span>{" "}
+                                        项待完善 · 定位
+                                    </span>
+                                </Button>
+                            )}
+                            {secondaryActions}
+                            <Button
+                                id="procurement-inquiry-save-feedback"
+                                type="button"
+                                size="sm"
+                                variant={feedbackDirty ? "outline" : "ghost"}
+                                className={
+                                    feedbackDirty
+                                        ? undefined
+                                        : detailWorkspaceStyles.quietButton
+                                }
+                                disabled={feedbackStatus.disabled}
+                                onClick={() => feedbackEditor.current?.save()}
+                            >
+                                {feedbackStatus.saving
+                                    ? "正在保存…"
+                                    : "保存处理进度"}
+                            </Button>
+                            {primaryAction}
+                        </>
+                    )
+                ) : secondaryActions || primaryAction ? (
+                    <>
+                        {secondaryActions}
                         {primaryAction}
                     </>
-                ) : (
-                    primaryAction
-                )
+                ) : undefined
 
-                const headerTitleExtra = (
-                    <>
-                        {embedded &&
-                        isActiveInquiry &&
-                        deadline.tone === "destructive" &&
-                        deadline.hint ? (
-                            <StatusBadge
-                                label={deadline.hint}
-                                tone="destructive"
-                            />
-                        ) : null}
-                        {canProcess && feedbackDirty ? (
-                            <DetailWorkspaceDirtyBadge />
-                        ) : null}
-                    </>
+                const locateDemand = (lineId: string) => {
+                    if (!wide) setReferenceOpen(false)
+                    inFeedbackPanel(() =>
+                        feedbackEditor.current?.locateLine(lineId),
+                    )
+                }
+                const referenceProps = {
+                    idPrefix: referencePrefix,
+                    requirement: inquiry.draft,
+                    onLocate: canProcess ? locateDemand : undefined,
+                }
+                const inquiryMeta = (
+                    <DetailWorkspaceMeta
+                        items={[
+                            inquiry.customer_name !== "询价采购处理"
+                                ? inquiry.customer_name
+                                : null,
+                            <span
+                                key="number"
+                                className="num select-all"
+                                data-workspace-document-number={
+                                    inquiry.inquiry_no
+                                }
+                            >
+                                {inquiry.inquiry_no}
+                            </span>,
+                            inquiry.deadline_at > 0 ? (
+                                <span
+                                    key="deadline"
+                                    className={cn(
+                                        deadline.tone === "destructive" &&
+                                            "text-destructive",
+                                        deadline.tone === "warning" &&
+                                            "text-warning-soft-foreground",
+                                    )}
+                                >
+                                    截止{" "}
+                                    <span className="num">
+                                        {deadline.label}
+                                    </span>
+                                    {deadline.hint && ` · ${deadline.hint}`}
+                                </span>
+                            ) : null,
+                        ]}
+                    />
                 )
 
                 return (
@@ -911,6 +1400,11 @@ export function InquiryProcurementView({
                             feeCount={displayFeeCount}
                             feedback={feedbackPanel}
                             publishedFeedback={publishedPanel}
+                            onFeedbackVisibilityChange={
+                                embedded
+                                    ? onFeedbackVisibilityChange
+                                    : undefined
+                            }
                             fees={
                                 <InquiryFees
                                     inquiry={inquiry}
@@ -925,50 +1419,221 @@ export function InquiryProcurementView({
                             }
                             renderLayout={(navigation, panels) =>
                                 embedded ? (
-                                    <TaskPane
-                                        aria-label="采购询价处理任务"
-                                        header={
-                                            <DetailWorkspaceChrome
-                                                className="shrink-0"
-                                                title={inquiry.customer_name}
-                                                documentNumber={
-                                                    inquiry.inquiry_no
-                                                }
-                                                numberLabel="询价单号"
-                                                primaryStatus={{
-                                                    label: INQUIRY_STATUS_LABEL[
-                                                        inquiry.status
-                                                    ],
-                                                    tone: INQUIRY_STATUS_TONE[
-                                                        inquiry.status
-                                                    ],
-                                                }}
-                                                titleExtra={headerTitleExtra}
-                                                meta={headerMeta}
-                                                secondaryActions={
-                                                    headerSecondary
-                                                }
-                                                tabs={navigation}
+                                    <>
+                                        {bodyHost &&
+                                            createPortal(
+                                                <>
+                                                    <div className="space-y-2 pt-2 empty:hidden">
+                                                        {alerts}
+                                                    </div>
+                                                    {embeddedKpiBand ? (
+                                                        <div className="pt-3">
+                                                            {embeddedKpiBand}
+                                                        </div>
+                                                    ) : null}
+                                                    <div className="min-w-0">
+                                                        {panels}
+                                                    </div>
+                                                </>,
+                                                bodyHost,
+                                            )}
+                                        <TaskPane
+                                            aria-label="询价采购处理任务"
+                                            idPrefix={referencePrefix}
+                                            archetype="action"
+                                            className="@container/inquiry-workbench bg-card"
+                                            contextRail={
+                                                wide
+                                                    ? {
+                                                          label: "对照询价需求",
+                                                          allowOnFullWidth: true,
+                                                          collapsible: true,
+                                                          resizable: true,
+                                                          defaultWidthPercent: 38,
+                                                          minWidthPercent: 26,
+                                                          maxWidthPercent: 52,
+                                                          storageKey:
+                                                              "erp.workspace.salesInquiryRefRailWidth",
+                                                          collapsed:
+                                                              !referenceOpen,
+                                                          onCollapsedChange: (
+                                                              collapsed,
+                                                          ) =>
+                                                              setReferenceOpen(
+                                                                  !collapsed,
+                                                              ),
+                                                          content:
+                                                              referenceOpen ? (
+                                                                  <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-card">
+                                                                      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 py-2.5 pr-1">
+                                                                          <div className="min-w-0">
+                                                                              <h2 className="truncate text-body-compact font-semibold text-foreground">
+                                                                                  询价需求对照
+                                                                              </h2>
+                                                                              <p className="num truncate text-xs text-muted-foreground select-all">
+                                                                                  {
+                                                                                      inquiry.inquiry_no
+                                                                                  }{" "}
+                                                                                  ·
+                                                                                  第{" "}
+                                                                                  {
+                                                                                      inquiry.requirement_version
+                                                                                  }{" "}
+                                                                                  版
+                                                                              </p>
+                                                                          </div>
+                                                                          <Button
+                                                                              id={`${referencePrefix}-rail-close`}
+                                                                              type="button"
+                                                                              variant="ghost"
+                                                                              size="icon-sm"
+                                                                              aria-label="收起询价需求对照栏"
+                                                                              onClick={() => {
+                                                                                  setReferenceOpen(
+                                                                                      false,
+                                                                                  )
+                                                                                  referenceTrigger.current?.focus()
+                                                                              }}
+                                                                          >
+                                                                              <XIcon aria-hidden="true" />
+                                                                          </Button>
+                                                                      </div>
+                                                                      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain">
+                                                                          <InquiryDemandReference
+                                                                              {...referenceProps}
+                                                                          />
+                                                                      </div>
+                                                                  </div>
+                                                              ) : null,
+                                                      }
+                                                    : undefined
+                                            }
+                                            header={
+                                                <InquiryTaskHeader
+                                                    title="询价采购处理"
+                                                    status={{
+                                                        label: INQUIRY_STATUS_LABEL[
+                                                            inquiry.status
+                                                        ],
+                                                        tone: INQUIRY_STATUS_TONE[
+                                                            inquiry.status
+                                                        ],
+                                                    }}
+                                                    meta={inquiryMeta}
+                                                    actions={
+                                                        <>
+                                                            {canProcess &&
+                                                                feedbackDirty && (
+                                                                    <DetailWorkspaceDirtyBadge />
+                                                                )}
+                                                            <Button
+                                                                id={`${referencePrefix}-open`}
+                                                                ref={
+                                                                    referenceTrigger
+                                                                }
+                                                                type="button"
+                                                                size="sm"
+                                                                variant={
+                                                                    referenceOpen &&
+                                                                    wide
+                                                                        ? "secondary"
+                                                                        : "ghost"
+                                                                }
+                                                                aria-pressed={
+                                                                    wide
+                                                                        ? referenceOpen
+                                                                        : undefined
+                                                                }
+                                                                aria-haspopup={
+                                                                    wide
+                                                                        ? undefined
+                                                                        : "dialog"
+                                                                }
+                                                                onClick={() =>
+                                                                    setReferenceOpen(
+                                                                        (
+                                                                            open,
+                                                                        ) =>
+                                                                            !open,
+                                                                    )
+                                                                }
+                                                            >
+                                                                {referenceOpen &&
+                                                                wide ? (
+                                                                    <PanelRightCloseIcon
+                                                                        aria-hidden="true"
+                                                                        data-icon="inline-start"
+                                                                    />
+                                                                ) : (
+                                                                    <FileTextIcon
+                                                                        aria-hidden="true"
+                                                                        data-icon="inline-start"
+                                                                    />
+                                                                )}
+                                                                {referenceOpen &&
+                                                                wide
+                                                                    ? "收起询价需求"
+                                                                    : "对照询价需求"}
+                                                            </Button>
+                                                            {headerSecondary}
+                                                            <div className="[&_[data-testid=workspace-workbench-rail-toggle]]:hidden">
+                                                                {
+                                                                    taskHeaderActions
+                                                                }
+                                                            </div>
+                                                        </>
+                                                    }
+                                                />
+                                            }
+                                            headerSupplement={
+                                                <div className="border-b border-border/60">
+                                                    {navigation}
+                                                </div>
+                                            }
+                                        >
+                                            <div
+                                                ref={mountBodyHost}
+                                                className="flex min-h-0 min-w-0 flex-1 overflow-hidden"
                                             />
-                                        }
-                                    >
-                                        <div className="flex min-h-0 flex-1 flex-col overflow-auto overscroll-contain">
-                                            <div className="space-y-2.5 pt-3 empty:hidden">
-                                                {alerts}
-                                            </div>
-                                            {overview}
-                                            <div className="min-w-0 flex-1">
-                                                {panels}
-                                            </div>
-                                        </div>
-                                        {taskFooterActions ? (
-                                            <WorkspaceTaskFooter
-                                                summary={taskFooterSummary}
-                                            >
-                                                {taskFooterActions}
-                                            </WorkspaceTaskFooter>
-                                        ) : null}
-                                    </TaskPane>
+                                            {taskFooterActions ||
+                                            taskFooterSummary ? (
+                                                <WorkspaceTaskFooter
+                                                    summary={taskFooterSummary}
+                                                >
+                                                    {taskFooterActions}
+                                                </WorkspaceTaskFooter>
+                                            ) : null}
+                                            {!wide && (
+                                                <Dialog
+                                                    open={referenceOpen}
+                                                    onOpenChange={
+                                                        setReferenceOpen
+                                                    }
+                                                >
+                                                    <DialogContent
+                                                        id={`${referencePrefix}-dialog`}
+                                                        size="xl"
+                                                        scroll="body"
+                                                        closeButtonId={`${referencePrefix}-close`}
+                                                        finalFocus={
+                                                            referenceTrigger
+                                                        }
+                                                    >
+                                                        <DialogHeader>
+                                                            <DialogTitle>
+                                                                对照询价需求
+                                                            </DialogTitle>
+                                                        </DialogHeader>
+                                                        <DialogBody>
+                                                            <InquiryDemandReference
+                                                                {...referenceProps}
+                                                            />
+                                                        </DialogBody>
+                                                    </DialogContent>
+                                                </Dialog>
+                                            )}
+                                        </TaskPane>
+                                    </>
                                 ) : (
                                     <>
                                         <DetailWorkspaceChrome
@@ -1043,7 +1708,10 @@ export function InquiryProcurementView({
     )
 
     return embedded ? (
-        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div
+            ref={embeddedRoot}
+            className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card"
+        >
             {content}
         </div>
     ) : (

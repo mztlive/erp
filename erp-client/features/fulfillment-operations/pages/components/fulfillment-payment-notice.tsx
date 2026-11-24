@@ -114,8 +114,10 @@ export function FulfillmentPaymentNotice({
 /** 采购付款入口复用采购单查看权限，可独立放入办理页标题操作区。 */
 export function FulfillmentPaymentLink({
     operation,
+    id = "fulfillment-operations-gate-view-payment",
 }: {
     operation: FulfillmentOperation
+    id?: string
 }) {
     const profile = useAccountProfileQuery()
     const purchaseOrderId = operation.source.purchaseOrderId
@@ -126,7 +128,7 @@ export function FulfillmentPaymentLink({
     if (!canViewPayment) return null
     return (
         <Button
-            id="fulfillment-operations-gate-view-payment"
+            id={id}
             variant="ghost"
             size="sm"
             render={
@@ -135,7 +137,8 @@ export function FulfillmentPaymentLink({
                 />
             }
         >
-            查看采购付款 <ArrowUpRightIcon data-icon="inline-end" />
+            查看采购付款{" "}
+            <ArrowUpRightIcon aria-hidden="true" data-icon="inline-end" />
         </Button>
     )
 }

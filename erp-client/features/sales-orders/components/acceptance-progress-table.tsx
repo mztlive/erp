@@ -135,6 +135,7 @@ export function AcceptanceProgressTable({
     surface = "task",
     className,
     showSummary = true,
+    compact = false,
 }: {
     progress: AcceptanceOrderProgress
     pendingHint?: string
@@ -142,6 +143,7 @@ export function AcceptanceProgressTable({
     surface?: "task" | "detail"
     className?: string
     showSummary?: boolean
+    compact?: boolean
 }) {
     const unit = progress.unitName
     const summary = progress.unitCode
@@ -154,26 +156,48 @@ export function AcceptanceProgressTable({
                 本单还没有销售明细。
             </p>
         ) : (
-            <Table className="min-w-[36rem]">
-                <TableHeader>
+            <Table
+                className={
+                    compact
+                        ? "table-fixed [&_td]:px-2 [&_td]:whitespace-normal [&_td]:wrap-anywhere [&_th]:bg-surface-sunken [&_th]:px-2 [&_th]:whitespace-normal [&_th:first-child]:rounded-l-md [&_th:last-child]:rounded-r-md"
+                        : "min-w-[36rem]"
+                }
+            >
+                <TableHeader
+                    className={
+                        compact ? "bg-transparent [&_tr]:border-0" : undefined
+                    }
+                >
                     <TableRow>
                         <TableHead>明细</TableHead>
                         <TableHead data-align="end">销售</TableHead>
                         <TableHead data-align="end">已交付</TableHead>
                         <TableHead data-align="end">已通过</TableHead>
                         <TableHead data-align="end">待验收</TableHead>
-                        <TableHead className="w-56 max-w-56">
+                        <TableHead
+                            className={compact ? "w-[25%]" : "w-56 max-w-56"}
+                        >
                             当前卡在
                         </TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {progress.lines.map((line) => (
-                        <ProgressRow key={line.salesOrderLineId} line={line} />
+                        <ProgressRow
+                            key={line.salesOrderLineId}
+                            line={line}
+                            compact={compact}
+                        />
                     ))}
                 </TableBody>
             </Table>
         )
+
+    if (compact) {
+        return (
+            <div className={cn("min-w-0 pt-2", className)}>{tableContent}</div>
+        )
+    }
 
     if (surface === "detail") {
         return (
@@ -226,7 +250,13 @@ export function AcceptanceProgressTable({
     )
 }
 
-function ProgressRow({ line }: { line: AcceptanceLineProgress }) {
+function ProgressRow({
+    line,
+    compact = false,
+}: {
+    line: AcceptanceLineProgress
+    compact?: boolean
+}) {
     const unit = line.unitName
     const hasPending = isPositiveQty(line.pendingQuantity)
     return (
@@ -254,7 +284,9 @@ function ProgressRow({ line }: { line: AcceptanceLineProgress }) {
             >
                 {qtyWithUnit(line.pendingQuantity, unit)}
             </TableCell>
-            <TableCell className="w-56 max-w-56 min-w-0">
+            <TableCell
+                className={compact ? "min-w-0" : "w-56 max-w-56 min-w-0"}
+            >
                 <StuckCell line={line} />
             </TableCell>
         </TableRow>

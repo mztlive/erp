@@ -35,6 +35,8 @@ import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceMoney } from "./workspace-money"
 import { WorkspaceProcurementInspector } from "./workspace-procurement-inspector"
+import { WorkspaceSalesInquiryInspector } from "./workspace-sales-inquiry-inspector"
+import { WorkspaceSupplierPortalInspector } from "./workspace-supplier-portal-inspector"
 import { WorkspaceTaskResponsibilityActions } from "./workspace-task-responsibility-actions"
 import { WorkspaceTaskSurface } from "./workspace-task-surface"
 import { WorkspaceTaskSurfaceBoundary } from "./workspace-task-surface-boundary"
@@ -134,7 +136,7 @@ function HeavyTaskSummaryCard({
     return (
         <div
             data-slot="workspace-heavy-task-summary"
-            className="flex min-h-0 flex-1 flex-col overflow-hidden bg-card"
+            className="@container/heavy-summary flex min-h-0 flex-1 flex-col overflow-hidden bg-card"
         >
             <div
                 className={cn(
@@ -265,7 +267,7 @@ function HeavyTaskSummaryCard({
                     </div>
                 ) : null}
 
-                <div className="rounded-md border border-border/70 bg-muted/35 px-3.5 py-2.5 text-xs text-muted-foreground">
+                <div className="rounded-lg bg-surface-sunken px-3.5 py-2.5 text-xs text-muted-foreground">
                     该事项包含多列宽表或复杂建单表单，建议进入完整工作区页签专注办理。
                 </div>
             </div>
@@ -273,15 +275,17 @@ function HeavyTaskSummaryCard({
             <footer
                 data-slot="workspace-inspector-footer"
                 className={cn(
-                    "flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border/60 bg-card py-3 shadow-footer",
+                    "flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border/60 bg-card py-2 shadow-footer",
                     padClass,
                 )}
             >
                 <div className="flex flex-wrap items-center gap-2">
-                    <WorkspaceTaskResponsibilityActions
-                        item={item}
-                        onCompleted={onCompleted}
-                    />
+                    {presentation === "pane" ? (
+                        <WorkspaceTaskResponsibilityActions
+                            item={item}
+                            onCompleted={onCompleted}
+                        />
+                    ) : null}
                 </div>
                 <Button
                     id={`workspace-inspector-enter-full-${segment}`}
@@ -375,6 +379,15 @@ export function WorkspaceTaskInspector({
             queryClient.invalidateQueries({
                 queryKey: ["workspace-invoice-review"],
             }),
+            queryClient.invalidateQueries({
+                queryKey: ["integration-errors"],
+            }),
+            queryClient.invalidateQueries({
+                queryKey: ["supplier-orders"],
+            }),
+            queryClient.invalidateQueries({
+                queryKey: ["supplier-offerings"],
+            }),
         ])
     }, [detailQuery, queryClient])
 
@@ -403,6 +416,38 @@ export function WorkspaceTaskInspector({
                 </div>
             )
         }
+        if (isOpenProcurementCreation && profileQuery.isError) {
+            return (
+                <div
+                    className={cn(
+                        "flex min-h-0 flex-1 flex-col justify-center py-6",
+                        padClass,
+                    )}
+                >
+                    <BusinessFailureState
+                        idPrefix={`workspace-inspector-profile-failure-${segment}`}
+                        title="账号权限读取失败"
+                        error={profileQuery.error}
+                        onRetry={() => void profileQuery.refetch()}
+                        action={
+                            <Button
+                                id={`workspace-inspector-error-open-full-${segment}`}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={onOpenFullPage}
+                            >
+                                在完整页面打开
+                                <ArrowUpRightIcon
+                                    data-icon="inline-end"
+                                    aria-hidden="true"
+                                />
+                            </Button>
+                        }
+                    />
+                </div>
+            )
+        }
         if (canInspectProcurementSourcing) {
             return (
                 <WorkspaceProcurementInspector
@@ -414,6 +459,42 @@ export function WorkspaceTaskInspector({
                     presentation={presentation}
                     userId={profile?.userid}
                     permissions={profile?.permissions}
+                />
+            )
+        }
+        if (
+            item.workItemType === "SALES_INQUIRY_PROCESSING" &&
+            item.handlerKey === "sales_inquiry_processing" &&
+            item.businessObjectType === "sales_inquiry"
+        ) {
+            return (
+                <WorkspaceSalesInquiryInspector
+                    key={item.workItemId}
+                    item={item}
+                    onOpenFullPage={onOpenFullPage}
+                    onCompleted={(completedId) =>
+                        notifyQueueCompleted(completedId)
+                    }
+                    presentation={presentation}
+                    userId={profile?.userid}
+                    permissions={profile?.permissions}
+                />
+            )
+        }
+        if (
+            item.workItemType === "SUPPLIER_PORTAL_REVIEW" &&
+            item.handlerKey === "supplier_portal_review" &&
+            item.businessObjectType === "supplier_portal_request"
+        ) {
+            return (
+                <WorkspaceSupplierPortalInspector
+                    key={item.workItemId}
+                    item={item}
+                    onOpenFullPage={onOpenFullPage}
+                    onCompleted={(completedId) =>
+                        notifyQueueCompleted(completedId)
+                    }
+                    presentation={presentation}
                 />
             )
         }

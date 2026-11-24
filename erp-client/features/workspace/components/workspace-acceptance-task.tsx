@@ -1,115 +1,325 @@
 "use client"
 
-import { WorkspaceProcessingPane } from "./workspace-processing-layout"
-
 import * as React from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { usePathname, useSearchParams } from "next/navigation"
-import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
+import { FileTextIcon, PanelRightCloseIcon, XIcon } from "lucide-react"
 
-import { IconActionButton } from "@/components/business"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+    BusinessFailureState,
+    DetailWorkspaceMeta,
+    PaperDocumentViewport,
+    useWorkspaceInspectorMode,
+    useWorkspaceTaskPage,
+} from "@/components/business"
+import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { AcceptanceWorkspace } from "@/features/sales-orders/components/acceptance-workspace"
-import { workspaceReadActionLabel } from "@/features/workspace/api/work-item-meta"
-import { workspaceHomeKeys } from "@/features/workspace/hooks/queries"
+import { SalesOrderPaperDocument } from "@/features/sales-orders/components/sales-order-paper-dialog"
+import { SalesOrderPaperPreviewDialog } from "@/features/sales-orders/components/sales-order-paper-preview-dialog"
+import { useSalesOrderDetailQuery } from "@/features/sales-orders/hooks/queries"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { PermissionGuard } from "@/features/auth/components/permission-guard"
+import { displayBusinessText } from "@/lib/display-name"
+import { hasPermission } from "@/lib/permissions"
+import { subscribeWorkspaceHotkeyAction } from "@/lib/workspace-hotkeys"
 
-import { sourceSalesOrderHref } from "../lib/source-sales-order"
+import { workspaceHomeKeys } from "../hooks/queries"
 import { stripDocumentNumberPrefix } from "../lib/stable-number"
 import {
     workspaceAcceptanceDescriptor,
     workspaceAcceptanceTaskIdentity,
 } from "../lib/workspace-acceptance"
 import type { WorkspaceWorkItem } from "../types"
-import {
-    WorkspaceDocumentPaperDialog,
-    type WorkspacePaperTarget,
-} from "./workspace-document-paper-dialog"
+import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
-type WorkspaceAcceptanceTaskProps = Readonly<{
+export function WorkspaceAcceptanceTask(props: {
     item: WorkspaceWorkItem
     onTaskCompleted?: (workItemId: string) => void
-}>
+}) {
+    return <AcceptanceTaskPane key={props.item.workItemId} {...props} />
+}
 
-/** W01 客户验收作业面：任务身份锁定一张销售单，登记验收不离开工作台。 */
-export function WorkspaceAcceptanceTask({
+function AcceptanceTaskPane({
     item,
     onTaskCompleted,
-}: WorkspaceAcceptanceTaskProps) {
+}: {
+    item: WorkspaceWorkItem
+    onTaskCompleted?: (workItemId: string) => void
+}) {
     const queryClient = useQueryClient()
     const descriptor = workspaceAcceptanceDescriptor(item)
     const executionAuthorized = item.allowedActions.includes("PROCESS")
-    const pathname = usePathname()
-    const searchParams = useSearchParams()
-    const returnTo = `${pathname}${searchParams.toString() ? `?${searchParams}` : ""}`
-    const [paper, setPaper] = React.useState<WorkspacePaperTarget | null>(null)
+    const idPrefix = `workspace-acceptance-${toAutomationIdSegment(item.workItemId)}`
+    const profile = useAccountProfileQuery()
     const salesOrderId = descriptor?.salesOrderId
-    const salesOrderNo = stripDocumentNumberPrefix(item.stableNumber)
-    const readSalesLabel = workspaceReadActionLabel("sales_order")
+    const canReadSalesOrder =
+        Boolean(salesOrderId) &&
+        profile.isSuccess &&
+        hasPermission(profile.data.permissions, "sales_order:detail")
+    const orderQuery = useSalesOrderDetailQuery(
+        canReadSalesOrder ? (salesOrderId ?? "") : "",
+    )
+    const order = canReadSalesOrder ? orderQuery.data : undefined
+    const title = "客户验收登记"
+    const salesOrderNo = displayBusinessText(
+        order?.documentNumber || stripDocumentNumberPrefix(item.stableNumber),
+        salesOrderId,
+        title,
+    )
+    const customer = (order?.customerName || item.counterpartyName)?.trim()
+    const owner = item.ownerUserLabel?.trim()
+    const [railOpen, setRailOpen] = React.useState(false)
+    const [narrowOpen, setNarrowOpen] = React.useState(false)
+    const [inlineReference, setInlineReference] = React.useState(false)
+    const [wide, setWide] = React.useState(false)
+    const surfaceRef = React.useRef<HTMLDivElement>(null)
+    const inspector = useWorkspaceInspectorMode()
+    const fullPage = useWorkspaceTaskPage()
+    const useRail = wide && !inspector
 
-    return (
+    React.useEffect(() => {
+        const surface = surfaceRef.current
+        if (!surface) return
+        const target = surface.closest<HTMLElement>("#main-content") ?? surface
+        const sync = () => setWide(target.clientWidth >= 960)
+        sync()
+        if (typeof ResizeObserver === "undefined") return
+        const observer = new ResizeObserver(sync)
+        observer.observe(target)
+        return () => observer.disconnect()
+    }, [])
+
+    React.useEffect(() => {
+        if (inspector || !canReadSalesOrder) return
+        return subscribeWorkspaceHotkeyAction((action) => {
+            if (action !== "toggle-rail") return
+            if (useRail) setRailOpen((open) => !open)
+            else setNarrowOpen((open) => !open)
+        })
+    }, [canReadSalesOrder, inspector, useRail])
+
+    const closeReference = () => {
+        setRailOpen(false)
+        setNarrowOpen(false)
+    }
+
+    const referenceActive = useRail ? railOpen : narrowOpen
+
+    const reference =
+        referenceActive && canReadSalesOrder ? (
+            <div className="flex h-full min-h-0 min-w-0 flex-col bg-card">
+                <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 py-2.5 pr-1">
+                    <div className="min-w-0">
+                        <h2 className="truncate text-body-compact font-semibold text-foreground">
+                            来源销售单对照
+                        </h2>
+                        {salesOrderNo ? (
+                            <p className="num truncate text-xs text-muted-foreground select-all">
+                                {salesOrderNo}
+                            </p>
+                        ) : null}
+                    </div>
+                    <Button
+                        id={`${idPrefix}-reference-close`}
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="收起来源销售单对照栏"
+                        onClick={closeReference}
+                    >
+                        <XIcon aria-hidden="true" />
+                    </Button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-3">
+                    {orderQuery.isPending ? (
+                        <div className="flex min-h-48 items-center justify-center py-10">
+                            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Spinner aria-hidden="true" />
+                                正在读取销售单…
+                            </p>
+                        </div>
+                    ) : orderQuery.isError ? (
+                        <BusinessFailureState
+                            title="销售单读取失败"
+                            error={orderQuery.error}
+                            action={
+                                <Button
+                                    id={`${idPrefix}-reference-retry`}
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => void orderQuery.refetch()}
+                                >
+                                    重试
+                                </Button>
+                            }
+                        />
+                    ) : order ? (
+                        <PaperDocumentViewport
+                            id={`${idPrefix}-reference-paper`}
+                            fitMode="width"
+                            fitKey={salesOrderId}
+                            role="region"
+                            aria-label="销售单纸面"
+                            tabIndex={0}
+                            className="bg-transparent p-0"
+                        >
+                            <SalesOrderPaperDocument order={order} />
+                        </PaperDocumentViewport>
+                    ) : (
+                        <p className="py-10 text-center text-xs text-muted-foreground">
+                            未找到这张销售单，可能已删除或当前角色无权查看。
+                        </p>
+                    )}
+                </div>
+            </div>
+        ) : null
+
+    const renderPane = (body: React.ReactNode) => (
         <WorkspaceProcessingPane
+            archetype="action"
+            className="@container/document"
+            idPrefix={idPrefix}
+            contextRail={
+                useRail && canReadSalesOrder
+                    ? {
+                          collapsible: true,
+                          resizable: true,
+                          allowOnFullWidth: true,
+                          defaultWidthPercent: 38,
+                          minWidthPercent: 26,
+                          maxWidthPercent: 52,
+                          storageKey: "erp.workspace.acceptanceRailWidth",
+                          collapsed: !railOpen,
+                          onCollapsedChange: (collapsed) =>
+                              setRailOpen(!collapsed),
+                          label: "对照来源销售单",
+                          content: reference,
+                      }
+                    : undefined
+            }
             header={
-                <WorkspaceTaskIdentityHeader item={item}>
-                    {salesOrderId ? (
-                        <PermissionGuard permission="sales_order:detail">
-                            <IconActionButton
-                                id={`workspace-acceptance-preview-so-${toAutomationIdSegment(item.workItemId)}`}
-                                label={readSalesLabel}
-                                testId={`work-item-read-sales-order-${item.workItemId}`}
-                                onClick={() =>
-                                    setPaper({
-                                        kind: "sales_order",
-                                        objectId: salesOrderId,
-                                        title: salesOrderNo,
-                                    })
+                <WorkspaceTaskIdentityHeader
+                    item={item}
+                    title={title}
+                    compact={!fullPage}
+                    subtitle={
+                        <DetailWorkspaceMeta
+                            items={[
+                                customer &&
+                                customer !== title &&
+                                customer !== salesOrderNo
+                                    ? customer
+                                    : null,
+                                salesOrderNo ? (
+                                    <span
+                                        key="number"
+                                        className="num select-all"
+                                        data-workspace-document-number={
+                                            salesOrderNo
+                                        }
+                                    >
+                                        {salesOrderNo}
+                                    </span>
+                                ) : null,
+                                owner ? `负责人 ${owner}` : null,
+                                item.dueAt && item.dueAtLabel ? (
+                                    <span key="deadline" className="num">
+                                        截止 {item.dueAtLabel}
+                                    </span>
+                                ) : null,
+                            ]}
+                        />
+                    }
+                >
+                    {canReadSalesOrder ? (
+                        <Button
+                            id={`${idPrefix}-reference-toggle`}
+                            type="button"
+                            variant={
+                                (useRail || inlineReference) && referenceActive
+                                    ? "secondary"
+                                    : "ghost"
+                            }
+                            size="sm"
+                            aria-pressed={
+                                useRail || inlineReference
+                                    ? referenceActive
+                                    : undefined
+                            }
+                            aria-haspopup={
+                                !useRail && !inlineReference
+                                    ? "dialog"
+                                    : undefined
+                            }
+                            onClick={(event) => {
+                                if (useRail) {
+                                    setRailOpen((open) => !open)
+                                    return
                                 }
-                            >
-                                <FileTextIcon aria-hidden="true" />
-                            </IconActionButton>
-                            <IconActionButton
-                                id={`workspace-acceptance-open-so-${toAutomationIdSegment(item.workItemId)}`}
-                                label="打开销售单"
-                                testId={`work-item-open-sales-order-${item.workItemId}`}
-                                href={sourceSalesOrderHref(
-                                    salesOrderId,
-                                    returnTo,
-                                )}
-                            >
-                                <ArrowUpRightIcon aria-hidden="true" />
-                            </IconActionButton>
-                        </PermissionGuard>
+                                setInlineReference(
+                                    Boolean(
+                                        event.currentTarget.closest(
+                                            '[data-business-component="task-action-sheet"]',
+                                        ),
+                                    ),
+                                )
+                                setNarrowOpen((open) => !open)
+                            }}
+                        >
+                            {(useRail || inlineReference) && referenceActive ? (
+                                <PanelRightCloseIcon
+                                    aria-hidden="true"
+                                    data-icon="inline-start"
+                                />
+                            ) : (
+                                <FileTextIcon
+                                    aria-hidden="true"
+                                    data-icon="inline-start"
+                                />
+                            )}
+                            {(useRail || inlineReference) && referenceActive
+                                ? "收起销售单"
+                                : "对照销售单"}
+                        </Button>
                     ) : null}
                 </WorkspaceTaskIdentityHeader>
             }
             aria-label="当前客户验收任务"
         >
-            {!descriptor ? (
-                <Alert variant="destructive">
-                    <AlertTitle>待办关联的单据信息异常</AlertTitle>
-                    <AlertDescription>
-                        当前待办与关联业务单据不匹配，请刷新页面后重试，或联系管理员处理。
-                    </AlertDescription>
-                </Alert>
-            ) : !executionAuthorized ? (
-                <Alert variant="warning">
-                    <AlertTitle>当前无法登记客户验收</AlertTitle>
-                    <AlertDescription>
-                        {item.actionBlockers[0]?.message ??
-                            "当前账号没有处理此验收任务的资格。"}
-                    </AlertDescription>
-                </Alert>
-            ) : (
+            {!useRail && inlineReference && narrowOpen ? reference : null}
+            {body}
+            {canReadSalesOrder && !useRail && !inlineReference ? (
+                <SalesOrderPaperPreviewDialog
+                    salesOrderId={salesOrderId ?? null}
+                    title={salesOrderNo}
+                    open={narrowOpen}
+                    onOpenChange={setNarrowOpen}
+                />
+            ) : null}
+        </WorkspaceProcessingPane>
+    )
+
+    return (
+        <div ref={surfaceRef} className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {descriptor ? (
                 <AcceptanceWorkspace
-                    key={item.workItemId}
                     salesOrderId={descriptor.salesOrderId}
+                    idPrefix={`${idPrefix}-registration`}
                     ownerName={item.ownerUserLabel}
                     workItem={workspaceAcceptanceTaskIdentity(item)}
                     persistRegisterInUrl={false}
                     inlineRegister
+                    taskBlocker={
+                        executionAuthorized
+                            ? undefined
+                            : (item.actionBlockers[0]?.message ??
+                              "当前账号无法办理此验收任务。")
+                    }
+                    referenceOrder={order}
+                    renderTaskPane={renderPane}
                     onPosted={(payload) => {
                         void queryClient.invalidateQueries({
                             queryKey: workspaceHomeKeys.all,
@@ -117,23 +327,23 @@ export function WorkspaceAcceptanceTask({
                         if (payload.remainingEligibleCount > 0) return
                         toast.add({
                             title: "客户验收已登记",
-                            description: payload.acceptanceNo
-                                ? `${payload.acceptanceNo} 已过账，本单待验已清零`
-                                : "本单待验已清零",
+                            description: `${payload.acceptanceNo} · 本单待验已清零`,
                             type: "success",
                             timeout: 4000,
                         })
                         onTaskCompleted?.(item.workItemId)
                     }}
                 />
+            ) : (
+                renderPane(
+                    <div
+                        role="alert"
+                        className="my-3 rounded-r-md border-l-2 border-l-destructive bg-destructive-soft px-3 py-2 text-xs text-destructive-soft-foreground"
+                    >
+                        待办与关联销售单不匹配。请刷新任务后重试。
+                    </div>,
+                )
             )}
-            <WorkspaceDocumentPaperDialog
-                target={paper}
-                open={Boolean(paper)}
-                onOpenChange={(open) => {
-                    if (!open) setPaper(null)
-                }}
-            />
-        </WorkspaceProcessingPane>
+        </div>
     )
 }

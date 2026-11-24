@@ -1,36 +1,36 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ArrowUpRightIcon, RefreshCwIcon } from "lucide-react"
+import { ArrowUpRightIcon, ChevronDownIcon, RefreshCwIcon } from "lucide-react"
 
 import { BusinessFailureState } from "@/components/business"
-import {
-    UnifiedMaterialViewer,
-    type MaterialFileItem,
-} from "@/components/business/unified-material-viewer"
+import { PaperDocumentViewport } from "@/components/business/paper-document-viewport"
+import { UnifiedMaterialViewer } from "@/components/business/unified-material-viewer"
 import { Button } from "@/components/ui/button"
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import { Skeleton } from "@/components/ui/skeleton"
-import { StatusBadge } from "@/components/ui/status-badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { COPY_TRIGGER_LABELS } from "@/features/approval-processes/copy-rules"
-import { ApprovalSubmittedMaterialsContent } from "@/features/approval-workflow/components/approval-submitted-materials"
+import type { ApprovalMaterials } from "@/features/approval-workflow/api/materials"
+import { ApprovalSalesOrderPaper } from "@/features/approval-workflow/components/approval-sales-order-paper"
+import { ApprovalSubmittedSummary } from "@/features/approval-workflow/components/approval-submitted-summary"
 import { UnifiedAuditTrail } from "@/features/approval-workflow/components/unified-audit-trail"
-import { displayUnixSeconds } from "@/features/approval-workflow/display"
+import {
+    displayActorName,
+    displayUnixSeconds,
+} from "@/features/approval-workflow/display"
 import type { ApprovalHistoryItem } from "@/features/approval-workflow/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { downloadBlob } from "@/lib/download-blob"
-import { getApprovalInstanceStatusMeta } from "@/lib/task-status-dictionary"
+import { displayBusinessText } from "@/lib/display-name"
 import { cn } from "@/lib/utils"
-import {
-    fetchCopyFile,
-    type CopyDetail,
-    type CopyHistoryItemDto,
-    type CopyReceipt,
-} from "./api"
-import { documentTypeLabel } from "./columns"
-import { CopyFiles } from "./copy-files"
+import type { CopyDetail, CopyHistoryItemDto, CopyReceipt } from "./api"
+import { CopyFiles, useCopyFileItems } from "./copy-files"
 import { CopyPurchaseLines } from "./purchase-lines"
-import { useCopyFile, useCopyInfinite, useReadCopies } from "./queries"
+import { useCopyInfinite, useReadCopies } from "./queries"
 
 /** 将抄送接口返回的追加分页执行历史去重并映射为 `UnifiedAuditTrail` 标准项。 */
 export function mapCopyHistoryToAuditItems(
@@ -71,6 +71,8 @@ function mapSingleCopyHistoryItem(
 
 type CopyInspectorTab = "snapshot" | "materials" | "history"
 
+const EMPTY_ATTACHMENTS: ApprovalMaterials["attachments"] = []
+
 export type CopyInspectorProps = Readonly<{
     receipt: CopyReceipt
     onOpenFullPage: () => void
@@ -81,13 +83,220 @@ export type CopyInspectorProps = Readonly<{
     onRetryRead?: () => void
 }>
 
-/**
- * 抄送原位速览检查器：用于 `WorkspaceSplitQueue` 右分栏或窄屏 `TaskActionSheet`。
- *
- * - 打开时按需自动标记未读抄送为已读；
- * - 使用 `bare` 冻结快照，无外框卡片嵌套与脆弱 `[&>article]` 选择器覆盖；
- * - 内置 `UnifiedMaterialViewer`（认证 Blob 原位对照）与追加式 `UnifiedAuditTrail`（不丢弃前页）。
- */
+export function CopyMarkReadError({
+    id,
+    onRetry,
+}: {
+    id: string
+    onRetry: () => void
+}) {
+    return (
+        <div
+            role="alert"
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-r-md border-l-2 border-l-destructive bg-destructive-soft/65 px-3 py-1.5 text-xs text-destructive-soft-foreground"
+        >
+            <span>已读状态保存失败。</span>
+            <Button
+                id={id}
+                type="button"
+                variant="ghost"
+                size="xs"
+                onClick={onRetry}
+            >
+                重试标记已读
+            </Button>
+        </div>
+    )
+}
+
+export function CopySnapshot({
+    detail,
+    idPrefix,
+    showAttachments,
+    onSelectFile,
+    activeFileId,
+}: {
+    detail: CopyDetail
+    idPrefix: string
+    showAttachments: boolean
+    onSelectFile: (id: string) => void
+    activeFileId?: string
+}) {
+    const { receipt, materials } = detail
+    const {
+        display,
+        sales_order: salesOrder,
+        purchase_lines: purchaseLines,
+    } = materials
+    const source = display.source
+    const submitter = displayActorName(
+        source.submitter_name,
+        salesOrder?.submitted_by,
+    )
+    const sourceOrders = materials.source_sales_orders ?? []
+    const sourceBriefs = display.source_sales ?? []
+    const fullSourceIds = new Set(
+        sourceOrders.map((order) => order.revision.id),
+    )
+    const briefOnlySources = sourceBriefs.filter(
+        (brief) => !fullSourceIds.has(brief.revision_id),
+    )
+
+    return (
+        <div className="min-w-0 space-y-4 wrap-anywhere">
+            <p className="num text-xs text-muted-foreground">
+                提交版本 {materials.subject_version}
+                {!salesOrder &&
+                source.extra_sections.length === 0 &&
+                source.list_summary
+                    ? ` · ${source.list_summary}`
+                    : null}
+            </p>
+            {salesOrder ? (
+                <CopySalesPaper
+                    submission={salesOrder}
+                    documentNo={receipt.document_no}
+                    submitterName={submitter ?? null}
+                />
+            ) : (
+                <ApprovalSubmittedSummary
+                    idPrefix={`${idPrefix}-summary`}
+                    source={source}
+                    submitterName={submitter}
+                    impactSummary={display.impact_summary}
+                    lineDetails={
+                        purchaseLines?.length ? (
+                            <CopyPurchaseLines
+                                lines={purchaseLines}
+                                fulfillment={materials.purchase_fulfillment}
+                                idPrefix={`${idPrefix}-purchase`}
+                            />
+                        ) : undefined
+                    }
+                />
+            )}
+
+            {sourceOrders.length || briefOnlySources.length ? (
+                <section className="min-w-0 border-t border-border/60 pt-3">
+                    <h3 className="text-section-title font-semibold">
+                        关联销售单
+                    </h3>
+                    <div className="divide-y divide-border/60">
+                        {sourceOrders.map((order) => (
+                            <CopySourceDisclosure
+                                key={order.revision.id}
+                                id={`${idPrefix}-source-sales-${toAutomationIdSegment(order.revision.id)}`}
+                                documentNo={order.document_no}
+                                revisionNo={order.revision.revision_no}
+                            >
+                                <CopySalesPaper
+                                    submission={order.revision}
+                                    documentNo={order.document_no}
+                                    submitterName={submitter ?? null}
+                                    hideDetailedDeliveryAddresses={
+                                        materials.document_type ===
+                                        "purchase_order"
+                                    }
+                                />
+                            </CopySourceDisclosure>
+                        ))}
+                        {briefOnlySources.map((brief) => (
+                            <CopySourceDisclosure
+                                key={brief.revision_id}
+                                id={`${idPrefix}-source-sales-${toAutomationIdSegment(brief.revision_id)}`}
+                                documentNo={
+                                    displayBusinessText(
+                                        brief.document_no,
+                                        brief.document_id,
+                                    ) || "未记录销售单号"
+                                }
+                                revisionNo={brief.revision_no}
+                            >
+                                <ApprovalSubmittedSummary
+                                    idPrefix={`${idPrefix}-source-summary-${toAutomationIdSegment(brief.revision_id)}`}
+                                    source={brief.source}
+                                    submitterName={displayActorName(
+                                        brief.source.submitter_name,
+                                    )}
+                                    impactSummary={null}
+                                    nested
+                                />
+                            </CopySourceDisclosure>
+                        ))}
+                    </div>
+                </section>
+            ) : null}
+
+            {showAttachments && materials.attachments.length > 0 ? (
+                <section className="min-w-0 space-y-2 border-t border-border/60 pt-3">
+                    <h3 className="text-section-title font-semibold">
+                        提交附件
+                    </h3>
+                    <CopyFiles
+                        id={receipt.id}
+                        files={materials.attachments}
+                        activeFileId={activeFileId}
+                        onSelectFile={onSelectFile}
+                        idPrefix={`${idPrefix}-file`}
+                    />
+                </section>
+            ) : null}
+        </div>
+    )
+}
+
+function CopySalesPaper(
+    props: React.ComponentProps<typeof ApprovalSalesOrderPaper>,
+) {
+    return (
+        <PaperDocumentViewport
+            fitKey={props.documentNo}
+            fitMode="width"
+            className="min-w-0 overflow-hidden bg-card p-0! [&>div]:mb-0!"
+        >
+            <ApprovalSalesOrderPaper {...props} />
+        </PaperDocumentViewport>
+    )
+}
+
+function CopySourceDisclosure({
+    id,
+    documentNo,
+    revisionNo,
+    children,
+}: {
+    id: string
+    documentNo: string
+    revisionNo: number
+    children: React.ReactNode
+}) {
+    return (
+        <Collapsible>
+            <CollapsibleTrigger
+                id={id}
+                render={<Button type="button" variant="ghost" size="sm" />}
+                className="group h-auto min-h-control-sm w-full justify-start py-1.5 text-left whitespace-normal"
+            >
+                <ChevronDownIcon
+                    aria-hidden="true"
+                    className="-rotate-90 transition-transform group-data-panel-open:rotate-0"
+                />
+                <span className="num min-w-0 wrap-anywhere">{documentNo}</span>
+                <span className="num text-xs text-muted-foreground">
+                    V{revisionNo}
+                </span>
+            </CollapsibleTrigger>
+            <CollapsibleContent
+                id={`${id}-content`}
+                className="min-w-0 space-y-3 pb-3"
+            >
+                {children}
+            </CollapsibleContent>
+        </Collapsible>
+    )
+}
+
+/** 抄送队列和轻作业抽屉共用的冻结快照检查器。 */
 export function CopyInspector({
     receipt,
     onOpenFullPage,
@@ -100,7 +309,6 @@ export function CopyInspector({
     const [activeFileId, setActiveFileId] = useState<string | undefined>()
     const query = useCopyInfinite(receipt.id)
     const mark = useReadCopies()
-    const fileDownload = useCopyFile()
 
     const attemptedRef = useRef<string | null>(null)
     useEffect(() => {
@@ -115,60 +323,44 @@ export function CopyInspector({
         }
     }, [autoMarkRead, mark, receipt.id, receipt.read_at])
 
-    const primaryPage = query.data?.pages[0]
+    const primaryPage =
+        query.isError && !query.isFetchNextPageError
+            ? undefined
+            : query.data?.pages[0]
     const historyItems = useMemo(
         () => mapCopyHistoryToAuditItems(query.data?.pages),
         [query.data?.pages],
     )
+    const attachments = primaryPage?.materials.attachments ?? EMPTY_ATTACHMENTS
+    const { items: materialItems } = useCopyFileItems(receipt.id, attachments)
+    const selectFile = (fileId: string) => {
+        setActiveFileId(fileId)
+        setActiveTab("materials")
+    }
 
-    const attachments = useMemo(
-        () => primaryPage?.materials.attachments ?? [],
-        [primaryPage?.materials.attachments],
-    )
-    const materialItems = useMemo<readonly MaterialFileItem[]>(
-        () =>
-            attachments.map((file) => ({
-                id: file.file_asset_id,
-                name: file.file_name,
-                mimeType: file.content_type,
-                sizeBytes: file.byte_size,
-                loadPreview: () =>
-                    fetchCopyFile(receipt.id, file.file_asset_id, true),
-                onDownload: async () => {
-                    const blob = await fileDownload.mutateAsync({
-                        id: receipt.id,
-                        file: file.file_asset_id,
-                        preview: false,
-                    })
-                    downloadBlob(blob, file.file_name)
-                },
-            })),
-        [attachments, fileDownload, receipt.id],
-    )
-
-    const segment = toAutomationIdSegment(receipt.id)
+    const idPrefix = `copy-inspector-${toAutomationIdSegment(receipt.id)}`
     const padClass = presentation === "sheet" ? "px-sheet-inline" : "px-5"
     const copiedAt = displayUnixSeconds(receipt.copied_at)
-    const statusMeta = getApprovalInstanceStatusMeta(
-        primaryPage?.instance_status ?? receipt.instance_status,
+    const isRead = Boolean(
+        receipt.read_at || primaryPage?.receipt.read_at || mark.isSuccess,
     )
 
-    if (query.isError) {
+    if (!primaryPage && query.isError) {
         return (
             <div
                 className={cn(
-                    "flex min-h-0 flex-1 flex-col justify-center py-6",
+                    "flex min-h-0 min-w-0 flex-1 flex-col justify-center bg-card py-6",
                     padClass,
                 )}
             >
                 <BusinessFailureState
-                    idPrefix={`copy-inspector-failure-${segment}`}
+                    idPrefix={`${idPrefix}-failure`}
                     title="抄送资料读取失败"
                     error={query.error}
                     onRetry={() => void query.refetch()}
                     action={
                         <Button
-                            id={`copy-inspector-error-open-${segment}`}
+                            id={`${idPrefix}-error-open`}
                             type="button"
                             variant="outline"
                             size="sm"
@@ -186,22 +378,19 @@ export function CopyInspector({
         )
     }
 
-    if (query.isPending || !primaryPage) {
+    if (!primaryPage) {
         return (
             <div
                 aria-busy="true"
                 className={cn(
-                    "flex min-h-0 flex-1 flex-col gap-4 py-5",
+                    "flex min-h-0 min-w-0 flex-1 flex-col gap-4 bg-card py-5",
                     padClass,
                 )}
             >
                 <span role="status" className="sr-only">
                     正在读取抄送资料…
                 </span>
-                <div className="space-y-2 border-b border-border/60 pb-4">
-                    <Skeleton className="h-4 w-32" />
-                    <Skeleton className="h-5 w-56" />
-                </div>
+                <Skeleton className="h-14 w-full" />
                 <Skeleton className="h-32 w-full" />
                 <Skeleton className="h-40 w-full" />
             </div>
@@ -213,78 +402,78 @@ export function CopyInspector({
             data-slot="copy-inspector"
             className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card"
         >
-            <div
-                className={cn(
-                    "flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-surface-sunken/50 py-2 text-xs text-muted-foreground",
-                    padClass,
-                )}
-            >
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                    <StatusBadge
-                        label={statusMeta.label}
-                        tone={statusMeta.tone}
-                    />
-                    <span>{documentTypeLabel(receipt.document_type)}审批</span>
-                    <span>·</span>
-                    <span>{COPY_TRIGGER_LABELS[receipt.trigger]}</span>
-                    {receipt.node_name ? (
-                        <>
-                            <span>·</span>
-                            <span>{receipt.node_name}</span>
-                        </>
-                    ) : null}
-                    <span>·</span>
-                    <span className="num">第 {receipt.round_no} 轮</span>
-                    {copiedAt ? (
-                        <>
-                            <span>·</span>
-                            <time dateTime={copiedAt.dateTime} className="num">
-                                {copiedAt.label}
-                            </time>
-                        </>
-                    ) : null}
-                </div>
-                <Button
-                    id={`copy-inspector-refresh-${segment}`}
-                    type="button"
-                    variant="ghost"
-                    size="xs"
-                    className="h-control-xs px-2 text-xs text-muted-foreground hover:text-foreground"
-                    disabled={query.isFetching}
-                    onClick={() => void query.refetch()}
-                >
-                    <RefreshCwIcon
-                        data-icon="inline-start"
-                        aria-hidden="true"
-                    />
-                    刷新
-                </Button>
-            </div>
-
-            {mark.isError || readFailed ? (
-                <div
-                    role="alert"
-                    className={cn(
-                        "flex shrink-0 flex-wrap items-center gap-2 border-b border-destructive-border bg-destructive-soft py-2 text-xs text-destructive-soft-foreground",
-                        padClass,
-                    )}
-                >
-                    <span>已读状态保存失败。</span>
+            <div className={cn("shrink-0 space-y-2 pt-3", padClass)}>
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg bg-surface-sunken px-3.5 py-2.5 text-xs wrap-anywhere">
+                    <dl className="flex min-w-0 flex-1 flex-wrap items-center gap-x-5 gap-y-2">
+                        <div>
+                            <dt className="text-muted-foreground">阅读状态</dt>
+                            <dd className="text-body-compact font-medium">
+                                {isRead ? "已读" : "未读"}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt className="text-muted-foreground">抄送节点</dt>
+                            <dd className="text-body-compact font-medium">
+                                {COPY_TRIGGER_LABELS[receipt.trigger]}
+                                {receipt.node_name
+                                    ? ` · ${receipt.node_name}`
+                                    : ""}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt className="text-muted-foreground">审批轮次</dt>
+                            <dd className="num text-body-compact font-medium">
+                                第 {receipt.round_no} 轮
+                            </dd>
+                        </div>
+                        {copiedAt ? (
+                            <div>
+                                <dt className="text-muted-foreground">
+                                    抄送时间
+                                </dt>
+                                <dd className="num text-body-compact font-medium">
+                                    <time dateTime={copiedAt.dateTime}>
+                                        {copiedAt.label}
+                                    </time>
+                                </dd>
+                            </div>
+                        ) : null}
+                        <div>
+                            <dt className="text-muted-foreground">附件</dt>
+                            <dd className="num text-body-compact font-medium">
+                                {attachments.length} 份
+                            </dd>
+                        </div>
+                    </dl>
                     <Button
-                        id={`copy-inspector-read-retry-${segment}`}
+                        id={`${idPrefix}-refresh`}
                         type="button"
                         variant="ghost"
                         size="xs"
-                        onClick={() =>
-                            onRetryRead
-                                ? onRetryRead()
-                                : mark.mutate([receipt.id])
-                        }
+                        className="ml-auto shrink-0 text-muted-foreground"
+                        disabled={query.isFetching}
+                        onClick={() => void query.refetch()}
                     >
-                        重试标记已读
+                        <RefreshCwIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                            className={
+                                query.isFetching ? "animate-spin" : undefined
+                            }
+                        />
+                        刷新
                     </Button>
                 </div>
-            ) : null}
+
+                {mark.isError || readFailed ? (
+                    <CopyMarkReadError
+                        id={`${idPrefix}-read-retry`}
+                        onRetry={
+                            onRetryRead ?? (() => mark.mutate([receipt.id]))
+                        }
+                    />
+                ) : null}
+            </div>
 
             <Tabs
                 value={activeTab}
@@ -297,7 +486,7 @@ export function CopyInspector({
                         setActiveTab(next)
                     }
                 }}
-                className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden"
+                className="flex min-h-0 min-w-0 flex-1 flex-col gap-0 overflow-hidden"
             >
                 <div
                     className={cn(
@@ -305,118 +494,67 @@ export function CopyInspector({
                         padClass,
                     )}
                 >
-                    <TabsList variant="line" aria-label="抄送检查器视图">
+                    <TabsList
+                        variant="line"
+                        aria-label="抄送检查器视图"
+                        className="max-w-full gap-3"
+                    >
                         <TabsTrigger
-                            id={`copy-inspector-tab-snapshot-${segment}`}
+                            id={`${idPrefix}-tab-snapshot`}
+                            aria-controls={`${idPrefix}-panel-snapshot`}
                             value="snapshot"
                         >
                             单据快照
                         </TabsTrigger>
                         <TabsTrigger
-                            id={`copy-inspector-tab-materials-${segment}`}
+                            id={`${idPrefix}-tab-materials`}
+                            aria-controls={`${idPrefix}-panel-materials`}
                             value="materials"
+                            className="gap-1"
                         >
-                            附件对照
-                            {attachments.length > 0 ? (
-                                <span className="num ml-1 text-xs text-muted-foreground">
-                                    ({attachments.length})
-                                </span>
-                            ) : null}
+                            <span>附件对照</span>
+                            <span className="num text-xs text-muted-foreground">
+                                ({attachments.length})
+                            </span>
                         </TabsTrigger>
                         <TabsTrigger
-                            id={`copy-inspector-tab-history-${segment}`}
+                            id={`${idPrefix}-tab-history`}
+                            aria-controls={`${idPrefix}-panel-history`}
                             value="history"
+                            className="gap-1"
                         >
-                            审批记录
-                            {historyItems.length > 0 ? (
-                                <span className="num ml-1 text-xs text-muted-foreground">
-                                    ({historyItems.length}
-                                    {query.hasNextPage ? "+" : ""})
-                                </span>
-                            ) : null}
+                            <span>审批记录</span>
+                            <span className="num text-xs text-muted-foreground">
+                                ({historyItems.length}
+                                {query.hasNextPage ? "+" : ""})
+                            </span>
                         </TabsTrigger>
                     </TabsList>
                 </div>
 
                 <TabsContent
+                    id={`${idPrefix}-panel-snapshot`}
                     value="snapshot"
                     className={cn(
-                        "mt-0 min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain py-5",
+                        "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain py-4",
                         padClass,
                     )}
                 >
-                    <ApprovalSubmittedMaterialsContent
-                        bare
-                        instanceId={primaryPage.receipt.instance_id}
-                        data={primaryPage.materials}
-                        attachmentContent={
-                            <CopyFiles
-                                id={receipt.id}
-                                files={attachments}
-                                activeFileId={activeFileId}
-                                onSelectFile={(fileId) => {
-                                    setActiveFileId(fileId)
-                                    setActiveTab("materials")
-                                }}
-                                idPrefix={`copy-inspector-file-${segment}`}
-                            />
-                        }
-                    />
-
-                    <CopyPurchaseLines
-                        lines={primaryPage.materials.purchase_lines ?? []}
-                        fulfillment={primaryPage.materials.purchase_fulfillment}
-                        idPrefix={`copy-inspector-purchase-${segment}`}
-                    />
-
-                    {(primaryPage.materials.source_sales_orders?.length ?? 0) >
-                    0 ? (
-                        <section className="divide-y divide-border/60 border-t border-border/60 pt-4">
-                            {primaryPage.materials.source_sales_orders?.map(
-                                (order) => (
-                                    <details
-                                        key={order.revision.id}
-                                        className="py-3 first:pt-0 last:pb-0"
-                                    >
-                                        <summary
-                                            id={`copy-inspector-source-sales-${toAutomationIdSegment(order.revision.id)}`}
-                                            className="cursor-pointer text-body-compact font-medium"
-                                        >
-                                            查看关联销售单完整资料 ·{" "}
-                                            <span className="num">
-                                                {order.document_no}
-                                            </span>
-                                        </summary>
-                                        <div className="pt-4">
-                                            <ApprovalSubmittedMaterialsContent
-                                                bare
-                                                instanceId={
-                                                    primaryPage.receipt
-                                                        .instance_id
-                                                }
-                                                data={primaryPage.materials}
-                                                view="source-sales"
-                                                sourceRevisionId={
-                                                    order.revision.id
-                                                }
-                                                attachmentContent={
-                                                    <p className="text-xs text-muted-foreground">
-                                                        附件请在上方「附件对照」页签中查看。
-                                                    </p>
-                                                }
-                                            />
-                                        </div>
-                                    </details>
-                                ),
-                            )}
-                        </section>
-                    ) : null}
+                    <div className="@container/copy-detail min-w-0">
+                        <CopySnapshot
+                            detail={primaryPage}
+                            idPrefix={idPrefix}
+                            showAttachments
+                            activeFileId={activeFileId}
+                            onSelectFile={selectFile}
+                        />
+                    </div>
                 </TabsContent>
-
                 <TabsContent
+                    id={`${idPrefix}-panel-materials`}
                     value="materials"
                     className={cn(
-                        "mt-0 flex min-h-0 flex-1 flex-col overflow-hidden py-4",
+                        "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden py-4",
                         padClass,
                     )}
                 >
@@ -425,25 +563,30 @@ export function CopyInspector({
                         files={materialItems}
                         activeFileId={activeFileId}
                         onActiveFileChange={setActiveFileId}
-                        idPrefix={`copy-inspector-viewer-${segment}`}
+                        idPrefix={`${idPrefix}-viewer`}
                         className="min-h-0 flex-1"
                     />
                 </TabsContent>
-
                 <TabsContent
+                    id={`${idPrefix}-panel-history`}
                     value="history"
                     className={cn(
-                        "mt-0 min-h-0 flex-1 overflow-y-auto overscroll-contain py-5",
+                        "min-h-0 min-w-0 flex-1 space-y-2 overflow-x-hidden overflow-y-auto overscroll-contain py-4",
                         padClass,
                     )}
                 >
+                    {query.isFetchNextPageError ? (
+                        <p role="alert" className="text-xs text-destructive">
+                            审批记录加载失败，请重试加载更多。
+                        </p>
+                    ) : null}
                     <UnifiedAuditTrail
                         historyItems={historyItems}
                         historyHasMore={Boolean(query.hasNextPage)}
                         historyLoadingMore={query.isFetchingNextPage}
                         onLoadMoreHistory={() => void query.fetchNextPage()}
                         showCopyHistory={false}
-                        idPrefix={`copy-inspector-audit-${segment}`}
+                        idPrefix={`${idPrefix}-audit`}
                     />
                 </TabsContent>
             </Tabs>

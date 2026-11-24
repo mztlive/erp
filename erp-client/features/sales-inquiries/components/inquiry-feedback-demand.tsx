@@ -1,11 +1,19 @@
 "use client"
 
 import * as React from "react"
-import { MapPinIcon, TruckIcon } from "lucide-react"
+import {
+    ChevronDownIcon,
+    CrosshairIcon,
+    MapPinIcon,
+    TruckIcon,
+} from "lucide-react"
 import { InquiryIconAction } from "./inquiry-icon-action"
-import { QuickPreviewSheet } from "@/components/business"
+import { QuantityValue, QuickPreviewSheet } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import type { InquiryLine } from "../types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import { useInquirySkuDetailsQuery } from "../hooks/queries"
+import { inquiryDateInput } from "../lib/format"
+import type { InquiryLine, InquiryRequirement } from "../types"
 import { InquiryRequirementDetail } from "./inquiry-requirement-detail"
 import { InquiryDeliveryBadge } from "./inquiry-delivery-badge"
 
@@ -96,5 +104,116 @@ export function InquiryFeedbackDemand({
                 />
             </QuickPreviewSheet>
         </>
+    )
+}
+
+export function InquiryDemandReference({
+    idPrefix,
+    requirement,
+    onLocate,
+}: {
+    idPrefix: string
+    requirement: InquiryRequirement
+    onLocate?: (lineId: string) => void
+}) {
+    const sku = useInquirySkuDetailsQuery(
+        requirement.lines.map((line) => line.sku_id),
+    )
+
+    return (
+        <div className="min-w-0 text-body-compact">
+            {requirement.note.trim() && (
+                <p className="border-b border-border/60 py-3 text-muted-foreground whitespace-pre-wrap wrap-anywhere">
+                    {requirement.note}
+                </p>
+            )}
+            {requirement.lines.length === 0 && (
+                <p className="py-4 text-xs text-muted-foreground">
+                    暂无商品需求
+                </p>
+            )}
+            <ul className="divide-y divide-border/60">
+                {requirement.lines.map((line) => {
+                    const prefix = `${idPrefix}-${toAutomationIdSegment(line.line_id)}`
+                    const unit = sku.units.get(line.unit_code) ?? ""
+                    const dueDate = inquiryDateInput(line.delivery_due_at)
+                    return (
+                        <li
+                            key={line.line_id}
+                            className="relative min-w-0 py-2"
+                        >
+                            <details className="group/demand min-w-0">
+                                <summary
+                                    id={`${prefix}-expand`}
+                                    className="flex min-w-0 cursor-pointer list-none items-start gap-2 rounded-sm py-1 focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden"
+                                >
+                                    <ChevronDownIcon
+                                        aria-hidden="true"
+                                        className="mt-0.5 size-3.5 shrink-0 -rotate-90 text-muted-foreground group-open/demand:rotate-0"
+                                    />
+                                    <div className="min-w-0 flex-1">
+                                        <p
+                                            className="truncate font-medium"
+                                            title={line.product_name}
+                                        >
+                                            {line.product_name}
+                                        </p>
+                                        <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                                            <span className="num wrap-anywhere">
+                                                {line.sku_code}
+                                            </span>
+                                            <QuantityValue
+                                                value={line.quantity}
+                                                unit={unit}
+                                            />
+                                            {dueDate && (
+                                                <span className="num">
+                                                    {dueDate}
+                                                </span>
+                                            )}
+                                        </p>
+                                    </div>
+                                    {onLocate && (
+                                        <span
+                                            aria-hidden="true"
+                                            className="w-7 shrink-0"
+                                        />
+                                    )}
+                                </summary>
+                                <div className="pt-3 pl-5">
+                                    {line.specification &&
+                                        line.specification !== "无规格" && (
+                                            <p className="pb-2 text-xs text-muted-foreground wrap-anywhere">
+                                                {line.specification}
+                                            </p>
+                                        )}
+                                    <InquiryRequirementDetail
+                                        line={line}
+                                        unit={unit}
+                                        procurement
+                                        compact
+                                        image={null}
+                                    />
+                                </div>
+                            </details>
+                            {onLocate && (
+                                <Button
+                                    id={`${prefix}-locate`}
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    className="absolute top-2 right-0"
+                                    aria-label={`定位${line.product_name}的采购反馈`}
+                                    title="定位采购反馈"
+                                    onClick={() => onLocate(line.line_id)}
+                                >
+                                    <CrosshairIcon aria-hidden="true" />
+                                </Button>
+                            )}
+                        </li>
+                    )
+                })}
+            </ul>
+        </div>
     )
 }

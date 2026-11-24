@@ -4,7 +4,10 @@ import * as React from "react"
 import {
     AlertCircleIcon,
     CheckCheckIcon,
+    ChevronLeftIcon,
+    ChevronRightIcon,
     SearchIcon,
+    Settings2Icon,
     XIcon,
 } from "lucide-react"
 import {
@@ -16,8 +19,14 @@ import {
 } from "@/components/business"
 import { TableToolbarScope } from "@/components/business/table-toolbar"
 import { Button } from "@/components/ui/button"
+import { NativeCheckbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover"
 import { RequiredMark } from "@/components/ui/required-mark"
 import {
     Table,
@@ -29,6 +38,7 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
+import { toast } from "@/components/ui/toast"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { useSupplierOfferingsForSkusQuery } from "@/features/supplier-offerings/hooks/queries"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -101,7 +111,12 @@ type ReadonlyFeedbackTableProps = {
     feeCount?: number
 }
 
-type LineFilter = "all" | "incomplete" | "complete"
+type LineFilter = "all" | "incomplete" | "complete" | "pending" | "anomaly"
+
+const WORKBENCH_PAGE_SIZE = 20
+
+const workbenchNumberInput =
+    "min-w-0 border-transparent bg-surface-sunken shadow-none hover:bg-card focus-visible:bg-card"
 
 function computeShortage(
     availableQuantity: string,
@@ -169,12 +184,17 @@ export function InquiryFeedbackTable({
     feedbackRound = 0,
     readOnly = false,
     idPrefix = "procurement-feedback",
+    workbench = false,
+    lineLocation,
 }: {
     lines: InquiryFeedbackLine[]
     demand: InquiryLine[]
     idPrefix?: string
+    workbench?: boolean
+    lineLocation?: { lineId: string }
 } & (EditableFeedbackTableProps | ReadonlyFeedbackTableProps)) {
     const rowPrefix = readOnly ? idPrefix : "procurement-inquiry"
+    const editableWorkbench = workbench && !readOnly
     const quoteQuery = useInternalQuotes(
         inquiryId,
         taskId,
@@ -208,7 +228,18 @@ export function InquiryFeedbackTable({
     const sku = useInquirySkuDetailsQuery(demand.map((line) => line.sku_id))
     const [filter, setFilter] = React.useState<LineFilter>("all")
     const [searchText, setSearchText] = React.useState("")
+    const [page, setPage] = React.useState(0)
     const [batchMessage, setBatchMessage] = React.useState("")
+    const [checkedIds, setCheckedIds] = React.useState<ReadonlySet<string>>(
+        () => new Set(),
+    )
+    const [showTax, setShowTax] = React.useState(false)
+    const [highlightedLine, setHighlightedLine] = React.useState<string>()
+    const [location, setLocation] = React.useState<{
+        lineId: string
+        target?: string
+    }>()
+    const highlightTimer = React.useRef<ReturnType<typeof setTimeout>>(null)
     const [touchedFields, setTouchedFields] = React.useState<
         Record<string, readonly string[]>
     >({})
@@ -235,34 +266,50 @@ export function InquiryFeedbackTable({
         [lines, demand],
     )
 
-    const allRows = React.useMemo(
-        () =>
-            lines.flatMap((value) => {
-                const line = demand.find(
-                    (item) => item.line_id === value.line_id,
-                )
-                return line
-                    ? [
-                          {
-                              value,
-                              line,
-                              issues: readOnly
-                                  ? []
-                                  : feedbackIssues(value, line),
-                              subtotal: feedbackLineSubtotal(value, line),
-                          },
-                      ]
-                    : []
-            }),
-        [lines, demand, readOnly],
-    )
+    const allRows = React.useMemo(() => {
+        const demandById = new Map(demand.map((line) => [line.line_id, line]))
+        return lines.flatMap((value) => {
+            const line = demandById.get(value.line_id)
+            return line
+                ? [
+                      {
+                          value,
+                          line,
+                          issues: readOnly ? [] : feedbackIssues(value, line),
+                          subtotal: feedbackLineSubtotal(value, line),
+                      },
+                  ]
+                : []
+        })
+    }, [lines, demand, readOnly])
 
+    const anomalyCount = allRows.filter(
+        ({ value, issues }) =>
+            value.conclusion !== "pending" && issues.length > 0,
+    ).length
+    const activeFilter =
+        (filter === "pending" && summary.pendingCount === 0) ||
+        (filter === "anomaly" && anomalyCount === 0)
+            ? "all"
+            : filter
     const normalizedSearch = searchText.trim().toLowerCase()
     const rows = React.useMemo(() => {
         if (readOnly) return allRows
         return allRows.filter((row) => {
-            if (filter === "incomplete" && row.issues.length === 0) return false
-            if (filter === "complete" && row.issues.length > 0) return false
+            if (activeFilter === "incomplete" && row.issues.length === 0)
+                return false
+            if (activeFilter === "complete" && row.issues.length > 0)
+                return false
+            if (
+                activeFilter === "pending" &&
+                row.value.conclusion !== "pending"
+            )
+                return false
+            if (
+                activeFilter === "anomaly" &&
+                (row.value.conclusion === "pending" || row.issues.length === 0)
+            )
+                return false
             if (normalizedSearch) {
                 const haystack = [
                     row.line.product_name,
@@ -275,7 +322,18 @@ export function InquiryFeedbackTable({
             }
             return true
         })
-    }, [allRows, filter, normalizedSearch, readOnly])
+    }, [allRows, activeFilter, normalizedSearch, readOnly])
+
+    const totalPages = workbench
+        ? Math.max(1, Math.ceil(rows.length / WORKBENCH_PAGE_SIZE))
+        : 1
+    const currentPage = Math.min(page, totalPages - 1)
+    const visibleRows = workbench
+        ? rows.slice(
+              currentPage * WORKBENCH_PAGE_SIZE,
+              (currentPage + 1) * WORKBENCH_PAGE_SIZE,
+          )
+        : rows
 
     const setLine = (value: InquiryFeedbackLine) => {
         if (readOnly || disabled) return
@@ -286,58 +344,111 @@ export function InquiryFeedbackTable({
         )
     }
 
-    const focusIssue = (value: InquiryFeedbackLine, field: string) => {
-        const target = feedbackFieldTarget(value, field)
-        const prefix = `${rowPrefix}-line-${toAutomationIdSegment(value.line_id)}`
+    const locateLine = React.useCallback(
+        (lineId: string, target?: string) => {
+            if (workbench) {
+                setFilter("all")
+                setSearchText("")
+                if (target === "tax-rate") setShowTax(true)
+                const targetIndex = allRows.findIndex(
+                    (row) => row.line.line_id === lineId,
+                )
+                if (targetIndex >= 0) {
+                    setPage(Math.floor(targetIndex / WORKBENCH_PAGE_SIZE))
+                }
+            }
+            setLocation({ lineId, target })
+        },
+        [allRows, workbench],
+    )
+
+    React.useLayoutEffect(() => {
+        if (!location) return
+        const { lineId, target } = location
+        const prefix = `${rowPrefix}-line-${toAutomationIdSegment(lineId)}`
         const targetId =
             target === "conclusion"
                 ? `${prefix}-conclusion-available`
                 : `${prefix}-${target}`
-        return requestAnimationFrame(() => {
-            const element =
-                document.getElementById(targetId) ??
-                document.getElementById(`${prefix}-${target}`)
-            element?.scrollIntoView({ block: "center" })
-            element?.focus()
+        const frame = requestAnimationFrame(() => {
+            const row = document.getElementById(prefix)
+            const element = target
+                ? (document.getElementById(targetId) ??
+                  document.getElementById(`${prefix}-${target}`))
+                : row
+            if (workbench && row) {
+                if (highlightTimer.current) clearTimeout(highlightTimer.current)
+                setHighlightedLine(lineId)
+                highlightTimer.current = setTimeout(
+                    () => setHighlightedLine(undefined),
+                    2200,
+                )
+            }
+            const scrollTarget = workbench ? (row ?? element) : element
+            scrollTarget?.scrollIntoView({
+                block: "center",
+                inline: "nearest",
+                behavior:
+                    workbench &&
+                    !window.matchMedia("(prefers-reduced-motion: reduce)")
+                        .matches
+                        ? "smooth"
+                        : "auto",
+            })
+            const focusTarget = element ?? row
+            focusTarget?.focus({ preventScroll: true })
         })
-    }
+        return () => cancelAnimationFrame(frame)
+    }, [location, rowPrefix, workbench])
+
+    const focusIssue = (value: InquiryFeedbackLine, field: string) =>
+        locateLine(value.line_id, feedbackFieldTarget(value, field))
+
+    React.useEffect(
+        () => () => {
+            if (highlightTimer.current) clearTimeout(highlightTimer.current)
+        },
+        [],
+    )
+
+    React.useEffect(() => {
+        if (lineLocation) locateLine(lineLocation.lineId)
+    }, [lineLocation, locateLine])
 
     React.useEffect(() => {
         if (readOnly || !validationRequest) return
         const first = allRows.find((row) => row.issues.length)
         if (!first) return
-        const hiddenByFilter =
-            filter === "complete" ||
-            (normalizedSearch.length > 0 &&
-                !rows.some((row) => row.line.line_id === first.line.line_id))
+        const hiddenByFilter = !rows.some(
+            (row) => row.line.line_id === first.line.line_id,
+        )
         if (hiddenByFilter) {
             setFilter("all")
             setSearchText("")
         }
-        const frame = requestAnimationFrame(() => {
-            focusIssue(first.value, first.issues[0].field)
-        })
-        return () => cancelAnimationFrame(frame)
+        focusIssue(first.value, first.issues[0].field)
         // 仅发布校验或外部定位触发聚焦；输入时不抢焦点。
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [validationRequest, readOnly])
 
-    const visiblePendingCount = rows.filter(
+    const checkedRows = allRows.filter(({ value }) =>
+        checkedIds.has(value.line_id),
+    )
+    const checkedLines = checkedRows.map(({ value }) => value)
+    const batchRows = checkedLines.length > 0 ? checkedRows : rows
+    const visiblePendingCount = batchRows.filter(
         ({ value }) => value.conclusion === "pending",
     ).length
 
     const markPendingAvailable = () => {
         if (readOnly || disabled) return
-        const targetIds = new Set(rows.map(({ value }) => value.line_id))
+        const targetLines = new Map(
+            batchRows.map(({ value, line }) => [value.line_id, line]),
+        )
         let changed = 0
         const nextLines = lines.map((value) => {
-            const line = demand.find((item) => item.line_id === value.line_id)
-            if (
-                !targetIds.has(value.line_id) ||
-                value.conclusion !== "pending" ||
-                !line
-            )
-                return value
+            const line = targetLines.get(value.line_id)
+            if (value.conclusion !== "pending" || !line) return value
             changed++
             return changeFeedbackConclusion(
                 value,
@@ -347,15 +458,47 @@ export function InquiryFeedbackTable({
             )
         })
         if (changed > 0) onChange?.(nextLines)
-        setBatchMessage(
+        const message =
             changed > 0
                 ? `已将 ${changed} 件待确认商品设为可供应，可供数量等于需求，请填写供给单价。`
-                : "当前范围内没有待确认商品。",
-        )
+                : "当前范围内没有待确认商品。"
+        if (editableWorkbench) toast.add({ title: message, type: "success" })
+        else setBatchMessage(message)
     }
 
-    const columnCount = 6
+    const taxVisible = !editableWorkbench || showTax
+    const columnCount = editableWorkbench ? (taxVisible ? 8 : 7) : 6
+    const pageCheckedCount = visibleRows.filter(({ value }) =>
+        checkedIds.has(value.line_id),
+    ).length
+    const allPageChecked =
+        visibleRows.length > 0 && pageCheckedCount === visibleRows.length
+    const allFilteredChecked =
+        rows.length > 0 &&
+        rows.every(({ value }) => checkedIds.has(value.line_id))
+    const checkPageRows = (checked: boolean) => {
+        setCheckedIds((previous) => {
+            const next = new Set(previous)
+            for (const { value } of visibleRows) {
+                if (checked) next.add(value.line_id)
+                else next.delete(value.line_id)
+            }
+            return next
+        })
+    }
+    const checkAllFilteredRows = () => {
+        setCheckedIds((previous) => {
+            const next = new Set(previous)
+            for (const { value } of rows) {
+                next.add(value.line_id)
+            }
+            return next
+        })
+    }
     const showInlineSearch = !readOnly && allRows.length > 5
+    const showWorkbenchFilterPills =
+        summary.pendingCount > 0 || anomalyCount > 0
+    const showWorkbenchSearch = allRows.length > 5 || Boolean(searchText)
 
     return (
         <TooltipProvider delay={200}>
@@ -389,7 +532,244 @@ export function InquiryFeedbackTable({
                         />
                     )}
 
-                    {!readOnly && (
+                    {editableWorkbench && (
+                        <div
+                            data-slot="inquiry-feedback-toolbar"
+                            className={cn(
+                                "flex min-h-10 min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 rounded-md border border-transparent px-1.5 py-1",
+                                checkedLines.length > 0 &&
+                                    "border-info-border/70 bg-info-soft/50",
+                            )}
+                        >
+                            {checkedLines.length > 0 ? (
+                                <>
+                                    <span className="shrink-0 px-1 text-xs font-medium text-info-soft-foreground">
+                                        已选{" "}
+                                        <span className="num">
+                                            {checkedLines.length}
+                                        </span>{" "}
+                                        项
+                                    </span>
+                                    {!allFilteredChecked && rows.length > 0 ? (
+                                        <Button
+                                            id={`${idPrefix}-batch-select-visible`}
+                                            type="button"
+                                            variant="ghost"
+                                            size="xs"
+                                            disabled={disabled}
+                                            onClick={checkAllFilteredRows}
+                                        >
+                                            全选当前结果（
+                                            <span className="num">
+                                                {rows.length}
+                                            </span>
+                                            ）
+                                        </Button>
+                                    ) : null}
+                                    <Button
+                                        id={`${idPrefix}-batch-clear`}
+                                        type="button"
+                                        variant="ghost"
+                                        size="xs"
+                                        onClick={() => setCheckedIds(new Set())}
+                                    >
+                                        清空
+                                    </Button>
+                                    <div className="ml-auto flex flex-wrap items-center gap-1">
+                                        {visiblePendingCount > 0 && (
+                                            <Button
+                                                id={`${idPrefix}-batch-available`}
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                disabled={disabled}
+                                                onClick={markPendingAvailable}
+                                            >
+                                                <CheckCheckIcon aria-hidden="true" />
+                                                待回复设为可供（
+                                                <span className="num">
+                                                    {visiblePendingCount}
+                                                </span>
+                                                ）
+                                            </Button>
+                                        )}
+                                        <InquiryFeedbackCommonTerms
+                                            lines={checkedLines}
+                                            selection
+                                            disabled={disabled}
+                                            onChange={(patch) => {
+                                                const updated = new Map(
+                                                    applyFeedbackTerms(
+                                                        checkedLines,
+                                                        demand,
+                                                        patch,
+                                                    ).map((line) => [
+                                                        line.line_id,
+                                                        line,
+                                                    ]),
+                                                )
+                                                onChange?.(
+                                                    lines.map(
+                                                        (line) =>
+                                                            updated.get(
+                                                                line.line_id,
+                                                            ) ?? line,
+                                                    ),
+                                                )
+                                            }}
+                                        />
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    {showWorkbenchFilterPills ? (
+                                        <div
+                                            role="group"
+                                            aria-label="按反馈状态筛选"
+                                            className={
+                                                detailWorkspaceStyles.subTabs
+                                            }
+                                        >
+                                            {(
+                                                [
+                                                    {
+                                                        id: "all",
+                                                        label: "全部",
+                                                        count: allRows.length,
+                                                    },
+                                                    {
+                                                        id: "pending",
+                                                        label: "待回复",
+                                                        count: summary.pendingCount,
+                                                    },
+                                                    {
+                                                        id: "anomaly",
+                                                        label: "异常",
+                                                        count: anomalyCount,
+                                                    },
+                                                ] as const
+                                            )
+                                                .filter(
+                                                    (tab) =>
+                                                        tab.id === "all" ||
+                                                        tab.count > 0,
+                                                )
+                                                .map((tab) => (
+                                                    <button
+                                                        key={tab.id}
+                                                        id={`${idPrefix}-filter-${tab.id}`}
+                                                        type="button"
+                                                        aria-pressed={
+                                                            activeFilter ===
+                                                            tab.id
+                                                        }
+                                                        data-active={
+                                                            activeFilter ===
+                                                            tab.id
+                                                                ? "true"
+                                                                : undefined
+                                                        }
+                                                        className={
+                                                            detailWorkspaceStyles.subTab
+                                                        }
+                                                        onClick={() => {
+                                                            setFilter(tab.id)
+                                                            setPage(0)
+                                                        }}
+                                                    >
+                                                        {tab.label}
+                                                        <span className="num text-xs">
+                                                            {tab.count}
+                                                        </span>
+                                                    </button>
+                                                ))}
+                                        </div>
+                                    ) : null}
+                                    {showWorkbenchSearch ? (
+                                        <div className="relative min-w-24 max-w-44 flex-1">
+                                            <SearchIcon
+                                                aria-hidden="true"
+                                                className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground"
+                                            />
+                                            <Input
+                                                id={`${idPrefix}-search`}
+                                                type="search"
+                                                value={searchText}
+                                                aria-label="筛选商品名称、规格或 SKU"
+                                                placeholder="筛商品 / SKU"
+                                                className="h-control-sm min-w-0 border-transparent bg-surface-sunken pr-7 pl-7 shadow-none hover:bg-card focus-visible:bg-card [&::-webkit-search-cancel-button]:hidden"
+                                                onChange={(event) => {
+                                                    setSearchText(
+                                                        event.target.value,
+                                                    )
+                                                    setPage(0)
+                                                }}
+                                                onKeyDown={(event) => {
+                                                    if (event.key === "Enter")
+                                                        event.preventDefault()
+                                                }}
+                                            />
+                                            {searchText && (
+                                                <Button
+                                                    id={`${idPrefix}-search-clear`}
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon-xs"
+                                                    aria-label="清空商品筛选"
+                                                    className="absolute top-1/2 right-0.5 -translate-y-1/2"
+                                                    onClick={() => {
+                                                        setSearchText("")
+                                                        setPage(0)
+                                                    }}
+                                                >
+                                                    <XIcon aria-hidden="true" />
+                                                </Button>
+                                            )}
+                                        </div>
+                                    ) : null}
+                                    <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1">
+                                        {toolbarActions}
+                                        {quoteWorkbookActions}
+                                        <Popover>
+                                            <PopoverTrigger
+                                                render={
+                                                    <Button
+                                                        id={`${idPrefix}-columns`}
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                    />
+                                                }
+                                            >
+                                                <Settings2Icon aria-hidden="true" />
+                                                列设置
+                                            </PopoverTrigger>
+                                            <PopoverContent
+                                                align="end"
+                                                className="w-40"
+                                            >
+                                                <Label
+                                                    htmlFor={`${idPrefix}-column-tax`}
+                                                    className="flex items-center gap-2"
+                                                >
+                                                    <NativeCheckbox
+                                                        id={`${idPrefix}-column-tax`}
+                                                        checked={showTax}
+                                                        onCheckedChange={
+                                                            setShowTax
+                                                        }
+                                                    />
+                                                    税率
+                                                </Label>
+                                            </PopoverContent>
+                                        </Popover>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+
+                    {!readOnly && !editableWorkbench && (
                         <div className="space-y-2">
                             <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
                                 <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -576,34 +956,119 @@ export function InquiryFeedbackTable({
                     <div className="min-w-0">
                         <div
                             data-slot="detail-inline-table"
-                            className="min-w-0 border-y border-border/70"
+                            className={cn(
+                                "min-w-0",
+                                !workbench && "border-y border-border/70",
+                            )}
                         >
                             <Table
-                                data-density="comfortable"
+                                data-density={
+                                    workbench ? "compact" : "comfortable"
+                                }
                                 className={
-                                    readOnly
-                                        ? "min-w-[880px] table-fixed [--table-cell-inline:0.75rem]"
-                                        : "min-w-[980px] table-fixed [--table-cell-inline:0.75rem]"
+                                    workbench
+                                        ? cn(
+                                              "min-w-[35rem] table-fixed [--table-cell-inline:0.5rem]",
+                                              editableWorkbench &&
+                                                  taxVisible &&
+                                                  "min-w-[42rem]",
+                                          )
+                                        : readOnly
+                                          ? "min-w-[880px] table-fixed [--table-cell-inline:0.75rem]"
+                                          : "min-w-[980px] table-fixed [--table-cell-inline:0.75rem]"
                                 }
                             >
                                 <colgroup>
+                                    {editableWorkbench && (
+                                        <col className="w-9" />
+                                    )}
                                     <col />
                                     <col
-                                        className={readOnly ? "w-28" : "w-44"}
+                                        className={
+                                            workbench
+                                                ? "w-[20%]"
+                                                : readOnly
+                                                  ? "w-28"
+                                                  : "w-44"
+                                        }
                                     />
                                     <col
-                                        className={readOnly ? "w-32" : "w-36"}
+                                        className={
+                                            workbench
+                                                ? "w-[13%]"
+                                                : readOnly
+                                                  ? "w-32"
+                                                  : "w-36"
+                                        }
                                     />
                                     <col
-                                        className={readOnly ? "w-36" : "w-56"}
+                                        className={
+                                            workbench
+                                                ? "w-[18%]"
+                                                : readOnly
+                                                  ? "w-36"
+                                                  : "w-56"
+                                        }
                                     />
-                                    <col className="w-24" />
-                                    <col className="w-36" />
+                                    {taxVisible && (
+                                        <col
+                                            className={
+                                                workbench ? "w-[10%]" : "w-24"
+                                            }
+                                        />
+                                    )}
+                                    {editableWorkbench && (
+                                        <col className="w-[13%]" />
+                                    )}
+                                    <col
+                                        className={
+                                            editableWorkbench
+                                                ? "w-[14%]"
+                                                : workbench
+                                                  ? "w-[16%]"
+                                                  : "w-36"
+                                        }
+                                    />
                                 </colgroup>
-                                <TableHeader className="sticky top-0 z-10">
+                                <TableHeader
+                                    className={cn(
+                                        "sticky top-0 z-10",
+                                        workbench &&
+                                            "bg-transparent [&_th]:bg-surface-sunken [&_th:first-child]:rounded-l-md [&_th:last-child]:rounded-r-md [&_tr]:border-b-0",
+                                    )}
+                                >
                                     <TableRow>
-                                        <TableHead>商品与交付</TableHead>
-                                        <TableHead className="border-l border-border/50">
+                                        {editableWorkbench && (
+                                            <TableHead data-align="center">
+                                                <NativeCheckbox
+                                                    id={`${idPrefix}-select-visible`}
+                                                    aria-label="勾选当前页商品用于批量操作"
+                                                    checked={allPageChecked}
+                                                    indeterminate={
+                                                        pageCheckedCount > 0 &&
+                                                        !allPageChecked
+                                                    }
+                                                    disabled={
+                                                        disabled ||
+                                                        visibleRows.length === 0
+                                                    }
+                                                    onCheckedChange={
+                                                        checkPageRows
+                                                    }
+                                                />
+                                            </TableHead>
+                                        )}
+                                        <TableHead>
+                                            {editableWorkbench
+                                                ? "商品与规格"
+                                                : "商品与交付"}
+                                        </TableHead>
+                                        <TableHead
+                                            className={cn(
+                                                !workbench &&
+                                                    "border-l border-border/50",
+                                            )}
+                                        >
                                             供给结论
                                         </TableHead>
                                         <TableHead
@@ -618,12 +1083,17 @@ export function InquiryFeedbackTable({
                                         >
                                             含税供给单价
                                         </TableHead>
-                                        <TableHead
-                                            data-align="end"
-                                            className="text-right"
-                                        >
-                                            税率
-                                        </TableHead>
+                                        {taxVisible && (
+                                            <TableHead
+                                                data-align="end"
+                                                className="text-right"
+                                            >
+                                                税率
+                                            </TableHead>
+                                        )}
+                                        {editableWorkbench && (
+                                            <TableHead>要求交付</TableHead>
+                                        )}
                                         <TableHead
                                             data-align="end"
                                             className="text-right"
@@ -669,7 +1139,7 @@ export function InquiryFeedbackTable({
                                             </TableCell>
                                         </TableRow>
                                     )}
-                                    {rows.map(
+                                    {visibleRows.map(
                                         ({ value, line, issues, subtotal }) => {
                                             const prefix = `${rowPrefix}-line-${toAutomationIdSegment(line.line_id)}`
                                             const unit =
@@ -799,32 +1269,91 @@ export function InquiryFeedbackTable({
                                                     key={line.line_id}
                                                 >
                                                     <TableRow
+                                                        id={
+                                                            workbench
+                                                                ? prefix
+                                                                : undefined
+                                                        }
+                                                        tabIndex={
+                                                            workbench
+                                                                ? -1
+                                                                : undefined
+                                                        }
                                                         className={cn(
                                                             "[&>td]:align-top",
-                                                            hasReasonRow
-                                                                ? "border-b-0 [&>td]:pt-3.5 [&>td]:pb-2"
-                                                                : "[&>td]:py-3.5",
+                                                            workbench
+                                                                ? "[&>td]:py-2"
+                                                                : hasReasonRow
+                                                                  ? "border-b-0 [&>td]:pt-3.5 [&>td]:pb-2"
+                                                                  : "[&>td]:py-3.5",
+                                                            workbench &&
+                                                                hasReasonRow &&
+                                                                "border-b-0",
                                                             rowSurfaceClass,
+                                                            highlightedLine ===
+                                                                line.line_id &&
+                                                                "bg-info-soft/25 ring-1 ring-info-border ring-inset motion-safe:animate-pulse",
                                                         )}
                                                     >
+                                                        {editableWorkbench && (
+                                                            <TableCell data-align="center">
+                                                                <NativeCheckbox
+                                                                    id={`${prefix}-batch-select`}
+                                                                    aria-label={`勾选${line.product_name}用于批量操作`}
+                                                                    checked={checkedIds.has(
+                                                                        line.line_id,
+                                                                    )}
+                                                                    disabled={
+                                                                        disabled
+                                                                    }
+                                                                    onCheckedChange={(
+                                                                        checked,
+                                                                    ) =>
+                                                                        setCheckedIds(
+                                                                            (
+                                                                                previous,
+                                                                            ) => {
+                                                                                const next =
+                                                                                    new Set(
+                                                                                        previous,
+                                                                                    )
+                                                                                if (
+                                                                                    checked
+                                                                                )
+                                                                                    next.add(
+                                                                                        line.line_id,
+                                                                                    )
+                                                                                else
+                                                                                    next.delete(
+                                                                                        line.line_id,
+                                                                                    )
+                                                                                return next
+                                                                            },
+                                                                        )
+                                                                    }
+                                                                />
+                                                            </TableCell>
+                                                        )}
                                                         <TableCell className="whitespace-normal">
                                                             <div className="flex items-start gap-2.5">
-                                                                <InquiryProductImage
-                                                                    idPrefix={`${prefix}-image`}
-                                                                    size="sm"
-                                                                    label={
-                                                                        line.product_name
-                                                                    }
-                                                                    assetId={sku.images.get(
-                                                                        line.sku_id,
-                                                                    )}
-                                                                    pending={
-                                                                        sku.isPending
-                                                                    }
-                                                                    lookupFailed={Boolean(
-                                                                        sku.error,
-                                                                    )}
-                                                                />
+                                                                {!workbench && (
+                                                                    <InquiryProductImage
+                                                                        idPrefix={`${prefix}-image`}
+                                                                        size="sm"
+                                                                        label={
+                                                                            line.product_name
+                                                                        }
+                                                                        assetId={sku.images.get(
+                                                                            line.sku_id,
+                                                                        )}
+                                                                        pending={
+                                                                            sku.isPending
+                                                                        }
+                                                                        lookupFailed={Boolean(
+                                                                            sku.error,
+                                                                        )}
+                                                                    />
+                                                                )}
                                                                 <div className="min-w-0 flex-1 space-y-1">
                                                                     <p
                                                                         className={cn(
@@ -851,32 +1380,43 @@ export function InquiryFeedbackTable({
                                                                             specLine
                                                                         }
                                                                     </p>
-                                                                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-0.5">
-                                                                        <span className="num text-xs text-muted-foreground">
-                                                                            交期{" "}
-                                                                            {
-                                                                                dueDate
-                                                                            }
-                                                                        </span>
-                                                                        <InquiryFeedbackDemand
-                                                                            line={
-                                                                                line
-                                                                            }
-                                                                            unit={
-                                                                                unit
-                                                                            }
-                                                                            idPrefix={
-                                                                                prefix
-                                                                            }
-                                                                            appearance="badge"
-                                                                        />
-                                                                    </div>
+                                                                    {!editableWorkbench && (
+                                                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-0.5">
+                                                                            <span className="num text-xs text-muted-foreground">
+                                                                                交期{" "}
+                                                                                {
+                                                                                    dueDate
+                                                                                }
+                                                                            </span>
+                                                                            <InquiryFeedbackDemand
+                                                                                line={
+                                                                                    line
+                                                                                }
+                                                                                unit={
+                                                                                    unit
+                                                                                }
+                                                                                idPrefix={
+                                                                                    prefix
+                                                                                }
+                                                                                appearance="badge"
+                                                                            />
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         </TableCell>
 
-                                                        <TableCell className="border-l border-border/50 whitespace-normal">
+                                                        <TableCell
+                                                            className={cn(
+                                                                "whitespace-normal",
+                                                                !workbench &&
+                                                                    "border-l border-border/50",
+                                                            )}
+                                                        >
                                                             <InquiryFeedbackConclusionCell
+                                                                compact={
+                                                                    workbench
+                                                                }
                                                                 readOnly={
                                                                     readOnly
                                                                 }
@@ -987,7 +1527,10 @@ export function InquiryFeedbackTable({
                                                                                 disabled
                                                                             }
                                                                             className={cn(
-                                                                                "h-control-sm num min-w-16 flex-1 text-right",
+                                                                                "h-control-sm num flex-1 text-right",
+                                                                                workbench
+                                                                                    ? workbenchNumberInput
+                                                                                    : "min-w-16",
                                                                                 !value.available_quantity.trim() &&
                                                                                     !quantityError &&
                                                                                     "ring-1 ring-warning/60",
@@ -1038,14 +1581,56 @@ export function InquiryFeedbackTable({
                                                                         ) : null}
                                                                     </div>
                                                                     {quantityError ? (
-                                                                        <p
-                                                                            id={`${prefix}-available-quantity-error`}
-                                                                            className="text-right text-xs text-destructive"
-                                                                        >
-                                                                            {
-                                                                                quantityError
-                                                                            }
-                                                                        </p>
+                                                                        <div className="space-y-1 text-right">
+                                                                            <p
+                                                                                id={`${prefix}-available-quantity-error`}
+                                                                                className="text-xs text-destructive"
+                                                                            >
+                                                                                {
+                                                                                    quantityError
+                                                                                }
+                                                                            </p>
+                                                                            {(() => {
+                                                                                try {
+                                                                                    return (
+                                                                                        compareDecimal(
+                                                                                            value.available_quantity.trim(),
+                                                                                            line.quantity,
+                                                                                            line.quantity_scale,
+                                                                                        ) >=
+                                                                                        0
+                                                                                    )
+                                                                                } catch {
+                                                                                    return false
+                                                                                }
+                                                                            })() && (
+                                                                                <Button
+                                                                                    id={`${prefix}-switch-available`}
+                                                                                    type="button"
+                                                                                    variant="ghost"
+                                                                                    size="xs"
+                                                                                    disabled={
+                                                                                        disabled
+                                                                                    }
+                                                                                    className="h-5 px-1.5 text-xs text-primary"
+                                                                                    onClick={() => {
+                                                                                        clearLineTouched(
+                                                                                            line.line_id,
+                                                                                        )
+                                                                                        setLine(
+                                                                                            changeFeedbackConclusion(
+                                                                                                value,
+                                                                                                line,
+                                                                                                "available",
+                                                                                                defaultTerms,
+                                                                                            ),
+                                                                                        )
+                                                                                    }}
+                                                                                >
+                                                                                    改为全量可供
+                                                                                </Button>
+                                                                            )}
+                                                                        </div>
                                                                     ) : shortage !==
                                                                       null ? (
                                                                         <p className="num text-right text-xs text-warning-soft-foreground">
@@ -1179,7 +1764,11 @@ export function InquiryFeedbackTable({
                                                                             disabled={
                                                                                 disabled
                                                                             }
-                                                                            className="h-control-sm num pl-6 text-right"
+                                                                            className={cn(
+                                                                                "h-control-sm num pl-6 text-right",
+                                                                                workbench &&
+                                                                                    workbenchNumberInput,
+                                                                            )}
                                                                             aria-label={`${line.product_name}含税供给单价`}
                                                                             aria-invalid={
                                                                                 Boolean(
@@ -1270,97 +1859,125 @@ export function InquiryFeedbackTable({
                                                             )}
                                                         </TableCell>
 
-                                                        <TableCell
-                                                            data-align="end"
-                                                            className="whitespace-normal text-right"
-                                                        >
-                                                            {readOnly ? (
-                                                                <div className="flex min-h-control-sm items-center justify-end">
-                                                                    {!unavailable &&
-                                                                    price?.tax_rate !=
-                                                                        null ? (
-                                                                        <RateValue
-                                                                            value={multiplyFixed(
-                                                                                price.tax_rate,
-                                                                                "100",
-                                                                                {
-                                                                                    leftMaxScale: 6,
-                                                                                    rightMaxScale: 0,
-                                                                                    outputScale: 2,
-                                                                                },
+                                                        {taxVisible && (
+                                                            <TableCell
+                                                                data-align="end"
+                                                                className="whitespace-normal text-right"
+                                                            >
+                                                                {readOnly ? (
+                                                                    <div className="flex min-h-control-sm items-center justify-end">
+                                                                        {!unavailable &&
+                                                                        price?.tax_rate !=
+                                                                            null ? (
+                                                                            <RateValue
+                                                                                value={multiplyFixed(
+                                                                                    price.tax_rate,
+                                                                                    "100",
+                                                                                    {
+                                                                                        leftMaxScale: 6,
+                                                                                        rightMaxScale: 0,
+                                                                                        outputScale: 2,
+                                                                                    },
+                                                                                )}
+                                                                                precision={
+                                                                                    2
+                                                                                }
+                                                                            />
+                                                                        ) : (
+                                                                            <span className="text-muted-foreground">
+                                                                                —
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                ) : unavailable ? (
+                                                                    <span className="flex h-control-sm items-center justify-end text-muted-foreground/70">
+                                                                        —
+                                                                    </span>
+                                                                ) : (
+                                                                    <div className="space-y-1">
+                                                                        <InquiryTaxRateInput
+                                                                            id={`${prefix}-tax-rate`}
+                                                                            className={cn(
+                                                                                "h-control-sm num text-right",
+                                                                                workbench &&
+                                                                                    workbenchNumberInput,
                                                                             )}
-                                                                            precision={
-                                                                                2
+                                                                            disabled={
+                                                                                disabled
+                                                                            }
+                                                                            aria-label={`${line.product_name}税率（%）`}
+                                                                            aria-invalid={
+                                                                                Boolean(
+                                                                                    taxError,
+                                                                                ) ||
+                                                                                undefined
+                                                                            }
+                                                                            aria-describedby={
+                                                                                taxError
+                                                                                    ? `${prefix}-tax-rate-error`
+                                                                                    : undefined
+                                                                            }
+                                                                            placeholder="如 13"
+                                                                            title="输入 13 表示 13%，最多 4 位小数"
+                                                                            value={
+                                                                                price?.tax_rate ??
+                                                                                ""
+                                                                            }
+                                                                            onBlur={() =>
+                                                                                markTouched(
+                                                                                    line.line_id,
+                                                                                    "tax-rate",
+                                                                                )
+                                                                            }
+                                                                            onValueChange={(
+                                                                                rate,
+                                                                            ) =>
+                                                                                updatePrice(
+                                                                                    {
+                                                                                        tax_rate:
+                                                                                            rate ||
+                                                                                            null,
+                                                                                    },
+                                                                                )
                                                                             }
                                                                         />
-                                                                    ) : (
-                                                                        <span className="text-muted-foreground">
-                                                                            —
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                            ) : unavailable ? (
-                                                                <span className="flex h-control-sm items-center justify-end text-muted-foreground/70">
-                                                                    —
-                                                                </span>
-                                                            ) : (
-                                                                <div className="space-y-1">
-                                                                    <InquiryTaxRateInput
-                                                                        id={`${prefix}-tax-rate`}
-                                                                        className="h-control-sm num text-right"
-                                                                        disabled={
-                                                                            disabled
-                                                                        }
-                                                                        aria-label={`${line.product_name}税率（%）`}
-                                                                        aria-invalid={
-                                                                            Boolean(
-                                                                                taxError,
-                                                                            ) ||
-                                                                            undefined
-                                                                        }
-                                                                        aria-describedby={
-                                                                            taxError
-                                                                                ? `${prefix}-tax-rate-error`
-                                                                                : undefined
-                                                                        }
-                                                                        placeholder="如 13"
-                                                                        title="输入 13 表示 13%，最多 4 位小数"
-                                                                        value={
-                                                                            price?.tax_rate ??
-                                                                            ""
-                                                                        }
-                                                                        onBlur={() =>
-                                                                            markTouched(
-                                                                                line.line_id,
-                                                                                "tax-rate",
-                                                                            )
-                                                                        }
-                                                                        onValueChange={(
-                                                                            rate,
-                                                                        ) =>
-                                                                            updatePrice(
+                                                                        {taxError ? (
+                                                                            <p
+                                                                                id={`${prefix}-tax-rate-error`}
+                                                                                className="text-right text-xs text-destructive"
+                                                                            >
                                                                                 {
-                                                                                    tax_rate:
-                                                                                        rate ||
-                                                                                        null,
-                                                                                },
-                                                                            )
+                                                                                    taxError
+                                                                                }
+                                                                            </p>
+                                                                        ) : null}
+                                                                    </div>
+                                                                )}
+                                                            </TableCell>
+                                                        )}
+
+                                                        {editableWorkbench && (
+                                                            <TableCell className="whitespace-normal">
+                                                                <div className="flex min-h-control-sm flex-wrap items-center gap-1">
+                                                                    <span className="num text-xs text-muted-foreground">
+                                                                        {
+                                                                            dueDate
+                                                                        }
+                                                                    </span>
+                                                                    <InquiryFeedbackDemand
+                                                                        line={
+                                                                            line
+                                                                        }
+                                                                        unit={
+                                                                            unit
+                                                                        }
+                                                                        idPrefix={
+                                                                            prefix
                                                                         }
                                                                     />
-                                                                    {taxError ? (
-                                                                        <p
-                                                                            id={`${prefix}-tax-rate-error`}
-                                                                            className="text-right text-xs text-destructive"
-                                                                        >
-                                                                            {
-                                                                                taxError
-                                                                            }
-                                                                        </p>
-                                                                    ) : null}
                                                                 </div>
-                                                            )}
-                                                        </TableCell>
-
+                                                            </TableCell>
+                                                        )}
                                                         <TableCell
                                                             data-align="end"
                                                             className="whitespace-normal text-right"
@@ -1420,6 +2037,9 @@ export function InquiryFeedbackTable({
                                                             className={cn(
                                                                 "hover:bg-transparent",
                                                                 rowSurfaceClass,
+                                                                highlightedLine ===
+                                                                    line.line_id &&
+                                                                    "bg-info-soft/25",
                                                             )}
                                                         >
                                                             <TableCell className="h-auto pt-0 pb-3.5" />
@@ -1428,7 +2048,11 @@ export function InquiryFeedbackTable({
                                                                     columnCount -
                                                                     1
                                                                 }
-                                                                className="h-auto border-l border-border/50 pt-0.5 pb-3.5 whitespace-normal"
+                                                                className={cn(
+                                                                    "h-auto pt-0.5 pb-3.5 whitespace-normal",
+                                                                    !workbench &&
+                                                                        "border-l border-border/50",
+                                                                )}
                                                             >
                                                                 {readOnly ? (
                                                                     <div className="flex items-baseline gap-2 border-l-2 border-border pl-2.5 text-xs text-muted-foreground">
@@ -1497,7 +2121,11 @@ export function InquiryFeedbackTable({
                                                                                         ? "说明无法供应的原因（如：停产、暂无货源），提交后销售可见"
                                                                                         : "说明缺货原因与补货计划（如：厂方库存不足，预计下周补齐），提交后销售可见"
                                                                                 }
-                                                                                className="min-h-control-sm px-2.5 py-1 text-body-compact leading-5"
+                                                                                className={cn(
+                                                                                    "min-h-control-sm px-2.5 py-1 text-body-compact leading-5",
+                                                                                    workbench &&
+                                                                                        workbenchNumberInput,
+                                                                                )}
                                                                                 onBlur={() =>
                                                                                     markTouched(
                                                                                         line.line_id,
@@ -1540,7 +2168,14 @@ export function InquiryFeedbackTable({
                                     )}
                                 </TableBody>
                                 {allRows.length > 0 && (
-                                    <TableFooter className="border-t border-border/75 bg-surface-sunken/50 font-normal">
+                                    <TableFooter
+                                        className={cn(
+                                            "font-normal",
+                                            workbench
+                                                ? "border-0 bg-transparent [&_td]:bg-surface-sunken [&_td:first-child]:rounded-l-md [&_td:last-child]:rounded-r-md [&_tr]:border-b-0"
+                                                : "border-t border-border/75 bg-surface-sunken/50",
+                                        )}
+                                    >
                                         <TableRow className="hover:bg-transparent">
                                             <TableCell
                                                 colSpan={columnCount - 2}
@@ -1548,12 +2183,22 @@ export function InquiryFeedbackTable({
                                             >
                                                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                                                     <span className="font-medium text-foreground">
-                                                        共{" "}
+                                                        {workbench
+                                                            ? "整单合计 · 共 "
+                                                            : "共 "}
                                                         <span className="num">
                                                             {summary.totalCount}
                                                         </span>{" "}
                                                         项商品
                                                     </span>
+                                                    {rows.length <
+                                                        allRows.length && (
+                                                        <span className="num text-muted-foreground">
+                                                            （当前显示{" "}
+                                                            {rows.length}{" "}
+                                                            项，合计按整单）
+                                                        </span>
+                                                    )}
                                                     <span>
                                                         可供应{" "}
                                                         <span className="num text-foreground">
@@ -1655,6 +2300,51 @@ export function InquiryFeedbackTable({
                                 )}
                             </Table>
                         </div>
+
+                        {workbench && totalPages > 1 ? (
+                            <nav
+                                aria-label="采购商品反馈分页"
+                                className="flex flex-wrap items-center justify-end gap-2 pt-2 text-xs"
+                            >
+                                <span
+                                    className="num mr-1 text-muted-foreground"
+                                    aria-live="polite"
+                                >
+                                    共 {rows.length} 项 · 第 {currentPage + 1} /{" "}
+                                    {totalPages} 页
+                                </span>
+                                <Button
+                                    id={`${idPrefix}-page-prev`}
+                                    type="button"
+                                    size="icon-xs"
+                                    variant="outline"
+                                    aria-label="上一页"
+                                    disabled={currentPage === 0}
+                                    onClick={() =>
+                                        setPage((value) =>
+                                            Math.max(0, value - 1),
+                                        )
+                                    }
+                                >
+                                    <ChevronLeftIcon aria-hidden="true" />
+                                </Button>
+                                <Button
+                                    id={`${idPrefix}-page-next`}
+                                    type="button"
+                                    size="icon-xs"
+                                    variant="outline"
+                                    aria-label="下一页"
+                                    disabled={currentPage + 1 >= totalPages}
+                                    onClick={() =>
+                                        setPage((value) =>
+                                            Math.min(totalPages - 1, value + 1),
+                                        )
+                                    }
+                                >
+                                    <ChevronRightIcon aria-hidden="true" />
+                                </Button>
+                            </nav>
+                        ) : null}
 
                         {extraCostsFooter}
                     </div>

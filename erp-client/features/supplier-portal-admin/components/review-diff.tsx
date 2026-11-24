@@ -4,13 +4,22 @@ import {
     DetailWorkspaceSection,
     detailWorkspaceStyles,
 } from "@/components/business/detail-workspace"
-import type { ReactNode } from "react"
+import { useRef, useState, type ReactNode } from "react"
+import {
+    ChevronLeftIcon,
+    ChevronRightIcon,
+    SearchIcon,
+    XIcon,
+} from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
 import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Table,
     TableBody,
     TableCell,
+    TableFooter,
     TableHead,
     TableHeader,
     TableRow,
@@ -23,6 +32,12 @@ import {
 } from "@/lib/supplier-payment-terms"
 import { percentageFromRate } from "@/features/supplier-offerings/lib/offering-forms"
 import type { PortalApplication } from "@/features/supplier-portal/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import { cn } from "@/lib/utils"
+import {
+    reviewRecord as record,
+    reviewSnapshot as unpack,
+} from "../lib/review-overview"
 
 type Fields = Record<string, unknown>
 type FieldKind =
@@ -107,20 +122,6 @@ const productKindLabels: Record<string, string> = {
     VIRTUAL: "虚拟",
     OFFLINE_SERVICE: "线下服务",
     VOUCHER: "卡券",
-}
-const record = (value: unknown): Fields =>
-    value && typeof value === "object" && !Array.isArray(value)
-        ? (value as Fields)
-        : {}
-function unpack(value: unknown): Fields {
-    const source = record(value)
-    return Object.keys(record(source.snapshot)).length
-        ? unpack(source.snapshot)
-        : Object.keys(record(source.input)).length
-          ? unpack(source.input)
-          : Object.keys(record(source.proposal)).length
-            ? unpack(source.proposal)
-            : source
 }
 function text(value: unknown): string {
     if (typeof value === "string") return value
@@ -270,13 +271,25 @@ function comparison(
     fields: FieldSpec[],
     existing: boolean,
     unit = "",
+    compact = false,
 ) {
     return (
-        <section className="space-y-3">
-            <h3 className="font-semibold">{title}</h3>
-            <div className={detailWorkspaceStyles.dataTableWrapper}>
-                <Table>
-                    <TableHeader>
+        <section className="space-y-2">
+            <h3 className="text-body-compact font-semibold">{title}</h3>
+            <div
+                className={
+                    compact
+                        ? "min-w-0 overflow-hidden rounded-lg"
+                        : detailWorkspaceStyles.dataTableWrapper
+                }
+            >
+                <Table className={cn(compact && "w-full table-fixed")}>
+                    <TableHeader
+                        className={cn(
+                            compact &&
+                                "bg-surface-sunken [&_tr]:border-0 [&_th]:whitespace-normal [&_th:first-child]:rounded-l-md [&_th:last-child]:rounded-r-md",
+                        )}
+                    >
                         <TableRow>
                             <TableHead>核对项目</TableHead>
                             <TableHead>当前生效值</TableHead>
@@ -301,18 +314,19 @@ function comparison(
                             )
                             return (
                                 <TableRow key={item.key}>
-                                    <TableCell className="font-medium">
+                                    <TableCell className="wrap-anywhere whitespace-normal font-medium">
                                         {item.label}
                                     </TableCell>
                                     <TableCell
                                         data-align={
                                             isNumeric ? "end" : undefined
                                         }
-                                        className={
-                                            isNumeric || isCodeOrDate
-                                                ? "num min-w-36 whitespace-normal"
-                                                : "min-w-36 whitespace-normal"
-                                        }
+                                        className={cn(
+                                            "wrap-anywhere whitespace-normal",
+                                            !compact && "min-w-36",
+                                            (isNumeric || isCodeOrDate) &&
+                                                "num",
+                                        )}
                                     >
                                         {valueContent(
                                             before[item.key],
@@ -324,11 +338,12 @@ function comparison(
                                         data-align={
                                             isNumeric ? "end" : undefined
                                         }
-                                        className={
-                                            isNumeric || isCodeOrDate
-                                                ? "num min-w-36 whitespace-normal"
-                                                : "min-w-36 whitespace-normal"
-                                        }
+                                        className={cn(
+                                            "wrap-anywhere whitespace-normal",
+                                            !compact && "min-w-36",
+                                            (isNumeric || isCodeOrDate) &&
+                                                "num",
+                                        )}
                                     >
                                         {valueContent(
                                             after[item.key],
@@ -340,6 +355,13 @@ function comparison(
                                         <StatusBadge
                                             tone={change.tone}
                                             label={change.label}
+                                            appearance={
+                                                compact ? "text" : undefined
+                                            }
+                                            className={cn(
+                                                compact &&
+                                                    "inline whitespace-normal",
+                                            )}
                                         />
                                     </TableCell>
                                 </TableRow>
@@ -355,8 +377,10 @@ function comparison(
 /** 审核对比只读取明确列出的商务与商品字段，不展开内部原始对象。 */
 export function PortalReviewDiff({
     application,
+    compact = false,
 }: {
     application: PortalApplication
+    compact?: boolean
 }) {
     const proposal = unpack(application.submitted_snapshot ?? application.input)
     const current = unpack(application.current)
@@ -384,10 +408,15 @@ export function PortalReviewDiff({
         ? current.skus.map(record)
         : []
     return (
-        <DetailWorkspaceSection title="逐项核对及生效影响">
-            <p className="text-xs text-muted-foreground">
-                本次拟生效值采用供应商本次提交内容。采购确认前，当前价格、供货条款及合作条件继续有效。
-            </p>
+        <DetailWorkspaceSection
+            title="逐项核对及生效影响"
+            className={cn(compact && "py-3.5 first:pt-3.5 last:pb-3.5")}
+        >
+            {!compact ? (
+                <p className="text-xs text-muted-foreground">
+                    本次拟生效值采用供应商本次提交内容。采购确认前，当前价格、供货条款及合作条件继续有效。
+                </p>
+            ) : null}
             {!currentLoaded &&
                 (application.kind === "terms" ||
                     application.kind === "cooperation" ||
@@ -404,6 +433,7 @@ export function PortalReviewDiff({
                     termsFields,
                     application.kind === "terms" || currentLoaded,
                     unit,
+                    compact,
                 )}
             {application.kind === "quote" &&
                 comparison(
@@ -421,6 +451,7 @@ export function PortalReviewDiff({
                     ],
                     currentLoaded,
                     unit,
+                    compact,
                 )}
             {application.kind === "cooperation" &&
                 comparison(
@@ -429,6 +460,8 @@ export function PortalReviewDiff({
                     proposal,
                     cooperationFields,
                     true,
+                    "",
+                    compact,
                 )}
             {application.kind === "stop" &&
                 comparison(
@@ -437,6 +470,8 @@ export function PortalReviewDiff({
                     { status: "STOPPED" },
                     [field("status", "供给关系", "relation")],
                     true,
+                    "",
+                    compact,
                 )}
             {newProduct && (
                 <>
@@ -446,52 +481,63 @@ export function PortalReviewDiff({
                         proposal,
                         productFields,
                         currentLoaded,
+                        "",
+                        compact,
                     )}
-                    {productSkus.map((sku, index) => {
-                        const previous =
-                            currentSkus.find(
-                                (item) =>
-                                    (item.row_id &&
-                                        item.row_id === sku.row_id) ||
-                                    (item.ordering_code &&
-                                        item.ordering_code ===
-                                            sku.ordering_code),
-                            ) ?? {}
-                        const skuUnit = text(sku.unit)
-                        return (
-                            <section
-                                key={
-                                    typeof sku.row_id === "string"
-                                        ? sku.row_id
-                                        : String(index)
-                                }
-                                className="flex flex-col gap-4 border-t border-border/60 pt-4"
-                            >
-                                <h3 className="font-semibold">
-                                    规格{index + 1} ·{" "}
-                                    {text(sku.name) || "未填写名称"}
-                                </h3>
-                                {comparison(
-                                    "提报规格明细",
-                                    previous,
-                                    sku,
-                                    skuFields,
-                                    Object.keys(previous).length > 0,
-                                    skuUnit,
-                                )}
-                                {comparison(
-                                    "首次供货条款",
-                                    record(
-                                        previous.supply_terms ?? previous.terms,
-                                    ),
-                                    record(sku.supply_terms),
-                                    termsFields,
-                                    Object.keys(previous).length > 0,
-                                    skuUnit,
-                                )}
-                            </section>
-                        )
-                    })}
+                    {compact ? (
+                        <SubmittedSkuTable
+                            applicationId={application.id}
+                            skus={productSkus}
+                            currentSkus={currentSkus}
+                        />
+                    ) : (
+                        productSkus.map((sku, index) => {
+                            const previous =
+                                currentSkus.find(
+                                    (item) =>
+                                        (item.row_id &&
+                                            item.row_id === sku.row_id) ||
+                                        (item.ordering_code &&
+                                            item.ordering_code ===
+                                                sku.ordering_code),
+                                ) ?? {}
+                            const skuUnit = text(sku.unit)
+                            return (
+                                <section
+                                    key={
+                                        typeof sku.row_id === "string"
+                                            ? sku.row_id
+                                            : String(index)
+                                    }
+                                    className="flex flex-col gap-4 border-t border-border/60 pt-4"
+                                >
+                                    <h3 className="font-semibold">
+                                        规格{index + 1} ·{" "}
+                                        {text(sku.name) || "未填写名称"}
+                                    </h3>
+                                    {comparison(
+                                        "提报规格明细",
+                                        previous,
+                                        sku,
+                                        skuFields,
+                                        Object.keys(previous).length > 0,
+                                        skuUnit,
+                                    )}
+                                    {comparison(
+                                        "首次供货条款",
+                                        record(
+                                            previous.supply_terms ??
+                                                previous.terms,
+                                        ),
+                                        record(sku.supply_terms),
+                                        termsFields,
+                                        Object.keys(previous).length > 0,
+                                        skuUnit,
+                                    )}
+                                </section>
+                            )
+                        })
+                    )}
                 </>
             )}
             <div className="space-y-1.5 border-l-2 border-border/80 pl-3.5 text-xs text-muted-foreground">
@@ -520,5 +566,313 @@ export function PortalReviewDiff({
                 )}
             </div>
         </DetailWorkspaceSection>
+    )
+}
+
+const SKU_PAGE_SIZE = 20
+
+function SubmittedSkuTable({
+    applicationId,
+    skus,
+    currentSkus,
+}: {
+    applicationId: string
+    skus: readonly Fields[]
+    currentSkus: readonly Fields[]
+}) {
+    const prefix = `supplier-portal-submitted-skus-${toAutomationIdSegment(applicationId)}`
+    const [filter, setFilter] = useState("")
+    const [page, setPage] = useState(0)
+    const [selectedKey, setSelectedKey] = useState<string | null>(null)
+    const searchRef = useRef<HTMLInputElement>(null)
+    const needle = filter.trim().toLocaleLowerCase()
+    const rows = skus.map((sku) => ({
+        sku,
+        key:
+            text(sku.row_id) ||
+            JSON.stringify([sku.ordering_code, sku.name, sku.barcode]),
+        name: text(sku.name),
+        unit: text(sku.unit),
+        orderingCode: text(sku.ordering_code),
+    }))
+    const counts = new Map<string, number>()
+    for (const { key } of rows) counts.set(key, (counts.get(key) ?? 0) + 1)
+    const filtered = rows.filter(
+        (row) =>
+            !needle ||
+            [row.name, row.unit, row.orderingCode].some((value) =>
+                value.toLocaleLowerCase().includes(needle),
+            ),
+    )
+    const pageCount = Math.max(1, Math.ceil(filtered.length / SKU_PAGE_SIZE))
+    const currentPage = Math.min(page, pageCount - 1)
+    const visible = filtered.slice(
+        currentPage * SKU_PAGE_SIZE,
+        (currentPage + 1) * SKU_PAGE_SIZE,
+    )
+    const selected = visible.find((row) => row.key === selectedKey)
+    const previous =
+        currentSkus.find(
+            (sku) =>
+                selected &&
+                ((sku.row_id && sku.row_id === selected.sku.row_id) ||
+                    (sku.ordering_code &&
+                        sku.ordering_code === selected.sku.ordering_code)),
+        ) ?? {}
+    const hasCurrent = Object.keys(previous).length > 0
+
+    return (
+        <section className="space-y-2" aria-label="提报规格与资料">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-body-compact font-semibold">
+                    提报规格{" "}
+                    <span className="num text-xs font-normal text-muted-foreground">
+                        {skus.length} 项
+                    </span>
+                </h3>
+                {skus.length > 8 ? (
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        {needle ? (
+                            <Button
+                                id={`${prefix}-clear-filter`}
+                                type="button"
+                                size="xs"
+                                variant="ghost"
+                                onClick={() => {
+                                    setFilter("")
+                                    setPage(0)
+                                    setSelectedKey(null)
+                                }}
+                            >
+                                清除筛选
+                            </Button>
+                        ) : null}
+                        <div className="relative flex w-full max-w-64 items-center">
+                            <SearchIcon
+                                className="pointer-events-none absolute left-2.5 size-3.5 text-muted-foreground"
+                                aria-hidden="true"
+                            />
+                            <Input
+                                ref={searchRef}
+                                id={`${prefix}-filter`}
+                                type="text"
+                                aria-label="筛选规格"
+                                placeholder="筛选规格、单位或订货编码"
+                                className="h-control-sm w-full pr-7 pl-8 text-xs"
+                                value={filter}
+                                onChange={(event) => {
+                                    setFilter(event.target.value)
+                                    setPage(0)
+                                    setSelectedKey(null)
+                                }}
+                            />
+                            {filter ? (
+                                <Button
+                                    id={`${prefix}-filter-clear`}
+                                    type="button"
+                                    size="icon-xs"
+                                    variant="ghost"
+                                    aria-label="清除规格筛选"
+                                    className="absolute right-0.5"
+                                    onClick={() => {
+                                        setFilter("")
+                                        setPage(0)
+                                        setSelectedKey(null)
+                                        searchRef.current?.focus()
+                                    }}
+                                >
+                                    <XIcon aria-hidden="true" />
+                                </Button>
+                            ) : null}
+                        </div>
+                    </div>
+                ) : null}
+            </div>
+            {visible.length ? (
+                <div className="min-w-0 space-y-2">
+                    <Table className="w-full table-fixed">
+                        <TableHeader className="bg-surface-sunken [&_tr]:border-0 [&_th:first-child]:rounded-l-md [&_th:last-child]:rounded-r-md">
+                            <TableRow>
+                                <TableHead className="w-2/5 whitespace-normal">
+                                    规格
+                                </TableHead>
+                                <TableHead className="whitespace-normal">
+                                    单位
+                                </TableHead>
+                                <TableHead className="whitespace-normal">
+                                    订货编码
+                                </TableHead>
+                                <TableHead
+                                    className="whitespace-normal"
+                                    data-align="end"
+                                >
+                                    含税单价
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {visible.map(
+                                (
+                                    { sku, key, name, unit, orderingCode },
+                                    index,
+                                ) => {
+                                    const supply = record(sku.supply_terms)
+                                    const amount =
+                                        supply.dropship_supply_price_gross ??
+                                        supply.bulk_supply_price_gross
+                                    const unique = counts.get(key) === 1
+                                    return (
+                                        <TableRow
+                                            key={
+                                                unique ? key : `${key}-${index}`
+                                            }
+                                        >
+                                            <TableCell className="wrap-anywhere whitespace-normal">
+                                                {unique ? (
+                                                    <button
+                                                        id={`${prefix}-row-${toAutomationIdSegment(encodeURIComponent(key))}`}
+                                                        type="button"
+                                                        aria-expanded={
+                                                            key === selectedKey
+                                                        }
+                                                        aria-controls={
+                                                            key === selectedKey
+                                                                ? `${prefix}-detail`
+                                                                : undefined
+                                                        }
+                                                        className="cursor-pointer text-left font-medium text-primary underline-offset-2 hover:underline"
+                                                        onClick={() =>
+                                                            setSelectedKey(
+                                                                key ===
+                                                                    selectedKey
+                                                                    ? null
+                                                                    : key,
+                                                            )
+                                                        }
+                                                    >
+                                                        {name ||
+                                                            "未填写规格名称"}
+                                                    </button>
+                                                ) : (
+                                                    name || "未填写规格名称"
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="wrap-anywhere whitespace-normal">
+                                                {unit || "—"}
+                                            </TableCell>
+                                            <TableCell className="num wrap-anywhere whitespace-normal">
+                                                {orderingCode || "—"}
+                                            </TableCell>
+                                            <TableCell
+                                                className="num wrap-anywhere whitespace-normal"
+                                                data-align="end"
+                                            >
+                                                {valueContent(
+                                                    amount,
+                                                    "money",
+                                                    "",
+                                                )}
+                                                {amount != null ? (
+                                                    <p className="text-tiny text-muted-foreground">
+                                                        {supply.dropship_supply_price_gross !=
+                                                        null
+                                                            ? "代发"
+                                                            : "集采"}
+                                                    </p>
+                                                ) : null}
+                                            </TableCell>
+                                        </TableRow>
+                                    )
+                                },
+                            )}
+                        </TableBody>
+                        <TableFooter className="border-0 bg-surface-sunken [&_tr]:border-b-0">
+                            <TableRow className="hover:bg-transparent">
+                                <TableCell
+                                    colSpan={4}
+                                    className="num rounded-md text-xs whitespace-normal"
+                                >
+                                    全部合计 {skus.length} 项规格
+                                    {needle ? (
+                                        <span className="ml-1 text-tiny text-muted-foreground">
+                                            （当前显示 {visible.length} 项
+                                            {filtered.length > visible.length
+                                                ? `，筛选命中 ${filtered.length} 项`
+                                                : ""}
+                                            ，合计按全部）
+                                        </span>
+                                    ) : null}
+                                </TableCell>
+                            </TableRow>
+                        </TableFooter>
+                    </Table>
+                    {filtered.length > SKU_PAGE_SIZE ? (
+                        <nav
+                            aria-label="提报规格分页"
+                            className="flex flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground"
+                        >
+                            <span className="num" aria-live="polite">
+                                第 {currentPage + 1} / {pageCount} 页 ·{" "}
+                                {filtered.length} 项
+                            </span>
+                            <Button
+                                id={`${prefix}-prev`}
+                                type="button"
+                                size="icon-xs"
+                                variant="outline"
+                                aria-label="上一页"
+                                disabled={currentPage === 0}
+                                onClick={() => setPage(currentPage - 1)}
+                            >
+                                <ChevronLeftIcon aria-hidden="true" />
+                            </Button>
+                            <Button
+                                id={`${prefix}-next`}
+                                type="button"
+                                size="icon-xs"
+                                variant="outline"
+                                aria-label="下一页"
+                                disabled={currentPage + 1 >= pageCount}
+                                onClick={() => setPage(currentPage + 1)}
+                            >
+                                <ChevronRightIcon aria-hidden="true" />
+                            </Button>
+                        </nav>
+                    ) : null}
+                </div>
+            ) : (
+                <p role="status" className="text-xs text-muted-foreground">
+                    {skus.length
+                        ? "没有符合筛选条件的规格。"
+                        : "本次申请未提报规格。"}
+                </p>
+            )}
+            {selected ? (
+                <section
+                    id={`${prefix}-detail`}
+                    className="space-y-3 border-t border-border/60 pt-3"
+                    aria-label={`核对 ${selected.name || "提报规格"}`}
+                >
+                    {comparison(
+                        "提报规格明细",
+                        previous,
+                        selected.sku,
+                        skuFields,
+                        hasCurrent,
+                        selected.unit,
+                        true,
+                    )}
+                    {comparison(
+                        "首次供货条款",
+                        record(previous.supply_terms ?? previous.terms),
+                        record(selected.sku.supply_terms),
+                        termsFields,
+                        hasCurrent,
+                        selected.unit,
+                        true,
+                    )}
+                </section>
+            ) : null}
+        </section>
     )
 }

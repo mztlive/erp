@@ -3,24 +3,18 @@
 import * as React from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { ExternalLinkIcon } from "lucide-react"
 
 import {
     BusinessEmptyState,
     BusinessFailureState,
     DetailWorkspaceBody,
     DetailWorkspaceChrome,
-    DetailWorkspaceMeta,
     DetailWorkspacePage,
     DetailWorkspaceSection,
     DetailWorkspaceSkeleton,
     DetailWorkspaceTabs,
-    detailWorkspaceStyles,
-    GuardedBusinessAction,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { StatusBadge } from "@/components/ui/status-badge"
-import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { clearAddressReveal } from "@/features/supplier-orders/api/index"
 import {
@@ -32,14 +26,13 @@ import {
     useRevealAddressMutation,
     useSupplierOrderDetailQuery,
 } from "@/features/supplier-orders/hooks/queries"
-import {
-    SECTION_LABEL,
-    SECTIONS,
-    type OrderSection,
-} from "@/features/supplier-orders/types"
-import { isNotFoundError } from "@/lib/api/errors"
-import { formatDateTime } from "@/lib/datetime"
+import { SECTION_LABEL, SECTIONS } from "@/features/supplier-orders/types"
+import { isApiError, isNotFoundError } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
+import {
+    SupplierOrderInvestigation,
+    type SupplierOrderInvestigationHost,
+} from "../components/supplier-order-investigation"
 import { SupplierOrderExecutionSetup } from "../components/supplier-order-execution-setup"
 import { SupplierOrderExecutionProgress } from "../components/supplier-order-execution-progress"
 import { SupplierOrderCenterDialogs } from "@/features/supplier-orders/components/supplier-order-preview-center-dialogs"
@@ -77,26 +70,18 @@ export function SupplierOrderCenterPage({
     supplierOrderId,
     section: sectionProp,
     workItemId: workItemIdProp,
-    embedded = false,
+    embedded,
     onTaskCompleted,
 }: {
     supplierOrderId: string
     section?: string
     workItemId?: string
-    embedded?: boolean
+    embedded?: SupplierOrderInvestigationHost
     onTaskCompleted?: (workItemId: string) => void
 }) {
     const searchParams = useSearchParams()
     const workItemId =
         workItemIdProp ?? searchParams.get("workItemId") ?? undefined
-
-    const { activeSection: urlSection, setSection: setUrlSection } =
-        useSupplierOrderCenterSection(supplierOrderId, sectionProp)
-    const [embeddedSection, setEmbeddedSection] = React.useState<OrderSection>(
-        () => resolveSection(sectionProp),
-    )
-    const activeSection = embedded ? embeddedSection : urlSection
-    const setSection = embedded ? setEmbeddedSection : setUrlSection
 
     const profileQuery = useAccountProfileQuery()
     const canDetail = hasPermission(
@@ -109,61 +94,8 @@ export function SupplierOrderCenterPage({
         workItemId,
         enabled: !profileQuery.isPending && canDetail,
     })
-    const queryResultMutation = useQueryResultMutation()
-    const replayMutation = useReplayOrderMutation()
-    const completeTaskMutation = useCompleteOrderTaskMutation()
-    const afterSalesMutation = useAfterSalesActionMutation()
-    const revealMutation = useRevealAddressMutation()
-    const noteMutation = useAddNoteMutation()
-
-    const identity = useSupplierOrderCenterCommandIdentity()
-    const { result, setResult } = useSupplierOrderCenterResult()
-
     const detail = query.data
-
-    const actions = useSupplierOrderCenterActions({
-        orderId: supplierOrderId,
-        workItemId,
-        detail,
-        currentUserId: profileQuery.data?.userid,
-        setResult,
-        queryResultMutation,
-        replayMutation,
-        commandIdentity: identity.commandIdentity,
-        forgetCommandIdentity: identity.forgetCommandIdentity,
-    })
-
-    const orderActions = useSupplierOrderCenterOrderActions({
-        orderId: supplierOrderId,
-        detail,
-        setResult,
-        afterSalesMutation,
-        revealMutation,
-    })
-
-    const derivation = useSupplierOrderCenterDerivation({
-        detail,
-        currentUserId: profileQuery.data?.userid,
-        latestInvestigation: actions.latestInvestigation,
-    })
-
-    const task = useSupplierOrderCenterTaskActions({
-        detail,
-        completionEvidence: derivation.completionEvidence,
-        refetch: () => query.refetch(),
-        setResult,
-        completeTaskMutation,
-        commandIdentity: identity.commandIdentity,
-        forgetCommandIdentity: identity.forgetCommandIdentity,
-        onTaskCompleted,
-    })
-
-    React.useEffect(() => {
-        return () => {
-            void clearAddressReveal(supplierOrderId)
-        }
-    }, [supplierOrderId])
-
+    const idPrefix = embedded?.idPrefix ?? "supplier-order-center"
     const listBack = embedded
         ? undefined
         : {
@@ -174,18 +106,20 @@ export function SupplierOrderCenterPage({
 
     if (profileQuery.isPending || (canDetail && query.isPending)) {
         if (embedded) {
-            return (
-                <DetailWorkspaceSection>
-                    <div
-                        className="space-y-4"
-                        aria-busy="true"
-                        aria-label="正在加载供应商订单详情"
-                    >
-                        <div className="h-12 animate-pulse rounded-md bg-muted/70" />
-                        <div className="h-44 animate-pulse rounded-md bg-muted/70" />
-                    </div>
-                </DetailWorkspaceSection>
-            )
+            return embedded.render({
+                body: (
+                    <DetailWorkspaceSection>
+                        <div
+                            className="space-y-4"
+                            aria-busy="true"
+                            aria-label="正在加载供应商订单详情"
+                        >
+                            <div className="h-12 animate-pulse rounded-md bg-muted/70" />
+                            <div className="h-44 animate-pulse rounded-md bg-muted/70" />
+                        </div>
+                    </DetailWorkspaceSection>
+                ),
+            })
         }
         return (
             <DetailWorkspaceSkeleton
@@ -200,14 +134,14 @@ export function SupplierOrderCenterPage({
         const content = (
             <DetailWorkspaceSection width="form">
                 <BusinessFailureState
-                    idPrefix="supplier-order-center-profile"
+                    idPrefix={`${idPrefix}-profile`}
                     title="账号权限读取失败"
                     error={profileQuery.error}
                     onRetry={() => void profileQuery.refetch()}
                 />
             </DetailWorkspaceSection>
         )
-        if (embedded) return content
+        if (embedded) return embedded.render({ body: content })
         return (
             <DetailWorkspacePage>
                 <DetailWorkspaceChrome title="供应商订单" back={listBack} />
@@ -226,7 +160,7 @@ export function SupplierOrderCenterPage({
                 />
             </DetailWorkspaceSection>
         )
-        if (embedded) return content
+        if (embedded) return embedded.render({ body: content })
         return (
             <DetailWorkspacePage>
                 <DetailWorkspaceChrome title="供应商订单" back={listBack} />
@@ -235,7 +169,13 @@ export function SupplierOrderCenterPage({
         )
     }
 
-    if (query.isError) {
+    if (
+        query.isError &&
+        (!embedded ||
+            !detail ||
+            (isApiError(query.error) &&
+                [401, 403, 404].includes(query.error.status ?? 0)))
+    ) {
         const notFound = isNotFoundError(query.error)
         const content = (
             <DetailWorkspaceSection width="form">
@@ -262,12 +202,12 @@ export function SupplierOrderCenterPage({
                     />
                 ) : (
                     <BusinessFailureState
-                        idPrefix="supplier-order-center-error"
+                        idPrefix={`${idPrefix}-error`}
                         title="供应商订单加载失败"
                         error={query.error}
                         action={
                             <Button
-                                id="supplier-order-center-error-retry"
+                                id={`${idPrefix}-error-retry`}
                                 type="button"
                                 variant="outline"
                                 size="sm"
@@ -280,7 +220,7 @@ export function SupplierOrderCenterPage({
                 )}
             </DetailWorkspaceSection>
         )
-        if (embedded) return content
+        if (embedded) return embedded.render({ body: content })
         return (
             <DetailWorkspacePage>
                 <DetailWorkspaceChrome title="供应商订单" back={listBack} />
@@ -312,7 +252,7 @@ export function SupplierOrderCenterPage({
                 />
             </DetailWorkspaceSection>
         )
-        if (embedded) return content
+        if (embedded) return embedded.render({ body: content })
         return (
             <DetailWorkspacePage>
                 <DetailWorkspaceChrome title="供应商订单" back={listBack} />
@@ -321,9 +261,113 @@ export function SupplierOrderCenterPage({
         )
     }
 
+    if (embedded) {
+        return (
+            <SupplierOrderInvestigation
+                key={embedded.idPrefix}
+                host={embedded}
+                detail={detail}
+                workItemId={workItemId}
+                permissions={profileQuery.data?.permissions}
+                currentUserId={profileQuery.data?.userid}
+                refresh={query.refetch}
+                refreshing={query.isFetching}
+                refreshFailed={query.isError}
+                onTaskCompleted={onTaskCompleted}
+            />
+        )
+    }
+
+    return (
+        <StandaloneSupplierOrderCenter
+            supplierOrderId={supplierOrderId}
+            section={sectionProp}
+            workItemId={workItemId}
+            query={query}
+            detail={detail}
+            profile={profileQuery.data}
+            onTaskCompleted={onTaskCompleted}
+        />
+    )
+}
+
+function StandaloneSupplierOrderCenter({
+    supplierOrderId,
+    section,
+    workItemId,
+    query,
+    detail,
+    profile,
+    onTaskCompleted,
+}: {
+    supplierOrderId: string
+    section?: string
+    workItemId?: string
+    query: ReturnType<typeof useSupplierOrderDetailQuery>
+    detail: NonNullable<ReturnType<typeof useSupplierOrderDetailQuery>["data"]>
+    profile: ReturnType<typeof useAccountProfileQuery>["data"]
+    onTaskCompleted?: (workItemId: string) => void
+}) {
+    const { activeSection, setSection } = useSupplierOrderCenterSection(
+        supplierOrderId,
+        section,
+    )
+    const queryResultMutation = useQueryResultMutation()
+    const replayMutation = useReplayOrderMutation()
+    const completeTaskMutation = useCompleteOrderTaskMutation()
+    const afterSalesMutation = useAfterSalesActionMutation()
+    const revealMutation = useRevealAddressMutation()
+    const noteMutation = useAddNoteMutation()
+
+    const identity = useSupplierOrderCenterCommandIdentity()
+    const { result, setResult } = useSupplierOrderCenterResult()
+
+    const actions = useSupplierOrderCenterActions({
+        orderId: supplierOrderId,
+        workItemId,
+        detail,
+        currentUserId: profile?.userid,
+        setResult,
+        queryResultMutation,
+        replayMutation,
+        commandIdentity: identity.commandIdentity,
+        forgetCommandIdentity: identity.forgetCommandIdentity,
+    })
+
+    const orderActions = useSupplierOrderCenterOrderActions({
+        orderId: supplierOrderId,
+        detail,
+        setResult,
+        afterSalesMutation,
+        revealMutation,
+    })
+
+    const derivation = useSupplierOrderCenterDerivation({
+        detail,
+        currentUserId: profile?.userid,
+        latestInvestigation: actions.latestInvestigation,
+    })
+
+    const task = useSupplierOrderCenterTaskActions({
+        detail,
+        completionEvidence: derivation.completionEvidence,
+        refetch: () => query.refetch(),
+        setResult,
+        completeTaskMutation,
+        commandIdentity: identity.commandIdentity,
+        forgetCommandIdentity: identity.forgetCommandIdentity,
+        onTaskCompleted,
+    })
+
+    React.useEffect(() => {
+        return () => {
+            void clearAddressReveal(supplierOrderId)
+        }
+    }, [supplierOrderId])
+
     const o = detail.order
     const canEditExecution = hasPermission(
-        profileQuery.data?.permissions,
+        profile?.permissions,
         "supplier_fulfillment_order:submit",
     )
 
@@ -456,192 +500,6 @@ export function SupplierOrderCenterPage({
             }}
         />
     )
-
-    if (embedded) {
-        return (
-            <div className="min-w-0 [&>[data-slot=detail-workspace-section]+[data-slot=detail-workspace-section]]:border-t [&>[data-slot=detail-workspace-section]+[data-slot=detail-workspace-section]]:border-border/60">
-                <DetailWorkspaceSection className="py-4 first:pt-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="min-w-0 space-y-2">
-                            <div
-                                role="list"
-                                aria-label="供应商订单业务状态"
-                                className="flex flex-wrap items-center gap-x-4 gap-y-1.5"
-                            >
-                                <div
-                                    role="listitem"
-                                    className="flex items-center gap-1.5"
-                                >
-                                    <span className="text-xs text-muted-foreground">
-                                        履约
-                                    </span>
-                                    <StatusBadge
-                                        label={o.fulfillmentLabel}
-                                        tone={o.fulfillmentTone}
-                                    />
-                                </div>
-                                <div
-                                    role="listitem"
-                                    className="flex items-center gap-1.5"
-                                >
-                                    <span className="text-xs text-muted-foreground">
-                                        取消
-                                    </span>
-                                    <StatusBadge
-                                        label={o.cancelLabel}
-                                        tone={o.cancelTone}
-                                    />
-                                </div>
-                                <div
-                                    role="listitem"
-                                    className="flex items-center gap-1.5"
-                                >
-                                    <span className="text-xs text-muted-foreground">
-                                        退款
-                                    </span>
-                                    <StatusBadge
-                                        label={o.refundLabel}
-                                        tone={o.refundTone}
-                                    />
-                                </div>
-                            </div>
-                            <DetailWorkspaceMeta
-                                items={[
-                                    <span key="external" className="num">
-                                        供应商单号{" "}
-                                        {o.externalOrderNo ?? "尚未返回"}
-                                    </span>,
-                                    o.connectionCode ? (
-                                        <span key="conn" className="num">
-                                            连接 {o.connectionCode}
-                                        </span>
-                                    ) : null,
-                                    o.createdAt ? (
-                                        <span key="created" className="num">
-                                            创建于{" "}
-                                            {formatDateTime(
-                                                o.createdAt,
-                                                "fullIntl",
-                                                "passthrough",
-                                            )}
-                                        </span>
-                                    ) : null,
-                                ]}
-                            />
-                        </div>
-
-                        {derivation.isResultUnknown ||
-                        detail.allowedActions.includes("ESCALATE_W29") ? (
-                            <div className="flex shrink-0 flex-wrap items-center gap-2">
-                                {derivation.isResultUnknown ? (
-                                    <PermissionGuard permission="supplier_fulfillment_order:investigate">
-                                        <GuardedBusinessAction
-                                            id="supplier-order-center-header-replay"
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            disabled={
-                                                !derivation.canReplay ||
-                                                replayMutation.isPending
-                                            }
-                                            reason={
-                                                derivation.canReplay
-                                                    ? "已确认无结果，可安全重发"
-                                                    : (detail.actionBlockers.find(
-                                                          (b) =>
-                                                              b.action ===
-                                                              "REPLAY",
-                                                      )?.message ??
-                                                      "需先查询确认无结果后，方可重发")
-                                            }
-                                            onClick={() => {
-                                                if (derivation.canReplay) {
-                                                    actions.setReplayOpen(true)
-                                                }
-                                            }}
-                                        >
-                                            安全重发
-                                        </GuardedBusinessAction>
-                                        <GuardedBusinessAction
-                                            id="supplier-order-center-header-query-result"
-                                            loading={
-                                                queryResultMutation.isPending
-                                            }
-                                            type="button"
-                                            size="sm"
-                                            disabled={
-                                                !derivation.canQuery ||
-                                                queryResultMutation.isPending
-                                            }
-                                            reason={
-                                                !derivation.canQuery
-                                                    ? (detail.actionBlockers.find(
-                                                          (b) =>
-                                                              b.action ===
-                                                              "QUERY_RESULT",
-                                                      )?.message ??
-                                                      "当前不可查询")
-                                                    : undefined
-                                            }
-                                            onClick={() =>
-                                                void actions.handleQueryResult()
-                                            }
-                                        >
-                                            {queryResultMutation.isPending
-                                                ? "查询中…"
-                                                : "查询原下单结果"}
-                                        </GuardedBusinessAction>
-                                    </PermissionGuard>
-                                ) : null}
-                                {detail.allowedActions.includes(
-                                    "ESCALATE_W29",
-                                ) ? (
-                                    <PermissionGuard permission="integration_error_task:list">
-                                        <Button
-                                            id="supplier-order-center-header-escalate"
-                                            type="button"
-                                            size="sm"
-                                            variant="ghost"
-                                            className={
-                                                detailWorkspaceStyles.quietButton
-                                            }
-                                            render={
-                                                <Link href="/governance/integration-errors" />
-                                            }
-                                        >
-                                            转接口错误中心
-                                            <ExternalLinkIcon
-                                                data-icon="inline-end"
-                                                aria-hidden="true"
-                                            />
-                                        </Button>
-                                    </PermissionGuard>
-                                ) : null}
-                            </div>
-                        ) : null}
-                    </div>
-
-                    {alertsContent}
-                </DetailWorkspaceSection>
-
-                <div className="border-b border-border/60">{sectionTabs}</div>
-
-                {activeSectionContent}
-
-                <SupplierOrderExecutionSetup
-                    orderId={supplierOrderId}
-                    addressSummary={
-                        detail.address.revealed ?? detail.address.masked
-                    }
-                    executionNotice={o.executionNotice}
-                    canEdit={canEditExecution}
-                    asSection
-                />
-
-                {dialogs}
-            </div>
-        )
-    }
 
     const hasAlertContent = Boolean(
         detail.workItem ||

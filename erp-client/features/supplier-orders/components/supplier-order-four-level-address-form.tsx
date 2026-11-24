@@ -21,6 +21,7 @@ import { useSupplierAddressCandidatesQuery } from "../hooks/use-execution-setup"
 /** 按供应商返回候选确认四级地址，最终仅提交服务端签发的完整地址票据。 */
 export function SupplierOrderFourLevelAddressForm({
     orderId,
+    idPrefix,
     setup,
     addressSummary,
     pending,
@@ -29,6 +30,7 @@ export function SupplierOrderFourLevelAddressForm({
     onCancel,
 }: {
     orderId: string
+    idPrefix?: string
     setup: SupplierExecutionSetup
     addressSummary: string
     pending: boolean
@@ -36,7 +38,9 @@ export function SupplierOrderFourLevelAddressForm({
     onSubmit: (request: SaveSupplierExecutionSetup) => Promise<void>
     onCancel: () => void
 }) {
-    const prefix = `supplier-four-level-address-${toAutomationIdSegment(orderId)}`
+    const prefix =
+        idPrefix ??
+        `supplier-four-level-address-${toAutomationIdSegment(orderId)}`
     const identity = React.useRef<{ payload: string; key: string } | null>(null)
     const form = useAppForm({
         defaultValues: {
@@ -154,7 +158,7 @@ export function SupplierOrderFourLevelAddressForm({
     return (
         <form
             id={`${prefix}-form`}
-            className="space-y-5"
+            className="@container/address-form space-y-5"
             onSubmit={(event) => {
                 event.preventDefault()
                 void form.handleSubmit()
@@ -174,7 +178,13 @@ export function SupplierOrderFourLevelAddressForm({
                     如需更改收货地址或数量，先办理原采购变更。
                 </p>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div
+                className={
+                    idPrefix
+                        ? "grid min-w-0 gap-4"
+                        : "grid min-w-0 gap-4 @[420px]/address-form:grid-cols-2"
+                }
+            >
                 {fields.map(({ name, label, query, enabled }, index) => (
                     <form.Field key={name} name={name}>
                         {(field) => (

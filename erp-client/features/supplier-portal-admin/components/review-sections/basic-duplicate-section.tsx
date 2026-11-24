@@ -31,6 +31,7 @@ export const BasicDuplicateSection = withForm({
         application: {} as PortalApplication,
         task: {} as WorkItemDto,
         rawProduct: null as NewProductInput | null,
+        compact: false,
         search: "",
         onSearchChange: (_value: string) => {},
         onSearchSubmit: () => {},
@@ -48,6 +49,7 @@ export const BasicDuplicateSection = withForm({
         application,
         task,
         rawProduct,
+        compact,
         search,
         onSearchChange,
         onSearchSubmit,
@@ -67,58 +69,88 @@ export const BasicDuplicateSection = withForm({
 
         return (
             <div className="max-w-4xl space-y-5">
-                <DetailWorkspaceFacts
-                    columns={3}
-                    ariaLabel="供应商提报概览"
-                    className="border-b border-border/60 pb-4"
-                >
-                    <DetailWorkspaceFact
-                        label="申请类型"
-                        value={kindLabels[application.kind]}
-                    />
-                    <DetailWorkspaceFact
-                        label="申请单号"
-                        value={application.application_no ?? "—"}
-                        numeric
-                    />
-                    <DetailWorkspaceFact
-                        label="供应商"
-                        value={application.supplier_name ?? "—"}
-                    />
-                    <DetailWorkspaceFact
-                        label="当前处理人"
-                        value={task.owner_user?.display_name ?? "待核对"}
-                    />
-                    {rawProduct ? (
-                        <>
-                            <DetailWorkspaceFact
-                                label="提报商品名称"
-                                value={rawProduct.name}
-                            />
-                            <DetailWorkspaceFact
-                                label="商品类型与规格数"
-                                value={
-                                    <span>
-                                        {productKindLabel} ·{" "}
-                                        <span className="num">
-                                            {rawProduct.skus.length}
-                                        </span>{" "}
-                                        个规格
-                                    </span>
-                                }
-                            />
-                            <DetailWorkspaceFact
-                                label="提报品牌原文"
-                                value={rawProduct.brand.raw_name}
-                            />
-                            <DetailWorkspaceFact
-                                label="提报分类原文"
-                                value={rawProduct.category.raw_name}
-                                span={2}
-                            />
-                        </>
-                    ) : null}
-                </DetailWorkspaceFacts>
+                {compact ? (
+                    <dl
+                        aria-label="审核责任与提报概览"
+                        className="flex flex-wrap gap-x-5 gap-y-1.5 border-b border-border/60 pb-3 text-xs"
+                    >
+                        <div className="inline-flex items-baseline gap-1.5">
+                            <dt className="text-muted-foreground">
+                                当前处理人
+                            </dt>
+                            <dd className="font-medium text-foreground">
+                                {task.owner_user?.display_name ?? "待核对"}
+                            </dd>
+                        </div>
+                        {rawProduct ? (
+                            <div className="inline-flex items-baseline gap-1.5">
+                                <dt className="text-muted-foreground">
+                                    商品类型与规格数
+                                </dt>
+                                <dd className="font-medium text-foreground">
+                                    {productKindLabel} ·{" "}
+                                    <span className="num">
+                                        {rawProduct.skus.length}
+                                    </span>{" "}
+                                    个规格
+                                </dd>
+                            </div>
+                        ) : null}
+                    </dl>
+                ) : (
+                    <DetailWorkspaceFacts
+                        columns={3}
+                        ariaLabel="供应商提报概览"
+                        className="border-b border-border/60 pb-4"
+                    >
+                        <DetailWorkspaceFact
+                            label="申请类型"
+                            value={kindLabels[application.kind]}
+                        />
+                        <DetailWorkspaceFact
+                            label="申请单号"
+                            value={application.application_no ?? "—"}
+                            numeric
+                        />
+                        <DetailWorkspaceFact
+                            label="供应商"
+                            value={application.supplier_name ?? "—"}
+                        />
+                        <DetailWorkspaceFact
+                            label="当前处理人"
+                            value={task.owner_user?.display_name ?? "待核对"}
+                        />
+                        {rawProduct ? (
+                            <>
+                                <DetailWorkspaceFact
+                                    label="提报商品名称"
+                                    value={rawProduct.name}
+                                />
+                                <DetailWorkspaceFact
+                                    label="商品类型与规格数"
+                                    value={
+                                        <span>
+                                            {productKindLabel} ·{" "}
+                                            <span className="num">
+                                                {rawProduct.skus.length}
+                                            </span>{" "}
+                                            个规格
+                                        </span>
+                                    }
+                                />
+                                <DetailWorkspaceFact
+                                    label="提报品牌原文"
+                                    value={rawProduct.brand.raw_name}
+                                />
+                                <DetailWorkspaceFact
+                                    label="提报分类原文"
+                                    value={rawProduct.category.raw_name}
+                                    span={2}
+                                />
+                            </>
+                        ) : null}
+                    </DetailWorkspaceFacts>
+                )}
 
                 {rawProduct ? (
                     <div className="space-y-4">

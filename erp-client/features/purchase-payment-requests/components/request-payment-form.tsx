@@ -1,11 +1,26 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
+import { TriangleAlertIcon } from "lucide-react"
+import {
+    useWorkspaceTaskNavigation,
+    useWorkspaceTaskPage,
+} from "@/components/business/workspace-task-pane"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { isWorkspaceFrameActive } from "@/lib/workspace-hotkeys"
 import { RequestDepositExecution } from "./request-deposit-execution"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
 import {
     MoneyValue,
+    RateValue,
     SensitiveValue,
     WorkspaceTaskFooter,
 } from "@/components/business"
@@ -16,15 +31,27 @@ import { FileUpload } from "@/components/ui/file-upload"
 import { SupplierPaymentSubmitConfirmDialog } from "@/features/supplier-payables/components/supplier-payment-submit-confirm-dialog"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
-import { getErrorMessage } from "@/lib/api"
-import { compareDecimal } from "@/lib/fixed-decimal"
+import { getErrorMessage, isApiError } from "@/lib/api"
+import {
+    clampZeroFixed,
+    compareDecimal,
+    divideFixed,
+    minFixed,
+    multiplyFixed,
+    subtractFixed,
+} from "@/lib/fixed-decimal"
 import {
     allocateRequestPayment,
     paymentBlockReason,
     positivePaymentAmount,
 } from "../lib/payment"
-import { classifyFormalCommandError } from "@/lib/formal-command"
 import {
+    FormalCommandKeyLedger,
+    isCommandOutcomeUnknown,
+    type FormalCommandIdentity,
+} from "@/lib/formal-command"
+import {
+    paymentRequestKeys,
     useAccountRevealMutation,
     useRequestPaymentMutation,
 } from "../hooks/queries"
@@ -34,6 +61,15 @@ import type {
     PaymentRequest,
     PaymentTaskContext,
 } from "../types"
+
+type PaymentIdempotencySlot = FormalCommandIdentity<{
+    payment: Omit<PaymentInput, "idempotencyKey">
+    recipient: PaymentRecipient
+    completesRequest: boolean
+    unpaidAmount: string
+}>
+
+const money = { maxScale: 2, outputScale: 2, allowNegative: true } as const
 
 /** 每笔付款保持独立命令身份；响应未知时重试原金额、回单及分配。 */
 function BankRequestPaymentForm({
@@ -48,15 +84,56 @@ function BankRequestPaymentForm({
     const payment = useRequestPaymentMutation(onTaskCompleted)
     const reveal = useAccountRevealMutation()
     const profile = useAccountProfileQuery()
-    const [confirmOpen, setConfirmOpen] = useState(false)
     const [unknown, setUnknown] = useState(false)
     const [result, setResult] = useState<string>()
-    const pending = useRef<PaymentInput | null>(null)
-    const pendingRecipient = useRef<PaymentRecipient | null>(null)
-    const pendingCompletesRequest = useRef(false)
+    const [ledger] = useState(() => new FormalCommandKeyLedger())
+    const formRef = useRef<HTMLFormElement>(null)
+    const inFlight = useRef(false)
+    const slotKey = JSON.stringify([request.id, task.workItemId])
+    const [pending, setPending] = useState<PaymentIdempotencySlot>()
+    const queryClient = useQueryClient()
+    const navigation = useWorkspaceTaskNavigation()
+    const fullPage = useWorkspaceTaskPage()
+    const id = "ppr-pay"
+    const formId = `${id}-form`
     const account = request.payment_recipient
-    const blocked = paymentBlockReason(request)
-    const locked = unknown || payment.isPending || Boolean(blocked)
+    const blocked =
+        !account.bank_account_id ||
+        !account.version ||
+        !account.account_number_masked ||
+        account.account_number_masked === "未记录"
+            ? "原申请缺少完整的收款账户，请核对原申请。"
+            : paymentBlockReason(request)
+    const rateLimited =
+        Boolean(pending) &&
+        payment.isError &&
+        isApiError(payment.error) &&
+        payment.error.status === 429
+    const conflict =
+        payment.isError &&
+        isApiError(payment.error) &&
+        payment.error.status === 409 &&
+        !unknown
+    const locked = unknown || payment.isPending || conflict || Boolean(blocked)
+    const paidRate =
+        compareDecimal(request.total_amount, "0", 4) > 0
+            ? divideFixed(
+                  multiplyFixed(
+                      clampZeroFixed(request.paid_amount, {
+                          maxScale: 4,
+                          outputScale: 4,
+                      }),
+                      "100",
+                      { leftMaxScale: 4, rightMaxScale: 0, outputScale: 4 },
+                  ),
+                  request.total_amount,
+                  {
+                      numeratorMaxScale: 4,
+                      denominatorMaxScale: 4,
+                      outputScale: 1,
+                  },
+              )
+            : "0"
     const schema = z
         .object({
             amount: z.string().trim(),
@@ -94,84 +171,341 @@ function BankRequestPaymentForm({
         validators: { onSubmit: schema },
         onSubmit: ({ value }) => {
             if (!value.receipt || locked) return
-            pendingCompletesRequest.current =
-                compareDecimal(value.amount, request.unpaid_amount, 2) === 0
-            pending.current = {
-                requestId: request.id,
-                expectedVersion: request.version,
-                supplierId: request.supplier_id,
-                workItemId: task.workItemId,
-                expectedTaskVersion: task.taskVersion,
-                amount: value.amount,
-                paidAt: value.paidAt,
-                bankReference: value.reference.trim(),
-                receipt: value.receipt,
-                ...allocateRequestPayment(request, value.amount),
-                idempotencyKey: `ppr-pay:${crypto.randomUUID()}`,
-            }
-            pendingRecipient.current = { ...account }
-            setConfirmOpen(true)
+            const slot = ledger.acquire(slotKey, "ppr-pay", {
+                payment: {
+                    requestId: request.id,
+                    expectedVersion: request.version,
+                    supplierId: request.supplier_id,
+                    workItemId: task.workItemId,
+                    expectedTaskVersion: task.taskVersion,
+                    amount: value.amount,
+                    paidAt: value.paidAt,
+                    bankReference: value.reference.trim(),
+                    receipt: value.receipt,
+                    ...allocateRequestPayment(request, value.amount),
+                },
+                recipient: account,
+                unpaidAmount: request.unpaid_amount,
+                completesRequest:
+                    compareDecimal(value.amount, request.unpaid_amount, 2) ===
+                    0,
+            })
+            payment.reset()
+            setPending(slot)
         },
     })
+    useEffect(() => {
+        const element = formRef.current
+        if (!element || locked || pending) return
+        const submitOnShortcut = (event: KeyboardEvent) => {
+            if (
+                event.key !== "Enter" ||
+                (!event.ctrlKey && !event.metaKey) ||
+                event.isComposing ||
+                event.repeat ||
+                event.defaultPrevented ||
+                !isWorkspaceFrameActive() ||
+                document.querySelector(
+                    '[data-slot="popover-content"][data-open]',
+                )
+            )
+                return
+            event.preventDefault()
+            element.requestSubmit()
+        }
+        element.addEventListener("keydown", submitOnShortcut)
+        return () => element.removeEventListener("keydown", submitOnShortcut)
+    }, [locked, pending])
+
+    useEffect(() => {
+        if (!unknown || !pending) return
+        if (
+            request.version !== pending.payload.payment.expectedVersion ||
+            task.taskVersion !== pending.payload.payment.expectedTaskVersion
+        ) {
+            ledger.settle(slotKey, "succeeded")
+            setUnknown(false)
+            setPending(undefined)
+            form.setFieldValue("amount", blocked ? "" : request.unpaid_amount)
+        }
+    }, [
+        blocked,
+        form,
+        ledger,
+        pending,
+        request.unpaid_amount,
+        request.version,
+        slotKey,
+        task.taskVersion,
+        unknown,
+    ])
+
     async function confirmPayment() {
-        if (!pending.current || !pendingRecipient.current) return
+        if (!pending || inFlight.current) return
+        inFlight.current = true
+        const { payload, idempotencyKey } = pending
         try {
             const applied = await payment.mutateAsync({
-                payment: pending.current,
-                recipient: pendingRecipient.current,
-                completesRequest: pendingCompletesRequest.current,
+                payment: { ...payload.payment, idempotencyKey },
+                recipient: payload.recipient,
+                completesRequest: payload.completesRequest,
             })
-            pending.current = null
-            pendingRecipient.current = null
+            ledger.settle(slotKey, "succeeded")
+            setPending(undefined)
             setUnknown(false)
             setResult(`付款 ${applied.payment_no} 已登记并核销。`)
-            form.reset()
-            setConfirmOpen(false)
+            form.reset({
+                ...form.state.values,
+                amount: subtractFixed(
+                    payload.unpaidAmount,
+                    payload.payment.amount,
+                    money,
+                ),
+                reference: "",
+                receipt: null,
+            })
         } catch (error) {
-            const outcomeUnknown =
-                classifyFormalCommandError(error) === "unknown"
-            setUnknown(outcomeUnknown)
-            throw error
+            if (isCommandOutcomeUnknown(error)) {
+                ledger.settle(slotKey, "unknown")
+                setUnknown(true)
+                return
+            }
+            if (isApiError(error) && error.status === 429) {
+                throw error
+            }
+            ledger.settle(slotKey, "failed")
+            setUnknown(false)
+            setPending(undefined)
+        } finally {
+            inFlight.current = false
         }
     }
+
+    const closeConfirmation = (open: boolean) => {
+        if (inFlight.current) return
+        if (!open && !unknown) {
+            ledger.settle(slotKey, "failed")
+            setPending(undefined)
+        }
+    }
+
+    const refreshPaymentBasis = async () => {
+        await queryClient.invalidateQueries({
+            queryKey: paymentRequestKeys.detail(request.id, task.workItemId),
+        })
+        navigation?.onRefresh?.()
+        payment.reset()
+    }
+
     return (
-        <section aria-label="当前付款任务" className="space-y-4">
-            {blocked && !unknown && (
-                <p
-                    role="alert"
-                    className="rounded-md bg-destructive/10 p-3 text-body-compact text-destructive"
-                >
-                    {blocked}
-                </p>
+        <section
+            aria-label="当前付款任务"
+            className="@container/payment-request min-w-0 space-y-4 bg-card pb-4 pt-3"
+        >
+            {fullPage && (
+                <TooltipProvider>
+                    <section
+                        aria-label="付款任务摘要"
+                        className="grid min-w-0 gap-x-6 gap-y-3.5 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/payment-request:grid-cols-2 @[840px]/payment-request:grid-cols-4"
+                    >
+                        <div className="min-w-0">
+                            <span className="text-xs text-muted-foreground">
+                                本申请剩余待付
+                            </span>
+                            <span className="ml-1.5 text-tiny text-muted-foreground/80">
+                                申请 − 已结
+                            </span>
+                            <Tooltip>
+                                <TooltipTrigger
+                                    id={`${id}-unpaid-formula`}
+                                    aria-label="本申请剩余待付计算口径"
+                                    render={
+                                        <Button
+                                            variant="ghost"
+                                            size="icon-xs"
+                                            type="button"
+                                            className="ml-1 size-4 rounded-full border border-border/80 align-middle text-tiny text-muted-foreground hover:bg-card hover:text-foreground"
+                                        />
+                                    }
+                                >
+                                    <span aria-hidden="true">?</span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    申请总额减去已结算金额与已关闭金额。
+                                </TooltipContent>
+                            </Tooltip>
+                            <div className="mt-1 min-w-0">
+                                <MoneyValue
+                                    value={request.unpaid_amount}
+                                    size="section"
+                                    display="exact"
+                                />
+                            </div>
+                        </div>
+                        <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                                <span>申请总额</span>
+                                <span className="text-tiny text-muted-foreground/80">
+                                    含税
+                                </span>
+                                <Tooltip>
+                                    <TooltipTrigger
+                                        id={`${id}-total-formula`}
+                                        aria-label="申请总额计算口径"
+                                        render={
+                                            <Button
+                                                variant="ghost"
+                                                size="icon-xs"
+                                                type="button"
+                                                className="size-4 rounded-full border border-border/80 text-tiny text-muted-foreground hover:bg-card hover:text-foreground"
+                                            />
+                                        }
+                                    >
+                                        <span aria-hidden="true">?</span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        本次付款申请审批通过的含税申请总额。
+                                    </TooltipContent>
+                                </Tooltip>
+                            </div>
+                            <div className="mt-1 min-w-0">
+                                <MoneyValue
+                                    value={request.total_amount}
+                                    display="exact"
+                                    className="num text-value-compact font-semibold"
+                                />
+                            </div>
+                            <p className="mt-0.5 text-tiny text-muted-foreground">
+                                <span className="num">
+                                    {request.lines.length}
+                                </span>{" "}
+                                张采购单
+                            </p>
+                        </div>
+                        <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                                <span>本申请已结算</span>
+                                <span className="text-tiny text-muted-foreground/80">
+                                    已核销
+                                </span>
+                                <Tooltip>
+                                    <TooltipTrigger
+                                        id={`${id}-paid-formula`}
+                                        aria-label="本申请已结算计算口径"
+                                        render={
+                                            <Button
+                                                variant="ghost"
+                                                size="icon-xs"
+                                                type="button"
+                                                className="size-4 rounded-full border border-border/80 text-tiny text-muted-foreground hover:bg-card hover:text-foreground"
+                                            />
+                                        }
+                                    >
+                                        <span aria-hidden="true">?</span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        本申请已登记并核销的累计付款金额及完成比例。
+                                    </TooltipContent>
+                                </Tooltip>
+                            </div>
+                            <div className="mt-1 min-w-0">
+                                <MoneyValue
+                                    value={request.paid_amount}
+                                    display="exact"
+                                    className="num text-value-compact font-semibold"
+                                />
+                            </div>
+                            <div
+                                aria-hidden="true"
+                                className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted"
+                            >
+                                <div
+                                    className="h-full rounded-full bg-primary"
+                                    style={{
+                                        width: `${minFixed(paidRate, "100", { maxScale: 1, outputScale: 1 })}%`,
+                                    }}
+                                />
+                            </div>
+                            <p className="mt-0.5 text-tiny text-muted-foreground">
+                                完成{" "}
+                                <RateValue
+                                    value={paidRate}
+                                    precision={1}
+                                    className="text-muted-foreground"
+                                />
+                                {compareDecimal(request.closed_amount, "0", 4) >
+                                    0 && (
+                                    <>
+                                        {" "}
+                                        · 已关闭{" "}
+                                        <MoneyValue
+                                            value={request.closed_amount}
+                                            display="exact"
+                                        />
+                                    </>
+                                )}
+                            </p>
+                        </div>
+                        <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                                <span>希望付款日</span>
+                                <span className="text-tiny text-muted-foreground/80">
+                                    银行转账
+                                </span>
+                            </div>
+                            <p className="num mt-1 text-value-compact font-semibold text-foreground">
+                                {request.desired_payment_date}
+                            </p>
+                            <p className="mt-0.5 truncate text-tiny text-muted-foreground">
+                                申请人 {request.applicant_name}
+                            </p>
+                        </div>
+                    </section>
+                </TooltipProvider>
             )}
-            <h3 className="font-semibold">付款与收款信息</h3>
-            <dl className="grid gap-x-8 gap-y-4 text-body-compact lg:grid-cols-2">
-                <div>
+            {blocked && !unknown && (
+                <div
+                    role="alert"
+                    className="flex items-start gap-2 rounded-r-md border-l-2 border-l-destructive bg-destructive-soft/65 px-3 py-2 text-xs text-destructive-soft-foreground"
+                >
+                    <TriangleAlertIcon
+                        aria-hidden="true"
+                        className="mt-0.5 size-3.5 shrink-0"
+                    />
+                    <span>{blocked}</span>
+                </div>
+            )}
+            <h2 className="text-section-title font-semibold">付款与收款信息</h2>
+            <dl className="grid gap-x-5 gap-y-3 text-body-compact @[480px]/payment-request:grid-cols-2 @[840px]/payment-request:grid-cols-4">
+                <div className="min-w-0">
                     <dt className="text-xs text-muted-foreground">
                         我方付款主体
                     </dt>
-                    <dd className="mt-1 break-words font-medium">
+                    <dd className="mt-1 wrap-anywhere font-medium">
                         {request.our_company_name}
                     </dd>
                 </div>
-                <div>
+                <div className="min-w-0">
                     <dt className="text-xs text-muted-foreground">收款户名</dt>
-                    <dd className="mt-1 break-words font-medium">
+                    <dd className="mt-1 wrap-anywhere font-medium">
                         {account.account_name}
                     </dd>
                 </div>
-                <div>
+                <div className="min-w-0">
                     <dt className="text-xs text-muted-foreground">开户行</dt>
-                    <dd className="mt-1 break-words">{account.bank_name}</dd>
+                    <dd className="mt-1 wrap-anywhere">{account.bank_name}</dd>
                 </div>
-                <div>
+                <div className="min-w-0">
                     <dt className="text-xs text-muted-foreground">收款账号</dt>
                     <dd className="mt-1">
                         <SensitiveValue
-                            id="ppr-pay-recipient-account"
+                            key={`${account.bank_account_id}:${account.version}`}
+                            id={`${id}-recipient-account`}
                             label="收款账号"
                             maskedValue={account.account_number_masked}
                             onReveal={
+                                account.bank_account_id &&
+                                account.version > 0 &&
                                 hasPermission(
                                     profile.data?.permissions,
                                     "party_bank_account:reveal",
@@ -184,35 +518,113 @@ function BankRequestPaymentForm({
                     </dd>
                 </div>
             </dl>
+            <dl className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
+                <div className="flex gap-2">
+                    <dt className="text-muted-foreground">申请人</dt>
+                    <dd>{request.applicant_name}</dd>
+                </div>
+                <div className="flex gap-2">
+                    <dt className="text-muted-foreground">希望付款日</dt>
+                    <dd className="num">{request.desired_payment_date}</dd>
+                </div>
+                {request.description && (
+                    <div className="flex min-w-0 gap-2">
+                        <dt className="shrink-0 text-muted-foreground">
+                            申请说明
+                        </dt>
+                        <dd className="whitespace-pre-wrap wrap-anywhere">
+                            {request.description}
+                        </dd>
+                    </div>
+                )}
+            </dl>
+            {unknown && (
+                <Alert variant="warning" role="status">
+                    <AlertTitle>付款登记结果待核对</AlertTitle>
+                    <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+                        <span>
+                            已保留本次金额、回单和收款账户。点击「核对提交结果」继续核对原付款，或先刷新最新状态。
+                        </span>
+                        <Button
+                            id={`${id}-unknown-refresh`}
+                            type="button"
+                            variant="outline"
+                            size="xs"
+                            disabled={payment.isPending}
+                            onClick={() => void refreshPaymentBasis()}
+                        >
+                            刷新最新数据
+                        </Button>
+                    </AlertDescription>
+                </Alert>
+            )}
+            {conflict && (
+                <Alert variant="warning">
+                    <AlertTitle>付款依据已更新</AlertTitle>
+                    <AlertDescription className="flex flex-wrap items-center gap-2">
+                        {getErrorMessage(
+                            payment.error,
+                            "请刷新后重新核对付款依据。",
+                        )}
+                        <Button
+                            id={`${id}-refresh`}
+                            type="button"
+                            variant="outline"
+                            size="xs"
+                            onClick={() => void refreshPaymentBasis()}
+                        >
+                            刷新最新数据
+                        </Button>
+                    </AlertDescription>
+                </Alert>
+            )}
             <form
-                id="ppr-pay-form"
+                id={formId}
+                ref={formRef}
                 className="space-y-4"
                 onSubmit={(event) => {
                     event.preventDefault()
-                    void form.handleSubmit()
+                    if (!locked) void form.handleSubmit()
                 }}
             >
-                <div className="space-y-4 border-t pt-5">
-                    <h3 className="font-semibold">登记实际付款</h3>
+                <h2 className="border-t border-border/60 pt-4 text-section-title font-semibold">
+                    登记实际付款
+                </h2>
+                <div className="grid items-start gap-4 @[600px]/payment-request:grid-cols-3">
                     <form.AppField name="amount">
                         {(field) => (
-                            <field.TextField
-                                money
-                                id="ppr-pay-amount"
-                                label="本次实际付款金额"
-                                inputMode="decimal"
-                                placeholder="按银行回单填写金额"
-                                required
-                                disabled={locked}
-                            />
+                            <div className="space-y-1">
+                                <field.TextField
+                                    money
+                                    id={`${id}-amount`}
+                                    label="本次实际付款金额"
+                                    inputMode="decimal"
+                                    inputClassName="num border-transparent bg-surface-sunken hover:bg-card focus-visible:bg-card"
+                                    placeholder="按银行回单填写金额"
+                                    required
+                                    disabled={locked}
+                                />
+                                <Button
+                                    id={`${id}-fill-unpaid`}
+                                    type="button"
+                                    variant="ghost"
+                                    size="xs"
+                                    disabled={locked}
+                                    onClick={() =>
+                                        field.handleChange(
+                                            request.unpaid_amount,
+                                        )
+                                    }
+                                >
+                                    填剩余待付
+                                </Button>
+                            </div>
                         )}
                     </form.AppField>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
                     <form.AppField name="paidAt">
                         {(field) => (
                             <field.DateTimeField
-                                id="ppr-pay-paid-at"
+                                id={`${id}-paid-at`}
                                 label="实际付款时间"
                                 required
                                 clearable={false}
@@ -227,7 +639,7 @@ function BankRequestPaymentForm({
                     <form.AppField name="reference">
                         {(field) => (
                             <field.TextField
-                                id="ppr-pay-bank-reference"
+                                id={`${id}-bank-reference`}
                                 label="银行流水号"
                                 disabled={locked}
                             />
@@ -237,7 +649,7 @@ function BankRequestPaymentForm({
                 <form.Field name="receipt">
                     {(field) => (
                         <Field>
-                            <FieldLabel htmlFor="ppr-pay-bank-receipt-input">
+                            <FieldLabel htmlFor={`${id}-bank-receipt-input`}>
                                 银行回单
                                 <span
                                     aria-hidden="true"
@@ -251,7 +663,7 @@ function BankRequestPaymentForm({
                                 selectedDescription={
                                     fileUploadText.pendingSubmit
                                 }
-                                idPrefix="ppr-pay-bank-receipt"
+                                idPrefix={`${id}-bank-receipt`}
                                 label="上传银行回单"
                                 description="点击选择或拖入 JPG、PNG、WebP 图片"
                                 density="compact"
@@ -261,7 +673,7 @@ function BankRequestPaymentForm({
                                 aria-invalid={
                                     field.state.meta.errors.length > 0
                                 }
-                                aria-describedby="ppr-pay-receipt-help ppr-pay-receipt-error"
+                                aria-describedby={`${id}-receipt-help ${id}-receipt-error`}
                                 accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
                                 disabled={locked}
                                 onFilesSelected={(files) => {
@@ -274,41 +686,106 @@ function BankRequestPaymentForm({
                                 }}
                             />
                             <p
-                                id="ppr-pay-receipt-help"
+                                id={`${id}-receipt-help`}
                                 className="text-xs text-muted-foreground"
                             >
                                 请核对实际打款金额与回单，提交时一并上传。
                             </p>
                             <FieldError
-                                id="ppr-pay-receipt-error"
+                                id={`${id}-receipt-error`}
                                 errors={field.state.meta.errors}
                             />
                         </Field>
                     )}
                 </form.Field>
                 <form.Subscribe selector={(state) => state.values.amount}>
-                    {(amount) => (
-                        <WorkspaceTaskFooter>
-                            <div className="mr-auto text-body-compact">
-                                本次登记{" "}
-                                <MoneyValue
-                                    value={
-                                        positivePaymentAmount(amount)
-                                            ? amount
-                                            : "0"
-                                    }
-                                />
-                            </div>
+                    {(value) => {
+                        const amount =
+                            unknown && pending
+                                ? pending.payload.payment.amount
+                                : positivePaymentAmount(value)
+                                  ? value
+                                  : "0"
+                        const unpaid =
+                            unknown && pending
+                                ? pending.payload.unpaidAmount
+                                : request.unpaid_amount
+                        const exceedsUnpaid =
+                            compareDecimal(amount, unpaid, 2) > 0
+                        const remaining = !exceedsUnpaid
+                            ? clampZeroFixed(
+                                  subtractFixed(unpaid, amount, money),
+                                  money,
+                              )
+                            : undefined
+                        const summary = (
+                            <dl className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
+                                <div className="flex items-baseline gap-1.5">
+                                    <dt className="text-muted-foreground">
+                                        本次登记
+                                    </dt>
+                                    <dd>
+                                        <MoneyValue
+                                            value={amount}
+                                            display="exact"
+                                        />
+                                    </dd>
+                                </div>
+                                <div className="flex items-baseline gap-1.5">
+                                    <dt className="text-muted-foreground">
+                                        登记后待付
+                                    </dt>
+                                    <dd>
+                                        {exceedsUnpaid ? (
+                                            <span className="font-medium text-destructive">
+                                                超出剩余待付
+                                            </span>
+                                        ) : (
+                                            <MoneyValue
+                                                value={remaining}
+                                                display="exact"
+                                            />
+                                        )}
+                                    </dd>
+                                </div>
+                            </dl>
+                        )
+                        const action = (
                             <Button
-                                id="ppr-pay-submit"
-                                type="submit"
-                                form="ppr-pay-form"
-                                disabled={locked}
+                                id={`${id}-submit`}
+                                type={unknown ? "button" : "submit"}
+                                form={unknown ? undefined : formId}
+                                size="sm"
+                                disabled={unknown ? payment.isPending : locked}
+                                onClick={
+                                    unknown
+                                        ? () => void confirmPayment()
+                                        : undefined
+                                }
                             >
-                                登记付款
+                                {unknown
+                                    ? payment.isPending
+                                        ? "正在核对结果…"
+                                        : "核对提交结果"
+                                    : payment.isPending
+                                      ? "正在提交…"
+                                      : "登记付款"}
                             </Button>
-                        </WorkspaceTaskFooter>
-                    )}
+                        )
+                        return (
+                            <WorkspaceTaskFooter
+                                summary={summary}
+                                fallback={
+                                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-2">
+                                        {summary}
+                                        {action}
+                                    </div>
+                                }
+                            >
+                                {action}
+                            </WorkspaceTaskFooter>
+                        )
+                    }}
                 </form.Subscribe>
                 <form.Subscribe selector={(state) => state.errors}>
                     {(errors) =>
@@ -328,7 +805,7 @@ function BankRequestPaymentForm({
                     {result}
                 </p>
             )}
-            {payment.isError && (
+            {payment.isError && !unknown && !conflict && !rateLimited && (
                 <p role="alert" className="text-body-compact text-destructive">
                     {getErrorMessage(
                         payment.error,
@@ -336,42 +813,28 @@ function BankRequestPaymentForm({
                     )}
                 </p>
             )}
-            {unknown && (
-                <div role="status" className="space-y-3 rounded-md border p-4">
-                    <p className="text-body-compact">
-                        付款结果暂无法确认。本次金额和回单已保留，请查询上次付款结果后继续。
-                    </p>
-                    <Button
-                        id="ppr-pay-recover"
-                        type="button"
-                        variant="outline"
-                        disabled={payment.isPending}
-                        onClick={() =>
-                            void confirmPayment().catch(() => undefined)
-                        }
-                    >
-                        查询本次付款结果
-                    </Button>
-                </div>
+            {pending && !unknown && (
+                <SupplierPaymentSubmitConfirmDialog
+                    idPrefix={`${id}-confirm`}
+                    open
+                    onOpenChange={closeConfirmation}
+                    pending={payment.isPending}
+                    paymentAmount={pending.payload.payment.amount}
+                    recipient={{
+                        bankAccountId:
+                            pending.payload.recipient.bank_account_id,
+                        version: pending.payload.recipient.version,
+                        accountName: pending.payload.recipient.account_name,
+                        bankName: pending.payload.recipient.bank_name,
+                        bankBranchName:
+                            pending.payload.recipient.bank_branch_name ??
+                            undefined,
+                        accountNumberMasked:
+                            pending.payload.recipient.account_number_masked,
+                    }}
+                    onConfirm={confirmPayment}
+                />
             )}
-            <SupplierPaymentSubmitConfirmDialog
-                idPrefix="ppr-pay-confirm"
-                open={confirmOpen}
-                onOpenChange={setConfirmOpen}
-                pending={payment.isPending}
-                paymentAmount={pending.current?.amount ?? "0"}
-                recipient={{
-                    bankAccountId: (pendingRecipient.current ?? account)
-                        .bank_account_id,
-                    version: (pendingRecipient.current ?? account).version,
-                    accountName: (pendingRecipient.current ?? account)
-                        .account_name,
-                    bankName: (pendingRecipient.current ?? account).bank_name,
-                    accountNumberMasked: (pendingRecipient.current ?? account)
-                        .account_number_masked,
-                }}
-                onConfirm={confirmPayment}
-            />
         </section>
     )
 }

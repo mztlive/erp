@@ -70,6 +70,7 @@ function conclusionTone(conclusion: InquiryConclusion) {
  */
 export function InquiryFeedbackConclusionCell({
     readOnly,
+    compact = false,
     prefix,
     value,
     line,
@@ -78,6 +79,7 @@ export function InquiryFeedbackConclusionCell({
     onChangeConclusion,
 }: {
     readOnly: boolean
+    compact?: boolean
     prefix: string
     value: InquiryFeedbackLine
     line: InquiryLine
@@ -137,6 +139,7 @@ export function InquiryFeedbackConclusionCell({
                 }
                 className={cn(
                     "grid h-control-sm w-full grid-cols-3 items-center gap-0.5 rounded-md bg-muted/60 p-0.5 transition-colors",
+                    compact && "bg-surface-sunken",
                     conclusionError &&
                         "bg-destructive-soft/50 ring-1 ring-destructive/65",
                     disabled && "opacity-60",
@@ -160,6 +163,7 @@ export function InquiryFeedbackConclusionCell({
                             className={cn(
                                 "inline-flex h-full min-w-0 cursor-pointer items-center justify-center gap-1 rounded-sm px-1.5 text-xs transition-all outline-none select-none",
                                 "focus-visible:ring-2 focus-visible:ring-primary/50",
+                                compact && "gap-0.5 px-0.5 text-tiny",
                                 active
                                     ? option.activeClass
                                     : "font-normal text-muted-foreground hover:text-foreground",
@@ -199,7 +203,7 @@ export function InquiryFeedbackConclusionCell({
                         aria-hidden="true"
                         className="size-1.5 shrink-0 rounded-full bg-warning"
                     />
-                    待确认结论
+                    {compact ? "待回复" : "待确认结论"}
                 </p>
             ) : null}
         </div>

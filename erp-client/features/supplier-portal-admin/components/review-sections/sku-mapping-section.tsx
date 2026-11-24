@@ -356,7 +356,7 @@ export const SkuMappingSection = withForm({
         return (
             <div className="space-y-5">
                 {/* 快捷工具条：一键应用默认单位到全部 SKU */}
-                <div className="space-y-3 border-y border-border/60 bg-muted/25 px-4 py-3.5">
+                <div className="space-y-3 rounded-lg bg-surface-sunken px-4 py-3.5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                             <WandSparklesIcon
@@ -400,8 +400,8 @@ export const SkuMappingSection = withForm({
                         </p>
                     </div>
 
-                    <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
-                        <div className="min-w-0 flex-1 sm:max-w-xs">
+                    <div className="flex flex-col gap-2.5 @[600px]/supplier-portal-review:flex-row @[600px]/supplier-portal-review:items-center">
+                        <div className="min-w-0 flex-1 @[600px]/supplier-portal-review:max-w-xs">
                             <OptionCombobox
                                 id="supplier-portal-review-default-unit"
                                 aria-label="默认标准基础单位"
@@ -598,9 +598,9 @@ export const SkuMappingSection = withForm({
                         return (
                             <div
                                 key={sku.row_id}
-                                className="grid gap-4 py-4 md:grid-cols-2"
+                                className="grid gap-4 py-4 @[600px]/supplier-portal-review:grid-cols-2"
                             >
-                                <div className="space-y-1 md:col-span-2">
+                                <div className="space-y-1 @[600px]/supplier-portal-review:col-span-2">
                                     <div className="flex flex-wrap items-center justify-between gap-2">
                                         <div className="flex flex-wrap items-center gap-2">
                                             <p className="font-medium text-foreground">
@@ -640,10 +640,10 @@ export const SkuMappingSection = withForm({
                                                 <Button
                                                     id={`${prefix}-unit-undo`}
                                                     type="button"
-                                                    size="sm"
+                                                    size="xs"
                                                     variant="ghost"
                                                     disabled={disabled}
-                                                    className="h-6 px-1.5 text-tiny text-muted-foreground hover:text-foreground"
+                                                    className="px-1.5 text-tiny text-muted-foreground hover:text-foreground"
                                                     onClick={() =>
                                                         undoSingleRowBatch(
                                                             sku.row_id,
@@ -762,7 +762,7 @@ export const SkuMappingSection = withForm({
 
                                 <div
                                     className={cn(
-                                        "md:col-span-2",
+                                        "@[600px]/supplier-portal-review:col-span-2",
                                         fieldHighlightClass(
                                             highlightedFieldId,
                                             `${prefix}-unit-synonym-confirmed`,

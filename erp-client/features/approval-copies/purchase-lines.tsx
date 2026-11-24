@@ -1,14 +1,10 @@
 "use client"
 
-import { useMemo } from "react"
+import { Fragment, useEffect, useMemo, useRef, useState } from "react"
+import { AlertTriangleIcon, ChevronRightIcon } from "lucide-react"
 
-import {
-    DetailWorkspaceSection,
-    MoneyValue,
-    QuantityValue,
-    RateValue,
-    detailWorkspaceStyles,
-} from "@/components/business"
+import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
+import { Button } from "@/components/ui/button"
 import {
     Table,
     TableBody,
@@ -26,36 +22,122 @@ import {
     countUniqueDeliveryPoints,
     formatPurchaseFulfillmentSummary,
 } from "@/features/approval-workflow/purchase-fulfillment"
+import {
+    APPROVAL_TABLE_DEFAULT_PAGE_SIZE,
+    APPROVAL_TABLE_FILTER_THRESHOLD,
+    ApprovalLineFilterBar,
+    ApprovalLinePagination,
+} from "@/features/workspace/components/workspace-approval-table-controls"
+import { PurchaseProfitValue } from "@/features/workspace/components/workspace-purchase-amount-details"
+import { evaluatePurchaseLines } from "@/features/workspace/components/workspace-purchase-comparison-model"
 import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 import { multiplyFixed, sumFixed } from "@/lib/fixed-decimal"
+import { cn } from "@/lib/utils"
 
-/** 仅展示抄送接口已经授权的采购提交行及履约规模摘要（不展示详细配送地址）。 */
+const LOCATE_HIGHLIGHT_MS = 2200
+
+/** 仅使用抄送接口返回的采购行，履约信息收敛为非地址摘要。 */
 export function CopyPurchaseLines({
     lines,
     fulfillment,
+    idPrefix = "copy-purchase-lines",
 }: {
     lines: ApprovalPurchaseLine[]
     fulfillment?: ApprovalPurchaseFulfillment | null
     idPrefix?: string
 }) {
     const { names } = useProductUnitNames([], lines.length > 0)
+    const [search, setSearch] = useState("")
+    const [riskOnly, setRiskOnly] = useState(false)
+    const [page, setPage] = useState(1)
+    const [pageSize, setPageSize] = useState(APPROVAL_TABLE_DEFAULT_PAGE_SIZE)
+    const [highlightRisks, setHighlightRisks] = useState(false)
+    const tableRef = useRef<HTMLDivElement>(null)
+    const highlightTimerRef = useRef<number | null>(null)
+    const scrollFrameRef = useRef<number | null>(null)
 
-    const uniquePointCount = useMemo(
-        () =>
-            countUniqueDeliveryPoints(
-                lines.map((line) => line.delivery_allocations),
-            ),
-        [lines],
+    useEffect(() => {
+        return () => {
+            if (highlightTimerRef.current !== null) {
+                window.clearTimeout(highlightTimerRef.current)
+            }
+            if (scrollFrameRef.current !== null) {
+                window.cancelAnimationFrame(scrollFrameRef.current)
+            }
+        }
+    }, [])
+
+    const rows = useMemo(() => evaluatePurchaseLines(lines), [lines])
+    const riskCount = rows.filter((row) => row.hasActionableRisk).length
+    const hasHighRisk = rows.some((row) => row.effectiveSeverity === "high")
+    const showFilters =
+        rows.length > APPROVAL_TABLE_FILTER_THRESHOLD ||
+        riskCount > 0 ||
+        riskOnly ||
+        Boolean(search.trim())
+    const term = showFilters ? search.trim().toLowerCase() : ""
+    const filtered = rows.filter(
+        ({ line, hasActionableRisk }) =>
+            (!showFilters || !riskOnly || hasActionableRisk) &&
+            (!term ||
+                [line.title, line.specification, String(line.line_no)].some(
+                    (value) => value?.toLowerCase().includes(term),
+                )),
     )
+    const currentPage = Math.min(
+        page,
+        Math.max(1, Math.ceil(filtered.length / pageSize)),
+    )
+    const start = (currentPage - 1) * pageSize
+    const visible = filtered.slice(start, start + pageSize)
+
+    const locateRisks = () => {
+        setSearch("")
+        setRiskOnly(true)
+        setPage(1)
+        setHighlightRisks(true)
+        if (highlightTimerRef.current !== null) {
+            window.clearTimeout(highlightTimerRef.current)
+        }
+        highlightTimerRef.current = window.setTimeout(() => {
+            highlightTimerRef.current = null
+            setHighlightRisks(false)
+        }, LOCATE_HIGHLIGHT_MS)
+
+        if (scrollFrameRef.current !== null) {
+            window.cancelAnimationFrame(scrollFrameRef.current)
+        }
+        scrollFrameRef.current = window.requestAnimationFrame(() => {
+            scrollFrameRef.current = window.requestAnimationFrame(() => {
+                scrollFrameRef.current = null
+                const target = tableRef.current
+                if (!target) return
+                const reducedMotion = window.matchMedia(
+                    "(prefers-reduced-motion: reduce)",
+                ).matches
+                target.scrollIntoView({
+                    behavior: reducedMotion ? "auto" : "smooth",
+                    block: "nearest",
+                })
+                target.focus({ preventScroll: true })
+            })
+        })
+    }
+
     const fulfillmentSummary = useMemo(
-        () => formatPurchaseFulfillmentSummary(fulfillment, uniquePointCount),
-        [fulfillment, uniquePointCount],
+        () =>
+            formatPurchaseFulfillmentSummary(
+                fulfillment,
+                countUniqueDeliveryPoints(
+                    lines.map((line) => line.delivery_allocations),
+                ),
+            ),
+        [fulfillment, lines],
     )
-
     const grossTotal = useMemo(() => {
         const amounts = lines
             .map((line) => line.gross_amount)
-            .filter((value): value is string => value != null)
+            .filter((value): value is string => value != null && value !== "")
         return amounts.length
             ? sumFixed(amounts, { maxScale: 2, outputScale: 2 })
             : null
@@ -63,155 +145,323 @@ export function CopyPurchaseLines({
 
     if (!lines.length) return null
 
-    const subtitle = fulfillmentSummary
-        ? `共 ${lines.length} 行 · ${fulfillmentSummary}`
-        : `共 ${lines.length} 行`
-
     return (
-        <DetailWorkspaceSection title="本次采购提交明细" subtitle={subtitle}>
+        <section className="min-w-0 space-y-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <h3 className="text-section-title font-semibold">
+                    本次采购提交明细
+                </h3>
+                <span className="num text-xs text-muted-foreground">
+                    共 {lines.length} 项
+                    {fulfillmentSummary ? ` · ${fulfillmentSummary}` : null}
+                </span>
+            </div>
+            {riskCount > 0 ? (
+                <div
+                    role="region"
+                    aria-label="采购明细风险提示"
+                    className={cn(
+                        "flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-r-md border-l-2 px-3 py-2 text-xs",
+                        hasHighRisk
+                            ? "border-l-destructive bg-destructive-soft/65 text-destructive-soft-foreground"
+                            : "border-l-warning bg-warning-soft/75 text-warning-soft-foreground",
+                    )}
+                >
+                    <span className="inline-flex items-center gap-1.5 font-medium">
+                        <AlertTriangleIcon
+                            aria-hidden="true"
+                            className="size-3.5 shrink-0"
+                        />
+                        <span>
+                            存在 <span className="num">{riskCount}</span>{" "}
+                            项采购风险明细
+                        </span>
+                    </span>
+                    <Button
+                        id={`${idPrefix}-locate-risks`}
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        className={cn(
+                            "h-control-xs text-xs font-medium",
+                            hasHighRisk
+                                ? "text-destructive-soft-foreground hover:bg-destructive-soft hover:text-destructive-soft-foreground"
+                                : "text-warning-soft-foreground hover:bg-warning-soft hover:text-warning-soft-foreground",
+                        )}
+                        onClick={locateRisks}
+                    >
+                        仅看风险项（<span className="num">{riskCount}</span>）
+                        <ChevronRightIcon aria-hidden="true" />
+                    </Button>
+                </div>
+            ) : null}
+            {showFilters ? (
+                <ApprovalLineFilterBar
+                    idPrefix={idPrefix}
+                    totalCount={lines.length}
+                    filteredCount={filtered.length}
+                    riskCount={riskCount}
+                    hasHighRisk={hasHighRisk}
+                    riskOnly={riskOnly}
+                    onRiskOnlyChange={(value) => {
+                        setRiskOnly(value)
+                        setPage(1)
+                    }}
+                    search={search}
+                    onSearchChange={(value) => {
+                        setSearch(value)
+                        setPage(1)
+                    }}
+                    onClearFilters={() => {
+                        setSearch("")
+                        setRiskOnly(false)
+                        setPage(1)
+                    }}
+                    searchPlaceholder="搜索商品、规格或序号"
+                />
+            ) : null}
+
             <div
-                className={detailWorkspaceStyles.inlineTableWrapper}
-                data-slot="detail-inline-table"
+                ref={tableRef}
+                tabIndex={-1}
+                className="min-w-0 scroll-mt-16 focus:outline-none"
             >
                 <Table
-                    data-density="comfortable"
-                    className="w-full [&_:is(th,td):first-child]:ps-0"
+                    aria-label="本次采购提交明细"
+                    className="table-fixed [&_:is(th,td)]:px-1.5 @[520px]/copy-detail:[&_:is(th,td)]:px-2.5 [&_[data-slot=money-value-number]]:whitespace-normal [&_[data-slot=money-value-number]]:wrap-anywhere"
                 >
-                    <TableHeader>
+                    <TableHeader className="bg-transparent [&_th]:bg-surface-sunken [&_th]:hover:bg-surface-sunken [&_th]:whitespace-normal [&_th:first-child]:rounded-l-md [&_th:last-child]:rounded-r-md [&_tr]:border-b-0">
                         <TableRow>
-                            <TableHead className="w-8">#</TableHead>
-                            <TableHead className="min-w-44">
-                                商品或费用 / 规格
+                            <TableHead scope="col" className="w-1/3">
+                                商品 / 规格
                             </TableHead>
-                            <TableHead data-align="end" className="w-24">
+                            <TableHead
+                                scope="col"
+                                data-align="end"
+                                className="w-1/6"
+                            >
                                 数量
                             </TableHead>
-                            <TableHead data-align="end" className="w-28">
+                            <TableHead
+                                scope="col"
+                                data-align="end"
+                                className="w-1/4"
+                            >
                                 含税单价
                             </TableHead>
-                            <TableHead data-align="end" className="w-28">
+                            <TableHead
+                                scope="col"
+                                data-align="end"
+                                className="w-1/4"
+                            >
                                 含税金额
-                            </TableHead>
-                            <TableHead data-align="end" className="w-28">
-                                预计交付
                             </TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {lines.map((line) => {
-                            const unit =
-                                line.unitName ??
-                                names.get(line.unit?.trim() ?? "")
-                            const spec =
-                                line.specification &&
-                                line.specification !== "无规格"
-                                    ? line.specification
-                                    : null
-                            const taxRate =
-                                line.input_tax_rate != null
-                                    ? multiplyFixed(
-                                          line.input_tax_rate,
-                                          "100",
-                                          {
-                                              leftMaxScale: 6,
-                                              rightMaxScale: 0,
-                                              outputScale: 2,
-                                          },
-                                      )
-                                    : null
-                            return (
-                                <TableRow key={line.id}>
-                                    <TableCell className="num py-3 align-top text-muted-foreground">
-                                        {line.line_no}
-                                    </TableCell>
-                                    <TableCell className="py-3 align-top whitespace-normal wrap-anywhere">
-                                        <p className="font-medium text-foreground">
-                                            {line.title}
-                                        </p>
-                                        {spec ? (
-                                            <p className="mt-0.5 text-xs text-muted-foreground">
-                                                {spec}
-                                            </p>
-                                        ) : null}
-                                    </TableCell>
-                                    <TableCell
-                                        data-align="end"
-                                        className="py-3 align-top"
-                                    >
-                                        {line.quantity == null ? (
-                                            "—"
-                                        ) : (
-                                            <QuantityValue
-                                                value={line.quantity}
-                                                unit={unit}
-                                            />
-                                        )}
-                                    </TableCell>
-                                    <TableCell
-                                        data-align="end"
-                                        className="py-3 align-top"
-                                    >
-                                        <MoneyValue
-                                            display="exact"
-                                            value={line.unit_cost_gross}
-                                        />
-                                        {taxRate != null ? (
-                                            <p className="mt-0.5 text-xs text-muted-foreground">
-                                                进项{" "}
-                                                <RateValue
-                                                    value={taxRate}
-                                                    precision={2}
+                        {visible.map(
+                            ({
+                                line,
+                                comparison,
+                                externalLoss,
+                                effectiveSeverity,
+                                hasActionableRisk,
+                            }) => {
+                                const unit =
+                                    line.unitName ??
+                                    names.get(line.unit?.trim() ?? "")
+                                const spec =
+                                    line.specification === "无规格"
+                                        ? null
+                                        : line.specification
+                                const taxRate =
+                                    line.input_tax_rate != null
+                                        ? multiplyFixed(
+                                              line.input_tax_rate,
+                                              "100",
+                                              {
+                                                  leftMaxScale: 6,
+                                                  rightMaxScale: 0,
+                                                  outputScale: 2,
+                                              },
+                                          )
+                                        : null
+                                return (
+                                    <Fragment key={line.id}>
+                                        <TableRow
+                                            className={cn(
+                                                "border-border/60",
+                                                hasActionableRisk &&
+                                                    "border-b-0",
+                                                highlightRisks &&
+                                                    hasActionableRisk &&
+                                                    "bg-info-soft/35 ring-1 ring-inset ring-info-border motion-safe:animate-pulse",
+                                            )}
+                                        >
+                                            <TableCell className="py-2.5 align-top whitespace-normal wrap-anywhere">
+                                                <div className="font-medium text-foreground">
+                                                    <span className="num mr-1.5 text-tiny text-muted-foreground">
+                                                        {line.line_no}
+                                                    </span>
+                                                    {line.title}
+                                                </div>
+                                                {spec ? (
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {spec}
+                                                    </p>
+                                                ) : null}
+                                                {line.expected_delivery_date ? (
+                                                    <p className="num text-tiny text-muted-foreground">
+                                                        交付{" "}
+                                                        {
+                                                            line.expected_delivery_date
+                                                        }
+                                                    </p>
+                                                ) : null}
+                                            </TableCell>
+                                            <TableCell
+                                                data-align="end"
+                                                className="num py-2.5 align-top whitespace-normal wrap-anywhere"
+                                            >
+                                                {line.quantity == null ? (
+                                                    "—"
+                                                ) : (
+                                                    <QuantityValue
+                                                        value={line.quantity}
+                                                        unit={unit}
+                                                        className="whitespace-normal"
+                                                    />
+                                                )}
+                                            </TableCell>
+                                            <TableCell
+                                                data-align="end"
+                                                className="num py-2.5 align-top whitespace-normal"
+                                            >
+                                                <MoneyValue
+                                                    display="exact"
+                                                    value={line.unit_cost_gross}
                                                 />
-                                            </p>
+                                                {taxRate != null ? (
+                                                    <p className="mt-0.5 text-tiny text-muted-foreground">
+                                                        进项{" "}
+                                                        <RateValue
+                                                            value={taxRate}
+                                                            precision={2}
+                                                        />
+                                                    </p>
+                                                ) : null}
+                                            </TableCell>
+                                            <TableCell
+                                                data-align="end"
+                                                className="num py-2.5 align-top whitespace-normal"
+                                            >
+                                                <MoneyValue
+                                                    display="exact"
+                                                    value={line.gross_amount}
+                                                />
+                                                {comparison.purchaseMargin ? (
+                                                    <p className="mt-0.5 text-tiny text-muted-foreground">
+                                                        <span>采购毛利 </span>
+                                                        <PurchaseProfitValue
+                                                            className="whitespace-normal"
+                                                            amount={
+                                                                comparison
+                                                                    .purchaseMargin
+                                                                    .margin
+                                                            }
+                                                        />
+                                                    </p>
+                                                ) : null}
+                                            </TableCell>
+                                        </TableRow>
+                                        {hasActionableRisk ? (
+                                            <TableRow className="border-border/60 hover:bg-transparent">
+                                                <TableCell
+                                                    colSpan={4}
+                                                    className="h-auto pb-2 whitespace-normal"
+                                                >
+                                                    <p
+                                                        className={cn(
+                                                            "num rounded-r-md border-l-2 px-2 py-1 text-tiny wrap-anywhere",
+                                                            effectiveSeverity ===
+                                                                "high"
+                                                                ? "border-l-destructive bg-destructive-soft/65 text-destructive-soft-foreground"
+                                                                : "border-l-warning bg-warning-soft/75 text-warning-soft-foreground",
+                                                        )}
+                                                    >
+                                                        {[
+                                                            ...(externalLoss
+                                                                ? [
+                                                                      "对外售价低于采购价",
+                                                                  ]
+                                                                : []),
+                                                            ...comparison.actionableWarnings,
+                                                        ].join(" · ")}
+                                                    </p>
+                                                </TableCell>
+                                            </TableRow>
                                         ) : null}
-                                    </TableCell>
-                                    <TableCell
-                                        data-align="end"
-                                        className="py-3 align-top font-medium"
-                                    >
-                                        <MoneyValue
-                                            display="exact"
-                                            value={line.gross_amount}
-                                        />
-                                    </TableCell>
-                                    <TableCell
-                                        data-align="end"
-                                        className="num py-3 align-top text-muted-foreground"
-                                    >
-                                        {line.expected_delivery_date || "—"}
-                                    </TableCell>
-                                </TableRow>
-                            )
-                        })}
-                    </TableBody>
-                    {grossTotal ? (
-                        <TableFooter>
-                            <TableRow className="hover:bg-transparent">
+                                    </Fragment>
+                                )
+                            },
+                        )}
+                        {visible.length === 0 ? (
+                            <TableRow>
                                 <TableCell
                                     colSpan={4}
-                                    className="py-2.5 text-xs font-medium text-muted-foreground"
+                                    className="h-16 text-center text-xs text-muted-foreground"
                                 >
-                                    合计 · 共{" "}
-                                    <span className="num text-foreground">
-                                        {lines.length}
-                                    </span>{" "}
-                                    项
+                                    没有符合条件的采购明细
                                 </TableCell>
-                                <TableCell
-                                    data-align="end"
-                                    className="py-2.5 font-semibold text-foreground"
-                                >
-                                    <MoneyValue
-                                        display="exact"
-                                        value={grossTotal}
-                                    />
-                                </TableCell>
-                                <TableCell className="py-2.5" />
                             </TableRow>
-                        </TableFooter>
-                    ) : null}
+                        ) : null}
+                    </TableBody>
+                    <TableFooter className="border-t-0 bg-transparent [&_td]:bg-surface-sunken [&_td:first-child]:rounded-l-md [&_td:last-child]:rounded-r-md [&_tr]:border-b-0">
+                        <TableRow>
+                            <TableCell
+                                colSpan={3}
+                                className="py-2 text-xs whitespace-normal text-muted-foreground"
+                            >
+                                整单合计 ·{" "}
+                                <span className="num">{lines.length}</span> 项
+                                {visible.length !== lines.length ? (
+                                    <>
+                                        （当前显示{" "}
+                                        <span className="num">
+                                            {visible.length}
+                                        </span>{" "}
+                                        项，合计按整单）
+                                    </>
+                                ) : null}
+                            </TableCell>
+                            <TableCell
+                                data-align="end"
+                                className="num py-2 font-semibold"
+                            >
+                                <MoneyValue
+                                    display="exact"
+                                    value={grossTotal}
+                                />
+                            </TableCell>
+                        </TableRow>
+                    </TableFooter>
                 </Table>
             </div>
-        </DetailWorkspaceSection>
+            {filtered.length > APPROVAL_TABLE_DEFAULT_PAGE_SIZE ||
+            pageSize !== APPROVAL_TABLE_DEFAULT_PAGE_SIZE ? (
+                <ApprovalLinePagination
+                    idPrefix={idPrefix}
+                    page={currentPage}
+                    pageSize={pageSize}
+                    filteredCount={filtered.length}
+                    onPageChange={setPage}
+                    onPageSizeChange={(value) => {
+                        setPageSize(value)
+                        setPage(1)
+                    }}
+                    ariaLabel="采购明细分页"
+                />
+            ) : null}
+        </section>
     )
 }

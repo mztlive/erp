@@ -31,14 +31,14 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 import { cn } from "@/lib/utils"
 
-const RETURN_REASON_OPTIONS = [
+export const RETURN_REASON_OPTIONS = [
     { value: "DATA_MISMATCH", label: "预检数据与实际业务不一致" },
     { value: "RULE_MISMATCH", label: "导入口径或规则不一致" },
     { value: "MISSING_EVIDENCE", label: "缺少必要核对依据" },
     { value: "OTHER", label: "其它需修复问题" },
 ] as const
 
-const returnForFixSchema = z.object({
+export const returnForFixSchema = z.object({
     reasonCode: z.string().trim().min(1, "请选择退回原因"),
     comment: z.string().trim().min(3, "请填写至少 3 个字的修复说明"),
 })

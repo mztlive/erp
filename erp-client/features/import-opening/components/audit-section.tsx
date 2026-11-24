@@ -54,6 +54,7 @@ export function AuditSection({ batch }: { batch: ImportBatchView }) {
             <div>
                 <Button
                     id="operations-import-batch-detail-audit-view"
+                    nativeButton={false}
                     size="sm"
                     variant="outline"
                     render={
@@ -63,7 +64,10 @@ export function AuditSection({ batch }: { batch: ImportBatchView }) {
                     }
                 >
                     在权限与审计中查看
-                    <ExternalLinkIcon className="size-4" />
+                    <ExternalLinkIcon
+                        data-icon="inline-end"
+                        aria-hidden="true"
+                    />
                 </Button>
             </div>
         </DetailWorkspaceSection>

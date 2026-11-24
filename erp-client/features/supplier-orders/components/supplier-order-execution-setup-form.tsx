@@ -41,6 +41,7 @@ export function SupplierExecutionSetupForm({
     onSubmit,
     onCancel,
     orderId,
+    idPrefix,
     addressSummary,
 }: {
     setup: SupplierExecutionSetup
@@ -49,9 +50,11 @@ export function SupplierExecutionSetupForm({
     onSubmit: (request: SaveSupplierExecutionSetup) => Promise<void>
     onCancel: () => void
     orderId: string
+    idPrefix?: string
     addressSummary: string
 }) {
-    const prefix = `supplier-execution-setup-${toAutomationIdSegment(orderId)}`
+    const prefix =
+        idPrefix ?? `supplier-execution-setup-${toAutomationIdSegment(orderId)}`
     const identity = React.useRef<{ payload: string; key: string } | null>(null)
     const form = useAppForm({
         defaultValues: {
@@ -150,7 +153,7 @@ export function SupplierExecutionSetupForm({
     return (
         <form
             id={`${prefix}-form`}
-            className="space-y-4"
+            className="@container/setup-form space-y-4"
             onSubmit={(event) => {
                 event.preventDefault()
                 void form.handleSubmit()
@@ -199,7 +202,13 @@ export function SupplierExecutionSetupForm({
                     )}
                 </form.Field>
             ) : null}
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div
+                className={
+                    idPrefix
+                        ? "grid min-w-0 gap-3"
+                        : "grid min-w-0 gap-3 @[420px]/setup-form:grid-cols-2"
+                }
+            >
                 {(
                     [
                         {

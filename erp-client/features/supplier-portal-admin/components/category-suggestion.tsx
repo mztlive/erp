@@ -41,7 +41,7 @@ export function PortalCategoryMappingEvidence({
                     label={requiresRecheck ? "需重新核对" : "待本次人工确认"}
                 />
             </div>
-            <dl className="grid gap-x-4 gap-y-2 text-body-compact sm:grid-cols-[auto_1fr]">
+            <dl className="grid gap-x-4 gap-y-2 text-body-compact @[480px]/supplier-portal-review:grid-cols-[auto_1fr]">
                 <dt className="text-xs text-muted-foreground">商品类型</dt>
                 <dd>
                     {productKindLabels[suggestion.product_kind] ?? "待核对"}

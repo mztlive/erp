@@ -20,8 +20,10 @@ import type { SupplierExecutionShipment } from "../api/execution-setup"
 /** 来源发货数量与运单独立展示，运单不承担数量分摊。 */
 export function SupplierOrderExecutionShipments({
     shipments,
+    compact = false,
 }: {
     shipments: readonly SupplierExecutionShipment[]
+    compact?: boolean
 }) {
     if (shipments.length === 0) return null
     return (
@@ -34,10 +36,16 @@ export function SupplierOrderExecutionShipments({
                 data-slot="detail-inline-table"
                 className={cn(
                     detailWorkspaceStyles.inlineTableWrapper,
-                    "overflow-x-auto",
+                    !compact && "overflow-x-auto",
                 )}
             >
-                <Table>
+                <Table
+                    className={
+                        compact
+                            ? "table-fixed text-xs wrap-anywhere [&_td]:px-1.5 [&_td]:whitespace-normal [&_th]:h-auto [&_th]:px-1.5 [&_th]:py-2 [&_th]:whitespace-normal"
+                            : undefined
+                    }
+                >
                     <TableHeader>
                         <TableRow>
                             <TableHead>来源子单</TableHead>

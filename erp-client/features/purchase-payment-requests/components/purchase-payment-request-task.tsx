@@ -1,51 +1,40 @@
 "use client"
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { getErrorMessage } from "@/lib/api"
+import { useState, type ReactNode } from "react"
+import { BusinessFailureState } from "@/components/business"
+import { Spinner } from "@/components/ui/spinner"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import {
     usePaymentRequestQuery,
     usePaymentSubmissionQuery,
 } from "../hooks/queries"
-import type { PaymentTaskContext } from "../types"
-import { RequestDetailContent } from "./request-detail-content"
-import { RequestDetail } from "./request-detail"
+import type { PaymentRequest, PaymentTaskContext } from "../types"
+import { PaymentRequestTaskReview, RequestDetail } from "./request-detail"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
-/** 使用当前任务读取申请及限定来源，发起人历史跟踪使用普通申请资格。 */
-export function PurchasePaymentRequestTask({
-    item,
-    onDecisionApplied,
-    onTaskCompleted,
-    onSelectFile,
-    activeFileId,
-    hideEmbeddedMaterials = false,
-}: {
+type PaymentRequestTaskProps = {
     item: PaymentTaskContext
     onDecisionApplied?: (view: ApprovalCommandView) => void
     onTaskCompleted?: () => void
     onSelectFile?: (fileId: string) => void
     activeFileId?: string
     hideEmbeddedMaterials?: boolean
-}) {
-    if (item.workItemType === "APPROVAL_INSTANCE")
-        return (
-            <PaymentSubmissionTask
-                item={item}
-                onSelectFile={onSelectFile}
-                activeFileId={activeFileId}
-                hideEmbeddedMaterials={hideEmbeddedMaterials}
-            />
-        )
+    hasExternalPrimaryAction?: boolean
+    approvalRoundNo?: number
+    renderResubmission?: (request: PaymentRequest) => ReactNode
+}
+
+/** 使用当前任务读取申请及限定来源，发起人历史跟踪使用普通申请资格。 */
+export function PurchasePaymentRequestTask(props: PaymentRequestTaskProps) {
+    const { item } = props
     return (
-        <CurrentPaymentTask
-            item={item}
-            onDecisionApplied={onDecisionApplied}
-            onTaskCompleted={onTaskCompleted}
-            onSelectFile={onSelectFile}
-            activeFileId={activeFileId}
-            hideEmbeddedMaterials={hideEmbeddedMaterials}
-        />
+        <div className="@container/payment-request min-w-0 bg-card">
+            {item.workItemType === "APPROVAL_INSTANCE" ? (
+                <PaymentSubmissionTask key={item.workItemId} {...props} />
+            ) : (
+                <CurrentPaymentTask key={item.workItemId} {...props} />
+            )}
+        </div>
     )
 }
 
@@ -55,15 +44,11 @@ function CurrentPaymentTask({
     onTaskCompleted,
     onSelectFile,
     activeFileId,
-    hideEmbeddedMaterials = false,
-}: {
-    item: PaymentTaskContext
-    onDecisionApplied?: (view: ApprovalCommandView) => void
-    onTaskCompleted?: () => void
-    onSelectFile?: (fileId: string) => void
-    activeFileId?: string
-    hideEmbeddedMaterials?: boolean
-}) {
+    hideEmbeddedMaterials,
+    hasExternalPrimaryAction,
+    approvalRoundNo,
+    renderResubmission,
+}: PaymentRequestTaskProps) {
     const [completed, setCompleted] = useState(false)
     const scoped =
         item.workItemType !== "APPROVAL_INSTANCE" &&
@@ -81,29 +66,33 @@ function CurrentPaymentTask({
     // 完成后旧任务不再具备材料读取资格，等待队列切换时不展示其刷新错误。
     if (completed)
         return (
-            <p role="status" className="py-5 text-xs text-muted-foreground">
+            <p
+                role="status"
+                className="flex items-center gap-2 py-5 text-xs text-muted-foreground"
+            >
+                <Spinner />
                 当前任务已处理，正在更新待办…
             </p>
         )
     if (query.isPending)
         return (
-            <p className="py-5 text-xs text-muted-foreground">
+            <p
+                role="status"
+                className="flex items-center gap-2 py-5 text-xs text-muted-foreground"
+            >
+                <Spinner />
                 正在读取付款申请…
             </p>
         )
     if (query.isError)
         return (
-            <div className="space-y-3 py-5">
-                <p role="alert" className="text-body-compact text-destructive">
-                    {getErrorMessage(query.error, "付款申请读取失败")}
-                </p>
-                <Button
-                    id="ppr-task-retry"
-                    variant="outline"
-                    onClick={() => void query.refetch()}
-                >
-                    重试
-                </Button>
+            <div className="py-5">
+                <BusinessFailureState
+                    id={`ppr-task-${toAutomationIdSegment(item.workItemId)}-retry`}
+                    title="付款申请读取失败"
+                    error={query.error}
+                    onRetry={() => void query.refetch()}
+                />
             </div>
         )
     return (
@@ -114,6 +103,9 @@ function CurrentPaymentTask({
             onSelectFile={onSelectFile}
             activeFileId={activeFileId}
             hideEmbeddedMaterials={hideEmbeddedMaterials}
+            hasExternalPrimaryAction={hasExternalPrimaryAction}
+            approvalRoundNo={approvalRoundNo}
+            renderResubmission={renderResubmission}
             onDecisionApplied={(view) => {
                 setCompleted(true)
                 onDecisionApplied?.(view)
@@ -131,13 +123,10 @@ function PaymentSubmissionTask({
     item,
     onSelectFile,
     activeFileId,
-    hideEmbeddedMaterials = false,
-}: {
-    item: PaymentTaskContext
-    onSelectFile?: (fileId: string) => void
-    activeFileId?: string
-    hideEmbeddedMaterials?: boolean
-}) {
+    hideEmbeddedMaterials,
+    approvalRoundNo,
+    renderResubmission,
+}: PaymentRequestTaskProps) {
     const version = Number(item.subjectVersion)
     const validVersion = Number.isSafeInteger(version) && version > 0
     const query = usePaymentSubmissionQuery(
@@ -152,23 +141,23 @@ function PaymentSubmissionTask({
         )
     if (query.isPending)
         return (
-            <p role="status" className="py-5 text-xs text-muted-foreground">
+            <p
+                role="status"
+                className="flex items-center gap-2 py-5 text-xs text-muted-foreground"
+            >
+                <Spinner />
                 正在读取本次付款申请…
             </p>
         )
     if (query.isError)
         return (
-            <div className="space-y-3 py-5">
-                <p role="alert">
-                    {getErrorMessage(query.error, "本次付款申请读取失败")}
-                </p>
-                <Button
-                    id="ppr-submission-task-retry"
-                    variant="outline"
-                    onClick={() => void query.refetch()}
-                >
-                    重试
-                </Button>
+            <div className="py-5">
+                <BusinessFailureState
+                    id={`ppr-submission-task-${toAutomationIdSegment(item.workItemId)}-retry`}
+                    title="本次付款申请读取失败"
+                    error={query.error}
+                    onRetry={() => void query.refetch()}
+                />
             </div>
         )
     const request = query.data
@@ -183,10 +172,11 @@ function PaymentSubmissionTask({
             </p>
         )
     return (
-        <RequestDetailContent
+        <PaymentRequestTaskReview
             request={request}
-            embedded
-            showHistory={false}
+            idPrefix={`ppr-review-${toAutomationIdSegment(item.workItemId)}`}
+            approvalRoundNo={approvalRoundNo}
+            resubmission={renderResubmission?.(request)}
             submissionVersion={version}
             onSelectFile={onSelectFile}
             activeFileId={activeFileId}

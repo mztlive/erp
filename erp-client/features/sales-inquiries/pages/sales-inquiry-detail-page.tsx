@@ -21,7 +21,10 @@ import { buttonVariants } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { isWorkspaceFrame, workspaceHost } from "@/lib/workspace-tabs"
 import { InquiryCreateView } from "../components/inquiry-create-view"
-import { InquiryProcurementView } from "../components/inquiry-procurement-view"
+import {
+    InquiryProcurementView,
+    InquiryTaskHeader,
+} from "../components/inquiry-procurement-view"
 import { InquirySalesView } from "../components/inquiry-sales-view"
 import { useInquiry } from "../hooks/queries"
 import {
@@ -119,12 +122,18 @@ export function SalesInquiryDetailPage({
     ) => (
         <TaskPane
             aria-label={detailTitle}
+            archetype="action"
             header={
-                <DetailWorkspaceChrome
-                    className="shrink-0"
-                    title={detailTitle}
-                    meta={description ? <span>{description}</span> : undefined}
-                    secondaryActions={taskHeaderActions}
+                <InquiryTaskHeader
+                    title={procurement ? "询价采购处理" : detailTitle}
+                    meta={
+                        description ? (
+                            <span className="text-xs text-muted-foreground">
+                                {description}
+                            </span>
+                        ) : undefined
+                    }
+                    actions={taskHeaderActions}
                 />
             }
         >
@@ -152,7 +161,6 @@ export function SalesInquiryDetailPage({
                 >
                     正在核对账号权限…
                 </p>,
-                "正在核对账号权限…",
             )
         )
     }
@@ -218,7 +226,6 @@ export function SalesInquiryDetailPage({
                 >
                     正在读取询价资料…
                 </p>,
-                "正在读取询价资料…",
             )
         ) : (
             <DetailWorkspaceSkeleton

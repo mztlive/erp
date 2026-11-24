@@ -31,11 +31,13 @@ import { ApprovalRouteStepper } from "@/features/approval-workflow/components/ap
 import { ApprovalSubmittedSummary } from "@/features/approval-workflow/components/approval-submitted-summary"
 import {
     FinancialApprovalRenderer,
+    buildFinancialDynamicRejectPhrases,
     isFinancialApprovalDocumentType,
     isReversalDocumentType,
 } from "@/features/approval-workflow/components/financial-approval-renderer"
 import {
     StructuredDiffApprovalRenderer,
+    buildStructuredDiffDynamicRejectPhrases,
     isStructuredDiffDocumentType,
 } from "@/features/approval-workflow/components/structured-diff-approval"
 import {
@@ -87,6 +89,7 @@ import {
     WorkspaceApprovalContextRail,
     type ApprovalContextRailTab,
 } from "./workspace-approval-context-rail"
+import { WorkspaceApprovalResubmissionBanner } from "./workspace-approval-resubmission-banner"
 import { WorkspaceApprovalReworkActions } from "./workspace-approval-rework"
 import { WorkspaceDeliveryBrief } from "./workspace-delivery-brief"
 import { WorkspaceDocumentBadge } from "./workspace-document-badge"
@@ -96,6 +99,7 @@ import {
 } from "./workspace-document-paper-dialog"
 import { WorkspaceFulfillmentProcessAction } from "./workspace-fulfillment-task"
 import { WorkspaceInvoiceApproval } from "./workspace-invoice-approval"
+import { buildInvoiceDynamicRejectPhrases } from "./workspace-invoice-approval-model"
 import { WorkspaceMoney } from "./workspace-money"
 import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import {
@@ -103,10 +107,16 @@ import {
     purchaseApprovalRiskReasons,
     type WorkspacePurchaseApprovalHandle,
 } from "./workspace-purchase-approval"
-import { buildPurchaseDynamicRejectPhrases } from "./workspace-purchase-comparison-model"
+import {
+    buildPurchaseDynamicRejectPhrases,
+    parsePurchaseExtraSections,
+} from "./workspace-purchase-comparison-model"
 import { WorkspacePurchasePayment } from "./workspace-purchase-payment"
 import type { PurchaseSourceComparisonTarget } from "./workspace-purchase-source-comparison"
-import { WorkspaceReceiptApproval } from "./workspace-receipt-approval"
+import {
+    WorkspaceReceiptApproval,
+    buildReceiptDynamicRejectPhrases,
+} from "./workspace-receipt-approval"
 import { WorkspaceRejectionNotice } from "./workspace-rejection-notice"
 import {
     WorkspaceSalesApproval,
@@ -250,9 +260,6 @@ export function WorkspaceDocumentTaskDetail({
         useState<PurchaseSourceComparisonTarget>()
     const purchaseApprovalHandleRef =
         useRef<WorkspacePurchaseApprovalHandle | null>(null)
-    const [highlightedExecutionId, setHighlightedExecutionId] = useState<
-        string | null
-    >(null)
 
     const setRailCollapsed = (
         next: boolean | ((previous: boolean) => boolean),
@@ -289,7 +296,6 @@ export function WorkspaceDocumentTaskDetail({
         setPaper(null)
         setActiveMaterialFileId(undefined)
         setSourceComparisonTarget(undefined)
-        setHighlightedExecutionId(null)
         setRailTab((current) =>
             current === "source-sales" &&
             item.businessObjectType !== "purchase_order"
@@ -453,18 +459,11 @@ export function WorkspaceDocumentTaskDetail({
         })
     }
 
-    const handleJumpToHistory = (executionId?: string) => {
-        setHighlightedExecutionId(executionId ?? null)
-        if (showDecisionRail) {
-            setRailTab("trail")
-            setRailCollapsed(false)
-        }
-    }
-
     const routeStepperEnabled = Boolean(
         approvalDocument &&
         instanceId &&
-        !((salesApproval || purchaseApproval) && showDecisionRail),
+        canReadSubmission &&
+        !showDecisionRail,
     )
     const compactStepperHistoryQuery = useApprovalHistoryInfiniteQuery(
         { instanceId: instanceId ?? "", order: "desc" },
@@ -693,9 +692,20 @@ export function WorkspaceDocumentTaskDetail({
             item.businessObjectType === "customer_refund" ||
             item.businessObjectType === "supplier_refund"
         ) {
+            const extraRefundAmount =
+                submission?.display.source.extra_sections.find((section) =>
+                    [
+                        "本次退款金额",
+                        "退款金额",
+                        "含税金额",
+                        "申请金额",
+                        "金额",
+                    ].includes(section.label.trim()),
+                )?.value
             const amountValue = extractUnsignedDecimal(
                 item.amountSummary?.value ??
                     submission?.display.source.amount_label ??
+                    extraRefundAmount ??
                     primaryAmount?.value,
             )
             if (
@@ -720,6 +730,7 @@ export function WorkspaceDocumentTaskDetail({
         salesApproval,
         salesSubmission,
         submission?.display.source.amount_label,
+        submission?.display.source.extra_sections,
     ])
 
     const dynamicRejectPhrases = useMemo(() => {
@@ -735,13 +746,43 @@ export function WorkspaceDocumentTaskDetail({
                 submission.attachments.length,
             )
         }
+        if (invoiceApproval && invoiceReviewQuery.data) {
+            return buildInvoiceDynamicRejectPhrases(
+                invoiceReviewQuery.data,
+                submission ? dockedMaterialFiles.length : undefined,
+            )
+        }
+        if (receiptApproval && submission?.display.source) {
+            return buildReceiptDynamicRejectPhrases(
+                submission.display.source,
+                dockedMaterialFiles.length,
+            )
+        }
+        if (financialDocType && submission?.display.source) {
+            return buildFinancialDynamicRejectPhrases(
+                financialDocType,
+                submission.display.source,
+                dockedMaterialFiles.length,
+            )
+        }
+        if (structuredDiffDocType && submission?.display.source) {
+            return buildStructuredDiffDynamicRejectPhrases(
+                structuredDiffDocType,
+                submission.display.source,
+            )
+        }
         return []
     }, [
+        dockedMaterialFiles.length,
+        financialDocType,
+        invoiceApproval,
+        invoiceReviewQuery.data,
         purchaseApproval,
+        receiptApproval,
         salesApproval,
         salesSubmission,
-        submission?.attachments.length,
-        submission?.purchase_lines,
+        structuredDiffDocType,
+        submission,
     ])
 
     const actions = reworkTask ? (
@@ -751,7 +792,7 @@ export function WorkspaceDocumentTaskDetail({
         />
     ) : approvalTask && !trackingTask ? (
         <ApprovalActionBar
-            presentation="workspace"
+            presentation={inspectorMode ? "sheet" : "workspace"}
             id={`workspace-task-detail-approval-${toAutomationIdSegment(item.workItemId)}`}
             documentType={item.businessObjectType}
             documentId={item.businessObjectId}
@@ -807,10 +848,53 @@ export function WorkspaceDocumentTaskDetail({
         (materials.isPending || salesSubmission),
     )
     const usesPurchaseWorkbench = Boolean(purchaseApproval && instanceId)
+    const genericSubmissionPending = Boolean(
+        shouldReadSubmission && !specializedApproval && materials.isPending,
+    )
+    const genericResubmission = useMemo(() => {
+        if (
+            !submission ||
+            !(
+                useFinancialRenderer ||
+                useStructuredDiffRenderer ||
+                useInlineGenericSummary
+            )
+        ) {
+            return null
+        }
+        const parsed = parsePurchaseExtraSections(
+            submission.display.source.extra_sections,
+            item,
+        ).resubmission
+        if (!parsed) return null
+        const isResubmitRound =
+            (parsed.roundNo ?? 0) >= 2 ||
+            Boolean(parsed.resubmissionReason || parsed.diffSummary)
+        if (!isResubmitRound) return null
+        return useFinancialRenderer ? parsed : { ...parsed, diffs: [] }
+    }, [
+        item,
+        submission,
+        useFinancialRenderer,
+        useInlineGenericSummary,
+        useStructuredDiffRenderer,
+    ])
+    const genericResubmissionBanner = genericResubmission ? (
+        <WorkspaceApprovalResubmissionBanner
+            roundNo={genericResubmission.roundNo}
+            resubmissionReason={genericResubmission.resubmissionReason}
+            diffBaseline={genericResubmission.diffBaseline}
+            diffSummary={genericResubmission.diffSummary}
+            diffs={genericResubmission.diffs}
+            previousRejection={genericResubmission.previousRejection}
+        />
+    ) : null
 
     const hideCustomSummaryHeader =
         receiptApproval ||
+        Boolean(invoiceApproval && instanceId) ||
         deliveryBrief ||
+        genericSubmissionPending ||
         useInlineGenericSummary ||
         useStructuredDiffRenderer ||
         useFinancialRenderer ||
@@ -825,14 +909,13 @@ export function WorkspaceDocumentTaskDetail({
     )
     const headerActions = (
         <WorkspaceTaskHeaderActions item={headerItem}>
-            {showDecisionRail &&
-            (usesSalesWorkbench || usesPurchaseWorkbench) &&
-            submission ? (
+            {showDecisionRail && approvalDocument && submission ? (
                 <Button
                     id={`workspace-task-detail-materials-shortcut-${toAutomationIdSegment(item.workItemId)}`}
                     type="button"
                     variant="ghost"
                     size="xs"
+                    aria-pressed={!railCollapsed && railTab === "materials"}
                     className={cn(
                         detailWorkspaceStyles.quietButton,
                         dockedMaterialFiles.length === 0 &&
@@ -911,6 +994,11 @@ export function WorkspaceDocumentTaskDetail({
         </WorkspaceTaskHeaderActions>
     )
 
+    const isInvestigationFallback =
+        !approvalDocument &&
+        (item.workItemType === "INTEGRATION_RESULT_UNKNOWN" ||
+            item.workItemType === "BUSINESS_EXCEPTION")
+
     return (
         <WorkspaceProcessingPane
             archetype={
@@ -918,7 +1006,9 @@ export function WorkspaceDocumentTaskDetail({
                     ? showDecisionRail
                         ? "decision"
                         : "informational"
-                    : "action"
+                    : isInvestigationFallback
+                      ? "investigation"
+                      : "action"
             }
             idPrefix={`workspace-document-${toAutomationIdSegment(item.workItemId)}`}
             className="@container/document"
@@ -991,9 +1081,6 @@ export function WorkspaceDocumentTaskDetail({
                                             }
                                           : undefined
                                   }
-                                  highlightedExecutionId={
-                                      highlightedExecutionId
-                                  }
                                   isRework={rework}
                                   activeTab={railTab}
                                   onActiveTabChange={setRailTab}
@@ -1065,10 +1152,10 @@ export function WorkspaceDocumentTaskDetail({
                         hideRejectionBanner={
                             showRejectionAlertBanner ||
                             usesSalesWorkbench ||
-                            usesPurchaseWorkbench
-                        }
-                        onJumpToHistory={
-                            showDecisionRail ? handleJumpToHistory : undefined
+                            usesPurchaseWorkbench ||
+                            invoiceApproval ||
+                            receiptApproval ||
+                            Boolean(genericResubmission)
                         }
                         trailingActions={
                             inspectorMode ? headerActions : undefined
@@ -1186,6 +1273,9 @@ export function WorkspaceDocumentTaskDetail({
                                 ? handleSelectMaterialFile
                                 : undefined
                         }
+                        onOpenMaterials={
+                            showDecisionRail ? handleOpenMaterials : undefined
+                        }
                         activeFileId={activeMaterialFileId}
                         hideEmbeddedMaterials={showDecisionRail}
                     />
@@ -1237,6 +1327,11 @@ export function WorkspaceDocumentTaskDetail({
                 submission &&
                 instanceId ? (
                     <>
+                        {genericResubmissionBanner ? (
+                            <div className="pt-3">
+                                {genericResubmissionBanner}
+                            </div>
+                        ) : null}
                         <StructuredDiffApprovalRenderer
                             documentType={structuredDiffDocType}
                             source={submission.display.source}
@@ -1275,6 +1370,8 @@ export function WorkspaceDocumentTaskDetail({
                             impactSummary={submission.display.impact_summary}
                             documentNo={documentNumber}
                             counterpartyLabel={counterpartyName}
+                            instanceId={instanceId}
+                            resubmission={genericResubmissionBanner}
                         />
                         {!showDecisionRail ? (
                             <DetailBlock
@@ -1296,6 +1393,11 @@ export function WorkspaceDocumentTaskDetail({
                     </>
                 ) : useInlineGenericSummary && submission && instanceId ? (
                     <>
+                        {genericResubmissionBanner ? (
+                            <div className="pt-3">
+                                {genericResubmissionBanner}
+                            </div>
+                        ) : null}
                         <DetailBlock>
                             <div className="space-y-6">
                                 <ApprovalSubmittedSummary
@@ -1328,7 +1430,9 @@ export function WorkspaceDocumentTaskDetail({
                 ) : (
                     <>
                         {!receiptApproval &&
+                        !invoiceApproval &&
                         !deliveryBrief &&
+                        !genericSubmissionPending &&
                         !usesSalesWorkbench &&
                         !usesPurchaseWorkbench &&
                         informationFields.length > 0 ? (
@@ -1376,6 +1480,9 @@ export function WorkspaceDocumentTaskDetail({
                             showDecisionRail
                                 ? handleSelectMaterialFile
                                 : undefined
+                        }
+                        onOpenMaterials={
+                            showDecisionRail ? handleOpenMaterials : undefined
                         }
                         activeFileId={activeMaterialFileId}
                         hideEmbeddedMaterials={showDecisionRail}
@@ -1428,6 +1535,7 @@ export function WorkspaceDocumentTaskDetail({
                 ) : null}
 
                 {!invoiceApproval &&
+                !genericSubmissionPending &&
                 !useInlineGenericSummary &&
                 !useStructuredDiffRenderer &&
                 !useFinancialRenderer &&
@@ -1445,13 +1553,13 @@ export function WorkspaceDocumentTaskDetail({
                             {briefLines.map((line, lineIndex) => (
                                 <li
                                     key={`${lineIndex}:${line.title}`}
-                                    className="grid gap-1 border-b border-border/40 py-2.5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-4"
+                                    className="grid gap-1 border-b border-border/40 py-2.5 last:border-b-0 @[480px]/document:grid-cols-[minmax(0,1fr)_auto] @[480px]/document:gap-x-4"
                                 >
                                     <span className="min-w-0">
                                         {line.title}
                                     </span>
                                     {line.quantity || line.dueLabel ? (
-                                        <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground sm:max-w-md sm:justify-end sm:text-right">
+                                        <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground @[480px]/document:max-w-md @[480px]/document:justify-end @[480px]/document:text-right">
                                             {line.quantity ? (
                                                 <span className="num">
                                                     {line.quantity}

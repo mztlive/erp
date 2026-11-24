@@ -8,8 +8,10 @@ import { SupplierOrderExecutionShipments } from "./supplier-order-execution-ship
 /** 履约分区承接完整子单和运单；无执行明细时不渲染空分区，避免页面留白与套娃卡片。 */
 export function SupplierOrderExecutionProgress({
     orderId,
+    compact = false,
 }: {
     orderId: string
+    compact?: boolean
 }) {
     const query = useSupplierExecutionSetupQuery(orderId)
     const setup = query.data
@@ -46,7 +48,10 @@ export function SupplierOrderExecutionProgress({
                 />
             ) : null}
             {setup.shipments?.length ? (
-                <SupplierOrderExecutionShipments shipments={setup.shipments} />
+                <SupplierOrderExecutionShipments
+                    shipments={setup.shipments}
+                    compact={compact}
+                />
             ) : null}
         </>
     )

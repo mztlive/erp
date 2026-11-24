@@ -14,14 +14,12 @@ import {
     type MaterialFileItem,
 } from "@/components/business/unified-material-viewer"
 import { Button } from "@/components/ui/button"
-import type {
-    NewProductInput,
-    PortalApplication,
-} from "@/features/supplier-portal/types"
+import type { PortalApplication } from "@/features/supplier-portal/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { downloadBlob } from "@/lib/download-blob"
 import { portalReviewFile } from "../api"
 import { portalAdminKeys, usePortalReviewFile } from "../hooks"
+import { portalReviewMaterialRefs } from "../lib/review-overview"
 
 function ReviewImage({
     applicationId,
@@ -106,71 +104,54 @@ function ReviewImage({
     )
 }
 
+export function usePortalReviewMaterials(application?: PortalApplication) {
+    const queryClient = useQueryClient()
+    const applicationId = application?.id
+    const unique = useMemo(
+        () => portalReviewMaterialRefs(application),
+        [application],
+    )
+
+    const materialItems = useMemo<readonly MaterialFileItem[]>(
+        () =>
+            applicationId
+                ? unique.map((row) => {
+                      const fetchBlob = () =>
+                          queryClient.fetchQuery({
+                              queryKey: [
+                                  ...portalAdminKeys.all,
+                                  "image",
+                                  applicationId,
+                                  row.id,
+                              ],
+                              queryFn: () =>
+                                  portalReviewFile(applicationId, row.id),
+                          })
+                      return {
+                          id: row.id,
+                          name: row.label,
+                          mimeType: row.mimeType,
+                          loadPreview: () => fetchBlob(),
+                          onDownload: async () => {
+                              const blob = await fetchBlob()
+                              downloadBlob(blob, row.label)
+                          },
+                      }
+                  })
+                : [],
+        [applicationId, queryClient, unique],
+    )
+
+    return { unique, materialItems }
+}
+
 export function PortalReviewImages({
     application,
 }: {
     application: PortalApplication
 }) {
-    const queryClient = useQueryClient()
     const [activeFileId, setActiveFileId] = useState<string | null>(null)
-    const product = (application.submitted_snapshot ??
-        application.input) as unknown as NewProductInput
-
-    const unique = useMemo(() => {
-        const rows: { id: string; label: string; mimeType?: string }[] = [
-            ...(product.image_asset_ids ?? []).map((id) => ({
-                id,
-                label: "商品图片",
-                mimeType: "image/*",
-            })),
-            ...(product.file_asset_ids ?? []).map((id) => ({
-                id,
-                label: "商品资料图片",
-            })),
-            ...(product.skus ?? []).flatMap((row) =>
-                row.image_asset_id
-                    ? [
-                          {
-                              id: row.image_asset_id,
-                              label: `${row.name} · 规格图片`,
-                              mimeType: "image/*",
-                          },
-                      ]
-                    : [],
-            ),
-        ]
-        return rows.filter(
-            (row, index) =>
-                rows.findIndex((item) => item.id === row.id) === index,
-        )
-    }, [product.file_asset_ids, product.image_asset_ids, product.skus])
-
-    const materialItems = useMemo<readonly MaterialFileItem[]>(
-        () =>
-            unique.map((row) => {
-                const fetchBlob = () =>
-                    queryClient.fetchQuery({
-                        queryKey: [
-                            ...portalAdminKeys.all,
-                            "image",
-                            application.id,
-                            row.id,
-                        ],
-                        queryFn: () => portalReviewFile(application.id, row.id),
-                    })
-                return {
-                    id: row.id,
-                    name: row.label,
-                    mimeType: row.mimeType,
-                    loadPreview: () => fetchBlob(),
-                    onDownload: async () => {
-                        const blob = await fetchBlob()
-                        downloadBlob(blob, row.label)
-                    },
-                }
-            }),
-        [application.id, queryClient, unique],
-    )
+    const { unique, materialItems } = usePortalReviewMaterials(application)
 
     if (!unique.length) return null
     return (

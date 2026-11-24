@@ -1,8 +1,9 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useSelector } from "@tanstack/react-form"
-import { ArrowUpRightIcon, PencilLineIcon } from "lucide-react"
+import { useQueryClient } from "@tanstack/react-query"
+import { ArrowUpRightIcon, CircleAlertIcon, PencilLineIcon } from "lucide-react"
 import { z } from "zod"
 import { useAppForm, toFieldErrors } from "@/components/form"
 import { FormalActionConfirmDialog } from "@/components/business"
@@ -16,14 +17,16 @@ import { PurchaseChangeOrderEditDialog } from "@/features/purchase-orders/compon
 import { SalesChangeOrderEditDialog } from "@/features/sales-orders/components/sales-change-order-edit-dialog"
 import { useSalesOrderDetailQuery } from "@/features/sales-orders/hooks/queries"
 import { useAbandonApprovalReworkMutation } from "@/features/work-items/queries"
-import { getErrorMessage } from "@/lib/api/errors"
+import { getErrorMessage, isApiError } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     FormalCommandKeyLedger,
-    classifyFormalCommandError,
+    isCommandOutcomeUnknown,
+    type FormalCommandIdentity,
 } from "@/lib/formal-command"
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 import { hasPermission } from "@/lib/permissions"
+import { queryKeyRoots } from "@/lib/query-key-roots"
 import {
     WORK_ITEM_ABANDON_REASON_MAX_CHARS,
     workItemAbandonReasonSchema,
@@ -39,6 +42,24 @@ const FINANCIAL_INLINE_KINDS = new Set<FinancialDraftKind>([
     "supplier_refund",
     "payment_reversal",
 ])
+
+const ABANDON_COMMAND = "abandon"
+
+type AbandonPayload = {
+    workItemId: string
+    expectedTaskVersion: string
+    reason: string
+}
+
+type AbandonIssue =
+    | { kind: "unknown" }
+    | { kind: "conflict"; taskVersion: string }
+    | { kind: "failed"; message: string }
+
+type ReworkActionsProps = {
+    item: WorkspaceWorkItem
+    onTaskCompleted?: (workItemId: string) => void
+}
 
 function resolveFinancialDraftKind(
     documentType?: string,
@@ -58,21 +79,21 @@ function resolveFinancialDraftKind(
  * - 销售单/采购单/开票申请/付款申请等重型单据通过 `navigateWorkspace` 在工作台新页签打开编辑，不冲毁当前工作台上下文；
  * - 放弃本次办理接入统一 `ReasonTextareaField`（512 字符实时计数 + Ctrl/⌘+Enter 提交）。
  */
-export function WorkspaceApprovalReworkActions({
-    item,
-    onTaskCompleted,
-}: {
-    item: WorkspaceWorkItem
-    onTaskCompleted?: (workItemId: string) => void
-}) {
+export function WorkspaceApprovalReworkActions(props: ReworkActionsProps) {
+    return <ReworkActions key={props.item.workItemId} {...props} />
+}
+
+function ReworkActions({ item, onTaskCompleted }: ReworkActionsProps) {
     const router = useRouter()
     const profile = useAccountProfileQuery()
     const mutation = useAbandonApprovalReworkMutation()
-    const ledger = useMemo(() => new FormalCommandKeyLedger(), [])
+    const queryClient = useQueryClient()
+    const [ledger] = useState(() => new FormalCommandKeyLedger())
+    const submitting = useRef(false)
     const [abandonOpen, setAbandonOpen] = useState(false)
     const [inlineEditOpen, setInlineEditOpen] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    const [unknown, setUnknown] = useState(false)
+    const [issue, setIssue] = useState<AbandonIssue | null>(null)
+    const [refreshing, setRefreshing] = useState(false)
     const id = `workspace-rework-${toAutomationIdSegment(item.workItemId)}`
     const pathname = usePathname()
     const searchParams = useSearchParams()
@@ -111,6 +132,25 @@ export function WorkspaceApprovalReworkActions({
 
     const canProcess =
         item.status === "OPEN" && item.allowedActions.includes("PROCESS")
+    const canAbandon =
+        item.status === "OPEN" && item.allowedActions.includes("ABANDON_REWORK")
+    const unknown = issue?.kind === "unknown"
+    const versionConflict =
+        issue?.kind === "conflict" && issue.taskVersion === item.taskVersion
+
+    // 外部刷新后任务已关闭或版本推进时自动解除滞留的未知结果锁。
+    useEffect(() => {
+        if (!unknown) return
+        const lockedCommand = ledger.peek<AbandonPayload>(ABANDON_COMMAND)
+        if (
+            !canAbandon ||
+            !lockedCommand ||
+            lockedCommand.payload.expectedTaskVersion !== item.taskVersion
+        ) {
+            ledger.settle(ABANDON_COMMAND, "succeeded")
+            setIssue(null)
+        }
+    }, [canAbandon, item.taskVersion, ledger, unknown])
     const canSubmitStockAdjustment = hasPermission(
         profile.data?.permissions,
         "stock_adjustment:submit",
@@ -123,6 +163,68 @@ export function WorkspaceApprovalReworkActions({
         }
     }
 
+    async function submitAbandon(
+        command: FormalCommandIdentity<AbandonPayload>,
+    ) {
+        if (submitting.current) return
+        submitting.current = true
+        try {
+            await mutation.mutateAsync({
+                ...command.payload,
+                idempotencyKey: command.idempotencyKey,
+            })
+        } catch (cause) {
+            if (isCommandOutcomeUnknown(cause)) {
+                ledger.settle(ABANDON_COMMAND, "unknown")
+                setIssue({ kind: "unknown" })
+                setAbandonOpen(false)
+                throw cause
+            }
+
+            ledger.settle(ABANDON_COMMAND, "failed")
+            setIssue(
+                isApiError(cause) && cause.status === 409
+                    ? {
+                          kind: "conflict",
+                          taskVersion: command.payload.expectedTaskVersion,
+                      }
+                    : {
+                          kind: "failed",
+                          message: getErrorMessage(
+                              cause,
+                              "放弃办理未完成，请重试",
+                          ),
+                      },
+            )
+            setAbandonOpen(canAbandon)
+            throw cause
+        } finally {
+            submitting.current = false
+        }
+
+        ledger.settle(ABANDON_COMMAND, "succeeded")
+        setIssue(null)
+        setAbandonOpen(false)
+        form.reset()
+        onTaskCompleted?.(command.payload.workItemId)
+    }
+
+    async function refreshTask() {
+        setRefreshing(true)
+        try {
+            await Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: queryKeyRoots.workItems,
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: queryKeyRoots.workspaceHome,
+                }),
+            ])
+        } finally {
+            setRefreshing(false)
+        }
+    }
+
     const form = useAppForm({
         defaultValues: { reason: "" },
         validators: {
@@ -131,54 +233,127 @@ export function WorkspaceApprovalReworkActions({
             }),
         },
         onSubmit: async ({ value }) => {
-            if (mutation.isPending) return
-            const reason = value.reason.trim()
-            if (!reason) {
-                setError("请填写放弃办理的原因")
+            if (submitting.current || unknown || versionConflict || !canAbandon)
                 return
-            }
-            const command = ledger.acquire(
-                "abandon",
-                `rework:${item.workItemId}`,
-                {
-                    workItemId: item.workItemId,
-                    expectedTaskVersion: item.taskVersion,
-                    reason,
-                },
-            )
-            if (!command) return
-            setError(null)
+            setIssue(null)
+            let command: FormalCommandIdentity<AbandonPayload>
             try {
-                await mutation.mutateAsync({
-                    ...command.payload,
-                    idempotencyKey: command.idempotencyKey,
-                })
-                ledger.settle("abandon", "succeeded")
-                setUnknown(false)
-                setAbandonOpen(false)
-                onTaskCompleted?.(item.workItemId)
+                command = ledger.acquire(
+                    ABANDON_COMMAND,
+                    `rework:${item.workItemId}`,
+                    {
+                        workItemId: item.workItemId,
+                        expectedTaskVersion: item.taskVersion,
+                        reason: value.reason.trim(),
+                    },
+                )
             } catch (cause) {
-                const result = classifyFormalCommandError(cause)
-                ledger.settle("abandon", result)
-                setUnknown(result === "unknown")
-                setError(getErrorMessage(cause, "放弃办理未完成，请重试"))
+                setIssue({
+                    kind: "failed",
+                    message: getErrorMessage(cause, "无法提交，请重试"),
+                })
                 throw cause
             }
+            await submitAbandon(command)
         },
     })
     const rawReason = useSelector(form.store, (state) => state.values.reason)
+    const formSubmitting = useSelector(
+        form.store,
+        (state) => state.isSubmitting,
+    )
+    const pending = mutation.isPending || formSubmitting
     const reasonValid = workItemAbandonReasonSchema.safeParse(rawReason).success
 
     return (
         <>
-            <div className="flex flex-wrap items-center gap-2">
-                {canProcess && supportsInlineEdit ? (
-                    <>
+            {unknown ? (
+                <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
+                    <div
+                        role="alert"
+                        className="flex min-w-0 flex-[1_1_16rem] items-start gap-2 rounded-r-md border-l-2 border-l-warning bg-warning-soft/50 px-3 py-2 text-xs text-warning-soft-foreground"
+                    >
+                        <CircleAlertIcon
+                            aria-hidden="true"
+                            className="mt-0.5 size-3.5 shrink-0"
+                        />
+                        <p>
+                            <strong className="font-semibold">
+                                放弃办理结果待确认。
+                            </strong>
+                            点击核对提交结果，将沿用原提交凭证重试本次操作。
+                        </p>
+                    </div>
+                    <Button
+                        id={`${id}-unknown-refresh`}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={pending || refreshing}
+                        onClick={() => void refreshTask()}
+                    >
+                        {refreshing ? "正在刷新…" : "刷新最新数据"}
+                    </Button>
+                    <Button
+                        id={`${id}-check-result`}
+                        type="button"
+                        variant="default"
+                        size="sm"
+                        disabled={pending}
+                        onClick={() => {
+                            const command =
+                                ledger.peek<AbandonPayload>(ABANDON_COMMAND)
+                            if (command)
+                                void submitAbandon(command).catch(
+                                    () => undefined,
+                                )
+                        }}
+                    >
+                        {pending ? "正在核对结果…" : "核对提交结果"}
+                    </Button>
+                </div>
+            ) : (
+                <div className="flex flex-wrap items-center justify-end gap-2 empty:hidden">
+                    {!canAbandon && issue?.kind === "failed" && (
+                        <p role="alert" className="text-xs text-destructive">
+                            {issue.message}
+                        </p>
+                    )}
+                    {canProcess && supportsInlineEdit && href && (
+                        <Button
+                            id={`${id}-edit`}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={pending}
+                            onClick={openInWorkspaceTab}
+                        >
+                            打开原单页面
+                            <ArrowUpRightIcon
+                                data-icon="inline-end"
+                                aria-hidden="true"
+                            />
+                        </Button>
+                    )}
+                    {canAbandon && (
+                        <Button
+                            id={`${id}-abandon`}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={pending}
+                            onClick={() => setAbandonOpen(true)}
+                        >
+                            放弃本次办理
+                        </Button>
+                    )}
+                    {canProcess && supportsInlineEdit ? (
                         <Button
                             id={`${id}-inline-edit`}
                             type="button"
+                            variant="default"
                             size="sm"
-                            disabled={mutation.isPending || unknown}
+                            disabled={pending}
                             onClick={() => setInlineEditOpen(true)}
                         >
                             <PencilLineIcon
@@ -187,52 +362,24 @@ export function WorkspaceApprovalReworkActions({
                             />
                             就地修改并重提
                         </Button>
-                        {href ? (
-                            <Button
-                                id={`${id}-edit`}
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                disabled={mutation.isPending || unknown}
-                                onClick={openInWorkspaceTab}
-                            >
-                                打开原单页面
-                                <ArrowUpRightIcon
-                                    data-icon="inline-end"
-                                    aria-hidden="true"
-                                />
-                            </Button>
-                        ) : null}
-                    </>
-                ) : canProcess && href ? (
-                    <Button
-                        id={`${id}-edit`}
-                        type="button"
-                        size="sm"
-                        disabled={mutation.isPending || unknown}
-                        onClick={openInWorkspaceTab}
-                    >
-                        修改或重新提交
-                        <ArrowUpRightIcon
-                            data-icon="inline-end"
-                            aria-hidden="true"
-                        />
-                    </Button>
-                ) : null}
-                {item.status === "OPEN" &&
-                item.allowedActions.includes("ABANDON_REWORK") ? (
-                    <Button
-                        id={`${id}-abandon`}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={mutation.isPending || unknown}
-                        onClick={() => setAbandonOpen(!abandonOpen)}
-                    >
-                        放弃本次办理
-                    </Button>
-                ) : null}
-            </div>
+                    ) : canProcess && href ? (
+                        <Button
+                            id={`${id}-edit`}
+                            type="button"
+                            variant="default"
+                            size="sm"
+                            disabled={pending}
+                            onClick={openInWorkspaceTab}
+                        >
+                            修改或重新提交
+                            <ArrowUpRightIcon
+                                data-icon="inline-end"
+                                aria-hidden="true"
+                            />
+                        </Button>
+                    ) : null}
+                </div>
+            )}
 
             {inlineEditOpen && financialKind ? (
                 <FinancialDraftEditor
@@ -298,27 +445,35 @@ export function WorkspaceApprovalReworkActions({
                 idPrefix={`${id}-confirm-abandon`}
                 open={abandonOpen}
                 onOpenChange={(open) => {
-                    if (!mutation.isPending && !unknown) setAbandonOpen(open)
+                    if (!pending && !unknown) setAbandonOpen(open)
                 }}
                 title="放弃本次办理"
                 actionLabel="放弃本次办理"
-                confirmLabel={unknown ? "重试本次操作" : "确认放弃"}
+                confirmLabel="确认放弃"
                 actionVariant="destructive"
+                layout="compact"
                 fromStatus={{ label: "驳回待处理", tone: "warning" }}
                 toStatus={{ label: "已关闭", tone: "neutral" }}
                 description="放弃后关闭此待办。原单据仍为已驳回，内容和审批记录保留，后续可从单据详情再次办理。"
-                pending={mutation.isPending}
-                confirmDisabled={!reasonValid}
+                pending={pending}
+                confirmDisabled={!reasonValid || versionConflict || !canAbandon}
                 onConfirm={() => form.handleSubmit()}
+                onConfirmError={() => undefined}
                 formContent={
                     <div className="space-y-4">
                         <form.Field name="reason">
                             {(field) => {
-                                const fieldError = field.state.meta.isTouched
-                                    ? toFieldErrors(
-                                          field.state.meta.errors,
-                                      ).find((entry) => entry?.message)?.message
-                                    : undefined
+                                const overLimit =
+                                    Array.from(field.state.value.trim())
+                                        .length >
+                                    WORK_ITEM_ABANDON_REASON_MAX_CHARS
+                                const fieldError =
+                                    field.state.meta.isTouched || overLimit
+                                        ? toFieldErrors(
+                                              field.state.meta.errors,
+                                          ).find((entry) => entry?.message)
+                                              ?.message
+                                        : undefined
                                 return (
                                     <ReasonTextareaField
                                         id={`${id}-reason`}
@@ -331,32 +486,71 @@ export function WorkspaceApprovalReworkActions({
                                         placeholder="说明放弃本次办理的原因"
                                         value={field.state.value}
                                         onChange={field.handleChange}
-                                        onBlur={field.handleBlur}
-                                        disabled={mutation.isPending || unknown}
-                                        error={fieldError}
-                                        onCtrlEnterSubmit={() => {
-                                            if (
-                                                reasonValid &&
-                                                !mutation.isPending &&
-                                                !unknown
-                                            ) {
-                                                void form.handleSubmit()
-                                            }
+                                        onBlur={() => {
+                                            field.handleChange(
+                                                field.state.value.trim(),
+                                            )
+                                            field.handleBlur()
                                         }}
+                                        disabled={
+                                            pending || unknown || !canAbandon
+                                        }
+                                        error={fieldError}
+                                        onCtrlEnterSubmit={
+                                            versionConflict || unknown
+                                                ? undefined
+                                                : () => {
+                                                      if (
+                                                          reasonValid &&
+                                                          canAbandon &&
+                                                          !pending
+                                                      ) {
+                                                          void form
+                                                              .handleSubmit()
+                                                              .catch(
+                                                                  () =>
+                                                                      undefined,
+                                                              )
+                                                      }
+                                                  }
+                                        }
                                     />
                                 )
                             }}
                         </form.Field>
-                        {error ? (
+                        {versionConflict && (
+                            <div className="flex flex-wrap items-center gap-2 rounded-r-md border-l-2 border-l-warning bg-warning-soft/50 px-3 py-2 text-xs text-warning-soft-foreground">
+                                <p role="alert">
+                                    任务已更新，请刷新最新数据后核对。
+                                </p>
+                                <Button
+                                    id={`${id}-refresh-task`}
+                                    type="button"
+                                    variant="outline"
+                                    size="xs"
+                                    disabled={refreshing}
+                                    onClick={() => void refreshTask()}
+                                >
+                                    {refreshing ? "正在刷新…" : "刷新最新数据"}
+                                </Button>
+                            </div>
+                        )}
+                        {!canAbandon && (
+                            <p
+                                role="alert"
+                                className="text-xs text-destructive"
+                            >
+                                此任务当前无法放弃办理，请返回核对任务状态。
+                            </p>
+                        )}
+                        {issue?.kind === "failed" && canAbandon && (
                             <p
                                 role="alert"
                                 className="text-body-compact text-destructive"
                             >
-                                {unknown
-                                    ? "处理结果待确认，请保留输入并重试同一次操作。"
-                                    : error}
+                                {issue.message}
                             </p>
-                        ) : null}
+                        )}
                     </div>
                 }
             />

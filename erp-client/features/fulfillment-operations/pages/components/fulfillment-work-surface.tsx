@@ -22,13 +22,6 @@ import {
     WorkspaceTaskPageSlot,
     type ValidationIssue,
 } from "@/components/business"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
@@ -53,13 +46,14 @@ import {
 import { salesOrderHref } from "@/features/fulfillment-operations/pages/lib/gate-copy"
 import { displayText } from "@/features/fulfillment-operations/lib/readable-label"
 import { displayName } from "@/lib/display-name"
-import {
-    sourceContextFields,
-    shipmentSummary,
-} from "@/features/fulfillment-operations/pages/lib/presentation"
-import { toAutomationIdSegment } from "@/lib/automation-id"
+import { shipmentSummary } from "../lib/presentation"
 import { FulfillmentPaymentNotice } from "./fulfillment-payment-notice"
 import { FulfillmentGateStatus } from "./fulfillment-gate-status"
+import {
+    FulfillmentSourceContext,
+    type FulfillmentTaskContext,
+} from "./fulfillment-task-overview"
+import { FulfillmentTaskWorkSurface } from "./fulfillment-task-work-surface"
 
 export type FulfillmentWorkSurfaceProps = {
     operation: FulfillmentOperation
@@ -83,6 +77,14 @@ export type FulfillmentWorkSurfaceProps = {
     shortcutsOpen: boolean
     headingRef: React.Ref<HTMLHeadingElement>
     resultUnknown: boolean
+    taskContext?: FulfillmentTaskContext
+    actionError?: string | null
+    recovery?: {
+        resolving: boolean
+        retrying: boolean
+        onResolve: () => void
+        onRetry?: () => void
+    }
     /** W01 内联作业面只处理任务绑定的单个对象。 */
     singleOperation?: boolean
     showBack?: boolean
@@ -97,7 +99,20 @@ export type FulfillmentWorkSurfaceProps = {
 }
 
 /** 当前单据的处理面：处理条、来源上下文、草稿表单与动作区。 */
-export function FulfillmentWorkSurface({
+export function FulfillmentWorkSurface(props: FulfillmentWorkSurfaceProps) {
+    if (props.taskContext) {
+        return (
+            <FulfillmentTaskWorkSurface
+                key={props.operation.operationId}
+                {...props}
+                taskContext={props.taskContext}
+            />
+        )
+    }
+    return <FulfillmentQueueWorkSurface {...props} />
+}
+
+function FulfillmentQueueWorkSurface({
     operation,
     draft,
     validationIssues,
@@ -207,7 +222,10 @@ export function FulfillmentWorkSurface({
                                 variant="ghost"
                                 onClick={onBack}
                             >
-                                <ArrowLeftIcon data-icon="inline-start" />
+                                <ArrowLeftIcon
+                                    aria-hidden="true"
+                                    data-icon="inline-start"
+                                />
                                 返回
                             </Button>
                         ) : null}
@@ -249,25 +267,16 @@ export function FulfillmentWorkSurface({
                 </button>
             </div>
 
-            <Card
-                size="sm"
-                className={
-                    singleOperation
-                        ? addressPacking
-                            ? "min-h-0 flex-1 border-0 bg-transparent py-0 shadow-none"
-                            : "border-0 bg-transparent py-0 shadow-none"
-                        : "border border-border/80 bg-card shadow-none"
-                }
-            >
+            <section className="min-w-0 bg-card">
                 {singleOperation ? null : (
-                    <CardHeader className="border-b border-grid">
+                    <header className="border-b border-grid pb-2">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                             <div>
-                                <CardTitle
+                                <h3
                                     ref={headingRef}
                                     tabIndex={-1}
                                     aria-live="polite"
-                                    className="outline-none"
+                                    className="text-body-compact font-semibold outline-none"
                                 >
                                     {
                                         OPERATION_TYPE_LABEL[
@@ -275,11 +284,11 @@ export function FulfillmentWorkSurface({
                                         ]
                                     }
                                     {salesOrderNo ? ` · ${salesOrderNo}` : ""}
-                                </CardTitle>
+                                </h3>
                                 {headerSubtitle ? (
-                                    <CardDescription>
+                                    <p className="text-xs text-muted-foreground">
                                         {headerSubtitle}
-                                    </CardDescription>
+                                    </p>
                                 ) : null}
                             </div>
                             <BusinessStatusBadge
@@ -288,17 +297,9 @@ export function FulfillmentWorkSurface({
                                 tone={operation.statusTone}
                             />
                         </div>
-                    </CardHeader>
+                    </header>
                 )}
-                <CardContent
-                    className={
-                        singleOperation && addressPacking
-                            ? "flex min-h-0 flex-1 flex-col gap-3 px-0"
-                            : singleOperation
-                              ? "space-y-5 px-0 py-4"
-                              : "space-y-5"
-                    }
-                >
+                <div className="space-y-3 py-3">
                     {singleOperation && addressPacking && (
                         <h3
                             ref={headingRef}
@@ -474,8 +475,8 @@ export function FulfillmentWorkSurface({
                             />
                         </WorkspaceTaskFooter>
                     )}
-                </CardContent>
-            </Card>
+                </div>
+            </section>
         </div>
     )
 }
@@ -552,7 +553,10 @@ function FulfillmentExecuteActions({
                         disabled={formalPending}
                         onClick={onSkip}
                     >
-                        <SkipForwardIcon data-icon="inline-start" />
+                        <SkipForwardIcon
+                            aria-hidden="true"
+                            data-icon="inline-start"
+                        />
                         先跳过
                     </Button>
                 ) : null}
@@ -571,14 +575,14 @@ function FulfillmentExecuteActions({
                                 />
                             }
                         >
-                            <EllipsisIcon />
+                            <EllipsisIcon aria-hidden="true" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                             <DropdownMenuItem
                                 id="fulfillment-operations-work-surface-discard"
                                 onClick={onDiscard}
                             >
-                                <Undo2Icon />
+                                <Undo2Icon aria-hidden="true" />
                                 放弃修改
                             </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -595,7 +599,10 @@ function FulfillmentExecuteActions({
                         onClick={() => void onSave()}
                     >
                         {!savePending ? (
-                            <SaveIcon data-icon="inline-start" />
+                            <SaveIcon
+                                aria-hidden="true"
+                                data-icon="inline-start"
+                            />
                         ) : null}
                         {savePending ? "保存中…" : "保存草稿"}
                     </LoadingButton>
@@ -618,7 +625,10 @@ function FulfillmentExecuteActions({
                             className="animate-spin"
                         />
                     ) : (
-                        <CircleCheckIcon data-icon="inline-start" />
+                        <CircleCheckIcon
+                            aria-hidden="true"
+                            data-icon="inline-start"
+                        />
                     )}
                     {formalPending
                         ? "正在确认…"
@@ -642,13 +652,18 @@ function FulfillmentReadOnlyActions({
     salesOrderId: string
     currentUrl: string
 }) {
+    const profile = useAccountProfileQuery()
+    const canOpenSales =
+        showSalesOrderLinks &&
+        salesOrderId &&
+        hasPermission(profile.data?.permissions, "sales_order:detail")
     return (
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
             <p className="flex items-center gap-2 text-xs text-muted-foreground">
                 <EyeIcon className="size-4 shrink-0" aria-hidden="true" />
                 {readOnlyNote}
             </p>
-            {showSalesOrderLinks ? (
+            {canOpenSales ? (
                 <Button
                     id="fulfillment-operations-work-surface-open-sales-order"
                     type="button"
@@ -660,89 +675,9 @@ function FulfillmentReadOnlyActions({
                     }
                 >
                     打开销售单
-                    <ArrowRightIcon data-icon="inline-end" />
+                    <ArrowRightIcon aria-hidden="true" data-icon="inline-end" />
                 </Button>
             ) : null}
         </div>
-    )
-}
-
-function FulfillmentSourceContext({
-    operation,
-    currentUrl,
-    customerInTitle = false,
-}: {
-    operation: FulfillmentOperation
-    currentUrl: string
-    customerInTitle?: boolean
-}) {
-    const profile = useAccountProfileQuery()
-    const canViewPurchase = hasPermission(
-        profile.data?.permissions,
-        "purchase_order:detail",
-    )
-    const canViewSales = hasPermission(
-        profile.data?.permissions,
-        "sales_order:detail",
-    )
-    const fields = [
-        ...sourceContextFields(
-            operation,
-            salesOrderHref(operation.source.salesOrderId, currentUrl),
-        ),
-    ]
-        .filter((field) => !customerInTitle || field.label !== "客户")
-        .sort((left, right) => {
-            const order = ["客户", "供应商", "仓库", "销售单", "采购单"]
-            return order.indexOf(left.label) - order.indexOf(right.label)
-        })
-    if (fields.length === 0) return null
-    return (
-        <section aria-label="来源单据">
-            <dl className="my-3 flex flex-wrap gap-x-6 gap-y-2 border-t border-border/50 pt-3">
-                {fields.map((field) => {
-                    const purchaseLink =
-                        field.label === "采购单" &&
-                        operation.source.purchaseOrderId &&
-                        canViewPurchase
-                            ? `/procurement/orders/${encodeURIComponent(operation.source.purchaseOrderId)}`
-                            : undefined
-                    const href =
-                        purchaseLink || (canViewSales ? field.href : undefined)
-                    const isDocument =
-                        field.label === "销售单" || field.label === "采购单"
-                    return (
-                        <div
-                            key={field.label}
-                            className="flex min-w-0 items-baseline gap-3"
-                        >
-                            <dt className="shrink-0 text-xs text-muted-foreground">
-                                {field.label}
-                            </dt>
-                            <dd
-                                title={isDocument ? field.value : undefined}
-                                className={
-                                    isDocument
-                                        ? "min-w-0 truncate text-body-compact font-medium"
-                                        : "min-w-0 break-words text-body-compact font-medium"
-                                }
-                            >
-                                {href ? (
-                                    <Link
-                                        id={`fulfillment-operations-work-surface-source-${toAutomationIdSegment(field.label)}`}
-                                        href={href}
-                                        className="text-primary underline underline-offset-4"
-                                    >
-                                        {field.value}
-                                    </Link>
-                                ) : (
-                                    field.value
-                                )}
-                            </dd>
-                        </div>
-                    )
-                })}
-            </dl>
-        </section>
     )
 }

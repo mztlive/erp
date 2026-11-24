@@ -13,6 +13,12 @@ import type { SupplierOrderDetailView } from "@/features/supplier-orders/types"
 import { formatDateTime } from "@/lib/datetime"
 import { Item } from "@/features/supplier-orders/components/supplier-order-preview-center-section-parts"
 
+const SOURCE_LABELS: Record<string, string> = {
+    erp: "ERP 系统",
+    supplier_callback: "供应商回调",
+    manual_import: "人工导入",
+}
+
 const TRACK_LABELS: Record<
     SupplierOrderDetailView["statusHistory"][number]["track"],
     string
@@ -24,6 +30,8 @@ const TRACK_LABELS: Record<
 
 export function FulfillmentSection({
     logistics,
+    idPrefix = "supplier-order-center-fulfillment",
+    investigation = false,
     address,
     statusHistory,
     canReveal,
@@ -31,6 +39,8 @@ export function FulfillmentSection({
     onReveal,
     onHide,
 }: {
+    idPrefix?: string
+    investigation?: boolean
     logistics: SupplierOrderDetailView["logistics"]
     address: SupplierOrderDetailView["address"]
     statusHistory: SupplierOrderDetailView["statusHistory"]
@@ -41,8 +51,15 @@ export function FulfillmentSection({
 }) {
     return (
         <>
-            <DetailWorkspaceSection title="履约与物流" width="form">
-                <DescriptionList className="mb-4 gap-y-3">
+            <DetailWorkspaceSection
+                title="履约与物流"
+                width="form"
+                contentClassName="@container/fulfillment"
+            >
+                <DescriptionList
+                    columns="one"
+                    className="mb-4 gap-y-3 @[420px]/fulfillment:grid-cols-2"
+                >
                     <Item
                         label="接单时间"
                         value={
@@ -130,7 +147,7 @@ export function FulfillmentSection({
                 <div className="flex gap-2 pt-1">
                     {canReveal && (
                         <LoadingButton
-                            id="supplier-order-center-fulfillment-reveal"
+                            id={`${idPrefix}-reveal`}
                             loading={revealPending}
                             type="button"
                             size="sm"
@@ -138,19 +155,27 @@ export function FulfillmentSection({
                             disabled={!canReveal || revealPending}
                             onClick={onReveal}
                         >
-                            {!revealPending && <EyeIcon className="size-3.5" />}
+                            {!revealPending && (
+                                <EyeIcon
+                                    className="size-3.5"
+                                    aria-hidden="true"
+                                />
+                            )}
                             {revealPending ? "揭示中…" : "短时揭示"}
                         </LoadingButton>
                     )}
                     {address.revealed ? (
                         <Button
-                            id="supplier-order-center-fulfillment-hide"
+                            id={`${idPrefix}-hide`}
                             type="button"
                             size="sm"
                             variant="ghost"
                             onClick={onHide}
                         >
-                            <EyeOffIcon className="size-3.5" />
+                            <EyeOffIcon
+                                className="size-3.5"
+                                aria-hidden="true"
+                            />
                             立即隐藏
                         </Button>
                     ) : null}
@@ -186,7 +211,11 @@ export function FulfillmentSection({
                                                 "passthrough",
                                             )}
                                         </span>{" "}
-                                        · {h.source}
+                                        ·{" "}
+                                        {investigation
+                                            ? (SOURCE_LABELS[h.source] ??
+                                              "来源待核实")
+                                            : h.source}
                                     </span>
                                 </div>
                                 {h.note ? (

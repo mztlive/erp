@@ -56,7 +56,16 @@ export function FulfillmentPageStates({
     embedded = false,
 }: FulfillmentPageStatesProps) {
     if (status === "pending") {
-        const body = (
+        const body = embedded ? (
+            <div
+                aria-busy="true"
+                aria-label="正在加载履约任务"
+                className="space-y-3 py-3"
+            >
+                <div className="h-20 animate-pulse rounded-lg bg-surface-sunken" />
+                <div className="h-64 animate-pulse rounded-lg bg-surface-sunken" />
+            </div>
+        ) : (
             <>
                 <div className="h-20 animate-pulse rounded-lg bg-muted" />
                 <div className="grid gap-4 xl:grid-cols-[minmax(16rem,1fr)_minmax(0,2fr)]">

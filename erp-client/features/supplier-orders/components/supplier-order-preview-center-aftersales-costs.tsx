@@ -22,9 +22,11 @@ import {
 
 export function AftersalesSection({
     afterSales,
+    idPrefix = "supplier-order-center-aftersales",
     pending,
     onRequest,
 }: {
+    idPrefix?: string
     afterSales: SupplierOrderDetailView["afterSales"]
     pending: boolean
     onRequest: (request: AfterSalesConfirmRequest) => void
@@ -40,7 +42,7 @@ export function AftersalesSection({
                     {afterSales.map((as) => (
                         <section
                             key={as.requestId}
-                            className="flex flex-col gap-3 border-t border-border/60 pt-4 first:border-t-0 first:pt-0"
+                            className="@container/aftersales flex flex-col gap-3 border-t border-border/60 pt-4 first:border-t-0 first:pt-0"
                         >
                             <div>
                                 <h3 className="num font-semibold">
@@ -57,7 +59,7 @@ export function AftersalesSection({
                                     </span>
                                 </p>
                             </div>
-                            <div className="grid gap-2 sm:grid-cols-2">
+                            <div className="grid gap-2 @[400px]/aftersales:grid-cols-2">
                                 <FactGap
                                     title="余额/卡券恢复"
                                     status={as.cardRestore.statusLabel}
@@ -73,7 +75,7 @@ export function AftersalesSection({
                             <div className="flex flex-wrap gap-2">
                                 <PermissionGuard permission="supplier_fulfillment_order:cancel">
                                     <GuardedBusinessAction
-                                        id={`supplier-order-center-aftersales-${toAutomationIdSegment(as.requestId)}-cancel`}
+                                        id={`${idPrefix}-${toAutomationIdSegment(as.requestId)}-cancel`}
                                         type="button"
                                         size="sm"
                                         variant="outline"
@@ -100,7 +102,7 @@ export function AftersalesSection({
                                 </PermissionGuard>
                                 <PermissionGuard permission="supplier_fulfillment_order:refund">
                                     <GuardedBusinessAction
-                                        id={`supplier-order-center-aftersales-${toAutomationIdSegment(as.requestId)}-refund`}
+                                        id={`${idPrefix}-${toAutomationIdSegment(as.requestId)}-refund`}
                                         type="button"
                                         size="sm"
                                         variant="outline"

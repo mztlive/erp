@@ -10,6 +10,8 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { StatusBadge } from "@/components/ui/status-badge"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import { cn } from "@/lib/utils"
 import { InquiryFeedbackTable } from "./inquiry-feedback-table"
 import { sumInquiryFeesGross } from "../lib/feedback-summary"
 import { inquiryDate } from "../lib/format"
@@ -25,12 +27,14 @@ export function InquiryFeedbackResults({
     onRoundChange,
     idPrefix = "sales-inquiry",
     content = "all",
+    workbench = false,
 }: {
     inquiry: SalesInquiry | ProcurementInquiry
     selectedRound?: number
     onRoundChange?: (round: number) => void
     idPrefix?: string
     content?: "all" | "products" | "fees"
+    workbench?: boolean
 }) {
     const rounds = [...inquiry.feedbacks].sort(
         (left, right) => right.round - left.round,
@@ -42,7 +46,12 @@ export function InquiryFeedbackResults({
     )?.data
     if (!feedback)
         return (
-            <p className="rounded-lg border border-dashed p-6 text-xs text-muted-foreground">
+            <p
+                className={cn(
+                    "text-xs text-muted-foreground",
+                    workbench ? "py-4" : "rounded-lg border border-dashed p-6",
+                )}
+            >
                 采购尚未发布反馈。发布后可查看商品报价及当轮费用。
             </p>
         )
@@ -55,7 +64,7 @@ export function InquiryFeedbackResults({
         `第 ${item.round} 轮${item.round === inquiry.feedback_round ? "（最新）" : ""}`
     return (
         <section
-            className="space-y-5"
+            className={workbench ? "space-y-3" : "space-y-5"}
             aria-label={content === "fees" ? "反馈费用结果" : "采购反馈结果"}
         >
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -102,7 +111,7 @@ export function InquiryFeedbackResults({
                             >
                                 {rounds.map((item) => (
                                     <SelectItem
-                                        id={`${idPrefix}-feedback-round-option-${item.round}`}
+                                        id={`${idPrefix}-feedback-round-option-${toAutomationIdSegment(item.round)}`}
                                         key={item.round}
                                         value={String(item.round)}
                                     >
@@ -115,7 +124,7 @@ export function InquiryFeedbackResults({
                 )}
             </div>
             {content === "fees" ? (
-                <FeedbackFees feedback={feedback} />
+                <FeedbackFees feedback={feedback} workbench={workbench} />
             ) : !requirement ||
               feedback.data.lines.some(
                   (result) =>
@@ -130,6 +139,7 @@ export function InquiryFeedbackResults({
                 <InquiryFeedbackTable
                     key={`${feedback.round}-${feedback.requirement_version}`}
                     readOnly
+                    workbench={workbench}
                     idPrefix={`${idPrefix}-feedback-${feedback.round}`}
                     lines={feedback.data.lines}
                     demand={requirement.lines}
@@ -137,17 +147,25 @@ export function InquiryFeedbackResults({
                     feesTotal={sumInquiryFeesGross(feedback.data.fees)}
                 />
             )}
-            {content === "all" && <FeedbackFees feedback={feedback} />}
+            {content === "all" && (
+                <FeedbackFees feedback={feedback} workbench={workbench} />
+            )}
         </section>
     )
 }
 
-function FeedbackFees({ feedback }: { feedback: InquiryFeedback }) {
+function FeedbackFees({
+    feedback,
+    workbench = false,
+}: {
+    feedback: InquiryFeedback
+    workbench?: boolean
+}) {
     return (
         <section className="space-y-3" aria-label="本轮额外费用">
             <h3 className="text-body-compact font-medium">
                 本轮额外费用{" "}
-                <span className="text-body-compact font-normal text-muted-foreground">
+                <span className="num text-body-compact font-normal text-muted-foreground">
                     {feedback.data.fees.length} 项
                 </span>
             </h3>
@@ -156,7 +174,13 @@ function FeedbackFees({ feedback }: { feedback: InquiryFeedback }) {
                     本轮未提出额外费用。
                 </p>
             ) : (
-                <div className="divide-y rounded-lg border px-4">
+                <div
+                    className={
+                        workbench
+                            ? "divide-y divide-border/60 border-t border-border/60"
+                            : "divide-y rounded-lg border px-4"
+                    }
+                >
                     {feedback.data.fees.map((fee) => (
                         <div key={fee.fee_id} className="space-y-2 py-4">
                             <div className="flex flex-wrap items-center gap-3">

@@ -11,8 +11,12 @@ import { openWorkspaceLabel } from "@/lib/ui-text"
 
 function SettlementCenterPayable({
     payable,
+    idPrefix = "supplier-settlements-center",
+    grossAmount,
 }: {
     payable?: SettlementDetailView["payable"]
+    idPrefix?: string
+    grossAmount?: string
 }) {
     return (
         <DetailWorkspaceSection title="应付与票款" width="form">
@@ -27,17 +31,23 @@ function SettlementCenterPayable({
                     <p className="text-body-compact">
                         含税金额{" "}
                         <MoneyValue
-                            value={payable.grossAmount}
+                            value={grossAmount ?? payable.grossAmount}
                             display="exact"
                             className={taxAmountToneClass("含税金额")}
                         />{" "}
-                        · 到期 <span className="num">{payable.dueDate}</span> ·{" "}
-                        {payable.statusLabel}
+                        {payable.dueDate && (
+                            <>
+                                {" "}
+                                · 到期{" "}
+                                <span className="num">{payable.dueDate}</span>
+                            </>
+                        )}{" "}
+                        · {payable.statusLabel}
                     </p>
                     <div>
                         <Button
-                            id="supplier-settlements-center-payable-open-w12"
-                            type="button"
+                            id={`${idPrefix}-payable-open-w12`}
+                            nativeButton={false}
                             size="sm"
                             render={<Link href={payable.w12Href} />}
                         >

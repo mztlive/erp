@@ -57,7 +57,9 @@ export type InquiryPublishContext = {
     task_version: number
 }
 export type InquiryFeedbackEditorHandle = {
+    locateLine: (lineId: string) => void
     save: () => void
+    recover: () => void
     openFees: () => void
     focusFirstIncomplete: () => void
     validateBeforePublish: () => boolean
@@ -68,6 +70,7 @@ export type InquiryFeedbackEditorStatus = {
     dirty: boolean
     saving: boolean
     disabled: boolean
+    unresolved?: boolean
     completeCount: number
     totalCount: number
     availableCount: number
@@ -103,6 +106,47 @@ function feedbackBaseline(
     }
 }
 
+export const INQUIRY_FEEDBACK_DRAFT_CHANGED = "inquiry-feedback-draft-changed"
+
+type FeedbackDraft = {
+    data: InquiryFeedbackData
+    version: number
+    task_version: number
+    baseline?: FeedbackBaseline
+}
+
+export function initialInquiryFeedback(
+    inquiry: ProcurementInquiry,
+    task: InquiryTask,
+    userId: string,
+): FeedbackDraft {
+    const existing =
+        inquiry.feedback_work.find(
+            (work) => !work.frozen && work.actor_id === userId,
+        )?.data ?? inquiry.feedbacks.at(-1)?.data
+    const existingByLine = new Map(
+        existing?.lines.map((line) => [line.line_id, line]),
+    )
+    return {
+        version: inquiry.version,
+        baseline: feedbackBaseline(inquiry, task, userId),
+        task_version: task.version,
+        data: {
+            lines: inquiry.draft.lines.map(
+                (line) =>
+                    existingByLine.get(line.line_id) ?? {
+                        line_id: line.line_id,
+                        conclusion: "pending",
+                        available_quantity: "0",
+                        prices: [],
+                        public_note: "",
+                    },
+            ),
+            fees: existing?.fees ?? [],
+        },
+    }
+}
+
 export function InquiryFeedbackEditor({
     ref,
     publishing = false,
@@ -115,6 +159,7 @@ export function InquiryFeedbackEditor({
     onLinesChange,
     quoteWorkbookActions,
     onInternalQuote,
+    workbench = false,
 }: {
     ref?: React.Ref<InquiryFeedbackEditorHandle>
     publishing?: boolean
@@ -127,40 +172,14 @@ export function InquiryFeedbackEditor({
     onLinesChange?: (lines: readonly InquiryFeedbackLine[]) => void
     quoteWorkbookActions?: React.ReactNode
     onInternalQuote?: (lineId: string) => void
+    workbench?: boolean
 }) {
     const key = inquiryStorageKey(userId, `${inquiry.id}:${task.id}:feedback`)
-    const [initial, setInitial] = React.useState<{
-        data: InquiryFeedbackData
-        version: number
-        task_version: number
-        baseline?: FeedbackBaseline
-    } | null>(null)
+    const [initial, setInitial] = React.useState<FeedbackDraft | null>(null)
     React.useEffect(() => {
-        const existing =
-            inquiry.feedback_work.find(
-                (work) => !work.frozen && work.actor_id === userId,
-            )?.data ?? inquiry.feedbacks.at(-1)?.data
         setInitial(
-            readInquiryLocalValue(key) ?? {
-                version: inquiry.version,
-                baseline: feedbackBaseline(inquiry, task, userId),
-                task_version: task.version,
-                data: {
-                    lines: inquiry.draft.lines.map(
-                        (line) =>
-                            existing?.lines.find(
-                                (feedback) => feedback.line_id === line.line_id,
-                            ) ?? {
-                                line_id: line.line_id,
-                                conclusion: "pending",
-                                available_quantity: "0",
-                                prices: [],
-                                public_note: "",
-                            },
-                    ),
-                    fees: existing?.fees ?? [],
-                },
-            },
+            readInquiryLocalValue<FeedbackDraft>(key) ??
+                initialInquiryFeedback(inquiry, task, userId),
         )
         // 当前任务的后台刷新不覆盖报价输入。
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -181,6 +200,7 @@ export function InquiryFeedbackEditor({
             onLinesChange={onLinesChange}
             quoteWorkbookActions={quoteWorkbookActions}
             onInternalQuote={onInternalQuote}
+            workbench={workbench}
         />
     ) : (
         <p role="status" className="text-xs text-muted-foreground">
@@ -203,16 +223,12 @@ function FeedbackEditorContent({
     onLinesChange,
     quoteWorkbookActions,
     onInternalQuote,
+    workbench,
 }: {
     ref?: React.Ref<InquiryFeedbackEditorHandle>
     publishing: boolean
     storageKey: string
-    initial: {
-        data: InquiryFeedbackData
-        version: number
-        task_version: number
-        baseline?: FeedbackBaseline
-    }
+    initial: FeedbackDraft
     inquiry: ProcurementInquiry
     task: InquiryTask
     userId: string
@@ -222,6 +238,7 @@ function FeedbackEditorContent({
     onLinesChange?: (lines: readonly InquiryFeedbackLine[]) => void
     quoteWorkbookActions?: React.ReactNode
     onInternalQuote?: (lineId: string) => void
+    workbench: boolean
 }) {
     const client = useQueryClient()
     const command = useInquiryCommand(userId, inquiry.id)
@@ -250,6 +267,7 @@ function FeedbackEditorContent({
     const feeFocus = React.useRef<string | null>(null)
     const [feeValidationRequest, setFeeValidationRequest] = React.useState(0)
     const [validationRequest, setValidationRequest] = React.useState(0)
+    const [lineLocation, setLineLocation] = React.useState<{ lineId: string }>()
     const [ownCommandRevision, setOwnCommandRevision] = React.useState(0)
     const baseline = React.useRef(
         initial.baseline ??
@@ -457,6 +475,7 @@ function FeedbackEditorContent({
             dirty,
             saving: command.isPending,
             disabled,
+            unresolved: command.unresolved,
             completeCount: summary.completeCount,
             totalCount: summary.totalCount,
             availableCount: summary.availableCount,
@@ -470,13 +489,38 @@ function FeedbackEditorContent({
             grandTotal: summary.grandTotal,
             saved,
         })
-    }, [command.isPending, dirty, disabled, onStatusChange, saved, summary])
+    }, [
+        command.isPending,
+        command.unresolved,
+        dirty,
+        disabled,
+        onStatusChange,
+        saved,
+        summary,
+    ])
     React.useEffect(() => {
         onLinesChange?.(values.lines)
     }, [onLinesChange, values.lines])
+    React.useEffect(() => {
+        window.dispatchEvent(
+            new CustomEvent(INQUIRY_FEEDBACK_DRAFT_CHANGED, {
+                detail: storageKey,
+            }),
+        )
+    }, [storageKey, values, dirty])
     React.useImperativeHandle(ref, () => ({
+        locateLine(lineId) {
+            setLineLocation({ lineId })
+        },
         save() {
             if (!disabled) void form.handleSubmit()
+        },
+        recover() {
+            if (!command.unresolved || command.isPending) return
+            void command
+                .recover()
+                .then(() => onSaved())
+                .catch((failure) => setError(getErrorMessage(failure)))
         },
         openFees() {
             if (command.isPending || !command.ready) return
@@ -755,7 +799,7 @@ function FeedbackEditorContent({
                     </Alert>
                 )}
                 {command.unresolved && (
-                    <Alert variant="warning">
+                    <Alert variant="warning" className="border-l-2">
                         <AlertDescription>
                             上次提交结果待核对。
                             <Button
@@ -763,6 +807,7 @@ function FeedbackEditorContent({
                                 type="button"
                                 variant="outline"
                                 size="sm"
+                                className="ml-2"
                                 onClick={() =>
                                     void command
                                         .recover()
@@ -772,7 +817,7 @@ function FeedbackEditorContent({
                                         )
                                 }
                             >
-                                核对上次提交结果
+                                核对提交结果
                             </Button>
                         </AlertDescription>
                     </Alert>
@@ -782,6 +827,8 @@ function FeedbackEditorContent({
                     mode="array"
                     children={(field) => (
                         <InquiryFeedbackTable
+                            workbench={workbench}
+                            lineLocation={lineLocation}
                             inquiryId={inquiry.id}
                             taskId={task.id}
                             feedbackRound={inquiry.feedback_round + 1}

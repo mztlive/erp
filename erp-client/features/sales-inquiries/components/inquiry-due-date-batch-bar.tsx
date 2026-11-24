@@ -62,9 +62,13 @@ export function InquiryDueDateBatchBar({
                     data-icon="inline-start"
                     className="size-3.5"
                 />
-                {scopedToSelection
-                    ? `批量设交付日（${count}）`
-                    : "统一设交付日"}
+                {scopedToSelection ? (
+                    <>
+                        批量设交付日（<span className="num">{count}</span>）
+                    </>
+                ) : (
+                    "统一设交付日"
+                )}
             </PopoverTrigger>
             <PopoverContent
                 align="end"
@@ -100,7 +104,7 @@ export function InquiryDueDateBatchBar({
                             onClick={() => void form.handleSubmit()}
                         >
                             应用到{scopedToSelection ? "已选" : "全部"}{" "}
-                            {targetCount} 项商品
+                            <span className="num">{targetCount}</span> 项商品
                         </Button>
                     )}
                 </form.Subscribe>

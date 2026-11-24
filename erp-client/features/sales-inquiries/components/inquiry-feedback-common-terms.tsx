@@ -14,6 +14,7 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover"
 import { compactFixed, multiplyFixed } from "@/lib/fixed-decimal"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import type { FeedbackTerms } from "../lib/feedback-editing"
 import type { InquiryFeedbackLine } from "../types"
@@ -68,10 +69,12 @@ export function InquiryFeedbackCommonTerms({
     lines,
     disabled,
     onChange,
+    selection = false,
 }: {
     lines: InquiryFeedbackLine[]
     disabled: boolean
     onChange: (patch: Partial<FeedbackTerms>) => void
+    selection?: boolean
 }) {
     const [open, setOpen] = React.useState(false)
     const uniform = resolveUniformTaxRate(lines)
@@ -98,7 +101,11 @@ export function InquiryFeedbackCommonTerms({
                             detailWorkspaceStyles.subtleButton,
                             "gap-1.5",
                         )}
-                        title="批量设置全部非不供应商品的税率"
+                        title={
+                            selection
+                                ? "设置已选商品的税率（不含不供应商品）"
+                                : "批量设置全部非不供应商品的税率"
+                        }
                     />
                 }
             >
@@ -106,7 +113,7 @@ export function InquiryFeedbackCommonTerms({
                     aria-hidden="true"
                     className="size-3.5 text-muted-foreground"
                 />
-                <span>统一税率</span>
+                <span>{selection ? "批量设税率" : "统一税率"}</span>
                 <span className="num font-medium text-foreground">
                     {summaryLabel}
                 </span>
@@ -118,10 +125,11 @@ export function InquiryFeedbackCommonTerms({
             <PopoverContent align="end" className="w-72 gap-3 p-3.5">
                 <PopoverHeader>
                     <PopoverTitle className="text-body-compact font-semibold">
-                        统一设置税率
+                        {selection ? "批量设置税率" : "统一设置税率"}
                     </PopoverTitle>
                     <PopoverDescription>
-                        应用到全部可供及待确认商品，个别差异可直接在商品行修改。
+                        应用到{selection ? "已选" : "全部"}
+                        可供及待确认商品，个别差异可直接在商品行修改。
                     </PopoverDescription>
                 </PopoverHeader>
                 <div className="grid grid-cols-3 gap-1.5">
@@ -132,8 +140,9 @@ export function InquiryFeedbackCommonTerms({
                         return (
                             <button
                                 key={preset.rate}
-                                id={`procurement-feedback-common-tax-preset-${preset.rate.replace(".", "-")}`}
+                                id={`procurement-feedback-common-tax-preset-${toAutomationIdSegment(preset.rate)}`}
                                 type="button"
+                                aria-pressed={active}
                                 disabled={inactive}
                                 className={cn(
                                     "num h-control-sm cursor-pointer rounded-md border text-xs font-medium transition-colors",
@@ -164,7 +173,7 @@ export function InquiryFeedbackCommonTerms({
                         disabled={inactive}
                         inputMode="decimal"
                         aria-describedby="procurement-feedback-common-tax-hint"
-                        title="填写百分数，例如 13 表示 13%，修改后应用到全部非不供应商品"
+                        title="填写百分数，例如 13 表示 13%"
                         value={uniform.value}
                         placeholder={
                             uniform.state === "mixed"

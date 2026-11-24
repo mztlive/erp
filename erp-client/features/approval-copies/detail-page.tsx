@@ -1,67 +1,97 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
+import {
+    ArrowLeftIcon,
+    ChevronLeftIcon,
+    ChevronRightIcon,
+    KeyboardIcon,
+    PaperclipIcon,
+    RefreshCwIcon,
+} from "lucide-react"
 
 import {
     BusinessFailureState,
-    DetailWorkspaceBody,
-    DetailWorkspaceChrome,
     DetailWorkspaceMeta,
     DetailWorkspacePage,
-    DetailWorkspaceSection,
+    IconActionButton,
     detailWorkspaceStyles,
 } from "@/components/business"
 import {
-    UnifiedMaterialViewer,
-    type MaterialFileItem,
-} from "@/components/business/unified-material-viewer"
+    UnifiedTaskWorkbench,
+    UnifiedTaskWorkbenchRailToggle,
+} from "@/components/business/unified-task-workbench"
+import { UnifiedMaterialViewer } from "@/components/business/unified-material-viewer"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { COPY_TRIGGER_LABELS } from "@/features/approval-processes/copy-rules"
-import { ApprovalSubmittedMaterialsContent } from "@/features/approval-workflow/components/approval-submitted-materials"
-import { UnifiedAuditTrail } from "@/features/approval-workflow/components/unified-audit-trail"
-import { displayUnixSeconds } from "@/features/approval-workflow/display"
-import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
-    WorkspaceHotkeyCheatSheetButton,
-    useWorkspaceHotkeys,
-} from "@/features/workspace/hooks/use-workspace-hotkeys"
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog"
+import { Kbd } from "@/components/ui/kbd"
+import { Spinner } from "@/components/ui/spinner"
+import { StatusBadge } from "@/components/ui/status-badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { TooltipProvider } from "@/components/ui/tooltip"
+import { COPY_TRIGGER_LABELS } from "@/features/approval-processes/copy-rules"
+import type { ApprovalMaterials } from "@/features/approval-workflow/api/materials"
+import { UnifiedAuditTrail } from "@/features/approval-workflow/components/unified-audit-trail"
+import {
+    displayReadableName,
+    displayUnixSeconds,
+} from "@/features/approval-workflow/display"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { workspaceDocumentBadge } from "@/features/workspace/api/work-item-meta"
+import { useWorkspaceHotkeys } from "@/features/workspace/hooks/use-workspace-hotkeys"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { downloadBlob } from "@/lib/download-blob"
 import { useRouter, useSearchParams } from "@/lib/navigation"
 import {
     AUTO_NEXT_LABEL,
     getApprovalInstanceStatusMeta,
 } from "@/lib/task-status-dictionary"
+import { cn } from "@/lib/utils"
 import {
     buildWorkspaceDetailHref,
     workspaceQueueHref,
 } from "@/lib/workspace-detail-href"
-import { readWorkspaceQueueSequence } from "@/lib/workspace-queue-sequence"
-import { fetchCopyFile, type CopyFilters } from "./api"
-import { documentTypeLabel } from "./columns"
-import { CopyFiles } from "./copy-files"
-import { mapCopyHistoryToAuditItems } from "./copy-inspector"
-import { CopyPurchaseLines } from "./purchase-lines"
 import {
-    useCopies,
-    useCopyFile,
-    useCopyInfinite,
-    useReadCopies,
-} from "./queries"
+    readWorkspaceQueueSequence,
+    stashWorkspaceQueueSequence,
+} from "@/lib/workspace-queue-sequence"
+import type { CopyFilters } from "./api"
+import { documentTypeLabel } from "./columns"
+import { useCopyFileItems } from "./copy-files"
+import {
+    CopyMarkReadError,
+    CopySnapshot,
+    mapCopyHistoryToAuditItems,
+} from "./copy-inspector"
+import { useCopies, useCopyInfinite, useReadCopies } from "./queries"
 
 const AUTO_NEXT_STORAGE_KEY = "erp.workspace.autoNext"
+const RAIL_COLLAPSED_STORAGE_KEY = "erp.workspace.copyRailCollapsed"
+const EMPTY_ATTACHMENTS: ApprovalMaterials["attachments"] = []
+type CopyRailTab = "history" | "materials"
 
-function readStoredAutoNext(param: string | null): boolean {
-    if (param === "1") return true
-    if (param === "0") return false
+function readPreference(key: string): boolean {
     if (typeof window === "undefined") return false
     try {
-        return window.localStorage.getItem(AUTO_NEXT_STORAGE_KEY) === "1"
+        return window.localStorage.getItem(key) === "1"
     } catch {
         return false
+    }
+}
+
+function writePreference(key: string, value: boolean): void {
+    try {
+        window.localStorage.setItem(key, value ? "1" : "0")
+    } catch {
+        // 浏览器禁用本地存储时，当前页面偏好仍然生效。
     }
 }
 
@@ -85,14 +115,13 @@ export function ApprovalCopyDetailPage({ id }: { id: string }) {
         params.get("returnTo"),
         "/workspace/copies",
     )
-    const initialAutoNext = readStoredAutoNext(params.get("autoNext"))
 
     return (
         <CopyDetailPane
-            key={id}
+            key={`${id}:${returnTo}`}
             id={id}
             returnTo={returnTo}
-            initialAutoNext={initialAutoNext}
+            autoNextParam={params.get("autoNext")}
             onBack={() => router.replace(returnTo, { scroll: false })}
         />
     )
@@ -101,83 +130,128 @@ export function ApprovalCopyDetailPage({ id }: { id: string }) {
 function CopyDetailPane({
     id,
     returnTo,
-    initialAutoNext,
+    autoNextParam,
     onBack,
 }: {
     id: string
     returnTo: string
-    initialAutoNext: boolean
+    autoNextParam: string | null
     onBack: () => void
 }) {
     const router = useRouter()
-    const [autoNext, setAutoNextState] = useState(initialAutoNext)
-    const [sidebarTab, setSidebarTab] = useState<"history" | "materials">(
-        "history",
-    )
-    const [activeFileId, setActiveFileId] = useState<string | undefined>()
+    const [autoNext, setAutoNextState] = useState(autoNextParam === "1")
+    const [railCollapsed, setRailCollapsedState] = useState(false)
+    const [sidebarTab, setSidebarTab] = useState<CopyRailTab>("history")
+    const [activeFileId, setActiveFileId] = useState<string>()
+    const [showHotkeys, setShowHotkeys] = useState(false)
+    const [markedAutomatically, setMarkedAutomatically] = useState(false)
+    const [fallbackQueueIds, setFallbackQueueIds] =
+        useState<readonly string[]>()
+    const focusFrame = useRef<number | null>(null)
 
-    const setAutoNext = useCallback((next: boolean) => {
-        setAutoNextState(next)
-        try {
-            window.localStorage.setItem(AUTO_NEXT_STORAGE_KEY, next ? "1" : "0")
-        } catch {
-            // 隐私模式下忽略本地存储写入异常
+    useEffect(() => {
+        setAutoNextState(
+            autoNextParam === "1" ||
+                (autoNextParam !== "0" &&
+                    readPreference(AUTO_NEXT_STORAGE_KEY)),
+        )
+    }, [autoNextParam])
+    useEffect(() => {
+        setRailCollapsedState(readPreference(RAIL_COLLAPSED_STORAGE_KEY))
+        return () => {
+            if (focusFrame.current !== null) {
+                window.cancelAnimationFrame(focusFrame.current)
+            }
         }
     }, [])
+
+    const setAutoNext = (next: boolean) => {
+        setAutoNextState(next)
+        writePreference(AUTO_NEXT_STORAGE_KEY, next)
+    }
+    const setRailCollapsed = (next: boolean) => {
+        setRailCollapsedState(next)
+        writePreference(RAIL_COLLAPSED_STORAGE_KEY, next)
+    }
 
     const profile = useAccountProfileQuery()
     const userId = profile.data?.userid
     const query = useCopyInfinite(id)
     const mark = useReadCopies()
-    const fileDownload = useCopyFile()
 
     const cachedQueueIds = useMemo(
         () => readWorkspaceQueueSequence(userId, "copies", returnTo),
         [returnTo, userId],
     )
-    const hasCachedSequence = Boolean(
-        cachedQueueIds && cachedQueueIds.includes(id),
-    )
-
+    const hasCachedSequence = Boolean(cachedQueueIds?.includes(id))
     const queueFilters = useMemo(
         () => parseCopyQueueFilters(returnTo),
         [returnTo],
     )
     const queue = useCopies(queueFilters, Boolean(userId) && !hasCachedSequence)
+    const fetchedQueueIds = useMemo(
+        () => queue.data?.items.map((entry) => entry.id) ?? [],
+        [queue.data?.items],
+    )
 
-    const primaryPage = query.isError ? undefined : query.data?.pages[0]
+    useEffect(() => {
+        if (
+            !hasCachedSequence &&
+            !fallbackQueueIds &&
+            fetchedQueueIds.includes(id)
+        ) {
+            setFallbackQueueIds(fetchedQueueIds)
+            stashWorkspaceQueueSequence(
+                userId,
+                "copies",
+                returnTo,
+                fetchedQueueIds,
+            )
+        }
+    }, [
+        fallbackQueueIds,
+        fetchedQueueIds,
+        hasCachedSequence,
+        id,
+        returnTo,
+        userId,
+    ])
+
+    const queueIds =
+        hasCachedSequence && cachedQueueIds
+            ? cachedQueueIds
+            : (fallbackQueueIds ?? fetchedQueueIds)
+    const currentIndex = queueIds.indexOf(id)
+    const prevId = currentIndex > 0 ? queueIds[currentIndex - 1] : undefined
+    const nextId = currentIndex >= 0 ? queueIds[currentIndex + 1] : undefined
+
+    const primaryPage =
+        query.isError && !query.isFetchNextPageError
+            ? undefined
+            : query.data?.pages[0]
+    const receipt = primaryPage?.receipt
+    const attachments = primaryPage?.materials.attachments ?? EMPTY_ATTACHMENTS
+    const { items: materialItems } = useCopyFileItems(id, attachments)
     const historyItems = useMemo(
         () => mapCopyHistoryToAuditItems(query.data?.pages),
         [query.data?.pages],
     )
 
     const attempted = useRef(false)
+    const waitingForUnreadQueue =
+        queueFilters.read === false && !hasCachedSequence && queue.isPending
     useEffect(() => {
         if (
-            primaryPage &&
+            receipt &&
+            !receipt.read_at &&
             !query.isFetching &&
-            !query.isError &&
-            !primaryPage.receipt.read_at &&
+            !waitingForUnreadQueue &&
             !attempted.current
         ) {
             attempted.current = true
-            mark.mutate([id])
+            mark.mutate([id], { onSuccess: () => setMarkedAutomatically(true) })
         }
-    }, [primaryPage, query.isFetching, query.isError, id, mark])
-
-    const queueIds = useMemo(
-        () =>
-            hasCachedSequence && cachedQueueIds
-                ? cachedQueueIds
-                : (queue.data?.items.map((entry) => entry.id) ?? []),
-        [cachedQueueIds, hasCachedSequence, queue.data?.items],
-    )
-    const currentIndex = queueIds.indexOf(id)
-    const prevId = currentIndex > 0 ? queueIds[currentIndex - 1] : undefined
-    const nextId =
-        currentIndex >= 0 && currentIndex + 1 < queueIds.length
-            ? queueIds[currentIndex + 1]
-            : undefined
+    }, [id, mark, query.isFetching, receipt, waitingForUnreadQueue])
 
     const openSibling = useCallback(
         (targetId: string) => {
@@ -192,348 +266,525 @@ function CopyDetailPane({
         [autoNext, returnTo, router],
     )
 
-    const attachments = useMemo(
-        () => primaryPage?.materials.attachments ?? [],
-        [primaryPage?.materials.attachments],
-    )
+    const openRailTab = (tab: CopyRailTab) => {
+        setSidebarTab(tab)
+        if (railCollapsed) setRailCollapsed(false)
+        if (focusFrame.current !== null) {
+            window.cancelAnimationFrame(focusFrame.current)
+        }
+        focusFrame.current = window.requestAnimationFrame(() => {
+            focusFrame.current = null
+            document.getElementById(`copy-detail-tab-${tab}`)?.focus()
+        })
+    }
+
+    const toggleRailTab = (tab: CopyRailTab) => {
+        if (!railCollapsed && sidebarTab === tab) {
+            setRailCollapsed(true)
+            return
+        }
+        openRailTab(tab)
+    }
 
     useWorkspaceHotkeys({
         enabled: Boolean(primaryPage),
         onNext: nextId ? () => openSibling(nextId) : undefined,
         onPrev: prevId ? () => openSibling(prevId) : undefined,
-        onMaterials:
-            attachments.length > 0
-                ? () => {
-                      setSidebarTab("materials")
-                      window.requestAnimationFrame(() => {
-                          document
-                              .getElementById("copy-detail-tab-materials")
-                              ?.focus()
-                      })
-                  }
-                : undefined,
-        onHistory: () => {
-            setSidebarTab("history")
-            window.requestAnimationFrame(() => {
-                document.getElementById("copy-detail-tab-history")?.focus()
-            })
+        onMaterials: () => toggleRailTab("materials"),
+        onHistory: () => toggleRailTab("history"),
+        onToggleRail: () => setRailCollapsed(!railCollapsed),
+        onFocusSearch: () => {
+            const input = document.querySelector<HTMLInputElement>(
+                '[data-slot="workspace-task-body"] input[id$="-search"]',
+            )
+            if (!input) return
+            input.focus()
+            input.select()
         },
+        onToggleCheatSheet: () => setShowHotkeys((open) => !open),
     })
 
-    const materialItems = useMemo<readonly MaterialFileItem[]>(
-        () =>
-            attachments.map((file) => ({
-                id: file.file_asset_id,
-                name: file.file_name,
-                mimeType: file.content_type,
-                sizeBytes: file.byte_size,
-                loadPreview: () => fetchCopyFile(id, file.file_asset_id, true),
-                onDownload: async () => {
-                    const blob = await fileDownload.mutateAsync({
-                        id,
-                        file: file.file_asset_id,
-                        preview: false,
-                    })
-                    downloadBlob(blob, file.file_name)
-                },
-            })),
-        [attachments, fileDownload, id],
-    )
+    const isRead = Boolean(receipt?.read_at || mark.isSuccess)
+    const retryRead = (advance: boolean) => {
+        if (mark.isPending) return
+        attempted.current = true
+        mark.mutate([id], {
+            onSuccess: () => {
+                if (advance && nextId) openSibling(nextId)
+            },
+        })
+    }
+    const readAndAdvance = () => {
+        if (!nextId) return
+        if (isRead) openSibling(nextId)
+        else retryRead(true)
+    }
 
-    const queueNavigation = (
-        <div className="flex items-center gap-1">
-            {currentIndex >= 0 && queueIds.length > 1 ? (
-                <>
-                    <span className="num mr-1 text-xs text-muted-foreground">
-                        第 {currentIndex + 1} / {queueIds.length} 项
-                    </span>
-                    <Button
-                        id="copy-detail-prev"
-                        type="button"
-                        variant="ghost"
-                        size="xs"
-                        className={detailWorkspaceStyles.quietButton}
-                        disabled={!prevId}
-                        aria-label="上一项 (K)"
-                        title="上一项 (K)"
-                        onClick={() => prevId && openSibling(prevId)}
-                    >
-                        <ChevronLeftIcon aria-hidden="true" />
-                        上一项
-                    </Button>
-                    <Button
-                        id="copy-detail-next"
-                        type="button"
-                        variant="ghost"
-                        size="xs"
-                        className={detailWorkspaceStyles.quietButton}
-                        disabled={!nextId}
-                        aria-label="下一项 (J)"
-                        title="下一项 (J)"
-                        onClick={() => nextId && openSibling(nextId)}
-                    >
-                        下一项
-                        <ChevronRightIcon aria-hidden="true" />
-                    </Button>
-                </>
-            ) : null}
-            <WorkspaceHotkeyCheatSheetButton
-                id="copy-detail-hotkeys"
-                scope="copies-detail"
-            />
-        </div>
-    )
+    const status = receipt
+        ? getApprovalInstanceStatusMeta(primaryPage.instance_status)
+        : undefined
+    const documentBadge = receipt
+        ? workspaceDocumentBadge("DOCUMENT_APPROVAL", receipt.document_type)
+        : undefined
+    const copiedAt = receipt ? displayUnixSeconds(receipt.copied_at) : null
+    const trigger = receipt ? COPY_TRIGGER_LABELS[receipt.trigger] : null
+    const title = primaryPage
+        ? displayReadableName(
+              primaryPage.materials.display.counterparty_label,
+          ) ||
+          displayReadableName(primaryPage.materials.display.source.customer) ||
+          "抄送详情"
+        : "抄送详情"
+    const count = attachments.length
 
-    const sidebar = primaryPage ? (
-        <div className="min-w-0 space-y-4">
-            <Tabs
-                value={sidebarTab}
-                onValueChange={(next) => {
-                    if (next === "history" || next === "materials") {
-                        setSidebarTab(next)
-                    }
-                }}
-                className="gap-3"
-            >
-                <TabsList variant="line" aria-label="抄送上下文轨">
-                    <TabsTrigger id="copy-detail-tab-history" value="history">
-                        审批进度
-                        {historyItems.length > 0 ? (
-                            <span className="num ml-1 text-xs text-muted-foreground">
-                                ({historyItems.length}
-                                {query.hasNextPage ? "+" : ""})
-                            </span>
-                        ) : null}
-                    </TabsTrigger>
-                    {attachments.length > 0 ? (
-                        <TabsTrigger
-                            id="copy-detail-tab-materials"
-                            value="materials"
-                        >
-                            附件对照
-                            <span className="num ml-1 text-xs text-muted-foreground">
-                                ({attachments.length})
-                            </span>
-                        </TabsTrigger>
-                    ) : null}
-                </TabsList>
-
-                <TabsContent value="history" className="mt-0">
-                    <UnifiedAuditTrail
-                        historyItems={historyItems}
-                        historyHasMore={Boolean(query.hasNextPage)}
-                        historyLoadingMore={query.isFetchingNextPage}
-                        onLoadMoreHistory={() => void query.fetchNextPage()}
-                        showCopyHistory={false}
-                        idPrefix="copy-detail-audit"
-                    />
-                </TabsContent>
-
-                {attachments.length > 0 ? (
-                    <TabsContent value="materials" className="mt-0">
-                        <UnifiedMaterialViewer
-                            mode="docked"
-                            files={materialItems}
-                            activeFileId={activeFileId}
-                            onActiveFileChange={setActiveFileId}
-                            idPrefix="copy-detail-viewer"
-                            className="h-[calc(100dvh-16rem)] min-h-96"
-                        />
-                    </TabsContent>
+    const header = (
+        <header
+            data-slot="detail-workspace-chrome"
+            className="sticky top-0 z-10 flex min-h-14 min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border/60 bg-card py-2 @[960px]/workspace:flex-nowrap"
+        >
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 @[960px]/workspace:flex-nowrap">
+                <Button
+                    id="copy-back-to-list"
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    className="-ml-1.5 text-muted-foreground"
+                    onClick={onBack}
+                >
+                    <ArrowLeftIcon aria-hidden="true" />
+                    返回抄送列表
+                </Button>
+                <span
+                    aria-hidden="true"
+                    className="hidden h-4 w-px shrink-0 bg-border/70 @[960px]/workspace:block"
+                />
+                <h1
+                    className="min-w-0 max-w-48 truncate text-section-title font-semibold tracking-tight @[960px]/workspace:max-w-80"
+                    title={title}
+                >
+                    {title}
+                </h1>
+                {status ? (
+                    <StatusBadge label={status.label} tone={status.tone} />
                 ) : null}
-            </Tabs>
-        </div>
-    ) : undefined
-
-    return (
-        <DetailWorkspacePage>
-            <DetailWorkspaceChrome
-                title={
-                    primaryPage
-                        ? `${documentTypeLabel(primaryPage.receipt.document_type)}抄送`
-                        : "抄送详情"
-                }
-                back={{
-                    id: "copy-back-to-list",
-                    label: "返回抄送列表",
-                    onClick: onBack,
-                    visibility: "always",
-                }}
-                navigationMeta={queueNavigation}
-                primaryStatus={
-                    primaryPage
-                        ? getApprovalInstanceStatusMeta(
-                              primaryPage.instance_status,
-                          )
-                        : undefined
-                }
-                meta={
-                    primaryPage && (
+                {documentBadge && receipt ? (
+                    <Badge variant={documentBadge.variant}>
+                        {documentTypeLabel(receipt.document_type)}
+                    </Badge>
+                ) : null}
+                {receipt ? (
+                    <div
+                        className="min-w-0 @[960px]/workspace:flex-1"
+                        data-workspace-document-number={receipt.document_no}
+                        title={[
+                            receipt.document_no,
+                            trigger,
+                            receipt.node_name,
+                            `第 ${receipt.round_no} 轮`,
+                            copiedAt?.label,
+                        ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                    >
                         <DetailWorkspaceMeta
+                            className="@[960px]/workspace:flex-nowrap @[960px]/workspace:overflow-hidden @[960px]/workspace:[&>span]:truncate @[960px]/workspace:[&>span:first-child]:shrink-0"
                             items={[
                                 <span key="number" className="num select-all">
-                                    {primaryPage.receipt.document_no}
+                                    {receipt.document_no}
                                 </span>,
-                                COPY_TRIGGER_LABELS[
-                                    primaryPage.receipt.trigger
-                                ],
-                                primaryPage.receipt.node_name,
+                                trigger,
+                                receipt.node_name,
                                 <span key="round" className="num">
-                                    第 {primaryPage.receipt.round_no} 轮
+                                    第 {receipt.round_no} 轮
                                 </span>,
-                                <span key="copied-at" className="num">
-                                    {displayUnixSeconds(
-                                        primaryPage.receipt.copied_at,
-                                    )?.label ?? "—"}
-                                </span>,
+                                copiedAt ? (
+                                    <time
+                                        key="copied-at"
+                                        dateTime={copiedAt.dateTime}
+                                        className="num"
+                                    >
+                                        {copiedAt.label}
+                                    </time>
+                                ) : null,
                             ]}
                         />
-                    )
-                }
-                secondaryActions={
-                    <div className="flex flex-wrap items-center gap-3">
-                        <label
-                            htmlFor="copy-detail-auto-next"
-                            className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground select-none hover:text-foreground"
+                    </div>
+                ) : null}
+            </div>
+
+            {primaryPage ? (
+                <TooltipProvider>
+                    <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-1 @[960px]/workspace:flex-none @[960px]/workspace:flex-nowrap">
+                        {currentIndex >= 0 ? (
+                            <>
+                                <div
+                                    className="flex shrink-0 items-center gap-0.5"
+                                    role="group"
+                                    aria-label="抄送队列步进"
+                                >
+                                    <span className="num mr-1 text-xs text-muted-foreground">
+                                        第 {currentIndex + 1} /{" "}
+                                        {queueIds.length} 项
+                                    </span>
+                                    <Button
+                                        id="copy-detail-prev"
+                                        type="button"
+                                        variant="ghost"
+                                        size="xs"
+                                        disabled={!prevId}
+                                        aria-label="上一项 (K)"
+                                        title="上一项 (K)"
+                                        onClick={() =>
+                                            prevId && openSibling(prevId)
+                                        }
+                                    >
+                                        <ChevronLeftIcon aria-hidden="true" />
+                                        上一项
+                                    </Button>
+                                    <Button
+                                        id="copy-detail-next"
+                                        type="button"
+                                        variant="ghost"
+                                        size="xs"
+                                        disabled={!nextId}
+                                        aria-label="下一项 (J)"
+                                        title="下一项 (J)"
+                                        onClick={() =>
+                                            nextId && openSibling(nextId)
+                                        }
+                                    >
+                                        下一项
+                                        <ChevronRightIcon aria-hidden="true" />
+                                    </Button>
+                                </div>
+                                <span
+                                    aria-hidden="true"
+                                    className="hidden h-4 w-px shrink-0 bg-border/70 @[960px]/workspace:block"
+                                />
+                            </>
+                        ) : null}
+                        <Button
+                            id="copy-detail-attachments"
+                            type="button"
+                            variant="ghost"
+                            size="xs"
+                            aria-pressed={
+                                !railCollapsed && sidebarTab === "materials"
+                            }
+                            title="附件对照 (P)"
+                            className={cn(
+                                detailWorkspaceStyles.quietButton,
+                                count === 0 &&
+                                    "text-warning-soft-foreground hover:text-warning-soft-foreground",
+                                !railCollapsed &&
+                                    sidebarTab === "materials" &&
+                                    "bg-muted/80 text-foreground",
+                            )}
+                            onClick={() => toggleRailTab("materials")}
                         >
-                            <NativeCheckbox
-                                id="copy-detail-auto-next"
-                                checked={autoNext}
-                                onCheckedChange={(value) =>
-                                    setAutoNext(value === true)
+                            <PaperclipIcon aria-hidden="true" />
+                            附件 <span className="num">({count})</span>
+                        </Button>
+                        <IconActionButton
+                            id="copy-detail-refresh"
+                            testId="copy-detail-refresh"
+                            label="刷新抄送资料"
+                            disabled={query.isFetching}
+                            onClick={() => void query.refetch()}
+                        >
+                            <RefreshCwIcon
+                                aria-hidden="true"
+                                className={
+                                    query.isFetching
+                                        ? "animate-spin"
+                                        : undefined
                                 }
                             />
-                            <span>{AUTO_NEXT_LABEL}</span>
-                        </label>
-                        {autoNext && nextId ? (
-                            <Button
-                                id="copy-detail-read-next"
-                                type="button"
-                                size="sm"
-                                onClick={() => openSibling(nextId)}
-                            >
-                                已阅并下一项
-                                <ChevronRightIcon
-                                    data-icon="inline-end"
-                                    aria-hidden="true"
-                                />
-                            </Button>
-                        ) : null}
+                        </IconActionButton>
+                        <CopyHotkeyHelp
+                            open={showHotkeys}
+                            onOpenChange={setShowHotkeys}
+                        />
+                        <UnifiedTaskWorkbenchRailToggle />
                     </div>
+                </TooltipProvider>
+            ) : null}
+        </header>
+    )
+
+    return (
+        <DetailWorkspacePage className="min-h-0">
+            <UnifiedTaskWorkbench
+                archetype="decision"
+                framed
+                idPrefix="copy-detail"
+                aria-label="审批抄送详情"
+                header={header}
+                contextRail={
+                    primaryPage
+                        ? {
+                              collapsible: true,
+                              resizable: true,
+                              defaultWidthPercent: 28,
+                              minWidthPercent: 24,
+                              maxWidthPercent: 52,
+                              storageKey: "erp.workspace.copyRailWidth",
+                              preferredMinWidthPercent:
+                                  sidebarTab === "materials" ? 42 : undefined,
+                              collapsed: railCollapsed,
+                              onCollapsedChange: setRailCollapsed,
+                              label: "审批进度与附件对照",
+                              content: (
+                                  <Tabs
+                                      value={sidebarTab}
+                                      onValueChange={(next) => {
+                                          if (
+                                              next === "history" ||
+                                              next === "materials"
+                                          ) {
+                                              setSidebarTab(next)
+                                          }
+                                      }}
+                                      className="min-h-0 min-w-0 flex-1 gap-0"
+                                  >
+                                      <div className="-mx-4 shrink-0 border-b border-border/60 px-4 @[1120px]/workspace:-mx-5 @[1120px]/workspace:px-5">
+                                          <TabsList
+                                              variant="line"
+                                              aria-label="抄送上下文"
+                                              className="h-control-md w-full justify-start gap-2 overflow-x-auto"
+                                          >
+                                              <TabsTrigger
+                                                  id="copy-detail-tab-history"
+                                                  aria-controls="copy-detail-panel-history"
+                                                  value="history"
+                                                  className="shrink-0 gap-1 text-xs"
+                                              >
+                                                  <span>审批进度</span>
+                                                  <span className="num text-xs text-muted-foreground">
+                                                      ({historyItems.length}
+                                                      {query.hasNextPage
+                                                          ? "+"
+                                                          : ""}
+                                                      )
+                                                  </span>
+                                              </TabsTrigger>
+                                              <TabsTrigger
+                                                  id="copy-detail-tab-materials"
+                                                  aria-controls="copy-detail-panel-materials"
+                                                  value="materials"
+                                                  className="shrink-0 gap-1 text-xs"
+                                              >
+                                                  <span>附件对照</span>
+                                                  <span className="num text-xs text-muted-foreground">
+                                                      ({count})
+                                                  </span>
+                                              </TabsTrigger>
+                                          </TabsList>
+                                      </div>
+                                      <TabsContent
+                                          id="copy-detail-panel-history"
+                                          value="history"
+                                          className="min-h-0 min-w-0 space-y-2 overflow-x-hidden overflow-y-auto overscroll-contain py-3"
+                                      >
+                                          {query.isFetchNextPageError ? (
+                                              <p
+                                                  role="alert"
+                                                  className="text-xs text-destructive"
+                                              >
+                                                  审批记录加载失败，请重试加载更多。
+                                              </p>
+                                          ) : null}
+                                          <UnifiedAuditTrail
+                                              historyItems={historyItems}
+                                              historyHasMore={Boolean(
+                                                  query.hasNextPage,
+                                              )}
+                                              historyLoadingMore={
+                                                  query.isFetchingNextPage
+                                              }
+                                              onLoadMoreHistory={() =>
+                                                  void query.fetchNextPage()
+                                              }
+                                              showCopyHistory={false}
+                                              idPrefix="copy-detail-audit"
+                                          />
+                                      </TabsContent>
+                                      <TabsContent
+                                          id="copy-detail-panel-materials"
+                                          value="materials"
+                                          className="flex min-h-96 min-w-0 flex-1 flex-col overflow-hidden py-3 @[960px]/workspace:min-h-0"
+                                      >
+                                          <UnifiedMaterialViewer
+                                              mode="docked"
+                                              files={materialItems}
+                                              activeFileId={activeFileId}
+                                              onActiveFileChange={
+                                                  setActiveFileId
+                                              }
+                                              idPrefix="copy-detail-viewer"
+                                          />
+                                      </TabsContent>
+                                  </Tabs>
+                              ),
+                          }
+                        : undefined
                 }
-            />
-            <DetailWorkspaceBody
-                sidebar={sidebar}
-                sidebarLabel="审批进度与附件对照"
-                alerts={
-                    mark.isError && (
-                        <div
-                            role="alert"
-                            className="flex flex-wrap items-center gap-2 text-body-compact"
-                        >
-                            已读状态保存失败。
-                            <Button
-                                id="copy-read-retry"
-                                size="sm"
-                                variant="ghost"
-                                className={detailWorkspaceStyles.subtleButton}
-                                onClick={() => mark.mutate([id])}
+                footerLeading={
+                    primaryPage ? (
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                            <label
+                                htmlFor="copy-detail-auto-next"
+                                className="flex cursor-pointer items-center gap-1.5 select-none hover:text-foreground"
                             >
-                                重试标记已读
-                            </Button>
+                                <NativeCheckbox
+                                    id="copy-detail-auto-next"
+                                    checked={autoNext}
+                                    onCheckedChange={setAutoNext}
+                                />
+                                {AUTO_NEXT_LABEL}
+                            </label>
+                            <span role="status" className="min-w-0">
+                                {markedAutomatically
+                                    ? "已自动标记已读"
+                                    : isRead
+                                      ? "已读"
+                                      : mark.isPending
+                                        ? "正在标记已读…"
+                                        : trigger}
+                            </span>
                         </div>
+                    ) : undefined
+                }
+                footerActions={
+                    nextId && primaryPage ? (
+                        <Button
+                            id="copy-detail-read-next"
+                            type="button"
+                            size="sm"
+                            disabled={mark.isPending}
+                            onClick={readAndAdvance}
+                        >
+                            已阅并下一项
+                            <ChevronRightIcon
+                                data-icon="inline-end"
+                                aria-hidden="true"
+                            />
+                        </Button>
+                    ) : (
+                        <Button
+                            id="copy-detail-footer-back"
+                            type="button"
+                            size="sm"
+                            onClick={onBack}
+                        >
+                            返回抄送列表
+                        </Button>
                     )
                 }
             >
-                {query.isError ? (
-                    <DetailWorkspaceSection>
+                <div className="@container/copy-detail min-w-0 space-y-3 bg-card pt-3 pb-5">
+                    {mark.isError && !isRead ? (
+                        <CopyMarkReadError
+                            id="copy-read-retry"
+                            onRetry={() => retryRead(autoNext)}
+                        />
+                    ) : null}
+                    {profile.isError ? (
                         <BusinessFailureState
+                            idPrefix="copy-detail-profile"
+                            error={profile.error}
+                            onRetry={() => void profile.refetch()}
+                        />
+                    ) : profile.data &&
+                      profile.data.account_kind !== "admin" ? (
+                        <BusinessFailureState
+                            kind="permission"
+                            title="请使用内部账号查看抄送"
+                        />
+                    ) : !primaryPage && query.isError ? (
+                        <BusinessFailureState
+                            idPrefix="copy-detail-failure"
                             error={query.error}
                             onRetry={() => void query.refetch()}
                         />
-                    </DetailWorkspaceSection>
-                ) : !primaryPage || query.isPending ? (
-                    <DetailWorkspaceSection>
-                        <p
+                    ) : !primaryPage ? (
+                        <div
                             role="status"
-                            className="text-body-compact text-muted-foreground"
+                            className="flex items-center gap-2 py-4 text-body-compact text-muted-foreground"
                         >
-                            正在读取抄送资料…
-                        </p>
-                    </DetailWorkspaceSection>
-                ) : (
-                    <>
-                        <DetailWorkspaceSection>
-                            <ApprovalSubmittedMaterialsContent
-                                bare
-                                instanceId={primaryPage.receipt.instance_id}
-                                data={primaryPage.materials}
-                                attachmentContent={
-                                    <CopyFiles
-                                        id={id}
-                                        files={attachments}
-                                        activeFileId={activeFileId}
-                                        onSelectFile={(fileId) => {
-                                            setActiveFileId(fileId)
-                                            setSidebarTab("materials")
-                                        }}
-                                    />
-                                }
-                            />
-                        </DetailWorkspaceSection>
-                        <CopyPurchaseLines
-                            lines={primaryPage.materials.purchase_lines ?? []}
-                            fulfillment={
-                                primaryPage.materials.purchase_fulfillment
-                            }
-                            idPrefix={`copy-detail-purchase-${toAutomationIdSegment(id)}`}
+                            <Spinner aria-hidden="true" />
+                            <span>正在读取抄送资料…</span>
+                        </div>
+                    ) : (
+                        <CopySnapshot
+                            detail={primaryPage}
+                            idPrefix={`copy-detail-${toAutomationIdSegment(id)}`}
+                            showAttachments={railCollapsed}
+                            activeFileId={activeFileId}
+                            onSelectFile={(fileId) => {
+                                setActiveFileId(fileId)
+                                openRailTab("materials")
+                            }}
                         />
-                        {Boolean(
-                            primaryPage.materials.source_sales_orders?.length,
-                        ) && (
-                            <DetailWorkspaceSection contentClassName="divide-y divide-border/60 space-y-0">
-                                {primaryPage.materials.source_sales_orders?.map(
-                                    (order) => (
-                                        <details
-                                            key={order.revision.id}
-                                            className="py-3 first:pt-0 last:pb-0"
-                                        >
-                                            <summary
-                                                id={`copy-source-sales-${toAutomationIdSegment(order.revision.id)}`}
-                                                className="cursor-pointer text-body-compact font-medium"
-                                            >
-                                                查看关联销售单完整资料 ·{" "}
-                                                <span className="num">
-                                                    {order.document_no}
-                                                </span>
-                                            </summary>
-                                            <div className="pt-4">
-                                                <ApprovalSubmittedMaterialsContent
-                                                    bare
-                                                    instanceId={
-                                                        primaryPage.receipt
-                                                            .instance_id
-                                                    }
-                                                    data={primaryPage.materials}
-                                                    view="source-sales"
-                                                    sourceRevisionId={
-                                                        order.revision.id
-                                                    }
-                                                    attachmentContent={
-                                                        <p className="text-xs text-muted-foreground">
-                                                            附件请在上方本次提交资料中查看。
-                                                        </p>
-                                                    }
-                                                />
-                                            </div>
-                                        </details>
-                                    ),
-                                )}
-                            </DetailWorkspaceSection>
-                        )}
-                    </>
-                )}
-            </DetailWorkspaceBody>
+                    )}
+                </div>
+            </UnifiedTaskWorkbench>
         </DetailWorkspacePage>
+    )
+}
+
+const COPY_HOTKEYS = [
+    ["J / ↓", "下一项"],
+    ["K / ↑", "上一项"],
+    ["P", "打开或收起附件对照"],
+    ["H", "打开或收起审批进度"],
+    ["]", "折叠或展开右侧对照栏"],
+    ["/", "聚焦明细搜索"],
+    ["?", "打开或关闭快捷键"],
+] as const
+
+function CopyHotkeyHelp({
+    open,
+    onOpenChange,
+}: {
+    open: boolean
+    onOpenChange: (open: boolean) => void
+}) {
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogTrigger
+                id="copy-detail-hotkeys"
+                render={<Button type="button" variant="ghost" size="icon-sm" />}
+                aria-label="键盘快捷键 (?)"
+                title="键盘快捷键 (?)"
+            >
+                <KeyboardIcon aria-hidden="true" />
+            </DialogTrigger>
+            <DialogContent
+                size="sm"
+                closeButtonId="copy-detail-hotkeys-close"
+                data-slot="workspace-hotkey-cheatsheet"
+            >
+                <DialogHeader>
+                    <DialogTitle>键盘快捷键</DialogTitle>
+                    <DialogDescription>
+                        快捷键在当前工作页生效，编辑输入时暂停。
+                    </DialogDescription>
+                </DialogHeader>
+                <dl className="divide-y divide-border/60">
+                    {COPY_HOTKEYS.map(([keys, label]) => (
+                        <div
+                            key={keys}
+                            className="flex items-center justify-between gap-3 py-2"
+                        >
+                            <dt className="text-body-compact">{label}</dt>
+                            <dd>
+                                <Kbd>{keys}</Kbd>
+                            </dd>
+                        </div>
+                    ))}
+                </dl>
+            </DialogContent>
+        </Dialog>
     )
 }

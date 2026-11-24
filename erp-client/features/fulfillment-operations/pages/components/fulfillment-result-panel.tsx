@@ -29,6 +29,7 @@ export type FulfillmentResultPanelProps = {
     /** 嵌入销售单详情时原地展开客户验收。 */
     onOpenAcceptance?: () => void
     showNext?: boolean
+    showUnknownActions?: boolean
 }
 
 /**
@@ -50,6 +51,7 @@ export function FulfillmentResultPanel({
     onContinueWarehouseShip,
     onOpenAcceptance,
     showNext = true,
+    showUnknownActions = true,
 }: FulfillmentResultPanelProps) {
     if (!lastResult) return null
 
@@ -85,7 +87,8 @@ export function FulfillmentResultPanel({
                 }
                 actions={
                     <div className="flex flex-wrap gap-2">
-                        {lastResult.status === "unknown" ? (
+                        {showUnknownActions &&
+                        lastResult.status === "unknown" ? (
                             <LoadingButton
                                 id="fulfillment-operations-result-resolve-unknown"
                                 type="button"
@@ -94,10 +97,12 @@ export function FulfillmentResultPanel({
                                 loading={resolvePending}
                                 onClick={() => void onResolveUnknown()}
                             >
-                                {resolvePending ? "查询中…" : "查询最终结果"}
+                                {resolvePending ? "核对中…" : "核对提交结果"}
                             </LoadingButton>
                         ) : null}
-                        {lastResult.status === "unknown" && onRetryUnknown ? (
+                        {showUnknownActions &&
+                        lastResult.status === "unknown" &&
+                        onRetryUnknown ? (
                             <LoadingButton
                                 id="fulfillment-operations-result-retry-unknown"
                                 type="button"
@@ -118,6 +123,7 @@ export function FulfillmentResultPanel({
                                 id="fulfillment-operations-result-continue-warehouse-ship"
                                 type="button"
                                 size="sm"
+                                variant="outline"
                                 onClick={() =>
                                     onContinueWarehouseShip(
                                         lastResult.outcome!.salesOrderId,
@@ -125,7 +131,10 @@ export function FulfillmentResultPanel({
                                 }
                             >
                                 本单待仓发
-                                <ArrowRightIcon data-icon="inline-end" />
+                                <ArrowRightIcon
+                                    aria-hidden="true"
+                                    data-icon="inline-end"
+                                />
                             </Button>
                         ) : null}
                         {lastResult.outcome?.kind === "POSTED" &&
@@ -139,7 +148,10 @@ export function FulfillmentResultPanel({
                                     onClick={onOpenAcceptance}
                                 >
                                     去登记客户验收
-                                    <ArrowRightIcon data-icon="inline-end" />
+                                    <ArrowRightIcon
+                                        aria-hidden="true"
+                                        data-icon="inline-end"
+                                    />
                                 </Button>
                             ) : (
                                 <Button
@@ -157,7 +169,10 @@ export function FulfillmentResultPanel({
                                     }
                                 >
                                     去登记客户验收
-                                    <ArrowRightIcon data-icon="inline-end" />
+                                    <ArrowRightIcon
+                                        aria-hidden="true"
+                                        data-icon="inline-end"
+                                    />
                                 </Button>
                             )
                         ) : null}

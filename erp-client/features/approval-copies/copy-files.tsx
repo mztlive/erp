@@ -12,22 +12,12 @@ import { downloadBlob } from "@/lib/download-blob"
 import { fetchCopyFile } from "./api"
 import { useCopyFile } from "./queries"
 
-export function CopyFiles({
-    id,
-    files,
-    onSelectFile,
-    activeFileId,
-    idPrefix = "copy-file",
-}: {
-    id: string
-    files: ApprovalMaterials["attachments"]
-    /** 宽屏右轨对接回调：传入时交由右栏展示，否则弹出统一预览灯箱。 */
-    onSelectFile?: (fileId: string) => void
-    activeFileId?: string
-    idPrefix?: string
-}) {
+export function useCopyFileItems(
+    id: string,
+    files: ApprovalMaterials["attachments"],
+) {
     const fileQuery = useCopyFile()
-    const [dialogFileId, setDialogFileId] = useState<string | null>(null)
+    const { mutateAsync } = fileQuery
 
     const items = useMemo<readonly MaterialFileItem[]>(
         () =>
@@ -38,7 +28,7 @@ export function CopyFiles({
                 sizeBytes: file.byte_size,
                 loadPreview: () => fetchCopyFile(id, file.file_asset_id, true),
                 onDownload: async () => {
-                    const blob = await fileQuery.mutateAsync({
+                    const blob = await mutateAsync({
                         id,
                         file: file.file_asset_id,
                         preview: false,
@@ -46,8 +36,31 @@ export function CopyFiles({
                     downloadBlob(blob, file.file_name)
                 },
             })),
-        [fileQuery, files, id],
+        [files, id, mutateAsync],
     )
+    const downloadingFileId =
+        fileQuery.isPending && !fileQuery.variables?.preview
+            ? (fileQuery.variables?.file ?? null)
+            : null
+
+    return { items, downloadingFileId }
+}
+
+export function CopyFiles({
+    id,
+    files,
+    onSelectFile,
+    activeFileId,
+    idPrefix = "copy-file",
+}: {
+    id: string
+    files: ApprovalMaterials["attachments"]
+    onSelectFile?: (fileId: string) => void
+    activeFileId?: string
+    idPrefix?: string
+}) {
+    const { items, downloadingFileId } = useCopyFileItems(id, files)
+    const [dialogFileId, setDialogFileId] = useState<string | null>(null)
 
     const handlePreview = (file: MaterialFileItem) => {
         if (onSelectFile) {
@@ -63,13 +76,10 @@ export function CopyFiles({
                 files={items}
                 onPreview={handlePreview}
                 activeFileId={activeFileId ?? dialogFileId ?? undefined}
-                downloadingFileId={
-                    fileQuery.isPending && !fileQuery.variables?.preview
-                        ? (fileQuery.variables?.file ?? null)
-                        : null
-                }
+                downloadingFileId={downloadingFileId}
                 emptyMessage="本次提交没有附件。"
                 idPrefix={idPrefix}
+                className="[&>ul]:rounded-none [&>ul]:border-0 [&>ul>li]:px-0"
             />
             {!onSelectFile ? (
                 <UnifiedMaterialViewer

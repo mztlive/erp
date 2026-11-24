@@ -31,7 +31,11 @@ export const getPortalApplication = async (id: string) =>
 export const reviewPortalApplication = (
     id: string,
     input: Record<string, unknown>,
-) => apiPost<unknown>(`${base}/applications/${encoded(id)}/review`, input)
+) =>
+    apiPost<Record<string, unknown>>(
+        `${base}/applications/${encoded(id)}/review`,
+        input,
+    ).then(mapPortalApplication)
 export const portalReviewDictionaries = (kind: string) =>
     apiGet<PortalDictionary[]>(`${base}/dictionaries/${kind}`)
 export const portalDuplicates = (applicationId: string, q: string) =>

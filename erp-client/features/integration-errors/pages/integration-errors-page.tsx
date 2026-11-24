@@ -2,17 +2,12 @@
 
 import * as React from "react"
 import {
-    BusinessEmptyState,
-    BusinessFailureState,
     DetailWorkspaceBody,
-    DetailWorkspaceMeta,
     DetailWorkspacePage,
-    DetailWorkspaceSection,
     DetailWorkspaceSkeleton,
     PageScaffold,
 } from "@/components/business"
 import { listWorkspaceStyles as styles } from "@/components/business/list-workspace"
-import { Button } from "@/components/ui/button"
 import { useRouter } from "@/lib/navigation"
 import { isWorkspaceFrame, workspaceHost } from "@/lib/workspace-tabs"
 
@@ -34,6 +29,10 @@ import {
 } from "./components/integration-page-states"
 import { IntegrationPageHeader } from "./components/integration-page-header"
 import { IntegrationQueueToolbar } from "./components/integration-queue-toolbar"
+import {
+    EmbeddedIntegrationInvestigation,
+    type EmbeddedInvestigationOptions,
+} from "./components/investigation/page"
 import { useIntegrationActions } from "./hooks/use-integration-actions"
 import { useIntegrationItemNavigation } from "./hooks/use-integration-item-navigation"
 import { useIntegrationPageSync } from "./hooks/use-integration-page-sync"
@@ -46,17 +45,44 @@ import {
     selectQueueSelection,
 } from "./lib/selection"
 
-export function IntegrationErrorsPage({
+type IntegrationErrorsPageProps = {
+    forcedTaskId?: string
+    forcedDifferenceId?: string
+} & (
+    | { embedded?: false }
+    | {
+          embedded: true
+          investigation: EmbeddedInvestigationOptions
+          onTaskCompleted?: (workItemId: string) => void
+      }
+)
+
+export function IntegrationErrorsPage(props: IntegrationErrorsPageProps = {}) {
+    if (props.embedded) {
+        return (
+            <EmbeddedIntegrationInvestigation
+                forcedTaskId={props.forcedTaskId}
+                forcedDifferenceId={props.forcedDifferenceId}
+                options={props.investigation}
+                onTaskCompleted={props.onTaskCompleted}
+            />
+        )
+    }
+    return (
+        <StandaloneIntegrationErrorsPage
+            forcedTaskId={props.forcedTaskId}
+            forcedDifferenceId={props.forcedDifferenceId}
+        />
+    )
+}
+
+function StandaloneIntegrationErrorsPage({
     forcedTaskId,
     forcedDifferenceId,
-    embedded = false,
-    onTaskCompleted,
 }: {
     forcedTaskId?: string
     forcedDifferenceId?: string
-    embedded?: boolean
-    onTaskCompleted?: (workItemId: string) => void
-} = {}) {
+}) {
     const router = useRouter()
     const {
         urlState,
@@ -160,7 +186,6 @@ export function IntegrationErrorsPage({
         refetch,
         goToItem,
         neighbor,
-        onTaskCompleted: embedded ? onTaskCompleted : undefined,
     })
 
     const { searchDraft, setSearchDraft, searchInputRef } =
@@ -235,20 +260,6 @@ export function IntegrationErrorsPage({
     }
 
     if (focusLoading) {
-        if (embedded) {
-            return (
-                <DetailWorkspaceSection>
-                    <div
-                        className="space-y-4"
-                        aria-busy="true"
-                        aria-label={`正在加载${defaultDetailTitle}`}
-                    >
-                        <div className="h-14 animate-pulse rounded-md bg-muted/70" />
-                        <div className="h-44 animate-pulse rounded-md bg-muted/70" />
-                    </div>
-                </DetailWorkspaceSection>
-            )
-        }
         return <DetailWorkspaceSkeleton title={defaultDetailTitle} sidebar />
     }
 
@@ -264,22 +275,6 @@ export function IntegrationErrorsPage({
     }
 
     if (focusMode && detailItemQuery.isError) {
-        if (embedded) {
-            return (
-                <DetailWorkspaceSection width="form">
-                    <BusinessFailureState
-                        idPrefix="integration-page-failure"
-                        title={
-                            forcedDifferenceId
-                                ? "对账差异加载失败"
-                                : "异常任务加载失败"
-                        }
-                        error={detailItemQuery.error}
-                        onRetry={() => void detailItemQuery.refetch()}
-                    />
-                </DetailWorkspaceSection>
-            )
-        }
         return (
             <IntegrationPageFailure
                 title={defaultDetailTitle}
@@ -296,32 +291,6 @@ export function IntegrationErrorsPage({
     }
 
     if (focusError) {
-        if (embedded) {
-            return (
-                <DetailWorkspaceSection width="form">
-                    <BusinessEmptyState
-                        kind="no-data"
-                        title={
-                            forcedDifferenceId
-                                ? "未找到该对账差异"
-                                : "未找到该异常任务"
-                        }
-                        description="记录可能已结束或链接失效；请刷新待办重试。"
-                        action={
-                            <Button
-                                id="integration-detail-not-found-retry"
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => void detailItemQuery.refetch()}
-                            >
-                                重试
-                            </Button>
-                        }
-                    />
-                </DetailWorkspaceSection>
-            )
-        }
         return (
             <IntegrationNotFound
                 title={defaultDetailTitle}
@@ -349,9 +318,7 @@ export function IntegrationErrorsPage({
                 const next = neighbor(1)
                 if (next) goToItem(next)
             }}
-            onBackToQueue={
-                focusMode && !embedded ? handleBackToQueue : undefined
-            }
+            onBackToQueue={focusMode ? handleBackToQueue : undefined}
         />
     )
     const workspace = (
@@ -360,7 +327,7 @@ export function IntegrationErrorsPage({
             item={item}
             focusMode={focusMode}
             detailWorkspace={focusMode}
-            showEvidenceSection={embedded}
+            showEvidenceSection={false}
             urlState={urlState}
             currentQueueHref={currentQueueHref}
             positionIndex={positionIndex}
@@ -374,33 +341,6 @@ export function IntegrationErrorsPage({
             emptyReason={focusMode ? undefined : view?.emptyReason}
         />
     )
-
-    if (embedded) {
-        return (
-            <div className="min-w-0 [&>[data-slot=detail-workspace-section]+[data-slot=detail-workspace-section]]:border-t [&>[data-slot=detail-workspace-section]+[data-slot=detail-workspace-section]]:border-border/60">
-                {item ? (
-                    <div className="border-b border-border/60 py-3">
-                        <DetailWorkspaceMeta
-                            items={[
-                                <span key="age">
-                                    已滞留{" "}
-                                    <span className="num">{item.ageLabel}</span>
-                                </span>,
-                                item.fundsImpactLabel,
-                                item.environment
-                                    ? `${item.environmentLabel}环境`
-                                    : false,
-                            ]}
-                        />
-                    </div>
-                ) : null}
-                {lastResult || actionError ? (
-                    <div className="space-y-2.5 pt-4">{actionResult}</div>
-                ) : null}
-                {workspace}
-            </div>
-        )
-    }
 
     if (focusMode) {
         return (

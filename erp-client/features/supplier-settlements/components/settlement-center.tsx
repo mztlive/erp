@@ -12,12 +12,10 @@ import {
 
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
-import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
 import {
     BusinessEmptyState,
     BusinessFailureState,
     DetailWorkspaceBody,
-    DetailWorkspaceMeta,
     DetailWorkspacePage,
     DetailWorkspaceSection,
     DetailWorkspaceTabs,
@@ -60,8 +58,10 @@ import {
     type SettlementSection,
 } from "@/features/supplier-settlements/types"
 import { isNotFoundError } from "@/lib/api/errors"
-import { formatDateTime } from "@/lib/datetime"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import { isCommandOutcomeUnknown } from "@/lib/formal-command"
 import { responsibilityText } from "@/lib/ui-text"
+import { SettlementReviewWorkspace } from "./settlement-review-workspace"
 
 const RESPONSIBILITY_STATUS_META: Record<
     ResponsibilityStatus,
@@ -94,6 +94,15 @@ const RESPONSIBILITY_STATUS_META: Record<
     },
 }
 
+function SettlementSectionHotkey({
+    patchUrl,
+}: {
+    patchUrl: (patch: Partial<SettlementsUrlState>) => void
+}) {
+    useSettlementSectionHotkey(patchUrl)
+    return null
+}
+
 function SettlementCenter({
     statementId,
     workItemId,
@@ -102,6 +111,8 @@ function SettlementCenter({
     returnTo,
     onBack,
     embedded = false,
+    idPrefix = `supplier-settlements-center-${toAutomationIdSegment(statementId)}`,
+    fullTaskHref,
     onTaskCompleted,
 }: {
     statementId: string
@@ -111,6 +122,8 @@ function SettlementCenter({
     returnTo?: string
     onBack: () => void
     embedded?: boolean
+    idPrefix?: string
+    fullTaskHref?: string
     onTaskCompleted?: (workItemId: string) => void
 }) {
     const account = useAccountProfileQuery()
@@ -131,7 +144,6 @@ function SettlementCenter({
         detailEnabled: !account.isPending && canDetail,
     })
     useSettlementResultFocus(actions.result, actions.resultRef)
-    useSettlementSectionHotkey(patchUrl)
 
     const detailQuery = actions.detailQuery
     const section = urlState.section
@@ -147,8 +159,8 @@ function SettlementCenter({
                         aria-busy="true"
                         aria-label="正在加载供应商结算单"
                     >
-                        <div className="h-16 animate-pulse rounded-md bg-muted/70" />
-                        <div className="h-44 animate-pulse rounded-md bg-muted/70" />
+                        <div className="h-16 animate-pulse rounded-lg bg-surface-sunken" />
+                        <div className="h-44 animate-pulse rounded-lg bg-surface-sunken" />
                     </div>
                 </DetailWorkspaceSection>
             )
@@ -161,12 +173,12 @@ function SettlementCenter({
             return (
                 <DetailWorkspaceSection width="form">
                     <BusinessFailureState
-                        idPrefix="supplier-settlements-center-error"
+                        idPrefix={`${idPrefix}-error`}
                         title="结算单加载失败"
                         error={account.error}
                         action={
                             <Button
-                                id="supplier-settlements-center-error-retry"
+                                id={`${idPrefix}-error-retry`}
                                 type="button"
                                 variant="outline"
                                 size="sm"
@@ -213,7 +225,14 @@ function SettlementCenter({
         )
     }
 
-    if (detailQuery.isError) {
+    if (
+        detailQuery.isError &&
+        !(
+            embedded &&
+            detailQuery.data &&
+            isCommandOutcomeUnknown(detailQuery.error)
+        )
+    ) {
         if (isNotFoundError(detailQuery.error)) {
             if (embedded) {
                 return (
@@ -239,12 +258,12 @@ function SettlementCenter({
             return (
                 <DetailWorkspaceSection width="form">
                     <BusinessFailureState
-                        idPrefix="supplier-settlements-center-error"
+                        idPrefix={`${idPrefix}-error`}
                         title="结算单加载失败"
                         error={detailQuery.error}
                         action={
                             <Button
-                                id="supplier-settlements-center-error-retry"
+                                id={`${idPrefix}-error-retry`}
                                 type="button"
                                 variant="outline"
                                 size="sm"
@@ -292,10 +311,26 @@ function SettlementCenter({
         )
     }
 
+    if (embedded) {
+        return (
+            <SettlementReviewWorkspace
+                detail={detail}
+                actions={actions}
+                idPrefix={idPrefix}
+                fullTaskHref={fullTaskHref}
+                canReview={canReview}
+                canManageDifferences={hasPermission(
+                    account.data?.permissions,
+                    "supplier_settlement_difference:update",
+                )}
+                section={section}
+                patchUrl={patchUrl}
+                onTaskCompleted={onTaskCompleted}
+            />
+        )
+    }
+
     const st = detail.statement
-    const billVersion = st.externalBillVersion
-        ? String(st.externalBillVersion).replace(/^v/i, "")
-        : ""
     const responsibility =
         RESPONSIBILITY_STATUS_META[actions.responsibilityStatus]
     const canConfirmAction =
@@ -313,7 +348,7 @@ function SettlementCenter({
                 <Button
                     id="supplier-settlements-center-reject-trigger"
                     type="button"
-                    size={embedded ? "default" : "sm"}
+                    size="sm"
                     variant="outline"
                     className="border-destructive-border text-destructive-soft-foreground hover:bg-destructive-soft"
                     disabled={actions.decisionMutation.isPending}
@@ -326,7 +361,7 @@ function SettlementCenter({
                 <LoadingButton
                     id="supplier-settlements-center-confirm-task"
                     type="button"
-                    size={embedded ? "default" : "sm"}
+                    size="sm"
                     loading={actions.decisionMutation.isPending}
                     disabled={!canConfirmAction}
                     onClick={() => actions.setConfirmOpen(true)}
@@ -468,78 +503,6 @@ function SettlementCenter({
         </>
     )
 
-    if (embedded) {
-        return (
-            <div className="min-w-0 [&>[data-slot=detail-workspace-section]+[data-slot=detail-workspace-section]]:border-t [&>[data-slot=detail-workspace-section]+[data-slot=detail-workspace-section]]:border-border/60">
-                <DetailWorkspaceSection className="py-4 first:pt-4">
-                    <DetailWorkspaceMeta
-                        items={[
-                            <span key="period">{st.periodLabel}</span>,
-                            <span key="prepared">
-                                经办{" "}
-                                <span className="font-medium text-foreground">
-                                    {st.preparedBy?.displayName ?? "—"}
-                                </span>
-                            </span>,
-                            <span key="reviewed">
-                                复核{" "}
-                                <span className="font-medium text-foreground">
-                                    {st.reviewedBy?.displayName ?? "待复核人"}
-                                </span>
-                            </span>,
-                            <span key="facts-as-of" className="num">
-                                记录{" "}
-                                {formatDateTime(
-                                    detail.freshness.immutableFactsAsOf,
-                                    "default",
-                                )}
-                            </span>,
-                            st.externalBillNo ? (
-                                <span key="bill" className="num">
-                                    账单 {st.externalBillNo}
-                                    {billVersion
-                                        ? `（第 ${billVersion} 版）`
-                                        : ""}
-                                </span>
-                            ) : null,
-                        ]}
-                    />
-
-                    <SettlementCenterTotals detail={detail} />
-
-                    {detail.workItem ? (
-                        <WorkspaceTaskFooter>
-                            {reviewButtons}
-                        </WorkspaceTaskFooter>
-                    ) : detail.workItemBlocker ? (
-                        <Alert variant="warning">
-                            <AlertTitle>当前无法办理结算复核</AlertTitle>
-                            <AlertDescription>
-                                {detail.workItemBlocker.message}
-                            </AlertDescription>
-                        </Alert>
-                    ) : null}
-
-                    <SettlementCenterBlockersAlert
-                        blockers={detail.actionBlockers}
-                    />
-
-                    <SettlementCenterResultPanel
-                        result={actions.result}
-                        resultRef={actions.resultRef}
-                        onClose={actions.clearResult}
-                    />
-                </DetailWorkspaceSection>
-
-                <div className="border-b border-border/60">{sectionTabs}</div>
-
-                {activeSectionContent}
-
-                {dialogs}
-            </div>
-        )
-    }
-
     const hasAlertContent = Boolean(
         detail.workItem ||
         detail.workItemBlocker ||
@@ -549,6 +512,7 @@ function SettlementCenter({
 
     return (
         <DetailWorkspacePage>
+            <SettlementSectionHotkey patchUrl={patchUrl} />
             <SettlementCenterDocumentHeader
                 statement={st}
                 immutableFactsAsOf={detail.freshness.immutableFactsAsOf}

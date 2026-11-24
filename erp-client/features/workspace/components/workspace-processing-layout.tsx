@@ -12,7 +12,6 @@ import { NativeCheckbox } from "@/components/ui/checkbox"
 import { AUTO_NEXT_LABEL } from "@/lib/task-status-dictionary"
 import type { WorkspaceWorkItem } from "../types"
 import { isApprovalWorkbenchTask } from "../lib/navigation-eligibility"
-import { WorkspaceMoney } from "./workspace-money"
 
 const ACTION_TASK_TYPES = new Set([
     "PURCHASE_PAYMENT_ARRANGEMENT",
@@ -70,9 +69,12 @@ export function WorkspaceProcessingLayout({
     refreshing?: boolean
 }) {
     const fulfillment = item.workItemType === "FULFILLMENT_OPERATION"
+    const canProcessFulfillment =
+        fulfillment && item.allowedActions.includes("PROCESS")
+    const isActionTask = ACTION_TASK_TYPES.has(item.workItemType)
+    const isInvestigationTask = INVESTIGATION_TASK_TYPES.has(item.workItemType)
     const approval = item.approval
     const approvalDocument =
-        Boolean(approval || item.approvalProcessInstanceId) ||
         isApprovalWorkbenchTask(
             item.allowedActions,
             item.approvalProcessInstanceId,
@@ -80,7 +82,10 @@ export function WorkspaceProcessingLayout({
         ) ||
         item.workItemType === "DOCUMENT_APPROVAL" ||
         item.workItemType === "APPROVAL_INSTANCE" ||
-        item.workItemType === "APPROVAL_REWORK"
+        item.workItemType === "APPROVAL_REWORK" ||
+        (!isActionTask &&
+            !isInvestigationTask &&
+            Boolean(approval || item.approvalProcessInstanceId))
     const payment = item.businessObjectType === "purchase_payment_request"
     const paymentReview =
         payment && item.workItemType !== "SUPPLIER_PAYMENT_EXECUTION"
@@ -92,11 +97,9 @@ export function WorkspaceProcessingLayout({
     const archetype: TaskWorkbenchArchetype =
         approvalDocument || paymentReview
             ? "decision"
-            : INVESTIGATION_TASK_TYPES.has(item.workItemType)
+            : isInvestigationTask
               ? "investigation"
-              : ACTION_TASK_TYPES.has(item.workItemType)
-                ? "action"
-                : "action"
+              : "action"
 
     const actionable = (reworkTask ?? item).allowedActions.some((action) =>
         [
@@ -124,57 +127,18 @@ export function WorkspaceProcessingLayout({
             singleColumn={
                 archetype === "action" || archetype === "investigation"
             }
-            summaryInHeader={fulfillment}
-            denseHeader={fulfillment}
-            fillBody={fulfillment && item.businessObjectType === "delivery"}
+            summaryInHeader={false}
+            denseHeader={canProcessFulfillment}
+            fillBody={
+                canProcessFulfillment && item.businessObjectType === "delivery"
+            }
             fullWidth={
                 inquiryProcessing ||
                 (item.workItemType === "PROCUREMENT_ORDER_CREATION" &&
                     item.businessObjectType === "sales_order" &&
                     item.allowedActions.includes("PROCESS"))
             }
-            summary={
-                fulfillment ? (
-                    <div
-                        data-slot="workspace-processing-summary"
-                        className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2"
-                    >
-                        <dl className="flex flex-wrap items-center gap-x-7 gap-y-2">
-                            {item.amountSummary && (
-                                <Fact
-                                    inline
-                                    label={item.amountSummary.label}
-                                    value={
-                                        <WorkspaceMoney
-                                            value={item.amountSummary.value}
-                                        />
-                                    }
-                                />
-                            )}
-                            <Fact
-                                inline
-                                label="当前处理人"
-                                value={
-                                    reworkTask?.ownerUserLabel ||
-                                    item.ownerUserLabel
-                                }
-                            />
-                            <Fact
-                                inline
-                                label="进入时间"
-                                value={item.enteredAtLabel}
-                            />
-                            {item.dueAt && (
-                                <Fact
-                                    inline
-                                    label="截止时间"
-                                    value={item.dueAtLabel || "未设截止时间"}
-                                />
-                            )}
-                        </dl>
-                    </div>
-                ) : null
-            }
+            summary={null}
             aside={null}
             footerLeading={
                 showAutoNext ? (
@@ -197,30 +161,5 @@ export function WorkspaceProcessingLayout({
         >
             {children}
         </WorkspaceTaskPageProvider>
-    )
-}
-
-function Fact({
-    label,
-    value,
-    inline = false,
-}: {
-    label: string
-    value: ReactNode
-    inline?: boolean
-}) {
-    return (
-        <div
-            className={
-                inline
-                    ? "flex min-w-0 items-baseline gap-2"
-                    : "min-w-[9rem] flex-1 space-y-1.5"
-            }
-        >
-            <dt className="shrink-0 text-xs text-muted-foreground">{label}</dt>
-            <dd className="break-words text-body-compact font-medium leading-6">
-                {value || "—"}
-            </dd>
-        </div>
     )
 }

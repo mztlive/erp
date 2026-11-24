@@ -103,7 +103,7 @@ export const PRODUCT_KIND_LABELS: Record<string, string> = {
 
 export const reviewFormSchema = z.object({
     internalNote: z.string().max(500, "内部核对备注最多500字"),
-    returnReason: z.string().max(500, "退回原因最多500字"),
+    returnReason: z.string(),
     maintainerUserId: z.string(),
     productTarget: z.string(),
     brandId: z.string(),
@@ -185,7 +185,7 @@ export function fieldHighlightClass(
     fieldId: string,
 ) {
     return highlightedFieldId === fieldId
-        ? "rounded-md ring-2 ring-destructive/65 ring-offset-2 p-1.5 -m-1.5 transition-shadow"
+        ? "rounded-md ring-2 ring-destructive/65 ring-offset-2 p-1.5 -m-1.5 transition-shadow motion-safe:animate-pulse"
         : undefined
 }
 
@@ -527,14 +527,6 @@ export function evaluateReviewSections({
             sectionId: "decision",
             fieldId: "supplier-portal-review-comment",
             message: "内部核对备注最多500字",
-        })
-    }
-
-    if (values.returnReason.length > 500) {
-        decisionIssues.push({
-            sectionId: "decision",
-            fieldId: "supplier-portal-review-return-reason",
-            message: "退回原因最多500字",
         })
     }
 

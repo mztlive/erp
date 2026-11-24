@@ -17,10 +17,11 @@ import {
     detailWorkspaceStyles,
     type DetailWorkspaceTabItem,
 } from "@/components/business"
+import { useWorkspaceInspectorMode } from "@/components/business/workspace-task-pane"
 import { WorkItemResponsibilityDialog } from "@/components/business/work-item-responsibility-dialog"
 import { Button } from "@/components/ui/button"
-import { LoadingButton } from "@/components/ui/loading-button"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
+import type { PortalApplication } from "@/features/supplier-portal/types"
 import { PortalApplicationContent } from "@/features/supplier-portal/components/application-content"
 import { PortalError } from "@/features/supplier-portal/components/surface"
 import {
@@ -28,15 +29,12 @@ import {
     portalApplicationStatus,
     timeLabel,
 } from "@/features/supplier-portal/lib/presentation"
-import { usePortalAdminAccess, usePortalAdminApplication } from "../hooks"
+import { usePortalReviewApplication } from "../hooks"
 import { PortalReviewImages } from "../components/review-images"
 import { PortalReviewDiff } from "../components/review-diff"
 import { PortalOfferingImpacts } from "../components/offering-impacts"
-import {
-    PortalReviewForm,
-    type PortalReviewActionState,
-    type PortalReviewFormHandle,
-} from "./review-form"
+import { PortalReviewForm } from "./review-form"
+import { PortalReviewOverview } from "../components/review-overview"
 
 type ReviewSection = "review" | "impacts" | "history"
 
@@ -52,39 +50,45 @@ function safeReturnTo(raw: string | null): string | null {
     return raw
 }
 
-export function PortalAdminReviewPage({
-    applicationId,
-    workItemId,
-    embedded = false,
-    onTaskCompleted,
-}: {
+type ReviewPageProps = {
     applicationId: string
     workItemId?: string
     embedded?: boolean
+    fallbackSupplier?: string
     onTaskCompleted?: (id: string) => void
-}) {
+}
+
+export function PortalAdminReviewPage({ embedded, ...props }: ReviewPageProps) {
+    return embedded ? (
+        <EmbeddedPortalReview {...props} />
+    ) : (
+        <StandalonePortalReview {...props} />
+    )
+}
+
+function StandalonePortalReview({
+    applicationId,
+    workItemId,
+    onTaskCompleted,
+}: ReviewPageProps) {
     const searchParams = useSearchParams()
-    const access = usePortalAdminAccess()
-    const canReadDetail = access.can("supplier_portal_request:detail")
-    const query = usePortalAdminApplication(applicationId, canReadDetail)
+    const {
+        access,
+        canRead: canReadDetail,
+        query,
+        application,
+    } = usePortalReviewApplication(applicationId)
     const id =
         canReadDetail && access.can("work_item:detail")
             ? (workItemId ?? query.data?.work_item_id ?? "")
             : ""
     const task = useWorkItemDetailQuery(id)
-    const application = canReadDetail ? query.data : undefined
+    const taskDetail = task.data
 
     const [activeSection, setActiveSection] =
         React.useState<ReviewSection>("review")
     const [reassignOpen, setReassignOpen] = React.useState(false)
-    const [actionState, setActionState] =
-        React.useState<PortalReviewActionState>({
-            canProcess: false,
-            pending: false,
-            conflict: false,
-            retryDecision: null,
-        })
-    const reviewFormRef = React.useRef<PortalReviewFormHandle>(null)
+    const [decisionPending, setDecisionPending] = React.useState(false)
 
     const returnTo = safeReturnTo(searchParams.get("returnTo"))
     const fallbackHref =
@@ -133,10 +137,6 @@ export function PortalAdminReviewPage({
     const resolvedSection: ReviewSection =
         activeSection === "impacts" && !hasImpacts ? "review" : activeSection
 
-    const revealReviewTab = React.useCallback(() => {
-        setActiveSection("review")
-    }, [])
-
     const applicationTitle =
         application &&
         (application.title ??
@@ -146,7 +146,7 @@ export function PortalAdminReviewPage({
     const isLoading =
         access.profile.isPending || (canReadDetail && query.isPending)
 
-    if (!embedded && isLoading) {
+    if (isLoading) {
         return (
             <DetailWorkspaceSkeleton
                 title="供应商申请审核"
@@ -155,7 +155,7 @@ export function PortalAdminReviewPage({
         )
     }
 
-    if (!embedded && access.profile.isError) {
+    if (access.profile.isError) {
         return (
             <DetailWorkspacePage>
                 <DetailWorkspaceChrome
@@ -182,7 +182,7 @@ export function PortalAdminReviewPage({
         )
     }
 
-    if (!embedded && !canReadDetail) {
+    if (!canReadDetail) {
         return (
             <DetailWorkspacePage>
                 <DetailWorkspaceChrome
@@ -218,7 +218,7 @@ export function PortalAdminReviewPage({
         )
     }
 
-    if (!embedded && query.isError && !application) {
+    if (query.isError && !application) {
         return (
             <DetailWorkspacePage>
                 <DetailWorkspaceChrome
@@ -245,7 +245,7 @@ export function PortalAdminReviewPage({
         )
     }
 
-    if (!embedded && !application) {
+    if (!application) {
         return (
             <DetailWorkspacePage>
                 <DetailWorkspaceChrome
@@ -283,167 +283,79 @@ export function PortalAdminReviewPage({
 
     const bodyContent = (
         <>
-            {!canReadDetail && !access.profile.isPending ? (
-                <DetailWorkspaceSection width="form">
-                    <BusinessFailureState
-                        kind="permission"
-                        title="无权查看该供应商申请"
-                        description="当前账号缺少供应商申请资料查看资格，请联系管理员配置或转交处理。"
-                    />
-                </DetailWorkspaceSection>
-            ) : isLoading ? (
-                <DetailWorkspaceSection width="form">
-                    <p
-                        role="status"
-                        className="text-body-compact text-muted-foreground"
-                    >
-                        正在读取申请资料…
-                    </p>
-                </DetailWorkspaceSection>
-            ) : !application ? (
-                <DetailWorkspaceSection width="form">
-                    <BusinessEmptyState
-                        kind="no-data"
-                        title="未找到该供应商申请"
-                        description="该申请可能已被撤回、删除，或当前账号无权查看。"
-                    />
-                </DetailWorkspaceSection>
-            ) : (
+            {resolvedSection === "review" ? (
                 <>
-                    {embedded && sectionItems.length >= 2 ? (
-                        <div className="border-b border-border/60">
-                            <DetailWorkspaceTabs
-                                value={resolvedSection}
-                                onValueChange={(next) =>
-                                    setActiveSection(next as ReviewSection)
-                                }
-                                items={sectionItems}
-                                ariaLabel="申请审核分区"
-                                tabIdPrefix="supplier-portal-review-tab"
+                    <PortalReviewDiff
+                        key={application.id}
+                        application={application}
+                    />
+                    {application.kind === "new_product" ? (
+                        <PortalReviewImages application={application} />
+                    ) : null}
+                    {application.status === "pending" &&
+                    !access.can("work_item:detail") ? (
+                        <DetailWorkspaceSection width="form">
+                            <BusinessFailureState
+                                kind="permission"
+                                title="无法读取审核任务"
                             />
-                        </div>
+                        </DetailWorkspaceSection>
                     ) : null}
-
-                    {resolvedSection === "review" ? (
-                        <>
-                            <PortalReviewDiff application={application} />
-                            {application.kind === "new_product" ? (
-                                <PortalReviewImages application={application} />
-                            ) : null}
-                            {application.status === "pending" &&
-                            !access.can("work_item:detail") ? (
-                                <DetailWorkspaceSection width="form">
-                                    <BusinessFailureState
-                                        kind="permission"
-                                        title="无法读取审核任务"
-                                        description="当前账号缺少审核任务读取资格，请联系管理员配置或转交处理。"
-                                    />
-                                </DetailWorkspaceSection>
-                            ) : null}
-                            {application.status === "pending" ? (
-                                <>
-                                    {task.error ? (
-                                        <DetailWorkspaceSection width="form">
-                                            <BusinessFailureState
-                                                title="审核任务读取失败"
-                                                error={task.error}
-                                                onRetry={() => {
-                                                    void task.refetch()
-                                                }}
-                                            />
-                                        </DetailWorkspaceSection>
-                                    ) : null}
-                                    {access.can("work_item:detail") &&
-                                    task.data ? (
-                                        <PortalReviewForm
-                                            key={application.id}
-                                            application={application}
-                                            task={task.data}
-                                            formRef={reviewFormRef}
-                                            onActionStateChange={setActionState}
-                                            onRevealReviewTab={revealReviewTab}
-                                            onReload={async () => {
-                                                const results =
-                                                    await Promise.all([
-                                                        query.refetch(),
-                                                        task.refetch(),
-                                                    ])
-                                                const failed = results.find(
-                                                    (result) => result.error,
-                                                )
-                                                if (failed?.error)
-                                                    throw failed.error
-                                            }}
-                                            onSuccess={() => {
-                                                void query.refetch()
-                                                void task.refetch()
-                                                onTaskCompleted?.(
-                                                    task.data?.id ?? "",
-                                                )
-                                            }}
-                                        />
-                                    ) : null}
-                                </>
-                            ) : null}
-                            {access.can("product:list") &&
-                            application.kind === "new_product" &&
-                            application.status === "effective" ? (
-                                <DetailWorkspaceSection width="form">
-                                    <Link
-                                        id="supplier-portal-review-unlisted-link"
-                                        href="/master-data/products?productListingStatus=unlisted"
-                                        className={
-                                            detailWorkspaceStyles.inlineLinkButton
-                                        }
-                                    >
-                                        进入商品库集中定价及上架
-                                    </Link>
-                                </DetailWorkspaceSection>
-                            ) : null}
-                        </>
+                    {task.error ? (
+                        <DetailWorkspaceSection width="form">
+                            <BusinessFailureState
+                                title="审核任务读取失败"
+                                error={task.error}
+                                onRetry={() => void task.refetch()}
+                            />
+                        </DetailWorkspaceSection>
                     ) : null}
-
-                    {resolvedSection === "impacts" && offeringIdForImpacts ? (
-                        <PortalOfferingImpacts
-                            offeringId={offeringIdForImpacts}
-                            enabled={canReadDetail}
-                        />
-                    ) : null}
-
-                    {resolvedSection === "history" ? (
-                        <PortalApplicationContent
+                    {taskDetail ? (
+                        <PortalReviewForm
+                            key={taskDetail.id}
                             application={application}
-                            showDetails={application.kind === "new_product"}
-                            showImages={false}
-                            showHistory
+                            task={taskDetail}
+                            onPendingChange={setDecisionPending}
+                            onReload={async () => {
+                                const results = await Promise.all([
+                                    query.refetch(),
+                                    task.refetch(),
+                                ])
+                                const failure = results.find(
+                                    (result) => result.error,
+                                )
+                                if (failure?.error) throw failure.error
+                            }}
+                            onSuccess={() => {
+                                void query.refetch()
+                                void task.refetch()
+                                onTaskCompleted?.(taskDetail.id)
+                            }}
                         />
                     ) : null}
+                    <UnlistedProductLink
+                        application={application}
+                        allowed={access.can("product:list")}
+                    />
                 </>
-            )}
+            ) : null}
+            {resolvedSection === "impacts" && offeringIdForImpacts ? (
+                <PortalOfferingImpacts
+                    offeringId={offeringIdForImpacts}
+                    enabled={canReadDetail}
+                />
+            ) : null}
+            {resolvedSection === "history" ? (
+                <PortalApplicationContent
+                    application={application}
+                    showDetails={application.kind === "new_product"}
+                    showImages={false}
+                    showHistory
+                />
+            ) : null}
         </>
     )
 
-    if (embedded) {
-        return (
-            <div className="min-w-0">
-                {query.error ? (
-                    <div className="pb-4">
-                        <PortalError
-                            error={query.error}
-                            retry={() => void query.refetch()}
-                            id="supplier-portal-review-reload"
-                        />
-                    </div>
-                ) : null}
-                {bodyContent}
-            </div>
-        )
-    }
-
-    const showHeaderDecisionActions =
-        application?.status === "pending" &&
-        actionState.canProcess &&
-        !actionState.conflict
     const canHeaderReassign = Boolean(
         application?.status === "pending" &&
         access.can("work_item:manage") &&
@@ -485,69 +397,21 @@ export function PortalAdminReviewPage({
                     ) : undefined
                 }
                 secondaryActions={
-                    canHeaderReassign || showHeaderDecisionActions ? (
-                        <>
-                            {canHeaderReassign ? (
-                                <Button
-                                    id="supplier-portal-review-header-reassign"
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={actionState.pending}
-                                    onClick={() => setReassignOpen(true)}
-                                >
-                                    <ArrowRightLeftIcon
-                                        data-icon="inline-start"
-                                        aria-hidden="true"
-                                    />
-                                    转交他人
-                                </Button>
-                            ) : null}
-                            {showHeaderDecisionActions ? (
-                                <Button
-                                    id="supplier-portal-review-header-return"
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    className={
-                                        detailWorkspaceStyles.quietDangerButton
-                                    }
-                                    disabled={actionState.pending}
-                                    onClick={() => {
-                                        revealReviewTab()
-                                        reviewFormRef.current?.requestDecision(
-                                            "return",
-                                        )
-                                    }}
-                                >
-                                    {actionState.retryDecision === "return"
-                                        ? "重试退回"
-                                        : "退回修改"}
-                                </Button>
-                            ) : null}
-                        </>
-                    ) : undefined
-                }
-                primaryAction={
-                    showHeaderDecisionActions ? (
-                        <LoadingButton
-                            id="supplier-portal-review-header-approve"
+                    canHeaderReassign ? (
+                        <Button
+                            id="supplier-portal-review-header-reassign"
                             type="button"
                             size="sm"
-                            className="px-3.5"
-                            loading={actionState.pending}
-                            disabled={actionState.pending}
-                            onClick={() => {
-                                revealReviewTab()
-                                reviewFormRef.current?.requestDecision(
-                                    "approve",
-                                )
-                            }}
+                            variant="outline"
+                            disabled={decisionPending}
+                            onClick={() => setReassignOpen(true)}
                         >
-                            {actionState.retryDecision === "approve"
-                                ? "重试确认通过"
-                                : "确认通过并生效"}
-                        </LoadingButton>
+                            <ArrowRightLeftIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            转交他人
+                        </Button>
                     ) : undefined
                 }
                 tabs={
@@ -577,20 +441,21 @@ export function PortalAdminReviewPage({
             >
                 {bodyContent}
             </DetailWorkspaceBody>
-            {canHeaderReassign && task.data ? (
+            {canHeaderReassign && taskDetail ? (
                 <WorkItemResponsibilityDialog
                     mode="reassign"
                     idPrefix="supplier-portal-reassign"
                     targets={[
                         {
-                            workItemId: task.data.id,
+                            workItemId: taskDetail.id,
                             label:
                                 applicationTitle ??
                                 application?.application_no ??
                                 "供应商申请确认",
-                            expectedTaskVersion: task.data.task_version,
+                            expectedTaskVersion: taskDetail.task_version,
                             currentOwnerLabel:
-                                task.data.owner_user?.display_name ?? undefined,
+                                taskDetail.owner_user?.display_name ??
+                                undefined,
                         },
                     ]}
                     open={reassignOpen}
@@ -604,5 +469,156 @@ export function PortalAdminReviewPage({
                 />
             ) : null}
         </DetailWorkspacePage>
+    )
+}
+
+function UnlistedProductLink({
+    application,
+    allowed,
+}: {
+    application: PortalApplication
+    allowed: boolean
+}) {
+    if (
+        !allowed ||
+        application.kind !== "new_product" ||
+        application.status !== "effective"
+    )
+        return null
+    return (
+        <DetailWorkspaceSection width="form">
+            <Link
+                id="supplier-portal-review-unlisted-link"
+                href="/master-data/products?productListingStatus=unlisted"
+                className={detailWorkspaceStyles.inlineLinkButton}
+            >
+                进入商品库集中定价及上架
+            </Link>
+        </DetailWorkspaceSection>
+    )
+}
+
+function EmbeddedPortalReview({
+    applicationId,
+    workItemId,
+    fallbackSupplier,
+    onTaskCompleted,
+}: ReviewPageProps) {
+    const inspectorMode = useWorkspaceInspectorMode()
+    const { access, canRead, query, application } =
+        usePortalReviewApplication(applicationId)
+    const canReadTask =
+        canRead && access.can("work_item:detail") && !inspectorMode
+    const task = useWorkItemDetailQuery(
+        canReadTask ? (workItemId ?? application?.work_item_id ?? "") : "",
+    )
+
+    const taskDetail = task.data
+
+    if (access.profile.isPending || (canRead && query.isPending)) {
+        return (
+            <p role="status" className="py-4 text-xs text-muted-foreground">
+                正在读取申请资料…
+            </p>
+        )
+    }
+    if (access.profile.isError || (!application && query.isError)) {
+        return (
+            <BusinessFailureState
+                idPrefix="supplier-portal-workspace-review-failure"
+                title={
+                    access.profile.isError
+                        ? "账号权限信息读取失败"
+                        : "申请资料读取失败"
+                }
+                error={access.profile.error ?? query.error}
+                onRetry={() =>
+                    void (access.profile.isError
+                        ? access.profile.refetch()
+                        : query.refetch())
+                }
+            />
+        )
+    }
+    if (!canRead) {
+        return (
+            <BusinessFailureState
+                kind="permission"
+                title="无权查看该供应商申请"
+            />
+        )
+    }
+    if (!application) {
+        return <BusinessEmptyState kind="no-data" title="未找到该供应商申请" />
+    }
+
+    const details = (
+        <PortalReviewDiff
+            key={application.id}
+            application={application}
+            compact
+        />
+    )
+    return (
+        <div className="@container/supplier-portal-review min-w-0 space-y-3.5 bg-card py-3.5">
+            <PortalError
+                error={query.error}
+                retry={() => void query.refetch()}
+                id="supplier-portal-review-reload"
+            />
+            {canReadTask && taskDetail ? (
+                <PortalReviewForm
+                    key={taskDetail.id}
+                    application={application}
+                    task={taskDetail}
+                    workspace={{ details, fallbackSupplier }}
+                    onReload={async () => {
+                        const results = await Promise.all([
+                            query.refetch(),
+                            task.refetch(),
+                        ])
+                        const failure = results.find((result) => result.error)
+                        if (failure?.error) throw failure.error
+                    }}
+                    onSuccess={() => onTaskCompleted?.(taskDetail.id)}
+                />
+            ) : (
+                <>
+                    <PortalReviewOverview
+                        application={application}
+                        fallbackSupplier={fallbackSupplier}
+                    />
+                    {!inspectorMode && application.status === "pending" ? (
+                        !canReadTask ? (
+                            <BusinessFailureState
+                                kind="permission"
+                                title="无法读取审核任务"
+                            />
+                        ) : task.error ? (
+                            <BusinessFailureState
+                                idPrefix="supplier-portal-workspace-task-failure"
+                                title="审核任务读取失败"
+                                error={task.error}
+                                onRetry={() => void task.refetch()}
+                            />
+                        ) : task.isPending ? (
+                            <p
+                                role="status"
+                                className="text-xs text-muted-foreground"
+                            >
+                                正在读取审核任务…
+                            </p>
+                        ) : null
+                    ) : null}
+                    {!inspectorMode ? details : null}
+                </>
+            )}
+            {!inspectorMode ? (
+                <UnlistedProductLink
+                    application={application}
+                    allowed={access.can("product:list")}
+                />
+            ) : null}
+        </div>
     )
 }

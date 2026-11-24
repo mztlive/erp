@@ -28,14 +28,22 @@ export type MarginSummary = Readonly<{
     /** 无符号绝对毛利额（单位元，两位小数）。 */
     absAmount: string
     negative: boolean
+    positive: boolean
 }>
 
 export type VoucherDiscountSummary = Readonly<{
     label: string
     kind: "discount" | "par" | "premium"
+    faceValuePercent?: string
 }>
 
 export type SalesLineRiskSeverity = "high" | "medium" | "info" | "none"
+
+type SalesLineRiskDetail = Readonly<{
+    label: string
+    difference?: string
+    reference?: string
+}>
 
 export type EvaluatedSalesLine = Readonly<{
     line: SalesApprovalLine
@@ -50,9 +58,10 @@ export type EvaluatedSalesLine = Readonly<{
     missingSupply: boolean
     priceCheck: ReturnType<typeof salesLinePriceComparison> | null
     margin: MarginSummary | null
+    marginBasis: "line" | "unit"
     voucherDiscount: VoucherDiscountSummary | null
     severity: SalesLineRiskSeverity
-    /** 用于「仅看风险项」筛选（覆盖负毛利、低于原底价及底价调整）。 */
+    riskDetails: readonly SalesLineRiskDetail[]
     hasRisk: boolean
 }>
 
@@ -61,6 +70,7 @@ export type SalesApprovalMetrics = Readonly<{
     lineCount: number
     totalQuantity: { value: string; unit?: string } | null
     /** 商品与服务单据：按已填成本行汇总的预估成本、毛利额与毛利率（计入赠品成本）。 */
+    coveredRevenue: string | null
     estimatedCostTotal: string | null
     giftCostTotal: string | null
     estimatedMargin: MarginSummary | null
@@ -70,11 +80,13 @@ export type SalesApprovalMetrics = Readonly<{
     /** 卡券单据：总面额、总张数与整单折率。 */
     totalFaceValue: string | null
     totalCards: string | null
+    voucherFaceValueCoveredCount: number
     overallVoucherDiscount: VoucherDiscountSummary | null
     /** 风险计数 */
     negativeMarginCount: number
     belowFloorCount: number
     priceAdjustedCount: number
+    otherPriceRiskCount: number
     missingSupplyCount: number
     giftCount: number
     highRiskLineCount: number
@@ -85,6 +97,14 @@ export type SalesResubmissionContext = Readonly<{
     isResubmission: boolean
     roundNo?: number
     resubmissionReason?: string
+    diffBaseline?: string
+    diffSummary?: string
+    diffs?: readonly {
+        label: string
+        before: string
+        after: string
+        numeric?: boolean
+    }[]
     previousRejection?: Readonly<{
         reason: string
         actor?: string | null
@@ -150,7 +170,8 @@ export function calculateSalesMargin(
             maxScale: 6,
             outputScale: 2,
         })
-        const negative = compareDecimal(diff, "0", 6) < 0
+        const sign = compareDecimal(diff, "0", 6)
+        const negative = sign < 0
         const absDiff = negative ? diff.slice(1) : diff
         const absAmount = amount.startsWith("-") ? amount.slice(1) : amount
         const absPercent = divideFixed(
@@ -172,6 +193,7 @@ export function calculateSalesMargin(
             amount,
             absAmount,
             negative,
+            positive: sign > 0,
         }
     } catch {
         return null
@@ -221,7 +243,11 @@ export function calculateVoucherDiscount(
                 outputScale: 1,
             },
         )
-        return { label: `溢价 ${pct}%`, kind: "premium" }
+        return {
+            label: `溢价 ${pct}%`,
+            kind: "premium",
+            faceValuePercent: pct,
+        }
     } catch {
         return null
     }
@@ -318,10 +344,29 @@ export function buildSalesDynamicRejectPhrases(
             phrases.push("部分商品售价低于原采购底价，请说明调价依据")
         }
     }
-    if (!submission.contract_no?.trim() && attachmentCount === 0) {
+    if (missingSalesApprovalEvidence(submission, attachmentCount)) {
         phrases.push("无合同且未附带凭证附件，请补充盖章依据")
     }
     return phrases
+}
+
+export function missingSalesApprovalEvidence(
+    submission: ApprovalSalesSubmission,
+    attachmentCount?: number,
+): boolean {
+    return !submission.contract_no?.trim() && attachmentCount === 0
+}
+
+function unitPriceDifference(above: string, below: string): string {
+    const price = below.trim()
+    return sumFixed(
+        [above, price.startsWith("-") ? price.slice(1) : `-${price}`],
+        {
+            maxScale: 6,
+            outputScale: 6,
+            allowNegative: true,
+        },
+    )
 }
 
 export function evaluateSalesApprovalLines(
@@ -350,6 +395,7 @@ export function evaluateSalesApprovalLines(
                 line.procurement_supply_price_gross === "")
 
         let margin: MarginSummary | null = null
+        let marginBasis: EvaluatedSalesLine["marginBasis"] = "unit"
         if (!isCard && !isGift) {
             if (
                 line.procurement_supply_price_gross &&
@@ -363,6 +409,7 @@ export function evaluateSalesApprovalLines(
                         { leftMaxScale: 6, rightMaxScale: 6, outputScale: 2 },
                     )
                     margin = calculateSalesMargin(line.gross_amount, lineCost)
+                    marginBasis = "line"
                 } catch {
                     margin = calculateSalesMargin(
                         line.unit_price_gross,
@@ -381,20 +428,51 @@ export function evaluateSalesApprovalLines(
             ? calculateVoucherDiscount(line.unit_price_gross, line.face_value)
             : null
 
+        const riskDetails: SalesLineRiskDetail[] = []
+        if (negativeMargin) {
+            riskDetails.push({
+                label: "售价低于供给价",
+                difference: unitPriceDifference(
+                    line.procurement_supply_price_gross!,
+                    line.unit_price_gross!,
+                ),
+            })
+        }
+        if (belowOriginalFloor) {
+            riskDetails.push({
+                label: "售价低于原底价",
+                difference: unitPriceDifference(
+                    line.original_procurement_supply_price_gross!,
+                    line.unit_price_gross!,
+                ),
+                reference: line.original_procurement_supply_price_gross!,
+            })
+        }
+        if (priceCheck?.change != null) {
+            riskDetails.push({
+                label:
+                    priceCheck.adjustment === "increased"
+                        ? "供给价调高"
+                        : "供给价调低",
+                difference: priceCheck.change,
+                reference: belowOriginalFloor
+                    ? undefined
+                    : (line.original_procurement_supply_price_gross ??
+                      undefined),
+            })
+        }
+        if (priceCheck?.warnings.includes("价格格式需核对")) {
+            riskDetails.push({ label: "价格格式需核对" })
+        }
+
         const severity: SalesLineRiskSeverity =
             negativeMargin || belowOriginalFloor
                 ? "high"
-                : priceAdjusted
+                : riskDetails.length > 0
                   ? "medium"
                   : missingSupply
                     ? "info"
                     : "none"
-
-        const hasRisk =
-            negativeMargin ||
-            belowOriginalFloor ||
-            priceAdjusted ||
-            Boolean(priceCheck && priceCheck.warnings.length > 0)
 
         return {
             line,
@@ -409,9 +487,11 @@ export function evaluateSalesApprovalLines(
             missingSupply,
             priceCheck,
             margin,
+            marginBasis,
             voucherDiscount,
             severity,
-            hasRisk,
+            riskDetails,
+            hasRisk: riskDetails.length > 0,
         }
     })
 }
@@ -432,12 +512,13 @@ export function buildSalesApprovalMetrics(
     let costCoveredCount = 0
     let costExpectedCount = 0
 
-    let faceValues: string[] = []
-    let cardCounts: string[] = []
+    const faceValues: string[] = []
+    const cardCounts: string[] = []
 
     let negativeMarginCount = 0
     let belowFloorCount = 0
     let priceAdjustedCount = 0
+    let otherPriceRiskCount = 0
     let missingSupplyCount = 0
     let giftCount = 0
     let highRiskLineCount = 0
@@ -455,9 +536,11 @@ export function buildSalesApprovalMetrics(
         }
 
         if (entry.negativeMargin) negativeMarginCount += 1
-        if (!entry.negativeMargin && entry.belowOriginalFloor)
-            belowFloorCount += 1
+        if (entry.belowOriginalFloor) belowFloorCount += 1
         if (entry.priceAdjusted) priceAdjustedCount += 1
+        if (entry.priceCheck?.warnings.includes("价格格式需核对")) {
+            otherPriceRiskCount += 1
+        }
         if (entry.missingSupply) missingSupplyCount += 1
         if (entry.isGift) giftCount += 1
         if (entry.severity === "high") highRiskLineCount += 1
@@ -466,19 +549,22 @@ export function buildSalesApprovalMetrics(
         if (isCard) {
             if (entry.line.card_count != null) {
                 cardCounts.push(String(entry.line.card_count))
-                if (entry.line.face_value) {
+                const faceValue = entry.line.face_value
+                if (faceValue) {
                     try {
-                        faceValues.push(
-                            multiplyFixed(
-                                entry.line.face_value,
-                                String(entry.line.card_count),
-                                {
-                                    leftMaxScale: 6,
-                                    rightMaxScale: 0,
-                                    outputScale: 2,
-                                },
-                            ),
-                        )
+                        if (compareDecimal(faceValue, "0", 6) > 0) {
+                            faceValues.push(
+                                multiplyFixed(
+                                    faceValue,
+                                    String(entry.line.card_count),
+                                    {
+                                        leftMaxScale: 6,
+                                        rightMaxScale: 0,
+                                        outputScale: 2,
+                                    },
+                                ),
+                            )
+                        }
                     } catch {
                         // 忽略异常面额格式
                     }
@@ -533,17 +619,23 @@ export function buildSalesApprovalMetrics(
         }
     }
 
-    const totalQuantity =
+    let totalQuantity: { value: string; unit?: string } | null = null
+    if (
         evaluatedLines.length > 0 &&
         units.size === 1 &&
         quantities.length === evaluatedLines.length
-            ? {
-                  value: compactFixed(
-                      sumFixed(quantities, { maxScale: 6, outputScale: 6 }),
-                  ),
-                  unit: [...units][0] || undefined,
-              }
-            : null
+    ) {
+        try {
+            totalQuantity = {
+                value: compactFixed(
+                    sumFixed(quantities, { maxScale: 6, outputScale: 6 }),
+                ),
+                unit: [...units][0] || undefined,
+            }
+        } catch {
+            totalQuantity = null
+        }
+    }
 
     const estimatedMargin =
         !isCard && costCoveredCount > 0
@@ -561,7 +653,7 @@ export function buildSalesApprovalMetrics(
               )
             : null
     const overallVoucherDiscount =
-        isCard && totalFaceValue
+        isCard && totalFaceValue && faceValues.length === evaluatedLines.length
             ? calculateVoucherDiscount(submission.gross_amount, totalFaceValue)
             : null
 
@@ -569,6 +661,7 @@ export function buildSalesApprovalMetrics(
         isCard,
         lineCount: evaluatedLines.length,
         totalQuantity,
+        coveredRevenue: costCoveredCount > 0 ? coveredRevenue : null,
         estimatedCostTotal:
             !isCard && (costCoveredCount > 0 || hasGiftCost)
                 ? coveredCost
@@ -583,10 +676,12 @@ export function buildSalesApprovalMetrics(
             costCoveredCount < costExpectedCount,
         totalFaceValue,
         totalCards,
+        voucherFaceValueCoveredCount: faceValues.length,
         overallVoucherDiscount,
         negativeMarginCount,
         belowFloorCount,
         priceAdjustedCount,
+        otherPriceRiskCount,
         missingSupplyCount,
         giftCount,
         highRiskLineCount,
@@ -598,16 +693,32 @@ export function parseSalesResubmission(
     extraSections: ApprovalMaterials["display"]["source"]["extra_sections"],
     item: WorkspaceWorkItem,
 ): SalesResubmissionContext | null {
-    const resubmissionReason = extraSections
-        .find((section) => section.label === "重新提交说明")
-        ?.value.trim()
     const roundNo = item.approval?.currentRoundNo
-    const isResubmission = Boolean(
-        resubmissionReason || (roundNo != null && roundNo > 1),
-    )
+    if (roundNo == null || roundNo < 2) return null
+
+    const field = (label: string) =>
+        extraSections
+            .find((section) => section.label === label)
+            ?.value.trim() || undefined
+    const suffix = "（前→后）"
+    const arrow = " → "
+    const diffs = extraSections.flatMap((section) => {
+        if (!section.label.endsWith(suffix)) return []
+        const separator = section.value.indexOf(arrow)
+        if (separator < 0) return []
+        const before = section.value.slice(0, separator).trim()
+        const after = section.value.slice(separator + arrow.length).trim()
+        if (!before || !after) return []
+        return [
+            {
+                label: section.label.slice(0, -suffix.length),
+                before,
+                after,
+                numeric: section.numeric,
+            },
+        ]
+    })
     const previousRejection =
-        roundNo != null &&
-        roundNo > 1 &&
         item.approval?.status !== "REJECTED" &&
         item.approval?.lastRejectReason?.trim()
             ? {
@@ -616,11 +727,19 @@ export function parseSalesResubmission(
               }
             : undefined
 
-    if (!isResubmission && !previousRejection) return null
+    const resubmissionReason = field("重新提交说明")
+    const diffSummary = field("重提差异")
     return {
-        isResubmission,
+        isResubmission: true,
         roundNo,
-        resubmissionReason: resubmissionReason || undefined,
+        resubmissionReason,
+        diffBaseline: field("对比基准"),
+        diffSummary:
+            diffSummary ??
+            (!resubmissionReason && !diffs.length && !previousRejection
+                ? "未记录重提说明或字段变更"
+                : undefined),
+        diffs,
         previousRejection,
     }
 }

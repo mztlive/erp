@@ -1,9 +1,8 @@
 "use client"
 
 import { FormalActionConfirmDialog } from "@/components/business"
-import { Field, FieldLabel } from "@/components/ui/field"
+import { ReasonTextareaField } from "@/components/business/reason-textarea-field"
 import { StatusBadge } from "@/components/ui/status-badge"
-import { Textarea } from "@/components/ui/textarea"
 import {
     acceptanceConfirmLines,
     visibleAcceptanceNo,
@@ -15,6 +14,9 @@ import {
     type AcceptanceHistoryItem,
     type AcceptanceOverallResult,
 } from "@/features/sales-orders/lib/acceptance-types"
+import { utf8ByteLength } from "@/lib/validation/reason-length"
+
+const REVERSE_REASON_MAX_BYTES = 512
 
 export function AcceptanceDialogs({
     confirmOpen,
@@ -87,23 +89,22 @@ export function AcceptanceDialogs({
                 fromStatus={{ label: "已确认", tone: "success" }}
                 toStatus={{ label: "已冲正", tone: "warning" }}
                 formContent={
-                    <Field>
-                        <FieldLabel htmlFor="sales-orders-acceptance-reverse-reason">
-                            冲正理由 <span className="text-destructive">*</span>
-                        </FieldLabel>
-                        <Textarea
-                            id="sales-orders-acceptance-reverse-reason"
-                            rows={3}
-                            required
-                            value={reverseReason}
-                            onChange={(event) =>
-                                onReverseReasonChange(event.target.value)
-                            }
-                            placeholder="说明误录原因"
-                        />
-                    </Field>
+                    <ReasonTextareaField
+                        id="sales-orders-acceptance-reverse-reason"
+                        mode="utf8-bytes"
+                        max={REVERSE_REASON_MAX_BYTES}
+                        label="冲正理由"
+                        rows={3}
+                        required
+                        value={reverseReason}
+                        onChange={onReverseReasonChange}
+                        placeholder="说明误录原因"
+                    />
                 }
-                confirmDisabled={!reverseReason.trim()}
+                confirmDisabled={
+                    !reverseReason.trim() ||
+                    utf8ByteLength(reverseReason) > REVERSE_REASON_MAX_BYTES
+                }
                 onConfirm={onConfirmReverse}
             />
         </>
@@ -125,7 +126,7 @@ export function AcceptanceConfirmSelection({
                     key={line.fulfillmentLineId}
                     className="flex items-start justify-between gap-3 px-4 py-3"
                 >
-                    <div className="min-w-0 space-y-0.5">
+                    <div className="min-w-0 space-y-0.5 wrap-anywhere">
                         <p className="font-medium text-foreground">
                             {line.itemLabel}
                         </p>

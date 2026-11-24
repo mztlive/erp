@@ -4,6 +4,7 @@ import * as React from "react"
 import { FormalActionConfirmDialog } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { cn } from "@/lib/utils"
+import { getErrorMessage } from "@/lib/api/errors"
 import { isWorkspaceFrame } from "@/lib/workspace-tabs"
 import { FulfillmentQueueList } from "@/features/fulfillment-operations/components/queue/fulfillment-queue-list"
 import { confirmDescription } from "@/features/fulfillment-operations/lib/validation"
@@ -22,6 +23,8 @@ import {
 import { FulfillmentPageStates } from "./fulfillment-page-states"
 import { FulfillmentResultPanel } from "./fulfillment-result-panel"
 import { FulfillmentWorkSurface } from "./fulfillment-work-surface"
+import { serviceCompletionNoteIssue } from "./fulfillment-task-fields"
+import type { FulfillmentTaskContext } from "./fulfillment-task-overview"
 
 type FulfillmentOperationsWorkspaceProps = {
     controller: FulfillmentOperationsController
@@ -30,6 +33,7 @@ type FulfillmentOperationsWorkspaceProps = {
     roleLabel: string
     embedded?: boolean
     singleOperation?: boolean
+    taskContext?: FulfillmentTaskContext
     onBack: () => void
     onOpenAcceptance?: () => void
 }
@@ -49,12 +53,29 @@ export function FulfillmentOperationsWorkspace({
     roleLabel,
     embedded = false,
     singleOperation = false,
+    taskContext,
     onBack,
     onOpenAcceptance,
 }: FulfillmentOperationsWorkspaceProps) {
     const status = responsibilityStatus(
         controller.operation,
         controller.canExecute,
+    )
+
+    const completionNoteIssue = taskContext
+        ? serviceCompletionNoteIssue(controller.draft)
+        : undefined
+    const canPost = controller.canPost && !completionNoteIssue
+    const validationIssues = completionNoteIssue
+        ? [...controller.validationIssues, completionNoteIssue]
+        : controller.validationIssues
+    const showWorkSurface =
+        !controller.completed &&
+        Boolean(controller.operation && controller.draft)
+    const showRecoveryInFooter = Boolean(
+        taskContext &&
+        showWorkSurface &&
+        controller.lastResult?.status === "unknown",
     )
 
     React.useEffect(() => {
@@ -69,7 +90,7 @@ export function FulfillmentOperationsWorkspace({
             }
             if (
                 document.querySelector(
-                    '[role="dialog"]:not([data-closed]), [role="alertdialog"]:not([data-closed])',
+                    '[role="dialog"]:not([data-closed]):not([data-slot="toast"]):not([data-business-component="task-action-sheet"]), [role="alertdialog"]:not([data-closed])',
                 )
             ) {
                 return
@@ -94,7 +115,7 @@ export function FulfillmentOperationsWorkspace({
                 !event.altKey &&
                 event.key === "Enter" &&
                 controller.canExecute &&
-                controller.canPost &&
+                canPost &&
                 !controller.formalPending &&
                 !controller.savePending &&
                 !controller.confirmOpen
@@ -104,6 +125,7 @@ export function FulfillmentOperationsWorkspace({
                 return
             }
             if (
+                !taskContext &&
                 !modifier &&
                 !event.altKey &&
                 event.key === "?" &&
@@ -132,13 +154,27 @@ export function FulfillmentOperationsWorkspace({
         }
         window.addEventListener("keydown", handleKeyDown)
         return () => window.removeEventListener("keydown", handleKeyDown)
-    }, [controller, singleOperation])
+    }, [canPost, controller, singleOperation, taskContext])
+
+    async function resolveUnknown() {
+        try {
+            await controller.handleResolveUnknown()
+        } catch (error) {
+            controller.setActionError(
+                getErrorMessage(error, "本次核对失败，请稍后重试"),
+            )
+        }
+    }
 
     return (
         <div
             className={cn(
                 "flex min-w-0 flex-col",
-                embedded || singleOperation ? "gap-0" : "gap-4",
+                taskContext
+                    ? "gap-3 bg-card"
+                    : embedded || singleOperation
+                      ? "gap-0"
+                      : "gap-4",
                 singleOperation && "min-h-0 flex-1",
             )}
         >
@@ -152,9 +188,7 @@ export function FulfillmentOperationsWorkspace({
                         lastResult={controller.lastResult}
                         currentUrl={controller.currentUrl}
                         resolvePending={controller.resolvePending}
-                        onResolveUnknown={() =>
-                            void controller.handleResolveUnknown()
-                        }
+                        onResolveUnknown={() => void resolveUnknown()}
                         onRetryUnknown={() =>
                             void controller.handleRetryUnknown()
                         }
@@ -172,11 +206,12 @@ export function FulfillmentOperationsWorkspace({
                         onContinueWarehouseShip={controller.goToWarehouseShip}
                         onOpenAcceptance={onOpenAcceptance}
                         showNext={!singleOperation}
+                        showUnknownActions={!showRecoveryInFooter}
                     />
                 </div>
             ) : null}
 
-            {controller.actionError ? (
+            {controller.actionError && (!taskContext || !showWorkSurface) ? (
                 <Alert variant="destructive">
                     <AlertTitle>没有生效</AlertTitle>
                     <AlertDescription>
@@ -243,10 +278,25 @@ export function FulfillmentOperationsWorkspace({
                     <FulfillmentWorkSurface
                         operation={controller.operation}
                         draft={controller.draft}
-                        validationIssues={controller.validationIssues}
+                        taskContext={taskContext}
+                        actionError={controller.actionError}
+                        validationIssues={validationIssues}
+                        recovery={
+                            showRecoveryInFooter
+                                ? {
+                                      resolving: controller.resolvePending,
+                                      retrying: controller.retryPending,
+                                      onResolve: () => void resolveUnknown(),
+                                      onRetry: controller.canExecute
+                                          ? () =>
+                                                void controller.handleRetryUnknown()
+                                          : undefined,
+                                  }
+                                : undefined
+                        }
                         saveMessage={controller.saveMessage}
                         canExecute={controller.canExecute}
-                        canPost={controller.canPost}
+                        canPost={canPost}
                         formalPending={controller.formalPending}
                         savePending={controller.savePending}
                         supportsSave={controller.supportsSave}
@@ -336,7 +386,7 @@ export function FulfillmentOperationsWorkspace({
                 }}
                 pending={controller.formalPending}
                 onConfirm={async () => {
-                    await controller.handlePost()
+                    if (!completionNoteIssue) await controller.handlePost()
                 }}
             />
         </div>

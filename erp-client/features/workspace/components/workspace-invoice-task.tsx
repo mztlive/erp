@@ -1,27 +1,80 @@
 "use client"
 
-import { WorkspaceProcessingPane } from "./workspace-processing-layout"
-
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import { isResourceAuthorizationPending } from "@/lib/resource-authorization"
-import { Button } from "@/components/ui/button"
-import { useAccountProfileQuery } from "@/features/auth/queries"
-import { hasPermission } from "@/lib/permissions"
-import { sourceSalesOrderHref } from "../lib/source-sales-order"
-import { useInvoiceRequests } from "@/features/invoice-requests/hooks/queries"
-import { subtractFixed } from "@/lib/fixed-decimal"
-import type { InvoiceRequest } from "@/features/invoice-requests/api"
-import { InvoiceRequestDetails } from "@/features/invoice-requests/components/request-details"
+import {
+    ArrowUpRightIcon,
+    CircleHelpIcon,
+    CopyIcon,
+    FileTextIcon,
+    PanelRightCloseIcon,
+    XIcon,
+} from "lucide-react"
 
-import { BusinessFailureState, MoneyValue } from "@/components/business"
+import {
+    BusinessFailureState,
+    DetailWorkspaceMeta,
+    MoneyValue,
+    PaperDocumentViewport,
+    RateValue,
+    useWorkspaceInspectorMode,
+} from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { WorkspaceInvoiceUpload } from "./workspace-invoice-upload"
+import { Button, buttonVariants } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableFooter,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
+import { toast } from "@/components/ui/toast"
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useCustomerAccountsDetailQuery } from "@/features/customer-receivables/hooks/queries"
-import type { ReceivableAccountRow } from "@/features/customer-receivables/types"
+import type { InvoiceRequest } from "@/features/invoice-requests/api"
+import { resolveInvoiceRequestLines } from "@/features/invoice-requests/components/request-details"
+import { useInvoiceRequests } from "@/features/invoice-requests/hooks/queries"
+import {
+    canonicalInvoiceDecimal,
+    INVOICE_QUANTITY_SCALE,
+    INVOICE_UNIT_PRICE_SCALE,
+    invoiceLineAmount,
+    invoiceLinesTotal,
+    isPositiveInvoiceDecimal,
+} from "@/features/invoice-requests/line-amounts"
+import { SalesOrderPaperDocument } from "@/features/sales-orders/components/sales-order-paper-dialog"
+import { SalesOrderPaperPreviewDialog } from "@/features/sales-orders/components/sales-order-paper-preview-dialog"
+import { useSalesOrderDetailQuery } from "@/features/sales-orders/hooks/queries"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-
-import type { WorkspaceWorkItem } from "../types"
+import {
+    compareDecimal,
+    divideFixed,
+    formatFixedDisplay,
+    minFixed,
+    multiplyFixed,
+    normalizeFixed,
+    subtractFixed,
+} from "@/lib/fixed-decimal"
+import { hasPermission } from "@/lib/permissions"
+import { isResourceAuthorizationPending } from "@/lib/resource-authorization"
+import { subscribeWorkspaceHotkeyAction } from "@/lib/workspace-hotkeys"
+import { sourceSalesOrderHref } from "../lib/source-sales-order"
+import { stripDocumentNumberPrefix } from "../lib/stable-number"
 import { workspaceInvoiceDescriptor } from "../lib/workspace-invoice"
+import type { WorkspaceWorkItem } from "../types"
+import {
+    useWorkspaceInvoiceRegistration,
+    WorkspaceInvoiceUpload,
+} from "./workspace-invoice-upload"
+import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
 type WorkspaceInvoiceTaskProps = Readonly<{
@@ -29,31 +82,68 @@ type WorkspaceInvoiceTaskProps = Readonly<{
     onTaskCompleted?: (workItemId: string) => void
 }>
 
-function remainingApproved(amount: string, invoiced: string): string {
-    if (
-        !/^-?\d+(?:\.\d{1,2})?$/.test(amount) ||
-        !/^-?\d+(?:\.\d{1,2})?$/.test(invoiced)
-    ) {
-        return amount || "0.00"
+const currencyScale = { maxScale: 2, outputScale: 2 }
+const wrapMoney =
+    "[&_[data-slot=money-value-number]]:wrap-anywhere [&_[data-slot=money-value-number]]:whitespace-normal"
+
+function invoiceAmount(value: string): string | null {
+    try {
+        return normalizeFixed(value, currencyScale)
+    } catch {
+        return null
     }
-    return subtractFixed(amount, invoiced, { maxScale: 2, outputScale: 2 })
 }
 
-/** W01 开票作业面：任务身份锁定一个销售应收，登记销项发票不离开工作台。 */
-export function WorkspaceInvoiceTask({
+function remainingApproved(amount: string, invoiced: string): string | null {
+    const approved = invoiceAmount(amount)
+    const registered = invoiceAmount(invoiced)
+    return approved !== null && registered !== null
+        ? subtractFixed(approved, registered, currencyScale)
+        : null
+}
+
+function registeredRatio(approved: string, registered: string): string | null {
+    try {
+        if (compareDecimal(approved, "0", 2) <= 0) return null
+        const capped = minFixed(registered, approved, currencyScale)
+        return divideFixed(capped, approved, {
+            numeratorMaxScale: 2,
+            denominatorMaxScale: 2,
+            outputScale: 4,
+        })
+    } catch {
+        return null
+    }
+}
+
+export function WorkspaceInvoiceTask(props: WorkspaceInvoiceTaskProps) {
+    return <InvoiceExecutionWorkbench key={props.item.workItemId} {...props} />
+}
+
+function InvoiceExecutionWorkbench({
     item,
     onTaskCompleted,
 }: WorkspaceInvoiceTaskProps) {
-    const profile = useAccountProfileQuery().data
-    const canReadSalesOrder = hasPermission(
-        profile?.permissions,
-        "sales_order:detail",
-    )
-    const descriptor = workspaceInvoiceDescriptor(item)
+    const profileQuery = useAccountProfileQuery()
+    const permissions = profileQuery.isError
+        ? undefined
+        : profileQuery.data?.permissions
     const canReadRequest = hasPermission(
-        profile?.permissions,
+        permissions,
         "sales_invoice_request:list",
     )
+    const canOpenRequest = hasPermission(
+        permissions,
+        "sales_invoice_request:detail",
+    )
+    const canReadReceivable = hasPermission(
+        permissions,
+        "receivable_account:detail",
+    )
+    const canReadSalesOrder = hasPermission(permissions, "sales_order:detail")
+    const canPostInvoice = hasPermission(permissions, "invoice:post")
+    const descriptor = workspaceInvoiceDescriptor(item)
+    const idPrefix = `workspace-invoice-${toAutomationIdSegment(item.workItemId)}`
     const requestQuery = useInvoiceRequests(
         {
             work_item_id: item.workItemId,
@@ -74,20 +164,14 @@ export function WorkspaceInvoiceTask({
         request.receivable_account_id === descriptor.receivableAccountId
             ? request
             : undefined
-    const canProcess =
-        item.status === "OPEN" && item.allowedActions.includes("PROCESS")
-    const readOnly = !canProcess || taskRequest?.status === "completed"
-    const canOpenRequest =
-        canReadRequest &&
-        hasPermission(profile?.permissions, "sales_invoice_request:detail")
     const receivableQuery = useCustomerAccountsDetailQuery(
-        taskRequest && !readOnly ? "receivable" : null,
+        taskRequest && canReadReceivable ? "receivable" : null,
         descriptor?.receivableAccountId ?? null,
     )
-    const grantPending = isResourceAuthorizationPending(requestQuery.error)
-    const receivable = receivableQuery.isSuccess
-        ? receivableQuery.data?.receivable
-        : undefined
+    const receivable =
+        canReadReceivable && receivableQuery.isSuccess
+            ? receivableQuery.data?.receivable
+            : undefined
     const identityOk = Boolean(
         descriptor &&
         taskRequest &&
@@ -96,271 +180,840 @@ export function WorkspaceInvoiceTask({
         (!taskRequest.sales_order_id ||
             taskRequest.sales_order_id === receivable.salesOrderId),
     )
+    const referenceSalesOrderId =
+        identityOk && canReadSalesOrder ? receivable?.salesOrderId : undefined
+    const salesQuery = useSalesOrderDetailQuery(referenceSalesOrderId ?? "")
+    const salesOrder = referenceSalesOrderId ? salesQuery.data : undefined
+    const currentRevision = salesOrder?.revisions.find(
+        (revision) => revision.revisionNo === salesOrder.currentRevisionNo,
+    )
     const salesOrderNo =
         (identityOk && receivable?.salesOrderNo) || taskRequest?.sales_order_no
-
-    const customerTitle =
-        receivable?.counterpartyPartyName ||
+    const stableNo = stripDocumentNumberPrefix(item.stableNumber)
+    const title = item.workItemTypeLabel || "销项开票处理"
+    const customer =
+        (identityOk && receivable?.counterpartyPartyName) ||
         item.counterpartyName ||
         item.objectTitle
 
-    return (
-        <WorkspaceProcessingPane
-            header={
-                <WorkspaceTaskIdentityHeader
-                    item={item}
-                    title={customerTitle}
-                    subtitle={
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                            {item.stableNumber ? (
-                                <span className="num">{item.stableNumber}</span>
-                            ) : null}
-                            {identityOk &&
-                            receivable?.salesOrderId &&
-                            canReadSalesOrder ? (
-                                <Link
-                                    id="workspace-invoice-source-sales"
-                                    href={sourceSalesOrderHref(
-                                        receivable.salesOrderId,
-                                    )}
-                                    className="underline decoration-border underline-offset-4 hover:decoration-foreground"
-                                >
-                                    销售单 {receivable.salesOrderNo}
-                                </Link>
-                            ) : salesOrderNo ? (
-                                <span>销售单 {salesOrderNo}</span>
-                            ) : null}
-                        </div>
-                    }
-                />
-            }
-            aria-label="当前开票任务"
-        >
-            {!descriptor ? (
-                <Alert variant="destructive">
-                    <AlertTitle>无法确认本条待办对应的开票资料</AlertTitle>
-                    <AlertDescription>
-                        请联系管理员核对开票负责人和关联销售单，再刷新重试。
-                    </AlertDescription>
-                </Alert>
-            ) : profile && !canReadRequest ? (
-                <Alert>
-                    <AlertTitle>当前账号不能查看关联开票申请</AlertTitle>
-                </Alert>
-            ) : grantPending ? (
-                <Alert>
-                    <AlertTitle>资料授权正在处理</AlertTitle>
-                    <AlertDescription>
-                        审批已完成，资料准备好后将自动刷新。
-                        <Button
-                            id="workspace-invoice-grant-refresh"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => void requestQuery.refetch()}
-                        >
-                            刷新资料
-                        </Button>
-                    </AlertDescription>
-                </Alert>
-            ) : requestQuery.isError ? (
-                <BusinessFailureState
-                    idPrefix="workspace-invoice-request"
-                    title="开票申请暂不可查看"
-                    error={requestQuery.error}
-                    onRetry={() => void requestQuery.refetch()}
-                />
-            ) : requestQuery.isPending ? (
-                <InvoiceSessionSkeleton />
-            ) : !taskRequest ? (
-                <Alert variant="warning">
-                    <AlertTitle>未能核对本任务关联的开票申请</AlertTitle>
-                    <AlertDescription>
-                        请刷新任务。若仍无法查看，请联系管理员核对任务和申请的关联或访问权限。
-                    </AlertDescription>
-                </Alert>
-            ) : readOnly ? (
-                <div className="flex flex-col gap-4 py-5">
-                    <Alert>
-                        <AlertTitle>
-                            {taskRequest.status === "completed"
-                                ? "本次申请已全部开票"
-                                : item.status === "COMPLETED"
-                                  ? "该开票任务已完成"
-                                  : "当前仅可查看开票资料"}
-                        </AlertTitle>
-                        {item.actionBlockers[0] && item.status === "OPEN" && (
-                            <AlertDescription>
-                                {item.actionBlockers[0].message}
-                            </AlertDescription>
-                        )}
-                    </Alert>
-                    <dl className="grid gap-3 rounded-lg border border-grid p-4 text-body-compact sm:grid-cols-2">
-                        <div>
-                            <dt className="text-muted-foreground">申请金额</dt>
-                            <dd className="mt-1">
-                                <MoneyValue value={taskRequest.data.amount} />
-                            </dd>
-                        </div>
-                        <div>
-                            <dt className="text-muted-foreground">
-                                已登记开票
-                            </dt>
-                            <dd className="mt-1">
-                                <MoneyValue
-                                    value={taskRequest.invoiced_amount}
-                                />
-                            </dd>
-                        </div>
-                    </dl>
-                    <AppliedInvoiceDetails
-                        request={taskRequest}
-                        canOpenRequest={canOpenRequest}
-                    />
-                </div>
-            ) : receivableQuery.isPending ? (
-                <InvoiceSessionSkeleton />
-            ) : receivableQuery.isError ? (
-                <BusinessFailureState
-                    idPrefix={`workspace-invoice-receivable-${toAutomationIdSegment(item.workItemId)}`}
-                    title="销售应收资料暂不可查看"
-                    error={receivableQuery.error}
-                    onRetry={() => void receivableQuery.refetch()}
-                />
-            ) : !identityOk || !receivable ? (
-                <Alert variant="destructive">
-                    <AlertTitle>待办关联的销售应收不匹配</AlertTitle>
-                    <AlertDescription>
-                        请联系管理员核对本条待办关联的销售单和应收记录，修正后刷新再办理开票。
-                    </AlertDescription>
-                </Alert>
-            ) : taskRequest.status !== "approved" ? (
-                <Alert variant="warning">
-                    <AlertTitle>此任务没有可执行的已批准申请</AlertTitle>
-                    <AlertDescription>
-                        请从销售单发起开票申请，或刷新查看最新处理结果。
-                    </AlertDescription>
-                </Alert>
-            ) : (
-                <WorkspaceInvoiceSession
-                    request={taskRequest}
-                    canOpenRequest={canOpenRequest}
-                    item={item}
-                    receivable={{
-                        ...receivable,
-                        openInvoiceableTotal: remainingApproved(
-                            taskRequest.data?.amount || "0.00",
-                            taskRequest.invoiced_amount || "0.00",
-                        ),
+    const inspectorMode = useWorkspaceInspectorMode()
+    const [salesRailOpen, setSalesRailOpen] = useState(false)
+    const [narrowPreviewOpen, setNarrowPreviewOpen] = useState(false)
+    const [wide, setWide] = useState(false)
+    const rootRef = useRef<HTMLDivElement>(null)
+    const toggleRef = useRef<HTMLButtonElement>(null)
+
+    useEffect(() => {
+        if (inspectorMode || !rootRef.current) return
+        const target =
+            rootRef.current.closest<HTMLElement>("#main-content") ??
+            rootRef.current
+        const media = window.matchMedia("(min-width: 960px)")
+        const sync = () => {
+            const canSplit = media.matches && target.clientWidth >= 960
+            setWide(canSplit)
+            if (!canSplit) setSalesRailOpen(false)
+            else setNarrowPreviewOpen(false)
+        }
+        const observer =
+            typeof ResizeObserver === "undefined"
+                ? null
+                : new ResizeObserver(sync)
+        observer?.observe(target)
+        media.addEventListener("change", sync)
+        sync()
+        return () => {
+            observer?.disconnect()
+            media.removeEventListener("change", sync)
+        }
+    }, [inspectorMode])
+
+    useEffect(() => {
+        if (inspectorMode || !referenceSalesOrderId) return
+        return subscribeWorkspaceHotkeyAction((action) => {
+            if (action !== "toggle-rail") return
+            if (wide) setSalesRailOpen((open) => !open)
+            else setNarrowPreviewOpen((open) => !open)
+        })
+    }, [inspectorMode, referenceSalesOrderId, wide])
+
+    const readOnly =
+        item.status !== "OPEN" ||
+        !item.allowedActions.includes("PROCESS") ||
+        taskRequest?.status === "completed"
+    const amount = taskRequest
+        ? remainingApproved(
+              taskRequest.data.amount,
+              taskRequest.invoiced_amount,
+          )
+        : null
+    const remainingPositive =
+        amount !== null && compareDecimal(amount, "0", 2) > 0
+    const accountAmount = receivable
+        ? invoiceAmount(receivable.openInvoiceableTotal)
+        : null
+    const balanceMatches = Boolean(
+        amount !== null &&
+        accountAmount !== null &&
+        compareDecimal(amount, accountAmount, 2) <= 0,
+    )
+    const canRegister = Boolean(
+        taskRequest?.status === "approved" &&
+        !readOnly &&
+        canPostInvoice &&
+        identityOk &&
+        remainingPositive &&
+        balanceMatches &&
+        !requestQuery.isError &&
+        !receivableQuery.isError,
+    )
+    const registration = useWorkspaceInvoiceRegistration({
+        item,
+        request: taskRequest,
+        amount,
+        canRegister,
+        canVerify: canReadRequest && canPostInvoice && !profileQuery.isError,
+        onTaskCompleted,
+    })
+
+    let alertBanner
+    if (!descriptor) {
+        alertBanner = (
+            <InvoiceTaskNotice
+                title="无法确认本条待办对应的开票资料"
+                variant="destructive"
+            >
+                请联系管理员核对开票负责人和关联销售单。
+            </InvoiceTaskNotice>
+        )
+    } else if (profileQuery.isError) {
+        alertBanner = (
+            <BusinessFailureState
+                idPrefix={`${idPrefix}-profile`}
+                title="暂时无法核对账号权限"
+                error={profileQuery.error}
+                onRetry={() => void profileQuery.refetch()}
+            />
+        )
+    } else if (profileQuery.data && !canReadRequest) {
+        alertBanner = <InvoiceTaskNotice title="当前账号不能查看关联开票申请" />
+    } else if (isResourceAuthorizationPending(requestQuery.error)) {
+        alertBanner = (
+            <InvoiceTaskNotice title="资料授权正在处理">
+                审批已完成，资料准备好后将自动刷新。
+                <Button
+                    id={`${idPrefix}-grant-refresh`}
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    className="ml-2"
+                    onClick={() => void requestQuery.refetch()}
+                >
+                    刷新资料
+                </Button>
+            </InvoiceTaskNotice>
+        )
+    } else if (requestQuery.isError) {
+        alertBanner = (
+            <BusinessFailureState
+                idPrefix={`${idPrefix}-request`}
+                title="开票申请暂不可查看"
+                error={requestQuery.error}
+                onRetry={() => void requestQuery.refetch()}
+            />
+        )
+    } else if (requestQuery.isSuccess && !taskRequest) {
+        alertBanner = (
+            <InvoiceTaskNotice title="未能核对本任务关联的开票申请">
+                请刷新任务。若仍无法查看，请联系管理员核对任务和申请的关联。
+            </InvoiceTaskNotice>
+        )
+    } else if (taskRequest && readOnly) {
+        alertBanner = (
+            <InvoiceTaskNotice
+                title={
+                    taskRequest.status === "completed"
+                        ? "本次申请已全部开票"
+                        : item.status === "COMPLETED"
+                          ? "该开票任务已完成"
+                          : "当前仅可查看开票资料"
+                }
+                variant="info"
+            >
+                {item.status === "OPEN"
+                    ? item.actionBlockers[0]?.message
+                    : null}
+            </InvoiceTaskNotice>
+        )
+    } else if (taskRequest && (!canPostInvoice || !canReadReceivable)) {
+        alertBanner = (
+            <InvoiceTaskNotice title="当前账号没有办理本次开票所需的权限" />
+        )
+    } else if (taskRequest && receivableQuery.isError) {
+        alertBanner = (
+            <BusinessFailureState
+                idPrefix={`${idPrefix}-receivable`}
+                title="销售应收资料暂不可查看"
+                error={receivableQuery.error}
+                onRetry={() => void receivableQuery.refetch()}
+            />
+        )
+    } else if (taskRequest && receivableQuery.isSuccess && !identityOk) {
+        alertBanner = (
+            <InvoiceTaskNotice
+                title="待办关联的销售应收不匹配"
+                variant="destructive"
+            >
+                请联系管理员核对本条待办关联的销售单和应收记录。
+            </InvoiceTaskNotice>
+        )
+    } else if (taskRequest && taskRequest.status !== "approved") {
+        alertBanner = (
+            <InvoiceTaskNotice title="此任务没有可执行的已批准申请">
+                请刷新查看最新处理结果。
+            </InvoiceTaskNotice>
+        )
+    } else if (identityOk && (!remainingPositive || !balanceMatches)) {
+        alertBanner = (
+            <InvoiceTaskNotice title="待开票余额需要核对" variant="destructive">
+                {remainingPositive && accountAmount !== null ? (
+                    <>
+                        本申请剩余金额超过销售应收可开票额度{" "}
+                        <MoneyValue
+                            value={accountAmount}
+                            display="exact"
+                            inheritColor
+                        />
+                        。
+                    </>
+                ) : (
+                    "请刷新并核对开票申请与销售应收的余额。"
+                )}
+                <Button
+                    id={`${idPrefix}-balance-refresh`}
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    className="ml-2"
+                    onClick={() => {
+                        void requestQuery.refetch()
+                        void receivableQuery.refetch()
                     }}
-                    onTaskCompleted={onTaskCompleted}
-                />
-            )}
-        </WorkspaceProcessingPane>
-    )
-}
+                >
+                    刷新余额
+                </Button>
+            </InvoiceTaskNotice>
+        )
+    }
 
-/** 开票作业面加载占位。 */
-function InvoiceSessionSkeleton() {
-    return (
-        <div className="grid gap-4 py-5">
-            <div className="h-40 animate-pulse rounded-lg bg-muted" />
-            <div className="h-40 animate-pulse rounded-lg bg-muted" />
-        </div>
-    )
-}
+    const showDetails =
+        taskRequest &&
+        !requestQuery.isError &&
+        (readOnly || identityOk || !canReadReceivable || !canPostInvoice)
+    const showRegistration = canRegister || registration.verifying
+    const loading =
+        !alertBanner &&
+        (requestQuery.isPending || (!readOnly && receivableQuery.isPending)) &&
+        !showDetails
 
-/** 应收身份确认后展开核销工作面；提交结果留在当前任务。 */
-function WorkspaceInvoiceSession({
-    request,
-    canOpenRequest,
-    item,
-    receivable,
-    onTaskCompleted,
-}: {
-    request: InvoiceRequest
-    canOpenRequest: boolean
-    item: WorkspaceWorkItem
-    receivable: ReceivableAccountRow
-    onTaskCompleted?: (workItemId: string) => void
-}) {
+    const canSplitRail =
+        !inspectorMode && wide && Boolean(referenceSalesOrderId)
+    const closeRail = () => {
+        setSalesRailOpen(false)
+        toggleRef.current?.focus()
+    }
+
     return (
-        <div className="@container/invoice space-y-6 py-5">
-            <Alert variant="info">
-                <AlertTitle>当前需要你处理：登记已开出的销项发票</AlertTitle>
-                <AlertDescription>
-                    按下方已批准资料开票后上传发票。本入口按申请的全部剩余金额登记，请先核对发票合计与下方剩余金额一致。
-                </AlertDescription>
-            </Alert>
-            <dl className="grid grid-cols-1 gap-4 rounded-lg border border-grid p-5 @min-[420px]/invoice:grid-cols-3 @min-[420px]/invoice:gap-0">
-                {[
-                    ["本申请批准金额", request.data.amount],
-                    ["本申请已登记", request.invoiced_amount],
-                    ["本申请剩余可开票", receivable.openInvoiceableTotal],
-                ].map(([label, value]) => (
-                    <div
-                        key={label}
-                        className="min-w-0 space-y-2 border-grid @min-[420px]/invoice:border-l @min-[420px]/invoice:px-5 @min-[420px]/invoice:first:border-l-0 @min-[420px]/invoice:first:pl-0 @min-[420px]/invoice:last:pr-0"
-                    >
-                        <dt className="text-xs text-muted-foreground">
-                            {label}
-                        </dt>
-                        <dd className="overflow-x-auto">
-                            <MoneyValue
-                                value={value}
-                                className="text-value-compact font-semibold tracking-tight"
+        <div ref={rootRef} className="h-full min-h-0 min-w-0 bg-card">
+            <WorkspaceProcessingPane
+                archetype="action"
+                className="@container/document"
+                idPrefix={idPrefix}
+                aria-label="当前开票任务"
+                alertBanner={alertBanner}
+                contextRail={
+                    canSplitRail && referenceSalesOrderId
+                        ? {
+                              allowOnFullWidth: true,
+                              collapsible: true,
+                              resizable: true,
+                              defaultWidthPercent: 38,
+                              minWidthPercent: 26,
+                              maxWidthPercent: 52,
+                              storageKey: "workspace-invoice-sales-rail",
+                              collapsed: !salesRailOpen,
+                              onCollapsedChange: (collapsed) =>
+                                  setSalesRailOpen(!collapsed),
+                              label: "对照销售单",
+                              content: (
+                                  <SalesOrderReferenceRail
+                                      idPrefix={idPrefix}
+                                      salesOrderId={referenceSalesOrderId}
+                                      salesOrderNo={salesOrderNo}
+                                      query={salesQuery}
+                                      onClose={closeRail}
+                                  />
+                              ),
+                          }
+                        : undefined
+                }
+                header={
+                    <WorkspaceTaskIdentityHeader
+                        item={item}
+                        title={title}
+                        subtitle={
+                            <DetailWorkspaceMeta
+                                items={[
+                                    customer &&
+                                    customer !== title &&
+                                    customer !== stableNo
+                                        ? customer
+                                        : null,
+                                    stableNo &&
+                                    stableNo !== salesOrderNo &&
+                                    stableNo !== title ? (
+                                        <span
+                                            key="stable-number"
+                                            className="num select-all"
+                                        >
+                                            {stableNo}
+                                        </span>
+                                    ) : null,
+                                    salesOrderNo && referenceSalesOrderId ? (
+                                        <Link
+                                            key="sales-order"
+                                            id={`${idPrefix}-source-sales`}
+                                            href={sourceSalesOrderHref(
+                                                referenceSalesOrderId,
+                                            )}
+                                            className="num select-all underline decoration-border underline-offset-4 hover:decoration-foreground"
+                                        >
+                                            销售单 {salesOrderNo}
+                                        </Link>
+                                    ) : salesOrderNo ? (
+                                        <span
+                                            key="sales-order"
+                                            className="num select-all"
+                                        >
+                                            销售单 {salesOrderNo}
+                                        </span>
+                                    ) : null,
+                                    item.dueAt && item.dueAtLabel ? (
+                                        <span key="deadline" className="num">
+                                            任务截止 {item.dueAtLabel}
+                                        </span>
+                                    ) : null,
+                                ]}
                             />
-                        </dd>
+                        }
+                    >
+                        {referenceSalesOrderId ? (
+                            inspectorMode ? (
+                                <Link
+                                    id={`${idPrefix}-sales-reference`}
+                                    href={sourceSalesOrderHref(
+                                        referenceSalesOrderId,
+                                    )}
+                                    className={buttonVariants({
+                                        variant: "ghost",
+                                        size: "sm",
+                                    })}
+                                >
+                                    <FileTextIcon
+                                        aria-hidden="true"
+                                        data-icon="inline-start"
+                                    />
+                                    查看销售单
+                                    <ArrowUpRightIcon
+                                        aria-hidden="true"
+                                        data-icon="inline-end"
+                                    />
+                                </Link>
+                            ) : (
+                                <Button
+                                    ref={toggleRef}
+                                    id={`${idPrefix}-sales-reference`}
+                                    type="button"
+                                    variant={
+                                        canSplitRail && salesRailOpen
+                                            ? "secondary"
+                                            : "ghost"
+                                    }
+                                    size="sm"
+                                    aria-expanded={
+                                        canSplitRail ? salesRailOpen : undefined
+                                    }
+                                    aria-haspopup={
+                                        canSplitRail ? undefined : "dialog"
+                                    }
+                                    onClick={() => {
+                                        if (canSplitRail)
+                                            setSalesRailOpen((open) => !open)
+                                        else setNarrowPreviewOpen(true)
+                                    }}
+                                >
+                                    {canSplitRail && salesRailOpen ? (
+                                        <PanelRightCloseIcon
+                                            aria-hidden="true"
+                                            data-icon="inline-start"
+                                        />
+                                    ) : (
+                                        <FileTextIcon
+                                            aria-hidden="true"
+                                            data-icon="inline-start"
+                                        />
+                                    )}
+                                    {canSplitRail && salesRailOpen
+                                        ? "收起销售单"
+                                        : "对照销售单"}
+                                </Button>
+                            )
+                        ) : null}
+                    </WorkspaceTaskIdentityHeader>
+                }
+            >
+                {loading ? (
+                    <p
+                        className="flex items-center gap-2 py-5 text-xs text-muted-foreground"
+                        role="status"
+                    >
+                        <Spinner aria-hidden="true" />
+                        正在读取开票资料…
+                    </p>
+                ) : null}
+                {showDetails || showRegistration ? (
+                    <div className="@container/invoice-task flex min-w-0 flex-col gap-4 bg-card py-4">
+                        {showDetails ? (
+                            <>
+                                <InvoiceKpiBand
+                                    idPrefix={idPrefix}
+                                    request={taskRequest}
+                                    amount={amount}
+                                    invoiceType={currentRevision?.invoiceType}
+                                    taxPoint={
+                                        currentRevision?.taxPoint ||
+                                        salesOrder?.taxRatePercent
+                                    }
+                                />
+                                <InvoiceCommercialDetails
+                                    idPrefix={idPrefix}
+                                    request={taskRequest}
+                                    canOpenRequest={canOpenRequest}
+                                />
+                            </>
+                        ) : null}
+                        {showRegistration ? (
+                            <WorkspaceInvoiceUpload
+                                idPrefix={idPrefix}
+                                registration={registration}
+                            />
+                        ) : null}
                     </div>
-                ))}
-            </dl>
-            <AppliedInvoiceDetails
-                request={request}
-                canOpenRequest={canOpenRequest}
-            />
-            <WorkspaceInvoiceUpload
-                key={`${item.workItemId}:${item.taskVersion}`}
-                item={item}
-                request={request}
-                amount={receivable.openInvoiceableTotal}
-                onTaskCompleted={onTaskCompleted}
-            />
+                ) : null}
+                {referenceSalesOrderId && !inspectorMode && !wide ? (
+                    <SalesOrderPaperPreviewDialog
+                        salesOrderId={referenceSalesOrderId}
+                        title={salesOrderNo}
+                        open={narrowPreviewOpen}
+                        onOpenChange={setNarrowPreviewOpen}
+                    />
+                ) : null}
+            </WorkspaceProcessingPane>
         </div>
     )
 }
 
-function AppliedInvoiceDetails({
-    request,
-    canOpenRequest,
+function InvoiceTaskNotice({
+    title,
+    variant = "warning",
+    children,
 }: {
-    request: InvoiceRequest
-    canOpenRequest: boolean
+    title: string
+    variant?: "warning" | "destructive" | "info"
+    children?: React.ReactNode
 }) {
     return (
-        <section
-            aria-label="已批准开票资料"
-            className="flex min-w-0 flex-col gap-3"
+        <Alert variant={variant} className="border-l-2">
+            <AlertTitle>{title}</AlertTitle>
+            {children ? <AlertDescription>{children}</AlertDescription> : null}
+        </Alert>
+    )
+}
+
+function InvoiceKpiBand({
+    idPrefix,
+    request,
+    amount,
+    invoiceType,
+    taxPoint,
+}: {
+    idPrefix: string
+    request: InvoiceRequest
+    amount: string | null
+    invoiceType?: string
+    taxPoint?: string
+}) {
+    const ratio = registeredRatio(request.data.amount, request.invoiced_amount)
+    const ratioPercent =
+        ratio !== null
+            ? multiplyFixed(ratio, "100", {
+                  leftMaxScale: 4,
+                  rightMaxScale: 0,
+                  outputScale: 1,
+              })
+            : null
+    const taxRate = taxPoint?.replace(/[%％]$/, "").trim()
+    const taxNumber = request.data.tax_number.trim()
+
+    return (
+        <dl
+            aria-label="本申请开票指标"
+            className="grid min-w-0 grid-cols-1 gap-x-4 gap-y-3 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/invoice-task:grid-cols-2 @[840px]/invoice-task:grid-cols-4"
         >
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h3 className="text-body-compact font-semibold">
-                    已批准开票资料
-                </h3>
-                {request.request_no ? (
-                    canOpenRequest ? (
-                        <Link
-                            id={`workspace-invoice-linked-request-${toAutomationIdSegment(request.id)}`}
-                            href={`/finance/customer-accounts/invoice-requests/${encodeURIComponent(request.id)}`}
-                            className="text-body-compact underline-offset-4 hover:underline"
+            <div className="min-w-0">
+                <dt className="flex items-center gap-1 text-xs text-muted-foreground">
+                    待开票余额
+                    <Tooltip>
+                        <TooltipTrigger
+                            render={
+                                <Button
+                                    id={`${idPrefix}-balance-formula`}
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    aria-label="待开票余额计算公式"
+                                />
+                            }
                         >
-                            开票申请 {request.request_no}
-                        </Link>
-                    ) : (
-                        <p className="text-xs text-muted-foreground">
-                            开票申请 {request.request_no}
-                        </p>
-                    )
+                            <CircleHelpIcon aria-hidden="true" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            批复开票总额 − 已登记开票金额
+                        </TooltipContent>
+                    </Tooltip>
+                </dt>
+                <dd className="mt-0.5">
+                    <MoneyValue
+                        value={amount}
+                        display="exact"
+                        className={`text-value-section font-semibold tracking-tight ${wrapMoney}`}
+                    />
+                </dd>
+                <dd className="text-tiny text-muted-foreground">
+                    本申请 · 含税
+                </dd>
+            </div>
+            <div className="min-w-0">
+                <dt className="text-xs text-muted-foreground">批复总额</dt>
+                <dd className="mt-0.5">
+                    <MoneyValue
+                        value={request.data.amount}
+                        display="exact"
+                        className={`text-value-compact font-semibold ${wrapMoney}`}
+                    />
+                </dd>
+                <dd className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-tiny text-muted-foreground">
+                    已登记
+                    <MoneyValue
+                        value={request.invoiced_amount}
+                        display="exact"
+                        inheritColor
+                        className={wrapMoney}
+                    />
+                    {ratioPercent !== null ? (
+                        <span className="num">（{ratioPercent}%）</span>
+                    ) : null}
+                </dd>
+                {ratio !== null ? (
+                    <dd
+                        aria-hidden="true"
+                        className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-border"
+                    >
+                        <div
+                            className="h-full rounded-full bg-primary"
+                            style={{ width: `calc(${ratio} * 100%)` }}
+                        />
+                    </dd>
                 ) : null}
             </div>
-            <InvoiceRequestDetails data={request.data} />
+            <div className="min-w-0">
+                <dt className="text-xs text-muted-foreground">
+                    开票抬头与税号
+                </dt>
+                <dd className="mt-0.5 wrap-anywhere text-body-compact font-semibold select-all">
+                    {request.data.invoice_title || "—"}
+                </dd>
+                {taxNumber ? (
+                    <dd className="flex min-w-0 flex-wrap items-center gap-x-2">
+                        <span className="num min-w-0 wrap-anywhere text-xs select-all">
+                            {taxNumber}
+                        </span>
+                        <Button
+                            id={`${idPrefix}-copy-tax-number`}
+                            type="button"
+                            variant="ghost"
+                            size="xs"
+                            aria-label="复制购方税号"
+                            onClick={async () => {
+                                try {
+                                    await navigator.clipboard.writeText(
+                                        taxNumber,
+                                    )
+                                    toast.add({
+                                        title: "已复制购方税号",
+                                        type: "success",
+                                    })
+                                } catch {
+                                    toast.add({
+                                        title: "复制失败，请选中税号手动复制",
+                                        type: "error",
+                                    })
+                                }
+                            }}
+                        >
+                            <CopyIcon
+                                aria-hidden="true"
+                                data-icon="inline-start"
+                            />
+                            复制
+                        </Button>
+                    </dd>
+                ) : null}
+            </div>
+            <div className="min-w-0">
+                <dt className="text-xs text-muted-foreground">
+                    销售单开票要求
+                </dt>
+                <dd className="mt-0.5 wrap-anywhere text-body-compact font-semibold">
+                    {invoiceType || "—"}
+                </dd>
+                <dd className="mt-0.5 flex flex-wrap gap-x-1.5 text-xs text-muted-foreground">
+                    <span>税点</span>
+                    {taxRate ? (
+                        <RateValue value={taxRate} precision={2} />
+                    ) : (
+                        "—"
+                    )}
+                </dd>
+            </div>
+        </dl>
+    )
+}
+
+function InvoiceCommercialDetails({
+    idPrefix,
+    request,
+    canOpenRequest,
+}: {
+    idPrefix: string
+    request: InvoiceRequest
+    canOpenRequest: boolean
+}) {
+    const { data } = request
+    const lines = resolveInvoiceRequestLines(data)
+    const lineTotal = lines.length ? invoiceLinesTotal(lines) : null
+    const requestNumber = (
+        <span className="num select-all">{request.request_no}</span>
+    )
+
+    const fields = [
+        {
+            label: "开票申请",
+            value:
+                request.request_no &&
+                (canOpenRequest ? (
+                    <Link
+                        id={`${idPrefix}-linked-request-${toAutomationIdSegment(request.id)}`}
+                        href={`/finance/customer-accounts/invoice-requests/${encodeURIComponent(request.id)}`}
+                        className="underline decoration-border underline-offset-4 hover:decoration-foreground"
+                    >
+                        {requestNumber}
+                    </Link>
+                ) : (
+                    requestNumber
+                )),
+        },
+        { label: "销方开票主体", value: data.seller_name },
+        {
+            label: "销方税号",
+            value: data.seller_tax_number && (
+                <span className="num select-all">{data.seller_tax_number}</span>
+            ),
+        },
+        { label: "申请事由", value: data.reason },
+    ]
+
+    return (
+        <section aria-label="开票申请资料" className="min-w-0 space-y-3">
+            <dl className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
+                {fields.map(({ label, value }) =>
+                    value ? (
+                        <div
+                            key={label}
+                            className="flex min-w-0 flex-wrap gap-x-1.5"
+                        >
+                            <dt className="text-muted-foreground">{label}</dt>
+                            <dd className="min-w-0 wrap-anywhere whitespace-pre-wrap">
+                                {value}
+                            </dd>
+                        </div>
+                    ) : null,
+                )}
+            </dl>
+            {lines.length ? (
+                <Table
+                    aria-label="开票明细"
+                    className="w-full table-fixed text-body-compact"
+                >
+                    <TableHeader className="bg-transparent [&_th]:bg-surface-sunken [&_th:first-child]:rounded-l-md [&_th:last-child]:rounded-r-md [&_tr]:border-b-0">
+                        <TableRow>
+                            <TableHead className="whitespace-normal">
+                                开票内容
+                            </TableHead>
+                            <TableHead className="w-1/6 px-1 text-right whitespace-normal">
+                                数量
+                            </TableHead>
+                            <TableHead className="w-1/5 px-1 text-right whitespace-normal">
+                                含税单价
+                            </TableHead>
+                            <TableHead className="w-1/5 px-1 text-right whitespace-normal">
+                                行金额
+                            </TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {lines.map((line, index) => (
+                            <TableRow key={index}>
+                                <TableCell className="wrap-anywhere whitespace-pre-wrap">
+                                    {line.content || "—"}
+                                </TableCell>
+                                <TableCell className="num px-1 text-right wrap-anywhere whitespace-normal">
+                                    {invoiceDetailDecimal(
+                                        line.quantity,
+                                        INVOICE_QUANTITY_SCALE,
+                                    )}
+                                </TableCell>
+                                <TableCell className="num px-1 text-right wrap-anywhere whitespace-normal">
+                                    {invoiceDetailDecimal(
+                                        line.unit_price,
+                                        INVOICE_UNIT_PRICE_SCALE,
+                                    )}
+                                </TableCell>
+                                <TableCell className="px-1 text-right">
+                                    <MoneyValue
+                                        value={invoiceLineAmount(line)}
+                                        display="exact"
+                                        className={wrapMoney}
+                                    />
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                    {lineTotal !== null ? (
+                        <TableFooter className="border-0 bg-transparent [&_td]:bg-surface-sunken [&_td:first-child]:rounded-l-md [&_td:last-child]:rounded-r-md [&_tr]:border-b-0">
+                            <TableRow className="hover:bg-transparent">
+                                <TableCell
+                                    colSpan={3}
+                                    className="font-semibold"
+                                >
+                                    整单明细合计{" "}
+                                    <span className="num ml-1 text-xs font-normal text-muted-foreground">
+                                        {lines.length} 项
+                                    </span>
+                                </TableCell>
+                                <TableCell className="px-1 text-right">
+                                    <MoneyValue
+                                        value={lineTotal}
+                                        display="exact"
+                                        className={`font-semibold ${wrapMoney}`}
+                                    />
+                                </TableCell>
+                            </TableRow>
+                        </TableFooter>
+                    ) : null}
+                </Table>
+            ) : null}
         </section>
+    )
+}
+
+function invoiceDetailDecimal(value: string, maxScale: number) {
+    return isPositiveInvoiceDecimal(value, maxScale)
+        ? formatFixedDisplay(canonicalInvoiceDecimal(value), { maxScale })
+        : "—"
+}
+
+function SalesOrderReferenceRail({
+    idPrefix,
+    salesOrderId,
+    salesOrderNo,
+    query,
+    onClose,
+}: {
+    idPrefix: string
+    salesOrderId: string
+    salesOrderNo?: string
+    query: ReturnType<typeof useSalesOrderDetailQuery>
+    onClose: () => void
+}) {
+    return (
+        <div className="flex h-full min-h-0 min-w-0 flex-col bg-card">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 py-2.5">
+                <div className="min-w-0">
+                    <h2 className="text-body-compact font-semibold">
+                        对照销售单
+                    </h2>
+                    {salesOrderNo ? (
+                        <p className="num truncate text-xs text-muted-foreground select-all">
+                            {salesOrderNo}
+                        </p>
+                    ) : null}
+                </div>
+                <Button
+                    id={`${idPrefix}-sales-rail-close`}
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="收起销售单对照栏"
+                    onClick={onClose}
+                >
+                    <XIcon aria-hidden="true" />
+                </Button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-3">
+                {query.isPending ? (
+                    <p
+                        className="flex items-center justify-center gap-2 py-10 text-xs text-muted-foreground"
+                        role="status"
+                    >
+                        <Spinner aria-hidden="true" />
+                        正在读取销售单…
+                    </p>
+                ) : query.isError ? (
+                    <BusinessFailureState
+                        idPrefix={`${idPrefix}-sales-rail`}
+                        title="销售单读取失败"
+                        error={query.error}
+                        onRetry={() => void query.refetch()}
+                    />
+                ) : query.data ? (
+                    <PaperDocumentViewport
+                        id={`${idPrefix}-sales-paper`}
+                        fitMode="width"
+                        fitKey={salesOrderId}
+                        role="region"
+                        aria-label="销售单纸面"
+                        tabIndex={0}
+                        className="bg-transparent p-0"
+                    >
+                        <SalesOrderPaperDocument order={query.data} />
+                    </PaperDocumentViewport>
+                ) : (
+                    <p className="py-10 text-center text-xs text-muted-foreground">
+                        暂未找到这张销售单。
+                    </p>
+                )}
+            </div>
+        </div>
     )
 }

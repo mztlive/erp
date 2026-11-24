@@ -94,12 +94,16 @@ export function OverviewSection({
                     {batch.sourceObjectSet.includes("OPENING_STOCK") ? (
                         <Button
                             id="operations-import-batch-detail-overview-inventory-link"
+                            nativeButton={false}
                             size="sm"
                             variant="outline"
                             render={<Link href="/inventory?view=balance" />}
                         >
                             查看库存台账
-                            <ExternalLinkIcon className="size-4" />
+                            <ExternalLinkIcon
+                                data-icon="inline-end"
+                                aria-hidden="true"
+                            />
                         </Button>
                     ) : null}
                 </div>

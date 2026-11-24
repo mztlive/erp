@@ -32,6 +32,10 @@ import {
     type SettlementDifferenceView,
 } from "@/features/supplier-settlements/types"
 import { describeMoney } from "@/lib/money-display"
+import {
+    BPM_REASON_MAX_UTF8_BYTES,
+    utf8ByteLength,
+} from "@/lib/validation/reason-length"
 
 const REJECT_COMMENT_MAX_CHARS = 500
 const REJECT_QUICK_PHRASES = [
@@ -66,6 +70,7 @@ function MoneyWithReadout({
 }
 
 function SettlementResolveDialog({
+    idPrefix = "supplier-settlements-resolve",
     open,
     onOpenChange,
     activeDiff,
@@ -76,6 +81,7 @@ function SettlementResolveDialog({
     pending,
     onSubmit,
 }: {
+    idPrefix?: string
     open: boolean
     onOpenChange: (open: boolean) => void
     activeDiff?: SettlementDifferenceView | null
@@ -98,7 +104,7 @@ function SettlementResolveDialog({
             <DialogContent
                 size="md"
                 scroll="body"
-                closeButtonId="supplier-settlements-resolve-close"
+                closeButtonId={`${idPrefix}-close`}
                 showCloseButton={!pending}
             >
                 <DialogHeader>
@@ -107,10 +113,10 @@ function SettlementResolveDialog({
                         登记后将更新待确认成本差额，结论不可撤回；原始证据和历史成本保留。
                     </DialogDescription>
                 </DialogHeader>
-                <DialogBody className="space-y-4">
+                <DialogBody className="@container/settlement-resolve space-y-4">
                     {activeDiff ? (
-                        <dl className="grid gap-2.5 rounded-lg border border-border/70 bg-muted/35 p-3 text-xs sm:grid-cols-3">
-                            <div className="sm:col-span-3">
+                        <dl className="grid gap-2.5 rounded-lg bg-surface-sunken p-3 text-xs @[420px]/settlement-resolve:grid-cols-3">
+                            <div className="@[420px]/settlement-resolve:col-span-3">
                                 <dt className="text-muted-foreground">
                                     当前目标差异
                                 </dt>
@@ -181,12 +187,12 @@ function SettlementResolveDialog({
                     ) : null}
                     <div className="space-y-3">
                         <div className="space-y-1.5">
-                            <Label htmlFor="supplier-settlements-resolve-resolution">
+                            <Label htmlFor={`${idPrefix}-resolution`}>
                                 处理结论
                                 <RequiredMark />
                             </Label>
                             <OptionCombobox
-                                id="supplier-settlements-resolve-resolution"
+                                id={`${idPrefix}-resolution`}
                                 value={resolution}
                                 onValueChange={(v) => {
                                     if (v)
@@ -206,12 +212,12 @@ function SettlementResolveDialog({
                             />
                         </div>
                         <div className="space-y-1.5">
-                            <Label htmlFor="supplier-settlements-resolve-reason">
+                            <Label htmlFor={`${idPrefix}-reason`}>
                                 处理原因
                                 <RequiredMark />
                             </Label>
                             <OptionCombobox
-                                id="supplier-settlements-resolve-reason"
+                                id={`${idPrefix}-reason`}
                                 value={reasonCode}
                                 onValueChange={(v) => {
                                     if (v) onReasonCodeChange(v)
@@ -241,7 +247,7 @@ function SettlementResolveDialog({
                 </DialogBody>
                 <DialogFooter>
                     <Button
-                        id="supplier-settlements-resolve-cancel"
+                        id={`${idPrefix}-cancel`}
                         type="button"
                         variant="outline"
                         disabled={pending}
@@ -250,7 +256,7 @@ function SettlementResolveDialog({
                         取消
                     </Button>
                     <LoadingButton
-                        id="supplier-settlements-resolve-confirm"
+                        id={`${idPrefix}-confirm`}
                         loading={pending}
                         type="button"
                         disabled={pending}
@@ -265,6 +271,7 @@ function SettlementResolveDialog({
 }
 
 function SettlementEvidenceDialog({
+    idPrefix = "supplier-settlements-evidence",
     open,
     onOpenChange,
     referenceId,
@@ -274,6 +281,7 @@ function SettlementEvidenceDialog({
     pending,
     onSubmit,
 }: {
+    idPrefix?: string
     open: boolean
     onOpenChange: (open: boolean) => void
     referenceId: string
@@ -294,7 +302,7 @@ function SettlementEvidenceDialog({
             <DialogContent
                 size="md"
                 scroll="body"
-                closeButtonId="supplier-settlements-evidence-close"
+                closeButtonId={`${idPrefix}-close`}
                 showCloseButton={!pending}
             >
                 <DialogHeader>
@@ -305,12 +313,12 @@ function SettlementEvidenceDialog({
                 </DialogHeader>
                 <DialogBody className="space-y-4">
                     <div className="space-y-1.5">
-                        <Label htmlFor="supplier-settlements-evidence-reference">
+                        <Label htmlFor={`${idPrefix}-reference`}>
                             凭证编号或外部链接
                             <RequiredMark />
                         </Label>
                         <Input
-                            id="supplier-settlements-evidence-reference"
+                            id={`${idPrefix}-reference`}
                             value={referenceId}
                             onChange={(e) =>
                                 onReferenceIdChange(e.target.value)
@@ -322,11 +330,9 @@ function SettlementEvidenceDialog({
                         </p>
                     </div>
                     <div className="space-y-1.5">
-                        <Label htmlFor="supplier-settlements-evidence-comment">
-                            业务说明
-                        </Label>
+                        <Label htmlFor={`${idPrefix}-comment`}>业务说明</Label>
                         <Textarea
-                            id="supplier-settlements-evidence-comment"
+                            id={`${idPrefix}-comment`}
                             value={comment}
                             onChange={(e) => onCommentChange(e.target.value)}
                             placeholder="说明差异核实过程、供应商答复结果或补差约定"
@@ -336,7 +342,7 @@ function SettlementEvidenceDialog({
                 </DialogBody>
                 <DialogFooter>
                     <Button
-                        id="supplier-settlements-evidence-cancel"
+                        id={`${idPrefix}-cancel`}
                         type="button"
                         variant="outline"
                         disabled={pending}
@@ -345,7 +351,7 @@ function SettlementEvidenceDialog({
                         取消
                     </Button>
                     <LoadingButton
-                        id="supplier-settlements-evidence-confirm"
+                        id={`${idPrefix}-confirm`}
                         loading={pending}
                         type="button"
                         disabled={pending || !referenceId.trim()}
@@ -360,6 +366,7 @@ function SettlementEvidenceDialog({
 }
 
 function SettlementRejectDialog({
+    idPrefix = "supplier-settlements-reject",
     open,
     onOpenChange,
     statement,
@@ -369,7 +376,9 @@ function SettlementRejectDialog({
     onCommentChange,
     pending,
     onSubmit,
+    countUtf8Bytes = false,
 }: {
+    idPrefix?: string
     open: boolean
     onOpenChange: (open: boolean) => void
     statement?: SettlementDetailView["statement"]
@@ -377,6 +386,7 @@ function SettlementRejectDialog({
     onReasonCodeChange: (reasonCode: string) => void
     comment: string
     onCommentChange: (comment: string) => void
+    countUtf8Bytes?: boolean
     pending: boolean
     onSubmit: () => void | Promise<void>
 }) {
@@ -387,11 +397,16 @@ function SettlementRejectDialog({
 
     const trimmedComment = comment.trim()
     const commentChars = Array.from(trimmedComment).length
-    const commentTooLong = commentChars > REJECT_COMMENT_MAX_CHARS
+    const commentBytes = utf8ByteLength(trimmedComment)
+    const commentTooLong = countUtf8Bytes
+        ? commentBytes > BPM_REASON_MAX_UTF8_BYTES
+        : commentChars > REJECT_COMMENT_MAX_CHARS
     const commentRequired = reasonCode === "OTHER"
     const commentMissing = commentRequired && trimmedComment.length === 0
     const commentError = commentTooLong
-        ? `具体驳回意见不能超过 ${REJECT_COMMENT_MAX_CHARS} 个字（当前 ${commentChars} 字）`
+        ? countUtf8Bytes
+            ? `具体驳回意见不能超过 ${BPM_REASON_MAX_UTF8_BYTES} 字节（当前 ${commentBytes} 字节）`
+            : `具体驳回意见不能超过 ${REJECT_COMMENT_MAX_CHARS} 个字（当前 ${commentChars} 字）`
         : commentMissing && commentTouched
           ? "选择「其他」原因时请填写具体驳回意见"
           : undefined
@@ -401,7 +416,7 @@ function SettlementRejectDialog({
         <FormalActionConfirmDialog
             layout="compact"
             actionVariant="destructive"
-            idPrefix="supplier-settlements-reject"
+            idPrefix={idPrefix}
             open={open}
             onOpenChange={onOpenChange}
             title="驳回复核"
@@ -436,12 +451,12 @@ function SettlementRejectDialog({
             formContent={
                 <div className="space-y-3">
                     <div className="space-y-1.5">
-                        <Label htmlFor="supplier-settlements-reject-reason">
+                        <Label htmlFor={`${idPrefix}-reason`}>
                             驳回原因
                             <RequiredMark />
                         </Label>
                         <OptionCombobox
-                            id="supplier-settlements-reject-reason"
+                            id={`${idPrefix}-reason`}
                             value={reasonCode || null}
                             disabled={pending}
                             onValueChange={(v) => onReasonCodeChange(v ?? "")}
@@ -461,9 +476,13 @@ function SettlementRejectDialog({
                         />
                     </div>
                     <ReasonTextareaField
-                        id="supplier-settlements-reject-comment"
-                        mode="chars"
-                        max={REJECT_COMMENT_MAX_CHARS}
+                        id={`${idPrefix}-comment`}
+                        mode={countUtf8Bytes ? "utf8-bytes" : "chars"}
+                        max={
+                            countUtf8Bytes
+                                ? BPM_REASON_MAX_UTF8_BYTES
+                                : REJECT_COMMENT_MAX_CHARS
+                        }
                         label="具体驳回意见"
                         required={commentRequired}
                         value={comment}
@@ -612,28 +631,36 @@ function SettlementSubmitReviewDialog({
 }
 
 function SettlementConfirmSettlementDialog({
+    idPrefix = "supplier-settlements-dialog-confirm-settlement",
     open,
     onOpenChange,
     statement,
     totals,
+    payablePreview,
     pending,
     onConfirm,
 }: {
+    idPrefix?: string
     open: boolean
     onOpenChange: (open: boolean) => void
     statement: SettlementDetailView["statement"]
     totals: SettlementDetailView["totals"]
+    payablePreview?: { netPayable?: string; costDelta?: string }
     pending: boolean
     onConfirm: () => Promise<void>
 }) {
-    const payablePreview =
-        statement.supplierAmountGross ?? statement.erpAmountGross
-    const costDeltaPreview = totals.pendingCostDeltaGross ?? "0.00"
+    const payableAmount = payablePreview
+        ? payablePreview.netPayable
+        : (statement.supplierAmountGross ?? statement.erpAmountGross)
+    const costDeltaPreview = payablePreview
+        ? payablePreview.costDelta
+        : (totals.pendingCostDeltaGross ?? "0.00")
 
     return (
         <FormalActionConfirmDialog
             actionVariant="default"
-            id="supplier-settlements-dialog-confirm-settlement"
+            id={idPrefix}
+            idPrefix={idPrefix}
             open={open}
             onOpenChange={onOpenChange}
             title="确认结算"
@@ -655,7 +682,7 @@ function SettlementConfirmSettlementDialog({
                 <MoneyWithReadout
                     key="payable"
                     label="应付金额预览"
-                    value={payablePreview}
+                    value={payableAmount}
                 />,
                 <MoneyWithReadout
                     key="delta"
