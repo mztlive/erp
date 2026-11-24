@@ -285,7 +285,7 @@ export function WorkspacePurchaseSourceComparison({
         <TooltipProvider>
             <div
                 data-slot="workspace-purchase-source-comparison"
-                className="space-y-4"
+                className="@container/source-comparison min-w-0 space-y-4 wrap-anywhere [&_[data-slot=money-value]]:max-w-full [&_[data-slot=money-value-number]]:whitespace-normal"
             >
                 {/* 顶部：来源销售单切换 + 原单预览 + 图标化元信息 */}
                 <header className="space-y-1.5">
@@ -392,7 +392,7 @@ export function WorkspacePurchaseSourceComparison({
                                 aria-hidden="true"
                                 className="size-3 shrink-0 text-muted-foreground"
                             />
-                            <span className="wrap-anywhere">
+                            <span className="min-w-0">
                                 {activeOrder.customerName}
                             </span>
                         </span>
@@ -405,12 +405,14 @@ export function WorkspacePurchaseSourceComparison({
                             </>
                         ) : null}
                         {activeOrder.contractNo ? (
-                            <span className="num inline-flex items-center gap-1">
+                            <span className="num inline-flex min-w-0 items-center gap-1">
                                 <FileCheck2Icon
                                     aria-hidden="true"
                                     className="size-3 shrink-0"
                                 />
-                                {activeOrder.contractNo}
+                                <span className="min-w-0">
+                                    {activeOrder.contractNo}
+                                </span>
                             </span>
                         ) : (
                             <Badge variant="neutral">无合同</Badge>
@@ -667,7 +669,7 @@ function CommercialChecksSection({
 
     return (
         <section aria-label="商务与风控对照" className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-xs font-semibold text-foreground">
                     商务风控
                 </h3>
@@ -1062,20 +1064,22 @@ function OrderLedgerSection({
                         {/* 1. 多段式覆盖进度条 + 色点图例 */}
                         {ledger.totalSalesLineCount > 0 ? (
                             <div className="space-y-1.5">
-                                <div className="flex items-center justify-between gap-2">
+                                <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
                                     <span className="text-muted-foreground">
                                         明细覆盖
                                     </span>
-                                    <span className="num font-semibold text-foreground">
-                                        {ledger.coveredLineCount}/
-                                        {ledger.totalSalesLineCount} 行
+                                    <div className="num flex flex-wrap items-baseline gap-x-1 font-semibold text-foreground">
+                                        <span>
+                                            {ledger.coveredLineCount}/
+                                            {ledger.totalSalesLineCount} 行
+                                        </span>
                                         {ledger.salesCoveragePercent ? (
-                                            <span className="ml-1 font-normal text-muted-foreground">
+                                            <span className="font-normal text-muted-foreground">
                                                 · 占额{" "}
                                                 {ledger.salesCoveragePercent}%
                                             </span>
                                         ) : null}
-                                    </span>
+                                    </div>
                                 </div>
                                 <div
                                     aria-hidden="true"
@@ -1137,22 +1141,27 @@ function OrderLedgerSection({
                                         </>
                                     ) : null}
                                 </span>
-                                <span className="text-muted-foreground">
-                                    {ledger.isFullOrderCovered
-                                        ? "销售 "
-                                        : "对应销 "}
-                                    <MoneyValue
-                                        display="exact"
-                                        value={
-                                            ledger.correspondingSalesGrossTotal ??
-                                            ledger.salesGrossTotal
-                                        }
-                                    />
+                                <div className="flex min-w-0 flex-wrap items-baseline gap-x-1 gap-y-0.5 text-muted-foreground">
+                                    <span className="inline-flex min-w-0 items-baseline gap-1">
+                                        <span className="shrink-0">
+                                            {ledger.isFullOrderCovered
+                                                ? "销售"
+                                                : "对应销"}
+                                        </span>
+                                        <MoneyValue
+                                            display="exact"
+                                            value={
+                                                ledger.correspondingSalesGrossTotal ??
+                                                ledger.salesGrossTotal
+                                            }
+                                        />
+                                    </span>
                                     {!ledger.isFullOrderCovered &&
                                     ledger.correspondingSalesGrossTotal ? (
-                                        <span>
-                                            {" "}
-                                            / 整单{" "}
+                                        <span className="inline-flex min-w-0 items-baseline gap-1">
+                                            <span className="shrink-0">
+                                                / 整单
+                                            </span>
                                             <MoneyValue
                                                 display="exact"
                                                 value={ledger.salesGrossTotal}
@@ -1161,7 +1170,7 @@ function OrderLedgerSection({
                                             />
                                         </span>
                                     ) : null}
-                                </span>
+                                </div>
                             </div>
 
                             {ledger.costBarPercent ? (
@@ -1197,7 +1206,7 @@ function OrderLedgerSection({
                         </div>
 
                         {/* 3. 双栏利润卡：采购毛利（供-采） vs 对外毛利（含税 → 税后） */}
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 gap-2 @xs/source-comparison:grid-cols-2">
                             <div className="min-w-0 space-y-0.5 rounded-md bg-muted/35 px-2.5 py-2">
                                 <div className="flex items-center justify-between gap-1 text-muted-foreground">
                                     <span>采购毛利</span>
@@ -1274,7 +1283,7 @@ function OrderLedgerSection({
                                           : "border-transparent bg-muted/35",
                                 )}
                             >
-                                <div className="flex items-center justify-between gap-1">
+                                <div className="flex flex-wrap items-baseline justify-between gap-1">
                                     <span className="text-muted-foreground">
                                         对外毛利
                                     </span>
@@ -1580,7 +1589,7 @@ function ExpenseOrderLedgerBody({
             </div>
 
             {ledger.extraCostSummary ? (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 @xs/source-comparison:grid-cols-2">
                     <div className="min-w-0 space-y-0.5 rounded-md bg-muted/35 px-2.5 py-2">
                         <p className="text-muted-foreground">已有附加费</p>
                         <p className="num text-body-compact font-semibold">

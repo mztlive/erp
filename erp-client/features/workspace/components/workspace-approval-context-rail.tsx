@@ -132,7 +132,7 @@ export function WorkspaceApprovalContextRail({
                         setTab(next)
                     }
                 }}
-                className="flex min-h-0 flex-1 flex-col gap-0"
+                className="flex min-h-0 min-w-0 flex-1 flex-col gap-0"
             >
                 <div className="-mx-4 shrink-0 border-b border-border/60 px-4 @[1120px]/workspace:-mx-5 @[1120px]/workspace:px-5">
                     <TabsList
@@ -240,7 +240,7 @@ export function WorkspaceApprovalContextRail({
                 {sourceComparison ? (
                     <TabsContent
                         value="source-sales"
-                        className="mt-0 min-h-0 flex-1 overflow-y-auto overscroll-contain py-3.5"
+                        className="mt-0 min-h-0 min-w-0 flex-1 scrollbar-gutter-stable overflow-auto overscroll-contain py-3.5 pe-3"
                     >
                         <WorkspacePurchaseSourceComparison
                             key={instanceId}
