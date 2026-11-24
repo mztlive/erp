@@ -192,15 +192,15 @@ export function PurchaseComparisonRow({
                 </TableCell>
 
                 <TableCell data-align="end" className="py-3 align-top">
-                    <PurchaseProfitValue
-                        amount={comparison.purchaseMargin?.margin ?? null}
+                    <MoneyValue
+                        display="exact"
+                        value={sales?.unit_price_gross}
                     />
                 </TableCell>
 
                 <TableCell data-align="end" className="py-3 align-top">
-                    <MoneyValue
-                        display="exact"
-                        value={sales?.unit_price_gross}
+                    <PurchaseProfitValue
+                        amount={comparison.purchaseMargin?.margin ?? null}
                     />
                 </TableCell>
 

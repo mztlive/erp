@@ -215,14 +215,14 @@ export function WorkspacePurchaseComparisonTable({
                                 data-align="end"
                                 className="w-28"
                             >
-                                采购毛利
+                                销售单成交单价
                             </TableHead>
                             <TableHead
                                 scope="col"
                                 data-align="end"
                                 className="w-28"
                             >
-                                销售单成交单价
+                                采购毛利
                             </TableHead>
                             <TableHead
                                 scope="col"
@@ -335,6 +335,12 @@ export function WorkspacePurchaseComparisonTable({
                                 </TableCell>
                                 <TableCell
                                     data-align="end"
+                                    className="py-2.5 align-top text-muted-foreground"
+                                >
+                                    —
+                                </TableCell>
+                                <TableCell
+                                    data-align="end"
                                     className="py-2.5 align-top"
                                 >
                                     <PurchaseProfitValue
@@ -357,12 +363,6 @@ export function WorkspacePurchaseComparisonTable({
                                                 : null}
                                         </div>
                                     ) : null}
-                                </TableCell>
-                                <TableCell
-                                    data-align="end"
-                                    className="py-2.5 align-top text-muted-foreground"
-                                >
-                                    —
                                 </TableCell>
                                 <TableCell
                                     data-align="end"
