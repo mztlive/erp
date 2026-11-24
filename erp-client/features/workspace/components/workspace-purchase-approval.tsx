@@ -1,9 +1,11 @@
 "use client"
 
+import { useMemo, useState } from "react"
 import { FileTextIcon, TriangleAlertIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
+    DeliveryAllocationOverview,
     DetailWorkspaceSection,
     MoneyValue,
     detailWorkspaceStyles,
@@ -15,9 +17,14 @@ import type { ApprovalPurchaseLine } from "@/features/approval-workflow/api/mate
 import { ApprovalMaterialFiles } from "@/features/approval-workflow/components/approval-material-files"
 import type { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-approval-materials"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import {
+    buildDeliveryAllocationSummary,
+    type DeliveryAllocationLineInput,
+} from "@/lib/delivery-allocation-summary"
 import { displayBusinessText, displayName } from "@/lib/display-name"
 import {
     isPurchaseCostAbove,
+    purchaseSpecification,
     type PurchaseSource,
 } from "./workspace-purchase-comparison-model"
 import { WorkspacePurchaseComparisonTable } from "./workspace-purchase-comparison-table"
@@ -134,19 +141,64 @@ export function WorkspacePurchaseApproval({
     materials,
     riskReasons,
     onPreview,
+    onSelectFile,
+    activeFileId,
     hideEmbeddedMaterials,
 }: {
     instanceId: string
     materials: ReturnType<typeof useApprovalMaterials>
     riskReasons: readonly string[]
     onPreview: (target: WorkspacePaperTarget) => void
+    onSelectFile?: (fileId: string) => void
+    activeFileId?: string
     hideEmbeddedMaterials: boolean
 }) {
     const submission = materials.data
     const lines = submission?.purchase_lines
+    const fulfillment = submission?.purchase_fulfillment
     const extraCost = submission?.extra_cost_summary
     const prefix = purchaseApprovalPrefix(instanceId)
     const attachments = submission?.attachments ?? []
+
+    const [focusedDeliveryLineId, setFocusedDeliveryLineId] = useState<
+        string | null
+    >(null)
+
+    const deliveryLines = useMemo<
+        readonly DeliveryAllocationLineInput[]
+    >(() => {
+        if (!lines?.length) return []
+        return lines.map((line) => ({
+            id: line.id,
+            lineNo: line.line_no,
+            itemName: displayName(line.title) || "未记录商品名称",
+            specification: purchaseSpecification(line.specification),
+            unit: line.unitName ?? line.unit ?? "",
+            quantity: line.quantity,
+            allocations: line.delivery_allocations,
+        }))
+    }, [lines])
+
+    const deliverySummary = useMemo(
+        () => buildDeliveryAllocationSummary(deliveryLines),
+        [deliveryLines],
+    )
+
+    const deliverySectionId = `${prefix}-delivery-section`
+    const handleFocusDelivery = (lineId: string) => {
+        setFocusedDeliveryLineId(lineId)
+        window.requestAnimationFrame(() => {
+            document
+                .getElementById(deliverySectionId)
+                ?.scrollIntoView({ behavior: "smooth", block: "nearest" })
+        })
+    }
+
+    const showDeliverySection = Boolean(
+        submission &&
+        (fulfillment != null ||
+            (lines && lines.length > 0 && deliverySummary.totalRows > 0)),
+    )
 
     return (
         <>
@@ -202,6 +254,7 @@ export function WorkspacePurchaseApproval({
                     <WorkspacePurchaseComparisonTable
                         lines={lines}
                         sources={submission?.display.source_sales ?? []}
+                        deliverySummary={deliverySummary}
                         prefix={prefix}
                         onPreview={(revisionId) =>
                             onPreview({
@@ -211,6 +264,7 @@ export function WorkspacePurchaseApproval({
                                 sourceRevisionId: revisionId,
                             })
                         }
+                        onFocusDelivery={handleFocusDelivery}
                     />
                 ) : lines ? (
                     <p className="text-xs text-muted-foreground">
@@ -232,6 +286,27 @@ export function WorkspacePurchaseApproval({
                     </p>
                 ) : null}
             </DetailWorkspaceSection>
+
+            {showDeliverySection ? (
+                <DeliveryAllocationOverview
+                    idPrefix={`${prefix}-delivery`}
+                    sectionId={deliverySectionId}
+                    lines={deliveryLines}
+                    summary={deliverySummary}
+                    fulfillment={
+                        fulfillment
+                            ? {
+                                  responsibility: fulfillment.responsibility,
+                                  targetWarehouseName:
+                                      fulfillment.target_warehouse_name,
+                              }
+                            : undefined
+                    }
+                    focusedLineId={focusedDeliveryLineId}
+                    onClearFocus={() => setFocusedDeliveryLineId(null)}
+                />
+            ) : null}
+
             {submission && !hideEmbeddedMaterials ? (
                 <DetailWorkspaceSection
                     title="合同、凭证及附件"
@@ -247,6 +322,8 @@ export function WorkspacePurchaseApproval({
                         attachments={attachments}
                         idPrefix={`${prefix}-file`}
                         emptyMessage="本次提交未附带合同、凭证或其他附件。"
+                        onSelectFile={onSelectFile}
+                        activeFileId={activeFileId}
                     />
                 </DetailWorkspaceSection>
             ) : null}

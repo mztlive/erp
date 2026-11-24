@@ -365,6 +365,8 @@ export function CopyInspector({
 
                     <CopyPurchaseLines
                         lines={primaryPage.materials.purchase_lines ?? []}
+                        fulfillment={primaryPage.materials.purchase_fulfillment}
+                        idPrefix={`copy-inspector-purchase-${segment}`}
                     />
 
                     {(primaryPage.materials.source_sales_orders?.length ?? 0) >

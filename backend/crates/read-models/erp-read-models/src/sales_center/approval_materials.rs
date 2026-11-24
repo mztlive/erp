@@ -22,7 +22,8 @@ use serde::Serialize;
 use super::approval_source_sales::{ApprovalSourceSalesOrder, source_sales_orders};
 use super::prices::{enrich_inquiry_prices, enrich_line_prices};
 use crate::purchase_center::approval_materials::{
-    ApprovalExtraCostSummary, ApprovalPurchaseLine, extra_cost_summary, purchase_lines,
+    ApprovalExtraCostSummary, ApprovalPurchaseFulfillment, ApprovalPurchaseLine, extra_cost_summary,
+    purchase_fulfillment, purchase_lines,
 };
 use crate::purchase_center::approval_supplier::{ApprovalSupplierRating, supplier_rating};
 use crate::workbench::{InvoiceSalesBasis, optional_sales_basis};
@@ -35,6 +36,7 @@ pub struct ApprovalDocumentMaterials {
     pub materials: ApprovalMaterialsView,
     pub sales_order: Option<SubmissionView>,
     pub purchase_lines: Option<Vec<ApprovalPurchaseLine>>,
+    pub purchase_fulfillment: Option<ApprovalPurchaseFulfillment>,
     pub extra_cost_summary: Option<ApprovalExtraCostSummary>,
     pub source_sales_orders: Vec<ApprovalSourceSalesOrder>,
     pub current_sales_basis: Option<InvoiceSalesBasis>,
@@ -84,11 +86,16 @@ async fn materials_read<A: WorkflowAuthorizationPort>(
     } else {
         None
     };
-    let (purchase_lines, extra_cost_summary) = if materials.document_type == "purchase_order" {
-        (purchase_lines(db, &materials, executor).await?, extra_cost_summary(db, &materials, executor).await?)
-    } else {
-        (None, None)
-    };
+    let (purchase_lines, purchase_fulfillment, extra_cost_summary) =
+        if materials.document_type == "purchase_order" {
+            (
+                purchase_lines(db, &materials, executor).await?,
+                purchase_fulfillment(db, &materials, executor).await?,
+                extra_cost_summary(db, &materials, executor).await?,
+            )
+        } else {
+            (None, None, None)
+        };
     let source_sales_orders = source_sales_orders(db, &materials, executor).await?;
     let (current_sales_basis, current_sales_basis_error) =
         optional_sales_basis(db, &materials, executor).await?;
@@ -98,6 +105,7 @@ async fn materials_read<A: WorkflowAuthorizationPort>(
         materials,
         sales_order,
         purchase_lines,
+        purchase_fulfillment,
         extra_cost_summary,
         source_sales_orders,
         current_sales_basis,
@@ -157,10 +165,13 @@ async fn copy_read<A: WorkflowAuthorizationPort>(
     } else {
         None
     };
-    let purchase_lines = if materials.document_type == "purchase_order" {
-        purchase_lines(db, &materials, executor).await?
+    let (purchase_lines, purchase_fulfillment) = if materials.document_type == "purchase_order" {
+        (
+            purchase_lines(db, &materials, executor).await?,
+            purchase_fulfillment(db, &materials, executor).await?,
+        )
     } else {
-        None
+        (None, None)
     };
     let source_sales_orders = source_sales_orders(db, &materials, executor).await?;
 
@@ -173,6 +184,7 @@ async fn copy_read<A: WorkflowAuthorizationPort>(
             materials,
             sales_order,
             purchase_lines,
+            purchase_fulfillment,
             source_sales_orders,
             extra_cost_summary: None,
             current_sales_basis: None,

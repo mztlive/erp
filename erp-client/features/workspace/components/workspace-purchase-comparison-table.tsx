@@ -1,8 +1,18 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { ChevronLeftIcon, ChevronRightIcon, SearchIcon } from "lucide-react"
-import { detailWorkspaceStyles } from "@/components/business"
+import {
+    ChevronLeftIcon,
+    ChevronRightIcon,
+    SearchIcon,
+    XIcon,
+} from "lucide-react"
+
+import {
+    MoneyValue,
+    QuantityValue,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import {
     TableToolbar,
     TableToolbarScope,
@@ -22,12 +32,19 @@ import {
     TableBody,
     TableCaption,
     TableCell,
+    TableFooter,
     TableHead,
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
 import type { ApprovalPurchaseLine } from "@/features/approval-workflow/api/materials"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { fullDeliveryAddress } from "@/lib/delivery-address"
+import {
+    formatLineDeliveryHint,
+    type DeliveryAllocationSummary,
+} from "@/lib/delivery-allocation-summary"
+import { compactFixed, compareDecimal, sumFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 import {
     isPurchaseCostAbove,
@@ -40,29 +57,34 @@ import { PurchaseComparisonRow } from "./workspace-purchase-comparison-row"
 export function WorkspacePurchaseComparisonTable({
     lines,
     sources,
+    deliverySummary,
     prefix,
     onPreview,
+    onFocusDelivery,
 }: {
     lines: ApprovalPurchaseLine[]
     sources: PurchaseSource[]
+    deliverySummary: DeliveryAllocationSummary
     prefix: string
     onPreview: (revisionId: string) => void
+    onFocusDelivery: (lineId: string) => void
 }) {
     const [search, setSearch] = useState("")
     const [attentionOnly, setAttentionOnly] = useState(false)
     const [page, setPage] = useState(1)
     const [pageSize, setPageSize] = useState(20)
-    const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(
-        () => new Set(),
+
+    const deliveryItemById = useMemo(
+        () =>
+            new Map(
+                deliverySummary.itemGroups.map((group) => [
+                    group.lineId,
+                    group,
+                ]),
+            ),
+        [deliverySummary.itemGroups],
     )
-    const toggleExpanded = (id: string) => {
-        setExpandedIds((current) => {
-            const next = new Set(current)
-            if (next.has(id)) next.delete(id)
-            else next.add(id)
-            return next
-        })
-    }
+
     const rows = useMemo(
         () =>
             lines.map((line) => ({
@@ -79,24 +101,35 @@ export function WorkspacePurchaseComparisonTable({
         ({ comparison, negativeMargin }) =>
             comparison.warnings.length > 0 || negativeMargin,
     ).length
+    const hasNegativeMargin = rows.some(({ negativeMargin }) => negativeMargin)
+
     const needle = search.trim().toLocaleLowerCase()
-    const filtered = rows.filter(
-        ({ line, comparison, negativeMargin }) =>
-            (!attentionOnly ||
-                comparison.warnings.length > 0 ||
-                negativeMargin) &&
-            (!needle ||
-                [
-                    line.title,
-                    line.specification,
-                    line.source?.title,
-                    line.source?.specification,
-                ]
-                    .filter(Boolean)
-                    .join(" ")
-                    .toLocaleLowerCase()
-                    .includes(needle)),
-    )
+    const filtered = rows.filter(({ line, comparison, negativeMargin }) => {
+        if (
+            attentionOnly &&
+            !(comparison.warnings.length > 0 || negativeMargin)
+        )
+            return false
+        if (!needle) return true
+        const textMatched = [
+            String(line.line_no),
+            line.title,
+            line.specification,
+            line.source?.title,
+            line.source?.specification,
+        ]
+            .filter(Boolean)
+            .join(" ")
+            .toLocaleLowerCase()
+            .includes(needle)
+        if (textMatched) return true
+        return (line.delivery_allocations ?? []).some((row) =>
+            `${row.recipient} ${row.phone} ${fullDeliveryAddress(row)}`
+                .toLocaleLowerCase()
+                .includes(needle),
+        )
+    })
+
     const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize))
     const currentPage = Math.min(page, pageCount)
     const visible = filtered.slice(
@@ -113,76 +146,162 @@ export function WorkspacePurchaseComparisonTable({
         setAttentionOnly(false)
         setPage(1)
     }
+    const showFilterBar =
+        lines.length > 8 ||
+        attentionCount > 0 ||
+        Boolean(search) ||
+        attentionOnly
     const showPagination = filtered.length > 20 || pageSize !== 20
+
+    const footerTotals = useMemo(() => {
+        const grossAmounts: string[] = []
+        const netAmounts: string[] = []
+        const overSupplyTotals: string[] = []
+        const units = new Set<string>()
+        const quantities: string[] = []
+        let allHaveNet = true
+        let quantityLineCount = 0
+
+        for (const { line, comparison } of rows) {
+            if (line.gross_amount != null) grossAmounts.push(line.gross_amount)
+            if (line.net_amount != null) netAmounts.push(line.net_amount)
+            else allHaveNet = false
+            if (comparison.priceDifferenceTotal) {
+                overSupplyTotals.push(comparison.priceDifferenceTotal)
+            }
+            if (line.quantity != null) {
+                quantityLineCount += 1
+                quantities.push(line.quantity)
+                units.add(line.unitName ?? line.unit ?? "")
+            }
+        }
+
+        const grossTotal = grossAmounts.length
+            ? sumFixed(grossAmounts, { maxScale: 2, outputScale: 2 })
+            : null
+        const netTotal =
+            allHaveNet && netAmounts.length
+                ? sumFixed(netAmounts, { maxScale: 2, outputScale: 2 })
+                : null
+        const overSupplyTotal = overSupplyTotals.length
+            ? sumFixed(overSupplyTotals, { maxScale: 2, outputScale: 2 })
+            : null
+        const totalQuantity =
+            units.size === 1 &&
+            quantityLineCount > 0 &&
+            quantityLineCount === rows.length
+                ? {
+                      value: compactFixed(
+                          sumFixed(quantities, { maxScale: 6, outputScale: 6 }),
+                      ),
+                      unit: [...units][0] || undefined,
+                  }
+                : null
+
+        return {
+            grossTotal,
+            netTotal,
+            overSupplyTotal:
+                overSupplyTotal && compareDecimal(overSupplyTotal, "0", 2) > 0
+                    ? overSupplyTotal
+                    : null,
+            totalQuantity,
+        }
+    }, [rows])
 
     return (
         <TableToolbarScope>
             <div className="space-y-3">
-                <div
-                    className="flex flex-wrap items-center justify-between gap-3"
-                    aria-label="商品对照筛选"
-                >
+                {showFilterBar ? (
                     <div
-                        role="group"
-                        aria-label="异常筛选"
-                        className={detailWorkspaceStyles.subTabs}
+                        className="flex flex-wrap items-center justify-between gap-2.5"
+                        aria-label="商品对照筛选"
                     >
-                        <button
-                            id={`${prefix}-filter-all`}
-                            type="button"
-                            aria-pressed={!attentionOnly}
-                            data-active={!attentionOnly ? "true" : undefined}
-                            className={detailWorkspaceStyles.subTab}
-                            onClick={() => {
-                                setAttentionOnly(false)
-                                setPage(1)
-                            }}
+                        <div
+                            role="group"
+                            aria-label="异常筛选"
+                            className={detailWorkspaceStyles.subTabs}
                         >
-                            <span>全部</span>
-                            <span className="num text-xs text-muted-foreground">
-                                {lines.length}
-                            </span>
-                        </button>
-                        <button
-                            id={`${prefix}-filter-attention`}
-                            type="button"
-                            aria-pressed={attentionOnly}
-                            data-active={attentionOnly ? "true" : undefined}
-                            className={detailWorkspaceStyles.subTab}
-                            onClick={() => {
-                                setAttentionOnly(true)
-                                setPage(1)
-                            }}
-                        >
-                            <span>仅看异常项</span>
-                            <Badge
-                                variant={
-                                    attentionCount > 0 ? "warning" : "neutral"
+                            <button
+                                id={`${prefix}-filter-all`}
+                                type="button"
+                                aria-pressed={!attentionOnly}
+                                data-active={
+                                    !attentionOnly ? "true" : undefined
                                 }
-                                className="rounded-full px-1.5 py-0 text-tiny tabular-nums"
+                                className={detailWorkspaceStyles.subTab}
+                                onClick={() => {
+                                    setAttentionOnly(false)
+                                    setPage(1)
+                                }}
                             >
-                                {attentionCount}
-                            </Badge>
-                        </button>
+                                <span>全部</span>
+                                <span className="num text-xs text-muted-foreground">
+                                    {lines.length}
+                                </span>
+                            </button>
+                            <button
+                                id={`${prefix}-filter-attention`}
+                                type="button"
+                                aria-pressed={attentionOnly}
+                                data-active={attentionOnly ? "true" : undefined}
+                                className={detailWorkspaceStyles.subTab}
+                                onClick={() => {
+                                    setAttentionOnly(true)
+                                    setPage(1)
+                                }}
+                            >
+                                <span>仅看异常项</span>
+                                <Badge
+                                    variant={
+                                        hasNegativeMargin
+                                            ? "destructive"
+                                            : attentionCount > 0
+                                              ? "warning"
+                                              : "neutral"
+                                    }
+                                    className="rounded-full px-1.5 py-0 text-tiny tabular-nums"
+                                >
+                                    {attentionCount}
+                                </Badge>
+                            </button>
+                        </div>
+                        <div className="relative w-full sm:w-60">
+                            <SearchIcon
+                                className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+                                aria-hidden="true"
+                            />
+                            <Input
+                                id={`${prefix}-search`}
+                                value={search}
+                                onChange={(event) => {
+                                    setSearch(event.target.value)
+                                    setPage(1)
+                                }}
+                                placeholder="搜索商品、规格或收货人"
+                                aria-label="搜索商品、规格或收货人"
+                                className="h-control-sm pr-8 pl-8 text-xs"
+                            />
+                            {search ? (
+                                <Button
+                                    id={`${prefix}-search-clear`}
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    aria-label="清除搜索"
+                                    className="absolute top-1/2 right-0.5 -translate-y-1/2"
+                                    onClick={() => {
+                                        setSearch("")
+                                        setPage(1)
+                                    }}
+                                >
+                                    <XIcon aria-hidden="true" />
+                                </Button>
+                            ) : null}
+                        </div>
                     </div>
-                    <div className="relative w-full sm:w-64">
-                        <SearchIcon
-                            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-                            aria-hidden="true"
-                        />
-                        <Input
-                            id={`${prefix}-search`}
-                            value={search}
-                            onChange={(event) => {
-                                setSearch(event.target.value)
-                                setPage(1)
-                            }}
-                            placeholder="搜索商品名称 / 规格"
-                            aria-label="搜索商品名称或规格"
-                            className="h-control pl-9"
-                        />
-                    </div>
-                </div>
+                ) : null}
+
                 {search || attentionOnly || showPagination ? (
                     <TableToolbar
                         actions={
@@ -215,6 +334,7 @@ export function WorkspacePurchaseComparisonTable({
                         </span>
                     </TableToolbar>
                 ) : null}
+
                 <div
                     id={`${prefix}-table-scroll`}
                     data-slot="detail-inline-table"
@@ -223,6 +343,7 @@ export function WorkspacePurchaseComparisonTable({
                     className={detailWorkspaceStyles.inlineTableWrapper}
                 >
                     <Table
+                        data-density="comfortable"
                         aria-label="采购明细"
                         className="w-full [&_:is(th,td):first-child]:ps-0"
                     >
@@ -231,64 +352,178 @@ export function WorkspacePurchaseComparisonTable({
                         </TableCaption>
                         <TableHeader>
                             <TableRow>
-                                <TableHead scope="col" className="w-9">
-                                    序号
+                                <TableHead scope="col" className="w-8">
+                                    #
                                 </TableHead>
-                                <TableHead scope="col">商品 / 规格</TableHead>
-                                <TableHead scope="col" data-align="end">
-                                    数量
+                                <TableHead scope="col" className="min-w-44">
+                                    商品 / 规格与交期
                                 </TableHead>
-                                <TableHead scope="col">
-                                    含税单价 / 供给价
+                                <TableHead
+                                    scope="col"
+                                    data-align="end"
+                                    className="w-24"
+                                >
+                                    采购数量
                                 </TableHead>
-                                <TableHead scope="col" data-align="end">
-                                    金额 / 税率
+                                <TableHead
+                                    scope="col"
+                                    data-align="end"
+                                    className="w-28"
+                                >
+                                    采购含税单价
                                 </TableHead>
-                                <TableHead scope="col" data-align="end">
-                                    明细对照
+                                <TableHead
+                                    scope="col"
+                                    data-align="end"
+                                    className="w-36"
+                                >
+                                    销售对照
+                                </TableHead>
+                                <TableHead
+                                    scope="col"
+                                    data-align="end"
+                                    className="w-28"
+                                >
+                                    含税小计
                                 </TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {visible.map(
-                                ({ line, comparison, negativeMargin }) => (
-                                    <PurchaseComparisonRow
-                                        key={line.id}
-                                        line={line}
-                                        comparison={comparison}
-                                        negativeMargin={negativeMargin}
-                                        source={
-                                            sources.length > 1
-                                                ? sources.find(
-                                                      (source) =>
-                                                          source.revision_id ===
-                                                          line.source
-                                                              ?.revision_id,
-                                                  )
-                                                : undefined
-                                        }
-                                        prefix={`${prefix}-line-${toAutomationIdSegment(line.id)}`}
-                                        expanded={expandedIds.has(line.id)}
-                                        onToggle={() => toggleExpanded(line.id)}
-                                        onPreview={onPreview}
-                                    />
-                                ),
+                                ({ line, comparison, negativeMargin }) => {
+                                    const deliveryHint = formatLineDeliveryHint(
+                                        deliveryItemById.get(line.id),
+                                        deliverySummary,
+                                    )
+                                    return (
+                                        <PurchaseComparisonRow
+                                            key={line.id}
+                                            line={line}
+                                            comparison={comparison}
+                                            negativeMargin={negativeMargin}
+                                            source={
+                                                sources.length > 1
+                                                    ? sources.find(
+                                                          (source) =>
+                                                              source.revision_id ===
+                                                              line.source
+                                                                  ?.revision_id,
+                                                      )
+                                                    : undefined
+                                            }
+                                            deliveryHint={deliveryHint}
+                                            prefix={`${prefix}-line-${toAutomationIdSegment(line.id)}`}
+                                            onPreview={onPreview}
+                                            onFocusDelivery={() =>
+                                                onFocusDelivery(line.id)
+                                            }
+                                        />
+                                    )
+                                },
                             )}
-                            {!visible.length && (
+                            {!visible.length ? (
                                 <TableRow>
                                     <TableCell
                                         colSpan={6}
-                                        className="py-12 text-center text-muted-foreground"
+                                        className="py-10 text-center text-xs text-muted-foreground"
                                     >
                                         {attentionOnly && !search
                                             ? "当前没有异常项，仍请核对完整采购明细。"
                                             : "没有匹配的商品，请调整搜索条件或清除筛选。"}
                                     </TableCell>
                                 </TableRow>
-                            )}
+                            ) : null}
                         </TableBody>
+                        {lines.length > 0 ? (
+                            <TableFooter>
+                                <TableRow className="hover:bg-transparent">
+                                    <TableCell
+                                        colSpan={2}
+                                        className="py-2.5 align-middle text-xs font-medium text-muted-foreground"
+                                    >
+                                        合计 · 共{" "}
+                                        <span className="num text-foreground">
+                                            {lines.length}
+                                        </span>{" "}
+                                        项
+                                        {filtered.length !== lines.length ? (
+                                            <span className="num ml-1.5 font-normal">
+                                                （当前显示 {filtered.length}{" "}
+                                                项，合计按整单）
+                                            </span>
+                                        ) : null}
+                                    </TableCell>
+                                    <TableCell
+                                        data-align="end"
+                                        className="py-2.5 align-middle text-xs font-medium text-foreground"
+                                    >
+                                        {footerTotals.totalQuantity ? (
+                                            <QuantityValue
+                                                value={
+                                                    footerTotals.totalQuantity
+                                                        .value
+                                                }
+                                                unit={
+                                                    footerTotals.totalQuantity
+                                                        .unit
+                                                }
+                                            />
+                                        ) : (
+                                            "—"
+                                        )}
+                                    </TableCell>
+                                    <TableCell className="py-2.5" />
+                                    <TableCell
+                                        data-align="end"
+                                        className="py-2.5 align-middle text-xs"
+                                    >
+                                        {footerTotals.overSupplyTotal ? (
+                                            <span className="font-medium text-warning-soft-foreground">
+                                                超预估合计 +
+                                                <MoneyValue
+                                                    display="exact"
+                                                    value={
+                                                        footerTotals.overSupplyTotal
+                                                    }
+                                                    className="[&_[data-slot=money-value-number]]:text-inherit"
+                                                />
+                                            </span>
+                                        ) : null}
+                                    </TableCell>
+                                    <TableCell
+                                        data-align="end"
+                                        className="py-2.5 align-middle"
+                                    >
+                                        {footerTotals.grossTotal ? (
+                                            <div className="font-semibold text-foreground">
+                                                <MoneyValue
+                                                    display="exact"
+                                                    value={
+                                                        footerTotals.grossTotal
+                                                    }
+                                                />
+                                            </div>
+                                        ) : (
+                                            "—"
+                                        )}
+                                        {footerTotals.netTotal ? (
+                                            <div className="mt-0.5 text-xs font-normal text-muted-foreground">
+                                                不含税{" "}
+                                                <MoneyValue
+                                                    display="exact"
+                                                    value={
+                                                        footerTotals.netTotal
+                                                    }
+                                                />
+                                            </div>
+                                        ) : null}
+                                    </TableCell>
+                                </TableRow>
+                            </TableFooter>
+                        ) : null}
                     </Table>
                 </div>
+
                 {showPagination ? (
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">

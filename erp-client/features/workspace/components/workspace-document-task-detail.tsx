@@ -1232,6 +1232,12 @@ export function WorkspaceDocumentTaskDetail({
                         materials={materials}
                         riskReasons={purchaseRiskReasons}
                         onPreview={setPaper}
+                        onSelectFile={
+                            showDecisionRail
+                                ? handleSelectMaterialFile
+                                : undefined
+                        }
+                        activeFileId={activeMaterialFileId}
                         hideEmbeddedMaterials={showDecisionRail}
                     />
                 ) : null}

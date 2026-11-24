@@ -3,13 +3,15 @@
 use erp_core::ids::{PurchaseOrderId, PurchaseOrderSubmissionId, SalesOrderRevisionLineId};
 use erp_finance::dto::extra_cost::{SalesExtraCostListView, SalesExtraCostView};
 use erp_procurement::entity::purchase_order::{
-    PurchaseDeliveryAllocation, PurchaseLineType, PurchaseOrderSubmissionLine, PurchaseType,
+    FulfillmentResponsibility, PurchaseDeliveryAllocation, PurchaseLineType,
+    PurchaseOrderSubmissionLine, PurchaseType,
 };
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::prelude::*;
 use erp_sales::entity::sales_order::{LineType, SalesOrderGoodsServiceLineRevision, SalesOrderRevisionLine};
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
+use erp_warehouse::repository::WarehouseExt;
 use erp_workflow::entity::approval_integration::display_snapshot::ApprovalRelatedSalesSnapshot;
 use erp_workflow::service::approval::execution::runtime_service::ApprovalMaterialsView;
 use mongodb::Database;
@@ -32,11 +34,20 @@ pub struct ApprovalPurchaseLine {
     pub unit: Option<String>,
     pub unit_cost_gross: Option<String>,
     pub gross_amount: String,
+    pub net_amount: String,
+    pub tax_amount: String,
     pub expected_delivery_date: Option<String>,
     /// 本次不可变提交的进项税率与实际承担的收货安排。
     pub input_tax_rate: Option<String>,
     pub delivery_allocations: Vec<PurchaseDeliveryAllocation>,
     pub source: Option<ApprovalPurchaseSourceLine>,
+}
+
+/// 采购审批提交时的履约方式及入仓目标仓库信息。
+#[derive(Debug, Serialize)]
+pub struct ApprovalPurchaseFulfillment {
+    pub responsibility: FulfillmentResponsibility,
+    pub target_warehouse_name: Option<String>,
 }
 
 /// 费用采购单审批时来源销售单的附加费用合计（含本单之外已生效的费用）。
@@ -45,6 +56,56 @@ pub struct ApprovalExtraCostSummary {
     pub sales_order_id: String,
     pub occurred_gross_total: String,
     pub pending_gross_total: String,
+}
+
+// 读取本次采购审批提交的履约责任与目标仓库名称，便于区分入仓与供应商直发。
+pub(crate) async fn purchase_fulfillment(
+    db: &Database,
+    materials: &ApprovalMaterialsView,
+    executor: &mut dyn Executor,
+) -> Result<Option<ApprovalPurchaseFulfillment>> {
+    let submission = db
+        .purchase_order_submissions()
+        .find_by_order_and_submission_no(
+            &PurchaseOrderId::new(&materials.document_id),
+            &format!("SUB-{:06}", materials.subject_version),
+            executor,
+        )
+        .await?;
+    let order = db.purchase_orders().find_by_id(&materials.document_id, executor).await?;
+    let responsibility = submission
+        .as_ref()
+        .map(|item| item.fulfillment_responsibility)
+        .or_else(|| order.as_ref().map(|item| item.fulfillment_responsibility));
+    let Some(responsibility) = responsibility else {
+        return Ok(None);
+    };
+
+    let target_warehouse_name = if responsibility == FulfillmentResponsibility::Warehouse {
+        match order.as_ref().and_then(|item| item.target_warehouse_id.as_ref()) {
+            Some(warehouse_id) => {
+                if let Some(warehouse) =
+                    db.warehouses().find_by_id(warehouse_id.as_ref(), executor).await?
+                {
+                    match warehouse.stable.current_revision_id {
+                        Some(revision_id) => db
+                            .warehouse_revisions()
+                            .find_by_id(&revision_id, executor)
+                            .await?
+                            .map(|revision| revision.name),
+                        None => None,
+                    }
+                } else {
+                    None
+                }
+            }
+            None => None,
+        }
+    } else {
+        None
+    };
+
+    Ok(Some(ApprovalPurchaseFulfillment { responsibility, target_warehouse_name }))
 }
 
 // 生成采购审批材料视图时，费用采购单审批资料附带来源销售单已有附加费用合计；其他采购单返回空。
@@ -223,6 +284,8 @@ fn comparison_line(
         unit: line.base_unit_code.clone(),
         unit_cost_gross: line.unit_cost_gross.as_ref().map(|value| value.to_decimal().to_string()),
         gross_amount: line.gross_amount.to_string(),
+        net_amount: line.net_amount.to_string(),
+        tax_amount: line.tax_amount.to_string(),
         expected_delivery_date: line.expected_delivery_date.map(|date| date.to_string()),
         input_tax_rate: line.input_tax_rate.map(|rate| rate.to_decimal().to_string()),
         delivery_allocations: line.delivery_allocations.clone(),

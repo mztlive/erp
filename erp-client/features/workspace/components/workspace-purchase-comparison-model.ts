@@ -1,15 +1,15 @@
-import { salesLinePriceComparison } from "@/lib/sales-line-prices"
-import { formatIsoDate, unixSecondsToIsoOrEmpty } from "@/lib/datetime"
 import type {
     ApprovalMaterials,
     ApprovalPurchaseLine,
 } from "@/features/approval-workflow/api/materials"
+import { formatIsoDate, unixSecondsToIsoOrEmpty } from "@/lib/datetime"
 import {
     compareDecimal,
     divideFixed,
     multiplyFixed,
     subtractFixed,
 } from "@/lib/fixed-decimal"
+import { salesLinePriceComparison } from "@/lib/sales-line-prices"
 
 export type PurchaseSource = NonNullable<
     ApprovalMaterials["display"]["source_sales"]
@@ -53,6 +53,40 @@ function calendarDay(value: string | null) {
         : null
 }
 
+function calculatePurchaseMarginRate(
+    salesUnitPrice: string,
+    purchaseUnitCost: string,
+): { percent: string; negative: boolean } | null {
+    try {
+        if (compareDecimal(salesUnitPrice, "0", 6) <= 0) return null
+        const diff = subtractFixed(salesUnitPrice, purchaseUnitCost, {
+            maxScale: 6,
+            outputScale: 6,
+        })
+        const negative = compareDecimal(diff, "0", 6) < 0
+        const absDiff = negative ? diff.slice(1) : diff
+        const rate = divideFixed(
+            multiplyFixed(absDiff, "100", {
+                leftMaxScale: 6,
+                rightMaxScale: 0,
+                outputScale: 6,
+            }),
+            salesUnitPrice,
+            {
+                numeratorMaxScale: 6,
+                denominatorMaxScale: 6,
+                outputScale: 1,
+            },
+        )
+        return {
+            percent: negative ? `-${rate}` : rate,
+            negative,
+        }
+    } catch {
+        return null
+    }
+}
+
 /** 只比较本次冻结材料，不推算其他采购覆盖量或整单利润。 */
 export function purchaseComparison(line: ApprovalPurchaseLine) {
     const fee =
@@ -65,14 +99,18 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
     let priceDifferenceTotal: string | null = null
     let quantityExcess: string | null = null
     let partial = false
+    let marginRate: { percent: string; negative: boolean } | null = null
+    let salesSupplyAdjustment: "increased" | "decreased" | "unchanged" | null =
+        null
     const source = line.source
     if (!fee) {
         if (!source) warnings.push("来源销售缺失")
         else {
-            warnings.push(
-                ...salesLinePriceComparison(source.sales_prices ?? source)
-                    .warnings,
+            const sourcePriceCheck = salesLinePriceComparison(
+                source.sales_prices ?? source,
             )
+            salesSupplyAdjustment = sourcePriceCheck.adjustment
+            warnings.push(...sourcePriceCheck.warnings)
             if (
                 line.title.trim() !== source.title.trim() ||
                 purchaseSpecification(line.specification) !==
@@ -87,6 +125,12 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
             if (supplyPrice == null || supplyPrice === "")
                 warnings.push("销售预估采购价未填写")
             try {
+                if (sameUnit && line.unit_cost_gross != null) {
+                    marginRate = calculatePurchaseMarginRate(
+                        source.unit_price_gross,
+                        line.unit_cost_gross,
+                    )
+                }
                 if (
                     sameUnit &&
                     supplyPrice != null &&
@@ -174,6 +218,8 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
         priceDifferenceTotal,
         quantityExcess,
         partial,
+        marginRate,
+        salesSupplyAdjustment,
     }
 }
 

@@ -5,11 +5,17 @@ import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 import { SalesLinePriceComparison } from "@/components/business/sales-line-price-comparison"
 
 import {
+    DeliveryAllocationPrintAppendix,
     MoneyValue,
     PaperDocument,
     QuantityValue,
     RateValue,
 } from "@/components/business"
+import {
+    buildDeliveryAllocationSummary,
+    formatLineDeliveryHint,
+    type DeliveryAllocationLineInput,
+} from "@/lib/delivery-allocation-summary"
 import { multiplyFixed } from "@/lib/fixed-decimal"
 import { displayBusinessText } from "@/lib/display-name"
 import { welfareScenarioLabel } from "@/lib/business-options"
@@ -46,6 +52,23 @@ export function ApprovalSalesOrderPaper({
     const { names } = useProductUnitNames(
         lines.map((line) => line.sku_id),
         !isCard && lines.length > 0,
+    )
+    const deliveryLines: DeliveryAllocationLineInput[] = lines.map((line) => ({
+        id: line.id,
+        lineNo: line.line_no,
+        itemName:
+            displayReadableName(line.item_name_snapshot, line.sku_id) ||
+            "未记录商品名称",
+        specification: displayBusinessText(line.spec_snapshot, line.sku_id),
+        unit: approvalSalesUnit(line, isCard, names),
+        quantity:
+            line.quantity ??
+            (line.card_count == null ? null : String(line.card_count)),
+        allocations: line.delivery_allocations,
+    }))
+    const deliverySummary = buildDeliveryAllocationSummary(deliveryLines)
+    const deliveryItemById = new Map(
+        deliverySummary.itemGroups.map((group) => [group.lineId, group]),
     )
     return (
         <PaperDocument<ApprovalSalesSubmission["lines"][number]>
@@ -190,12 +213,17 @@ export function ApprovalSalesOrderPaper({
                                     {welfareScenarioLabel(row.welfare_scenario)}
                                 </div>
                             )}
-                            {row.delivery_allocations?.length ? (
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                    收货地址分配{" "}
-                                    {row.delivery_allocations.length} 条
-                                </p>
-                            ) : null}
+                            {(() => {
+                                const hint = formatLineDeliveryHint(
+                                    deliveryItemById.get(row.id),
+                                    deliverySummary,
+                                )
+                                return hint ? (
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                        收货：{hint}
+                                    </p>
+                                ) : null
+                            })()}
                         </div>
                     ),
                 },
@@ -359,6 +387,7 @@ export function ApprovalSalesOrderPaper({
                 },
             ]}
             remarks={submission.business_remark || undefined}
+            appendix={<DeliveryAllocationPrintAppendix lines={deliveryLines} />}
             footer={
                 isSubmission
                     ? "本预览保留此次审批提交的销售内容及全部明细。"

@@ -1,8 +1,10 @@
-import { FileTextIcon } from "lucide-react"
+import { FileTextIcon, TriangleAlertIcon } from "lucide-react"
+
 import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { ApprovalPurchaseLine } from "@/features/approval-workflow/api/materials"
 import { displayBusinessText, displayName } from "@/lib/display-name"
+import { cn } from "@/lib/utils"
 import {
     purchaseSpecification,
     type PurchaseComparison,
@@ -10,31 +12,29 @@ import {
 } from "./workspace-purchase-comparison-model"
 
 const warningDetails: Record<string, string> = {
-    来源销售缺失: "此次提交未保留可核对的来源销售明细，请联系申请人补充核对依据。",
-    销售预估采购价未填写:
-        "来源销售未填写预计采购含税单价，无法判断本次采购是否超出预估。",
-    数值格式需核对:
-        "价格或数量格式异常，无法可靠计算差额，请联系申请人核对原始资料。",
-    交期资料不完整: "销售承诺交期或采购预计交期缺失，无法判断能否按时交付。",
-    采购单价缺失: "本次提交未记录采购单价，请联系申请人核对计价依据。",
-    采购数量缺失: "本次提交未记录采购数量，请联系申请人核对本行采购范围。",
+    来源销售缺失: "未保留可核对的来源销售明细，请联系申请人补充依据",
+    销售预估采购价未填写: "来源销售未填写预估采购供给价",
+    数值格式需核对: "价格或数量格式异常，请核对原始资料",
+    交期资料不完整: "销售承诺交期或采购预计交期缺失",
+    采购单价缺失: "未记录采购单价，请核对计价依据",
+    采购数量缺失: "未记录采购数量，请核对采购范围",
 }
 
-/** 仅有新资料或需要解释的差异时提供展开入口。 */
-export function hasPurchaseSupplement(
-    line: ApprovalPurchaseLine,
+/** 仅在存在审批异常、品规差异或多来源销售单链接时展示紧贴主行的异常核对副条。 */
+export function hasPurchaseRiskStrip(
     comparison: PurchaseComparison,
+    negativeMargin: boolean,
     source?: PurchaseSource,
-) {
-    return Boolean(
-        comparison.warnings.length ||
-        line.delivery_allocations?.length ||
-        source,
-    )
+): boolean {
+    return Boolean(negativeMargin || comparison.warnings.length > 0 || source)
 }
 
-/** 展开区只展示提交中保存的补充资料及差异解释，不重复主行。 */
-export function PurchaseLineSupplement({
+/**
+ * 紧跟数据行的紧凑核对副条：
+ * 审批人无需逐行点击「展开」，零点击即可直读负毛利、超预估差额、超量、延期及品规差异证据。
+ * 收货地址已统一上提至独立「交付与收货地址」分区，此处不再重复堆砌地址列表。
+ */
+export function PurchaseLineRiskStrip({
     line,
     comparison,
     negativeMargin,
@@ -50,170 +50,156 @@ export function PurchaseLineSupplement({
     onPreview: (revisionId: string) => void
 }) {
     const mismatchedProduct = comparison.warnings.includes("商品 / 规格不一致")
-    const warnings = comparison.warnings.filter(
+    const otherWarnings = comparison.warnings.filter(
         (warning) => warning !== "商品 / 规格不一致",
     )
+    const hasRisk = negativeMargin || comparison.warnings.length > 0
+
     return (
-        <div className="grid gap-5 @min-[720px]/document:grid-cols-2">
-            {(negativeMargin || warnings.length > 0) && (
-                <section className="space-y-2">
-                    <h4 className="text-body-compact font-medium">异常说明</h4>
-                    <ul className="space-y-2 text-body-compact text-warning-soft-foreground">
-                        {negativeMargin ? (
-                            <li>本次采购含税单价高于来源销售含税单价。</li>
-                        ) : null}
-                        {warnings.map((warning) => (
-                            <li key={warning}>
-                                {warning === "高于销售预估采购价" &&
-                                comparison.priceDifference ? (
-                                    <>
-                                        每单位高于销售预估采购价{" "}
-                                        <MoneyValue
-                                            value={comparison.priceDifference}
-                                            display="exact"
-                                        />
-                                        {comparison.pricePercent && (
-                                            <>
-                                                （
-                                                <RateValue
-                                                    value={
-                                                        comparison.pricePercent
-                                                    }
-                                                    precision={1}
-                                                />
-                                                ）
-                                            </>
-                                        )}
-                                        {comparison.priceDifferenceTotal && (
-                                            <>
-                                                ，按本次采购数量计算合计高{" "}
-                                                <MoneyValue
-                                                    value={
-                                                        comparison.priceDifferenceTotal
-                                                    }
-                                                />
-                                            </>
-                                        )}
-                                        。
-                                    </>
-                                ) : warning === "本次数量超过销售需求" &&
-                                  comparison.quantityExcess ? (
-                                    <>
-                                        本次采购超过来源行全部销售需求{" "}
-                                        <QuantityValue
-                                            value={comparison.quantityExcess}
-                                            unit={line.unitName}
-                                        />
-                                        ，请核对超量采购依据。
-                                    </>
-                                ) : warning === "单位需核对" ? (
-                                    <>
-                                        销售单位为“
-                                        {line.source?.unitName || "未记录"}
-                                        ”，采购单位为“
-                                        {line.unitName || "未记录"}
-                                        ”；单位不一致，暂不计算单价和数量差额。
-                                    </>
-                                ) : warning.startsWith("交期晚 ") ? (
-                                    <>
-                                        预计交付晚于客户承诺{" "}
-                                        {comparison.delayDays}{" "}
-                                        天，请核对交付安排。
-                                    </>
-                                ) : (
-                                    (warningDetails[warning] ?? warning)
-                                )}
-                            </li>
-                        ))}
-                    </ul>
-                </section>
+        <div
+            id={`${prefix}-detail`}
+            role="region"
+            aria-label={`第 ${line.line_no} 项核对提示`}
+            className={cn(
+                "flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-l-2 py-2 pr-3 pl-3 text-xs",
+                negativeMargin
+                    ? "border-destructive bg-destructive-soft/25 text-destructive-soft-foreground"
+                    : hasRisk
+                      ? "border-warning bg-warning-soft/35 text-warning-soft-foreground"
+                      : "border-border bg-muted/25 text-muted-foreground",
             )}
-            {mismatchedProduct && line.source && (
-                <section className="space-y-2 text-body-compact">
-                    <h4 className="font-medium">商品与规格差异</h4>
-                    <dl className="space-y-2 wrap-anywhere">
-                        <div>
-                            <dt className="text-muted-foreground">销售要求</dt>
-                            <dd>
-                                {displayName(line.source.title) ||
-                                    "未记录商品名称"}{" "}
-                                ·{" "}
-                                {purchaseSpecification(
-                                    line.source.specification,
-                                ) || "未记录规格"}
-                            </dd>
-                        </div>
-                        <div>
-                            <dt className="text-muted-foreground">本次采购</dt>
-                            <dd>
-                                {displayName(line.title) || "未记录商品名称"} ·{" "}
-                                {purchaseSpecification(line.specification) ||
-                                    "未记录规格"}
-                            </dd>
-                        </div>
-                    </dl>
-                </section>
-            )}
-            {source && (
-                <section className="space-y-2 text-body-compact">
-                    <h4 className="font-medium">本行来源销售单</h4>
-                    <p>
+        >
+            <div className="min-w-0 flex-1 space-y-1">
+                {hasRisk ? (
+                    <div className="flex items-start gap-1.5">
+                        <TriangleAlertIcon
+                            aria-hidden="true"
+                            className="mt-0.5 size-3.5 shrink-0"
+                        />
+                        <ul className="flex flex-wrap items-baseline gap-x-3 gap-y-1 wrap-anywhere">
+                            {negativeMargin ? (
+                                <li className="font-medium">
+                                    采购单价高于销售含税单价（负毛利）
+                                </li>
+                            ) : null}
+                            {otherWarnings.map((warning) => (
+                                <li key={warning}>
+                                    {warning === "高于销售预估采购价" &&
+                                    comparison.priceDifference ? (
+                                        <>
+                                            单价超销售预估{" "}
+                                            <MoneyValue
+                                                value={
+                                                    comparison.priceDifference
+                                                }
+                                                display="exact"
+                                                className="[&_[data-slot=money-value-number]]:text-inherit"
+                                            />
+                                            {comparison.pricePercent ? (
+                                                <>
+                                                    （+
+                                                    <RateValue
+                                                        value={
+                                                            comparison.pricePercent
+                                                        }
+                                                        precision={1}
+                                                    />
+                                                    ）
+                                                </>
+                                            ) : null}
+                                            {comparison.priceDifferenceTotal ? (
+                                                <>
+                                                    ，本行合计多{" "}
+                                                    <MoneyValue
+                                                        value={
+                                                            comparison.priceDifferenceTotal
+                                                        }
+                                                        className="[&_[data-slot=money-value-number]]:text-inherit"
+                                                    />
+                                                </>
+                                            ) : null}
+                                        </>
+                                    ) : warning === "本次数量超过销售需求" &&
+                                      comparison.quantityExcess ? (
+                                        <>
+                                            超来源销售需求{" "}
+                                            <QuantityValue
+                                                value={
+                                                    comparison.quantityExcess
+                                                }
+                                                unit={line.unitName}
+                                            />
+                                            ，请核对超量依据
+                                        </>
+                                    ) : warning === "单位需核对" ? (
+                                        <>
+                                            单位不一致：销售「
+                                            {line.source?.unitName || "未记录"}
+                                            」vs 采购「
+                                            {line.unitName || "未记录"}
+                                            」（暂不比对单价与数量）
+                                        </>
+                                    ) : warning.startsWith("交期晚 ") ? (
+                                        <>
+                                            预计交期晚于客户承诺{" "}
+                                            {comparison.delayDays} 天（承诺{" "}
+                                            <span className="num">
+                                                {comparison.salesDate}
+                                            </span>
+                                            ）
+                                        </>
+                                    ) : (
+                                        (warningDetails[warning] ?? warning)
+                                    )}
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                ) : null}
+
+                {mismatchedProduct && line.source ? (
+                    <p className="pl-5 wrap-anywhere text-foreground/85">
+                        <span className="font-medium text-warning-soft-foreground">
+                            品规差异：
+                        </span>
+                        销售要求「
+                        {displayName(line.source.title) || "未记录商品名称"}
+                        {purchaseSpecification(line.source.specification)
+                            ? ` · ${purchaseSpecification(line.source.specification)}`
+                            : ""}
+                        」→ 本次采购「
+                        {displayName(line.title) || "未记录商品名称"}
+                        {purchaseSpecification(line.specification)
+                            ? ` · ${purchaseSpecification(line.specification)}`
+                            : ""}
+                        」
+                    </p>
+                ) : null}
+            </div>
+
+            {source ? (
+                <div className="flex shrink-0 items-center gap-2 text-muted-foreground">
+                    <span className="num">
+                        来源{" "}
                         {displayBusinessText(
                             source.document_no,
                             source.document_id,
                         ) || "未记录销售单号"}{" "}
-                        · 销售版本 V{source.revision_no}
-                    </p>
+                        · V{source.revision_no}
+                    </span>
                     <Button
                         id={`${prefix}-source`}
+                        type="button"
                         variant="link"
-                        size="sm"
-                        className="h-auto px-0 text-info"
+                        size="xs"
+                        className="h-auto px-0 text-xs text-primary"
                         onClick={() => onPreview(source.revision_id)}
                     >
                         <FileTextIcon aria-hidden="true" />
                         预览来源销售单
                     </Button>
-                </section>
-            )}
-            {!!line.delivery_allocations?.length && (
-                <section className="space-y-2 @min-[720px]/document:col-span-2">
-                    <h4 className="text-body-compact font-medium">交付安排</h4>
-                    <ul className="divide-y divide-grid rounded-md border border-grid px-3 text-body-compact">
-                        {line.delivery_allocations.map((delivery) => (
-                            <li
-                                key={JSON.stringify([
-                                    delivery.recipient,
-                                    delivery.phone,
-                                    delivery.region_code,
-                                    delivery.address,
-                                ])}
-                                className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 py-3"
-                            >
-                                <div className="min-w-0 flex-1 space-y-1 wrap-anywhere">
-                                    <p>
-                                        {delivery.recipient}{" "}
-                                        <span className="ml-3 num text-muted-foreground">
-                                            {delivery.phone}
-                                        </span>
-                                    </p>
-                                    <p className="text-muted-foreground">
-                                        {delivery.region_name}
-                                        {delivery.address}
-                                    </p>
-                                </div>
-                                <p>
-                                    分配数量{" "}
-                                    <QuantityValue
-                                        value={delivery.quantity}
-                                        unit={line.unitName}
-                                    />
-                                </p>
-                            </li>
-                        ))}
-                    </ul>
-                </section>
-            )}
+                </div>
+            ) : null}
         </div>
     )
 }

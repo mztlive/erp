@@ -1,6 +1,10 @@
 "use client"
 
-import type { ApprovalMaterials, ApprovalPurchaseLine } from "../api/materials"
+import type {
+    ApprovalMaterials,
+    ApprovalPurchaseFulfillment,
+    ApprovalPurchaseLine,
+} from "../api/materials"
 import type { ReactNode } from "react"
 import { ApprovalMaterialFiles } from "./approval-material-files"
 import { ApprovalSalesOrderPaper } from "./approval-sales-order-paper"
@@ -11,18 +15,22 @@ import {
 } from "./approval-submitted-summary"
 import {
     BusinessFailureState,
+    DeliveryAllocationPrintAppendix,
     MoneyValue,
     QuantityValue,
+    RateValue,
 } from "@/components/business"
 import { Spinner } from "@/components/ui/spinner"
 import {
     Table,
     TableBody,
     TableCell,
+    TableFooter,
     TableHead,
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import { multiplyFixed, sumFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 import { displayBusinessText } from "@/lib/display-name"
 import {
@@ -181,6 +189,7 @@ export function ApprovalSubmittedMaterialsContent({
                         data.purchase_lines ? (
                             <ApprovalPurchaseLinesPreview
                                 lines={data.purchase_lines}
+                                fulfillment={data.purchase_fulfillment}
                             />
                         ) : undefined
                     }
@@ -331,20 +340,46 @@ export function ApprovalSubmittedMaterialsContent({
 
 function ApprovalPurchaseLinesPreview({
     lines,
+    fulfillment,
 }: {
     lines: ApprovalPurchaseLine[]
+    fulfillment?: ApprovalPurchaseFulfillment | null
 }) {
+    const grossAmounts = lines
+        .map((line) => line.gross_amount)
+        .filter((value): value is string => value != null)
+    const grossTotal = grossAmounts.length
+        ? sumFixed(grossAmounts, { maxScale: 2, outputScale: 2 })
+        : null
+    const deliveryLines = lines.map((line) => ({
+        id: line.id,
+        lineNo: line.line_no,
+        itemName: displayReadableName(line.title) || "未记录商品名称",
+        specification: displayReadableName(line.specification),
+        unit: line.unitName ?? line.unit ?? "",
+        quantity: line.quantity,
+        allocations: line.delivery_allocations,
+    }))
+    const hasAllocations = lines.some(
+        (line) => (line.delivery_allocations?.length ?? 0) > 0,
+    )
+
     return (
-        <section className="space-y-3">
+        <section className="space-y-4">
             <MaterialSectionHeading
                 title="采购明细"
                 note={`共 ${lines.length} 行`}
             />
             {lines.length ? (
-                <Table aria-label="本次提交的采购明细">
+                <Table
+                    data-density="comfortable"
+                    aria-label="本次提交的采购明细"
+                >
                     <TableHeader>
                         <TableRow>
-                            <TableHead scope="col">序号</TableHead>
+                            <TableHead scope="col" className="w-9">
+                                序号
+                            </TableHead>
                             <TableHead scope="col">商品 / 规格</TableHead>
                             <TableHead scope="col" data-align="end">
                                 数量
@@ -355,29 +390,46 @@ function ApprovalPurchaseLinesPreview({
                             <TableHead scope="col" data-align="end">
                                 含税金额
                             </TableHead>
-                            <TableHead scope="col">预计交付</TableHead>
+                            <TableHead scope="col" data-align="end">
+                                预计交付
+                            </TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {lines.map((line) => {
                             const spec = displayReadableName(line.specification)
+                            const taxRate =
+                                line.input_tax_rate != null
+                                    ? multiplyFixed(
+                                          line.input_tax_rate,
+                                          "100",
+                                          {
+                                              leftMaxScale: 6,
+                                              rightMaxScale: 0,
+                                              outputScale: 2,
+                                          },
+                                      )
+                                    : null
                             return (
                                 <TableRow key={line.id}>
-                                    <TableCell className="num">
+                                    <TableCell className="num py-2.5 align-top text-muted-foreground">
                                         {line.line_no}
                                     </TableCell>
-                                    <TableCell className="min-w-36 whitespace-normal wrap-anywhere">
+                                    <TableCell className="min-w-36 py-2.5 align-top whitespace-normal wrap-anywhere">
                                         <p className="font-medium">
                                             {displayReadableName(line.title) ||
                                                 "未记录商品名称"}
                                         </p>
                                         {spec && spec !== "无规格" ? (
-                                            <p className="text-xs text-muted-foreground">
+                                            <p className="mt-0.5 text-xs text-muted-foreground">
                                                 {spec}
                                             </p>
                                         ) : null}
                                     </TableCell>
-                                    <TableCell data-align="end">
+                                    <TableCell
+                                        data-align="end"
+                                        className="py-2.5 align-top"
+                                    >
                                         {line.quantity == null ? (
                                             "—"
                                         ) : (
@@ -387,30 +439,86 @@ function ApprovalPurchaseLinesPreview({
                                             />
                                         )}
                                     </TableCell>
-                                    <TableCell data-align="end">
+                                    <TableCell
+                                        data-align="end"
+                                        className="py-2.5 align-top"
+                                    >
                                         <MoneyValue
                                             display="exact"
                                             value={line.unit_cost_gross}
                                         />
+                                        {taxRate != null ? (
+                                            <p className="mt-0.5 text-xs text-muted-foreground">
+                                                进项{" "}
+                                                <RateValue
+                                                    value={taxRate}
+                                                    precision={2}
+                                                />
+                                            </p>
+                                        ) : null}
                                     </TableCell>
-                                    <TableCell data-align="end">
+                                    <TableCell
+                                        data-align="end"
+                                        className="py-2.5 align-top font-medium"
+                                    >
                                         <MoneyValue
                                             display="exact"
                                             value={line.gross_amount}
                                         />
                                     </TableCell>
-                                    <TableCell className="num">
+                                    <TableCell
+                                        data-align="end"
+                                        className="num py-2.5 align-top text-muted-foreground"
+                                    >
                                         {line.expected_delivery_date ?? "—"}
                                     </TableCell>
                                 </TableRow>
                             )
                         })}
                     </TableBody>
+                    {grossTotal ? (
+                        <TableFooter>
+                            <TableRow className="hover:bg-transparent">
+                                <TableCell
+                                    colSpan={4}
+                                    className="py-2.5 text-xs font-medium text-muted-foreground"
+                                >
+                                    合计 · 共{" "}
+                                    <span className="num text-foreground">
+                                        {lines.length}
+                                    </span>{" "}
+                                    项
+                                </TableCell>
+                                <TableCell
+                                    data-align="end"
+                                    className="py-2.5 font-semibold text-foreground"
+                                >
+                                    <MoneyValue
+                                        display="exact"
+                                        value={grossTotal}
+                                    />
+                                </TableCell>
+                                <TableCell className="py-2.5" />
+                            </TableRow>
+                        </TableFooter>
+                    ) : null}
                 </Table>
             ) : (
                 <p className="text-xs text-muted-foreground">
                     本次提交没有采购明细。
                 </p>
+            )}
+            {fulfillment?.responsibility === "WAREHOUSE" && !hasAllocations ? (
+                <p className="border-t border-border/60 pt-3 text-xs text-muted-foreground">
+                    采购入库目标仓：
+                    <span className="font-medium text-foreground">
+                        {fulfillment.target_warehouse_name ||
+                            "以采购入库安排为准"}
+                    </span>
+                    （客户配送由仓库另行安排）。
+                </p>
+            ) : (
+                <DeliveryAllocationPrintAppendix lines={deliveryLines} />
             )}
         </section>
     )

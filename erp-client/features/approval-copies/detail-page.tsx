@@ -483,6 +483,10 @@ function CopyDetailPane({
                         </DetailWorkspaceSection>
                         <CopyPurchaseLines
                             lines={primaryPage.materials.purchase_lines ?? []}
+                            fulfillment={
+                                primaryPage.materials.purchase_fulfillment
+                            }
+                            idPrefix={`copy-detail-purchase-${toAutomationIdSegment(id)}`}
                         />
                         {Boolean(
                             primaryPage.materials.source_sales_orders?.length,

@@ -17,6 +17,8 @@ export type ApprovalMaterials = {
     } | null
     sales_order?: ApprovalSalesSubmission | null
     purchase_lines?: ApprovalPurchaseLine[] | null
+    /** 采购审批提交时的履约方式及入仓目标仓库快照。 */
+    purchase_fulfillment?: ApprovalPurchaseFulfillment | null
     /** 费用采购单：来源销售单已生效的附加费用合计（不含本次提交）。 */
     extra_cost_summary?: {
         sales_order_id: string
@@ -78,6 +80,16 @@ export type ApprovalMaterials = {
     }[]
 }
 
+export type ApprovalPurchaseFulfillment = {
+    responsibility:
+        | "WAREHOUSE"
+        | "SUPPLIER_DIRECT"
+        | "ELECTRONIC"
+        | "SERVICE"
+        | "NONE"
+    target_warehouse_name: string | null
+}
+
 /** 精确采购提交与冻结销售版本的逐行对照，不按商品名称拼接。 */
 export type ApprovalPurchaseLine = {
     id: string
@@ -90,6 +102,8 @@ export type ApprovalPurchaseLine = {
     unit_cost_gross: string | null
     /** 行含税金额；费用行按此核对。 */
     gross_amount?: string
+    net_amount?: string
+    tax_amount?: string
     expected_delivery_date: string | null
     /** 本次提交保存的税率（小数）与采购行承担的交付安排。 */
     input_tax_rate?: string | null
