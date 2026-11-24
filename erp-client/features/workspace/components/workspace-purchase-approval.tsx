@@ -6,28 +6,35 @@ import {
     useMemo,
     useRef,
     useState,
+    type ReactNode,
     type RefObject,
 } from "react"
 import {
+    ChevronRightIcon,
     Columns2Icon,
     FileTextIcon,
     InfoIcon,
+    MapPinIcon,
     PaperclipIcon,
     TriangleAlertIcon,
 } from "lucide-react"
 
 import {
     BusinessFailureState,
-    DetailWorkspaceMetricItem,
-    DetailWorkspaceMetrics,
     DetailWorkspaceSection,
     MoneyValue,
     detailWorkspaceStyles,
 } from "@/components/business"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { ApprovalMaterialFiles } from "@/features/approval-workflow/components/approval-material-files"
 import type { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-approval-materials"
 import {
@@ -40,10 +47,7 @@ import { cn } from "@/lib/utils"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceApprovalResubmissionBanner } from "./workspace-approval-resubmission-banner"
 import type { WorkspacePaperTarget } from "./workspace-document-paper-dialog"
-import {
-    PurchaseOrderAmountDetails,
-    PurchaseProfitValue,
-} from "./workspace-purchase-amount-details"
+import { PurchaseProfitValue } from "./workspace-purchase-amount-details"
 import {
     buildPurchaseApprovalMetrics,
     evaluatePurchaseLines,
@@ -55,6 +59,7 @@ import {
     WorkspacePurchaseComparisonTable,
     type PurchaseComparisonTableHandle,
 } from "./workspace-purchase-comparison-table"
+import { WorkspacePurchaseDeliveryDialog } from "./workspace-purchase-delivery-dialog"
 import type { PurchaseSourceComparisonTarget } from "./workspace-purchase-source-comparison"
 import { WorkspaceSupplierRating } from "./workspace-supplier-rating"
 
@@ -199,11 +204,20 @@ export function WorkspacePurchaseApproval({
     )
 
     const [riskOnly, setRiskOnly] = useState(false)
+    const [deliveryDialogOpen, setDeliveryDialogOpen] = useState(false)
+    const [focusedDeliveryLineId, setFocusedDeliveryLineId] = useState<
+        string | null
+    >(null)
     const [highlightedLineId, setHighlightedLineId] = useState<string | null>(
         null,
     )
     const highlightTimerRef = useRef<number | null>(null)
     const tableHandleRef = useRef<PurchaseComparisonTableHandle | null>(null)
+
+    const openDeliveryDialog = (lineId: string | null) => {
+        setFocusedDeliveryLineId(lineId)
+        setDeliveryDialogOpen(true)
+    }
 
     useEffect(() => {
         return () => {
@@ -323,9 +337,12 @@ export function WorkspacePurchaseApproval({
     const fallbackTax =
         extraSections.find((field) => field.label === "税额")?.value ?? null
     const submitter = displayName(submission?.display.source.submitter_name)
-    const fulfillmentLabel = formatPurchaseFulfillmentSummary(
+    const fulfillmentModeLabel = formatPurchaseFulfillmentSummary(
         fulfillment,
-        uniqueDeliveryPointCount,
+        0,
+    )
+    const isPureExpenseOrder = Boolean(
+        extraCost && metrics.goodsLineCount === 0,
     )
     const isSevereRisk =
         metrics.externalLossCount > 0 ||
@@ -348,13 +365,30 @@ export function WorkspacePurchaseApproval({
         .filter(Boolean)
         .join(" · ")
 
+    const purchaseMarginLimited = Boolean(
+        metrics.purchaseMargin &&
+        (metrics.purchaseMargin.lineCount < metrics.goodsLineCount ||
+            metrics.feeLineCount > 0),
+    )
+    const showGrossTooltip = Boolean(
+        metrics.feeGrossTotal ||
+        metrics.netTotal ||
+        metrics.taxTotal ||
+        fallbackNet ||
+        fallbackTax,
+    )
+    const missingDeliveryAddress =
+        uniqueDeliveryPointCount === 0 &&
+        (fulfillment?.responsibility === "SUPPLIER_DIRECT" ||
+            fulfillment?.responsibility === "SERVICE")
+
     return (
         <div
             data-slot="workspace-purchase-approval"
             className="@container/purchase-lines flex min-w-0 flex-col"
         >
             {parsedExtras.resubmission || riskReasons.length > 0 ? (
-                <div className="space-y-2.5 pt-3.5">
+                <div className="space-y-2 pt-3">
                     {parsedExtras.resubmission ? (
                         <WorkspaceApprovalResubmissionBanner
                             roundNo={parsedExtras.resubmission.roundNo}
@@ -373,54 +407,140 @@ export function WorkspacePurchaseApproval({
                     ) : null}
 
                     {riskReasons.length > 0 ? (
-                        <Alert
-                            variant={isSevereRisk ? "destructive" : "warning"}
+                        <div
                             role="alert"
+                            data-slot="purchase-approval-risk-strip"
+                            title={riskReasons.join("；")}
+                            className={cn(
+                                "flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md border-l-2 px-3 py-1.5 text-xs",
+                                isSevereRisk
+                                    ? "border-l-destructive bg-destructive-soft/65 text-destructive-soft-foreground"
+                                    : "border-l-warning bg-warning-soft/75 text-warning-soft-foreground",
+                            )}
                         >
-                            <TriangleAlertIcon aria-hidden="true" />
-                            <AlertTitle className="flex flex-wrap items-center justify-between gap-2">
-                                <span>
-                                    {isSevereRisk
-                                        ? "采购存在高危复核项"
-                                        : "采购价格或交期需复核"}
-                                </span>
-                                {metrics.actionableRiskLineCount > 0 &&
-                                !riskOnly ? (
-                                    <Button
-                                        id={`${prefix}-alert-filter-risk`}
-                                        type="button"
-                                        variant="outline"
-                                        size="xs"
-                                        className={cn(
-                                            "h-control-xs bg-card/80 px-2 text-xs hover:bg-card",
-                                            isSevereRisk
-                                                ? "border-destructive-border text-destructive-soft-foreground"
-                                                : "border-warning-border text-warning-soft-foreground",
-                                        )}
-                                        onClick={handleFilterToRisks}
+                            <div className="flex min-w-0 flex-1 items-center gap-2">
+                                <TriangleAlertIcon
+                                    aria-hidden="true"
+                                    className="size-3.5 shrink-0"
+                                />
+                                <p className="min-w-0 truncate">
+                                    <span className="font-medium">
+                                        {isSevereRisk ? "高危复核" : "需复核"}
+                                    </span>
+                                    <span
+                                        aria-hidden="true"
+                                        className="mx-1.5 opacity-60"
                                     >
-                                        仅看风险项（
-                                        {metrics.actionableRiskLineCount}）
-                                    </Button>
-                                ) : null}
-                            </AlertTitle>
-                            <AlertDescription>
-                                {riskReasons.join("；")}。
-                            </AlertDescription>
-                        </Alert>
+                                        ·
+                                    </span>
+                                    <span>
+                                        {riskChipsSummary ||
+                                            riskReasons.join("；")}
+                                    </span>
+                                </p>
+                            </div>
+                            {metrics.actionableRiskLineCount > 0 &&
+                            !riskOnly ? (
+                                <Button
+                                    id={`${prefix}-alert-filter-risk`}
+                                    type="button"
+                                    variant="ghost"
+                                    size="xs"
+                                    className={cn(
+                                        "h-control-xs shrink-0 gap-0.5 px-1.5 text-xs font-medium shadow-none",
+                                        isSevereRisk
+                                            ? "text-destructive-soft-foreground hover:bg-destructive-soft hover:text-destructive-soft-foreground"
+                                            : "text-warning-soft-foreground hover:bg-warning-soft hover:text-warning-soft-foreground",
+                                    )}
+                                    onClick={handleFilterToRisks}
+                                >
+                                    仅看风险项（
+                                    {metrics.actionableRiskLineCount}）
+                                    <ChevronRightIcon aria-hidden="true" />
+                                </Button>
+                            ) : null}
+                        </div>
                     ) : null}
                 </div>
             ) : null}
 
-            <div className="border-b border-border/60">
-                <DetailWorkspaceMetrics
-                    columns={4}
-                    variant="bar"
-                    ariaLabel="采购审批关键决策指标"
+            <TooltipProvider>
+                <div
+                    role="region"
+                    aria-label="采购审批关键决策指标"
+                    className={cn(
+                        "mt-3 grid grid-cols-1 gap-x-6 gap-y-3.5 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/purchase-lines:grid-cols-2",
+                        isPureExpenseOrder
+                            ? "@[720px]/purchase-lines:grid-cols-3"
+                            : "@[840px]/purchase-lines:grid-cols-4",
+                    )}
                 >
-                    <DetailWorkspaceMetricItem
-                        label="实际采购含税总额"
+                    <PurchaseKpiCell
+                        label="实际采购总额"
+                        basis="含税"
                         emphasis="primary"
+                        tooltipId={
+                            showGrossTooltip
+                                ? `${prefix}-kpi-gross-info`
+                                : undefined
+                        }
+                        tooltipLabel="实际采购总额明细"
+                        tooltipContent={
+                            showGrossTooltip ? (
+                                <div className="num space-y-0.5">
+                                    <div>
+                                        含税总额：
+                                        {metrics.grossTotal ? (
+                                            <MoneyValue
+                                                display="exact"
+                                                value={metrics.grossTotal}
+                                                inheritColor
+                                            />
+                                        ) : (
+                                            (fallbackGross ?? "—")
+                                        )}
+                                    </div>
+                                    {metrics.feeGrossTotal ? (
+                                        <div>
+                                            其中费用：
+                                            <MoneyValue
+                                                display="exact"
+                                                value={metrics.feeGrossTotal}
+                                                inheritColor
+                                            />
+                                        </div>
+                                    ) : null}
+                                    {metrics.netTotal || fallbackNet ? (
+                                        <div>
+                                            不含税总额：
+                                            {metrics.netTotal ? (
+                                                <MoneyValue
+                                                    display="exact"
+                                                    value={metrics.netTotal}
+                                                    inheritColor
+                                                />
+                                            ) : (
+                                                fallbackNet
+                                            )}
+                                        </div>
+                                    ) : null}
+                                    {metrics.taxTotal || fallbackTax ? (
+                                        <div>
+                                            税额：
+                                            {metrics.taxTotal ? (
+                                                <MoneyValue
+                                                    display="exact"
+                                                    value={metrics.taxTotal}
+                                                    inheritColor
+                                                />
+                                            ) : (
+                                                fallbackTax
+                                            )}
+                                        </div>
+                                    ) : null}
+                                </div>
+                            ) : undefined
+                        }
                         value={
                             metrics.grossTotal ? (
                                 <MoneyValue
@@ -432,32 +552,27 @@ export function WorkspacePurchaseApproval({
                             )
                         }
                         detail={
-                            <>
-                                {metrics.goodsLineCount > 0 ? (
-                                    <div className="basis-full">
-                                        <PurchaseOrderAmountDetails
-                                            totals={metrics.purchaseMargin}
-                                            goodsLineCount={
-                                                metrics.goodsLineCount
-                                            }
-                                            hasFees={metrics.feeLineCount > 0}
-                                        />
-                                    </div>
-                                ) : null}
-                                {metrics.netTotal ? (
-                                    <span>
-                                        不含税{" "}
-                                        <MoneyValue
-                                            display="exact"
-                                            value={metrics.netTotal}
-                                        />
-                                    </span>
-                                ) : fallbackNet ? (
-                                    <span>不含税 {fallbackNet}</span>
-                                ) : null}
-                                {metrics.taxTotal ? (
-                                    <>
+                            metrics.netTotal ||
+                            metrics.taxTotal ||
+                            fallbackNet ||
+                            fallbackTax ? (
+                                <>
+                                    {metrics.netTotal ? (
+                                        <span>
+                                            不含税{" "}
+                                            <MoneyValue
+                                                display="exact"
+                                                value={metrics.netTotal}
+                                            />
+                                        </span>
+                                    ) : fallbackNet ? (
+                                        <span>不含税 {fallbackNet}</span>
+                                    ) : null}
+                                    {(metrics.netTotal || fallbackNet) &&
+                                    (metrics.taxTotal || fallbackTax) ? (
                                         <span aria-hidden="true">·</span>
+                                    ) : null}
+                                    {metrics.taxTotal ? (
                                         <span>
                                             税{" "}
                                             <MoneyValue
@@ -465,85 +580,34 @@ export function WorkspacePurchaseApproval({
                                                 value={metrics.taxTotal}
                                             />
                                         </span>
-                                    </>
-                                ) : fallbackTax ? (
-                                    <>
-                                        <span aria-hidden="true">·</span>
+                                    ) : fallbackTax ? (
                                         <span>税 {fallbackTax}</span>
-                                    </>
-                                ) : null}
-                                {metrics.feeGrossTotal &&
-                                metrics.goodsLineCount > 0 ? (
-                                    <>
-                                        <span aria-hidden="true">·</span>
-                                        <span>
-                                            含费用{" "}
-                                            <MoneyValue
-                                                display="exact"
-                                                value={metrics.feeGrossTotal}
-                                            />
-                                        </span>
-                                    </>
-                                ) : null}
-                            </>
+                                    ) : null}
+                                </>
+                            ) : metrics.feeGrossTotal &&
+                              metrics.goodsLineCount > 0 ? (
+                                <span>
+                                    含费用{" "}
+                                    <MoneyValue
+                                        display="exact"
+                                        value={metrics.feeGrossTotal}
+                                    />
+                                </span>
+                            ) : null
                         }
                     />
 
-                    <DetailWorkspaceMetricItem
-                        label={
-                            extraCost && metrics.goodsLineCount === 0
-                                ? "来源销售附加费（本单外）"
-                                : metrics.partialSalesCoverage
-                                  ? "对应公司对外毛利（含税）"
-                                  : "公司对外毛利（含税）"
-                        }
-                        value={
-                            metrics.externalGrossMargin != null ? (
-                                <span className="inline-flex flex-wrap items-baseline gap-x-2">
-                                    <PurchaseProfitValue
-                                        amount={metrics.externalGrossMargin}
-                                    />
-                                    {metrics.externalMargin ? (
-                                        <span className="num text-body-compact font-medium">
-                                            {metrics.externalMargin.percent}%
-                                        </span>
-                                    ) : null}
-                                </span>
-                            ) : extraCost ? (
+                    {isPureExpenseOrder && extraCost ? (
+                        <PurchaseKpiCell
+                            label="来源销售附加费"
+                            basis="本单外"
+                            value={
                                 <MoneyValue
                                     display="exact"
                                     value={extraCost.occurred_gross_total}
                                 />
-                            ) : (
-                                <span className="text-body-compact font-medium text-muted-foreground">
-                                    —
-                                </span>
-                            )
-                        }
-                        detail={
-                            metrics.correspondingSalesTotal ? (
-                                <>
-                                    <span>
-                                        对外销售金额{" "}
-                                        <MoneyValue
-                                            display="exact"
-                                            value={
-                                                metrics.correspondingSalesTotal
-                                            }
-                                        />
-                                    </span>
-                                    {metrics.partialSalesCoverage ? (
-                                        <>
-                                            <span aria-hidden="true">·</span>
-                                            <span className="num text-warning-soft-foreground">
-                                                已比对{" "}
-                                                {metrics.salesCoveredCount}/
-                                                {metrics.goodsLineCount} 项
-                                            </span>
-                                        </>
-                                    ) : null}
-                                </>
-                            ) : extraCost ? (
+                            }
+                            detail={
                                 <>
                                     <span>已发生如上</span>
                                     <span aria-hidden="true">·</span>
@@ -557,56 +621,238 @@ export function WorkspacePurchaseApproval({
                                         />
                                     </span>
                                 </>
-                            ) : (
-                                "暂无可比对的对外售价"
-                            )
-                        }
-                    />
+                            }
+                        />
+                    ) : (
+                        <>
+                            <PurchaseKpiCell
+                                label="采购毛利"
+                                basis="供给 − 采购"
+                                tooltipId={
+                                    metrics.purchaseMargin
+                                        ? `${prefix}-kpi-purchase-margin-info`
+                                        : undefined
+                                }
+                                tooltipLabel="采购毛利核算说明"
+                                tooltipContent={
+                                    metrics.purchaseMargin ? (
+                                        <div className="num space-y-0.5">
+                                            <div>
+                                                口径：采购供给总额 −
+                                                对应实际采购额（含税）
+                                            </div>
+                                            <div>
+                                                采购供给总额：
+                                                <MoneyValue
+                                                    display="exact"
+                                                    value={
+                                                        metrics.purchaseMargin
+                                                            .supply
+                                                    }
+                                                    inheritColor
+                                                />
+                                            </div>
+                                            <div>
+                                                对应实际采购额：
+                                                <MoneyValue
+                                                    display="exact"
+                                                    value={
+                                                        metrics.purchaseMargin
+                                                            .cost
+                                                    }
+                                                    inheritColor
+                                                />
+                                            </div>
+                                            {purchaseMarginLimited ? (
+                                                <div className="text-background/75">
+                                                    已核算{" "}
+                                                    {
+                                                        metrics.purchaseMargin
+                                                            .lineCount
+                                                    }
+                                                    /{metrics.goodsLineCount}{" "}
+                                                    项商品
+                                                    {metrics.feeLineCount > 0
+                                                        ? "（不含费用）"
+                                                        : ""}
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    ) : undefined
+                                }
+                                value={
+                                    metrics.purchaseMargin ? (
+                                        <PurchaseProfitValue
+                                            amount={
+                                                metrics.purchaseMargin.margin
+                                            }
+                                            className="font-semibold"
+                                        />
+                                    ) : (
+                                        <span className="text-body-compact font-medium text-muted-foreground">
+                                            暂无法核算
+                                        </span>
+                                    )
+                                }
+                                detail={
+                                    metrics.purchaseMargin ? (
+                                        <>
+                                            <span>
+                                                供给总额{" "}
+                                                <MoneyValue
+                                                    display="exact"
+                                                    value={
+                                                        metrics.purchaseMargin
+                                                            .supply
+                                                    }
+                                                />
+                                            </span>
+                                            {metrics.purchaseMargin.lineCount <
+                                            metrics.goodsLineCount ? (
+                                                <>
+                                                    <span aria-hidden="true">
+                                                        ·
+                                                    </span>
+                                                    <span className="num text-warning-soft-foreground">
+                                                        {
+                                                            metrics
+                                                                .purchaseMargin
+                                                                .lineCount
+                                                        }
+                                                        /
+                                                        {metrics.goodsLineCount}{" "}
+                                                        项
+                                                    </span>
+                                                </>
+                                            ) : metrics.feeLineCount > 0 ? (
+                                                <>
+                                                    <span aria-hidden="true">
+                                                        ·
+                                                    </span>
+                                                    <span>不含费用</span>
+                                                </>
+                                            ) : null}
+                                        </>
+                                    ) : metrics.missingSupplyCount > 0 ? (
+                                        <span className="num">
+                                            {metrics.missingSupplyCount}{" "}
+                                            项未填供给价
+                                        </span>
+                                    ) : (
+                                        "暂无可比对供给价"
+                                    )
+                                }
+                            />
 
-                    <DetailWorkspaceMetricItem
-                        label="采购风险"
-                        value={
-                            metrics.actionableRiskLineCount > 0 ? (
-                                <span
-                                    className={
-                                        isSevereRisk
-                                            ? "text-destructive-soft-foreground"
-                                            : "text-warning-soft-foreground"
-                                    }
-                                >
-                                    {metrics.actionableRiskLineCount} 项需复核
-                                </span>
-                            ) : (
-                                <span className="text-body-compact font-medium text-success-soft-foreground">
-                                    无异常项
-                                </span>
-                            )
-                        }
-                        detail={
-                            metrics.actionableRiskLineCount > 0 ? (
-                                <button
-                                    id={`${prefix}-kpi-filter-risk`}
-                                    type="button"
-                                    onClick={handleFilterToRisks}
-                                    className="cursor-pointer text-left text-primary hover:underline"
-                                >
-                                    {riskChipsSummary
-                                        ? `${riskChipsSummary} · 点击筛选`
-                                        : "查看风险项"}
-                                </button>
-                            ) : metrics.missingSupplyCount > 0 ? (
-                                <span className="num">
-                                    {metrics.missingSupplyCount}{" "}
-                                    项采购供给价未填写
-                                </span>
-                            ) : (
-                                "价格、数量与交期均正常"
-                            )
-                        }
-                    />
+                            <PurchaseKpiCell
+                                label="公司对外毛利"
+                                basis="销售 − 采购"
+                                tooltipId={
+                                    metrics.externalGrossMargin != null
+                                        ? `${prefix}-kpi-external-margin-info`
+                                        : undefined
+                                }
+                                tooltipLabel="公司对外毛利核算说明"
+                                tooltipContent={
+                                    metrics.externalGrossMargin != null ? (
+                                        <div className="num space-y-0.5">
+                                            <div>
+                                                口径：对应对外销售总额 −
+                                                对应实际采购成本（含税）
+                                            </div>
+                                            {metrics.correspondingSalesTotal ? (
+                                                <div>
+                                                    对应对外销售总额：
+                                                    <MoneyValue
+                                                        display="exact"
+                                                        value={
+                                                            metrics.correspondingSalesTotal
+                                                        }
+                                                        inheritColor
+                                                    />
+                                                </div>
+                                            ) : null}
+                                            {metrics.feeGrossTotal ? (
+                                                <div>
+                                                    已计入本单费用：
+                                                    <MoneyValue
+                                                        display="exact"
+                                                        value={
+                                                            metrics.feeGrossTotal
+                                                        }
+                                                        inheritColor
+                                                    />
+                                                </div>
+                                            ) : null}
+                                            <div className="text-background/75">
+                                                税后口径可在右侧「采销对照」查看
+                                            </div>
+                                        </div>
+                                    ) : undefined
+                                }
+                                value={
+                                    metrics.externalGrossMargin != null ? (
+                                        <span className="inline-flex flex-wrap items-baseline gap-x-2">
+                                            <PurchaseProfitValue
+                                                amount={
+                                                    metrics.externalGrossMargin
+                                                }
+                                                className="font-semibold"
+                                            />
+                                            {metrics.externalMargin ? (
+                                                <span className="num text-body-compact font-medium">
+                                                    {
+                                                        metrics.externalMargin
+                                                            .percent
+                                                    }
+                                                    %
+                                                </span>
+                                            ) : null}
+                                        </span>
+                                    ) : (
+                                        <span className="text-body-compact font-medium text-muted-foreground">
+                                            —
+                                        </span>
+                                    )
+                                }
+                                detail={
+                                    metrics.correspondingSalesTotal ? (
+                                        <>
+                                            <span>
+                                                对外销售{" "}
+                                                <MoneyValue
+                                                    display="exact"
+                                                    value={
+                                                        metrics.correspondingSalesTotal
+                                                    }
+                                                />
+                                            </span>
+                                            {metrics.partialSalesCoverage ? (
+                                                <>
+                                                    <span aria-hidden="true">
+                                                        ·
+                                                    </span>
+                                                    <span className="num text-warning-soft-foreground">
+                                                        {
+                                                            metrics.salesCoveredCount
+                                                        }
+                                                        /
+                                                        {metrics.goodsLineCount}{" "}
+                                                        项
+                                                    </span>
+                                                </>
+                                            ) : null}
+                                        </>
+                                    ) : (
+                                        "暂无可比对对外售价"
+                                    )
+                                }
+                            />
+                        </>
+                    )}
 
-                    <DetailWorkspaceMetricItem
-                        label="付款门禁与附件"
+                    <PurchaseKpiCell
+                        label="付款与交付"
                         value={
                             <span className="inline-flex flex-wrap items-center gap-1.5 text-body-compact font-semibold text-foreground">
                                 <span>{metrics.paymentTermLabel ?? "—"}</span>
@@ -617,44 +863,81 @@ export function WorkspacePurchaseApproval({
                         }
                         detail={
                             <>
-                                {fulfillmentLabel ? (
-                                    <span className="num">
-                                        {fulfillmentLabel}
-                                    </span>
+                                {fulfillmentModeLabel ? (
+                                    <span>{fulfillmentModeLabel}</span>
                                 ) : null}
-                                {fulfillmentLabel ? (
-                                    <span aria-hidden="true">·</span>
+                                {uniqueDeliveryPointCount > 0 ? (
+                                    <>
+                                        {fulfillmentModeLabel ? (
+                                            <span aria-hidden="true">·</span>
+                                        ) : null}
+                                        <button
+                                            id={`${prefix}-kpi-delivery-addresses`}
+                                            type="button"
+                                            onClick={() =>
+                                                openDeliveryDialog(null)
+                                            }
+                                            className="inline-flex cursor-pointer items-center gap-1 text-primary hover:underline"
+                                        >
+                                            <MapPinIcon
+                                                aria-hidden="true"
+                                                className="size-3 shrink-0"
+                                            />
+                                            <span className="num">
+                                                配送地址（
+                                                {uniqueDeliveryPointCount} 处）
+                                            </span>
+                                        </button>
+                                    </>
+                                ) : missingDeliveryAddress ? (
+                                    <>
+                                        {fulfillmentModeLabel ? (
+                                            <span aria-hidden="true">·</span>
+                                        ) : null}
+                                        <span>未指定地址</span>
+                                    </>
                                 ) : null}
-                                {attachments.length > 0 ? (
-                                    <button
-                                        id={`${prefix}-kpi-open-materials`}
-                                        type="button"
-                                        onClick={handleOpenAttachmentShortcut}
-                                        className="inline-flex cursor-pointer items-center gap-1 text-primary hover:underline"
-                                    >
-                                        <PaperclipIcon
-                                            aria-hidden="true"
-                                            className="size-3 shrink-0"
-                                        />
-                                        <span className="num">
-                                            附件 {attachments.length} 份
-                                        </span>
-                                    </button>
-                                ) : (
-                                    <span className="text-warning-soft-foreground">
-                                        未附凭证附件
-                                    </span>
-                                )}
+                                {!hideEmbeddedMaterials ? (
+                                    <>
+                                        {fulfillmentModeLabel ||
+                                        uniqueDeliveryPointCount > 0 ||
+                                        missingDeliveryAddress ? (
+                                            <span aria-hidden="true">·</span>
+                                        ) : null}
+                                        {attachments.length > 0 ? (
+                                            <button
+                                                id={`${prefix}-kpi-open-materials`}
+                                                type="button"
+                                                onClick={
+                                                    handleOpenAttachmentShortcut
+                                                }
+                                                className="inline-flex cursor-pointer items-center gap-1 text-primary hover:underline"
+                                            >
+                                                <PaperclipIcon
+                                                    aria-hidden="true"
+                                                    className="size-3 shrink-0"
+                                                />
+                                                <span className="num">
+                                                    附件 {attachments.length} 份
+                                                </span>
+                                            </button>
+                                        ) : (
+                                            <span className="text-warning-soft-foreground">
+                                                未附凭证附件
+                                            </span>
+                                        )}
+                                    </>
+                                ) : null}
                             </>
                         }
                     />
-                </DetailWorkspaceMetrics>
-            </div>
+                </div>
+            </TooltipProvider>
 
             {submission ? (
                 <section
                     aria-label="采购单商业与来源信息"
-                    className="space-y-2 border-b border-border/60 py-3"
+                    className="space-y-2 pt-3.5 pb-1"
                 >
                     <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs">
                         <div className="inline-flex items-center gap-1.5">
@@ -706,7 +989,7 @@ export function WorkspacePurchaseApproval({
                         ) : null}
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-border/45 pt-2 text-xs">
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs">
                         <span className="shrink-0 text-muted-foreground">
                             来源销售单
                         </span>
@@ -719,7 +1002,7 @@ export function WorkspacePurchaseApproval({
                     </div>
 
                     {extraCost && metrics.goodsLineCount > 0 ? (
-                        <div className="flex items-center gap-2 rounded-md border border-info-border/70 bg-info-soft/35 px-3 py-1.5 text-xs text-info-soft-foreground">
+                        <div className="flex items-center gap-2 rounded-md bg-info-soft/45 px-3 py-1.5 text-xs text-info-soft-foreground">
                             <InfoIcon
                                 aria-hidden="true"
                                 className="size-3.5 shrink-0"
@@ -757,7 +1040,7 @@ export function WorkspacePurchaseApproval({
                             : `共 ${lines.length} 行 · 金额含税`
                         : undefined
                 }
-                className="py-5 first:pt-4"
+                className="pt-4 pb-5"
             >
                 {lines?.length ? (
                     <WorkspacePurchaseComparisonTable
@@ -780,6 +1063,9 @@ export function WorkspacePurchaseApproval({
                             })
                         }
                         onCompareSource={onCompareSource}
+                        onInspectDeliveryLine={(lineId) =>
+                            openDeliveryDialog(lineId)
+                        }
                     />
                 ) : lines ? (
                     <p className="text-xs text-muted-foreground">
@@ -814,6 +1100,83 @@ export function WorkspacePurchaseApproval({
                         activeFileId={activeFileId}
                     />
                 </DetailWorkspaceSection>
+            ) : null}
+
+            <WorkspacePurchaseDeliveryDialog
+                idPrefix={`${prefix}-delivery-dialog`}
+                open={deliveryDialogOpen}
+                onOpenChange={setDeliveryDialogOpen}
+                lines={lines ?? []}
+                fulfillment={fulfillment}
+                focusedLineId={focusedDeliveryLineId}
+                onClearFocus={() => setFocusedDeliveryLineId(null)}
+            />
+        </div>
+    )
+}
+
+function PurchaseKpiCell({
+    label,
+    basis,
+    value,
+    detail,
+    emphasis = "default",
+    tooltipId,
+    tooltipLabel,
+    tooltipContent,
+}: {
+    label: string
+    basis?: string
+    value: ReactNode
+    detail?: ReactNode
+    emphasis?: "primary" | "default"
+    tooltipId?: string
+    tooltipLabel?: string
+    tooltipContent?: ReactNode
+}) {
+    return (
+        <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
+                <span>{label}</span>
+                {basis ? (
+                    <span className="text-tiny text-muted-foreground/80">
+                        {basis}
+                    </span>
+                ) : null}
+                {tooltipContent && tooltipId ? (
+                    <Tooltip>
+                        <TooltipTrigger
+                            render={
+                                <button
+                                    id={tooltipId}
+                                    type="button"
+                                    aria-label={tooltipLabel ?? `${label}说明`}
+                                    className="inline-flex size-4 cursor-help items-center justify-center rounded-sm text-muted-foreground/80 transition-colors hover:text-foreground"
+                                />
+                            }
+                        >
+                            <InfoIcon aria-hidden="true" className="size-3" />
+                        </TooltipTrigger>
+                        <TooltipContent className="block">
+                            {tooltipContent}
+                        </TooltipContent>
+                    </Tooltip>
+                ) : null}
+            </div>
+            <div
+                className={cn(
+                    "num mt-1 max-w-full wrap-anywhere font-semibold tracking-tight text-foreground",
+                    emphasis === "primary"
+                        ? "text-value-section"
+                        : "text-value-compact",
+                )}
+            >
+                {value}
+            </div>
+            {detail ? (
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                    {detail}
+                </div>
             ) : null}
         </div>
     )

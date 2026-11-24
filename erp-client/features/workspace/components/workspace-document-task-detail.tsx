@@ -462,7 +462,9 @@ export function WorkspaceDocumentTaskDetail({
     }
 
     const routeStepperEnabled = Boolean(
-        approvalDocument && instanceId && !(salesApproval && showDecisionRail),
+        approvalDocument &&
+        instanceId &&
+        !((salesApproval || purchaseApproval) && showDecisionRail),
     )
     const compactStepperHistoryQuery = useApprovalHistoryInfiniteQuery(
         { instanceId: instanceId ?? "", order: "desc" },

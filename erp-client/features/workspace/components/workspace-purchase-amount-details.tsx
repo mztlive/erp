@@ -2,7 +2,13 @@ import { MoneyValue } from "@/components/business"
 import { cn } from "@/lib/utils"
 import type { PurchaseMarginTotals } from "./workspace-purchase-comparison-model"
 
-export function PurchaseProfitValue({ amount }: { amount: string | null }) {
+export function PurchaseProfitValue({
+    amount,
+    className,
+}: {
+    amount: string | null
+    className?: string
+}) {
     const loss = amount?.startsWith("-")
     const profit = amount != null && !loss && amount !== "0.00"
 
@@ -12,6 +18,7 @@ export function PurchaseProfitValue({ amount }: { amount: string | null }) {
                 "font-medium whitespace-nowrap",
                 loss && "text-destructive-soft-foreground",
                 profit && "text-success-soft-foreground",
+                className,
             )}
         >
             {loss ? "亏 " : profit ? "赚 " : null}

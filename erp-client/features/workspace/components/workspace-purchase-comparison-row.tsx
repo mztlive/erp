@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { MapPinIcon } from "lucide-react"
 
 import { MoneyValue, QuantityValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
@@ -31,6 +32,7 @@ export function PurchaseComparisonRow({
     prefix,
     onPreview,
     onCompareSource,
+    onInspectDelivery,
 }: {
     rowId?: string
     highlighted?: boolean
@@ -42,6 +44,7 @@ export function PurchaseComparisonRow({
     prefix: string
     onPreview: (revisionId: string) => void
     onCompareSource?: (target: PurchaseSourceComparisonTarget) => void
+    onInspectDelivery?: () => void
 }) {
     const [inlineDetailsOpen, setInlineDetailsOpen] = useState(false)
     const title = displayName(line.title) || "未记录商品名称"
@@ -127,7 +130,26 @@ export function PurchaseComparisonRow({
                                     >
                                         ·
                                     </span>
-                                    <span>{deliveryPointCount} 处收货点</span>
+                                    {onInspectDelivery ? (
+                                        <button
+                                            id={`${prefix}-delivery`}
+                                            type="button"
+                                            onClick={onInspectDelivery}
+                                            className="inline-flex cursor-pointer items-center gap-1 text-primary hover:underline"
+                                        >
+                                            <MapPinIcon
+                                                aria-hidden="true"
+                                                className="size-3 shrink-0"
+                                            />
+                                            <span>
+                                                {deliveryPointCount} 处收货点
+                                            </span>
+                                        </button>
+                                    ) : (
+                                        <span>
+                                            {deliveryPointCount} 处收货点
+                                        </span>
+                                    )}
                                 </>
                             ) : null}
                         </p>
@@ -221,8 +243,9 @@ export function PurchaseComparisonRow({
                         <Button
                             id={`${prefix}-source-compare`}
                             type="button"
-                            variant="outline"
+                            variant="ghost"
                             size="xs"
+                            className="h-control-xs px-2 text-xs font-normal text-primary shadow-none hover:bg-sidebar-accent/70 hover:text-primary"
                             aria-label={`${compareLabel}，第 ${line.line_no} 行价格`}
                             aria-expanded={
                                 useSideComparison
@@ -278,7 +301,7 @@ export function PurchaseComparisonRow({
                         colSpan={9}
                         className="pt-0 pb-3 whitespace-normal"
                     >
-                        <div className="rounded-md border border-border/60 p-3">
+                        <div className="rounded-md bg-surface-sunken p-3">
                             <PurchaseLinePriceDetails
                                 line={line}
                                 comparison={comparison}

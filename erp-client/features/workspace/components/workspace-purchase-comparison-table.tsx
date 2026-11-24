@@ -2,11 +2,7 @@
 
 import { useImperativeHandle, useMemo, useState, type RefObject } from "react"
 
-import {
-    MoneyValue,
-    QuantityValue,
-    detailWorkspaceStyles,
-} from "@/components/business"
+import { MoneyValue, QuantityValue } from "@/components/business"
 import {
     Table,
     TableBody,
@@ -55,6 +51,7 @@ export function WorkspacePurchaseComparisonTable({
     tableHandleRef,
     onPreview,
     onCompareSource,
+    onInspectDeliveryLine,
 }: {
     lines: ApprovalPurchaseLine[]
     evaluatedRows?: readonly EvaluatedPurchaseRow[]
@@ -68,6 +65,7 @@ export function WorkspacePurchaseComparisonTable({
     tableHandleRef?: RefObject<PurchaseComparisonTableHandle | null>
     onPreview: (revisionId: string) => void
     onCompareSource?: (target: PurchaseSourceComparisonTarget) => void
+    onInspectDeliveryLine?: (lineId: string) => void
 }) {
     const [search, setSearch] = useState("")
     const [internalRiskOnly, setInternalRiskOnly] = useState(false)
@@ -171,17 +169,15 @@ export function WorkspacePurchaseComparisonTable({
 
             <div
                 id={`${prefix}-table-scroll`}
-                data-slot="detail-inline-table"
-                data-inset-cells
                 role="region"
                 aria-label="采购与销售明细对照"
-                className={detailWorkspaceStyles.inlineTableWrapper}
+                className="w-full max-w-full"
             >
                 <Table data-density="comfortable" aria-label="采购明细">
                     <TableCaption className="sr-only">
                         金额含税。采购毛利按供给金额减采购成本计算，公司对外毛利按本次采购对应的销售单成交金额减采购成本计算。
                     </TableCaption>
-                    <TableHeader>
+                    <TableHeader className="bg-surface-sunken [&_th]:bg-surface-sunken [&_th:first-child]:rounded-l-md [&_th:last-child]:rounded-r-md [&_tr]:border-b-0">
                         <TableRow>
                             <TableHead scope="col" className="w-8">
                                 #
@@ -236,7 +232,7 @@ export function WorkspacePurchaseComparisonTable({
                             </TableHead>
                         </TableRow>
                     </TableHeader>
-                    <TableBody>
+                    <TableBody className="[&_tr]:border-border/45 [&_tr:last-child]:border-0">
                         {visible.map(({ line, comparison, externalLoss }) => {
                             const lineDeliveryPointCount =
                                 uniqueDeliveryPointCount > 1
@@ -270,6 +266,13 @@ export function WorkspacePurchaseComparisonTable({
                                     prefix={`${prefix}-line-${lineSegment}`}
                                     onPreview={onPreview}
                                     onCompareSource={onCompareSource}
+                                    onInspectDelivery={
+                                        onInspectDeliveryLine &&
+                                        lineDeliveryPointCount > 0
+                                            ? () =>
+                                                  onInspectDeliveryLine(line.id)
+                                            : undefined
+                                    }
                                 />
                             )
                         })}
@@ -287,7 +290,7 @@ export function WorkspacePurchaseComparisonTable({
                         ) : null}
                     </TableBody>
                     {lines.length > 0 ? (
-                        <TableFooter>
+                        <TableFooter className="border-t-0 bg-surface-sunken/80 [&_td:first-child]:rounded-l-md [&_td:last-child]:rounded-r-md">
                             <TableRow className="hover:bg-transparent">
                                 <TableCell
                                     colSpan={2}
