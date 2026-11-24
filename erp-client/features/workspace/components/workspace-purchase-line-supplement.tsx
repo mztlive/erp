@@ -34,7 +34,7 @@ export function hasPurchaseRiskStrip(
 
 /**
  * 紧跟数据行的紧凑核对副条：
- * 审批人无需逐行点击「展开」，零点击即可直读负毛利、超预估差额、超量、延期及品规差异证据。
+ * 审批人可以直接核对负毛利、单价超预估、超量、延期及品规差异。
  */
 export function PurchaseLineRiskStrip({
     line,
@@ -108,18 +108,6 @@ export function PurchaseLineRiskStrip({
                                                         precision={1}
                                                     />
                                                     ）
-                                                </>
-                                            ) : null}
-                                            {comparison.priceDifferenceTotal ? (
-                                                <>
-                                                    ，本行合计多{" "}
-                                                    <MoneyValue
-                                                        value={
-                                                            comparison.priceDifferenceTotal
-                                                        }
-                                                        display="exact"
-                                                        inheritColor
-                                                    />
                                                 </>
                                             ) : null}
                                         </>

@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceApprovalResubmissionBanner } from "./workspace-approval-resubmission-banner"
 import type { WorkspacePaperTarget } from "./workspace-document-paper-dialog"
+import { PurchaseOrderAmountDetails } from "./workspace-purchase-amount-details"
 import {
     buildPurchaseApprovalMetrics,
     evaluatePurchaseLines,
@@ -450,7 +451,7 @@ export function WorkspacePurchaseApproval({
                     ariaLabel="采购审批关键决策指标"
                 >
                     <DetailWorkspaceMetricItem
-                        label="采购含税总额"
+                        label="实际采购含税总额"
                         emphasis="primary"
                         value={
                             metrics.grossTotal ? (
@@ -464,6 +465,13 @@ export function WorkspacePurchaseApproval({
                         }
                         detail={
                             <>
+                                {metrics.goodsLineCount > 0 ? (
+                                    <div className="basis-full">
+                                        <PurchaseOrderAmountDetails
+                                            metrics={metrics}
+                                        />
+                                    </div>
+                                ) : null}
                                 {metrics.netTotal ? (
                                     <span>
                                         不含税{" "}
@@ -599,33 +607,9 @@ export function WorkspacePurchaseApproval({
                     />
 
                     <DetailWorkspaceMetricItem
-                        label="相对预估与风险"
+                        label="采购风险"
                         value={
-                            metrics.netSupplyVarianceSign === "over" &&
-                            metrics.absNetSupplyVariance ? (
-                                <span className="text-warning-soft-foreground">
-                                    超预估 +
-                                    <MoneyValue
-                                        display="exact"
-                                        value={metrics.absNetSupplyVariance}
-                                        inheritColor
-                                    />
-                                </span>
-                            ) : metrics.netSupplyVarianceSign === "saved" &&
-                              metrics.absNetSupplyVariance ? (
-                                <span className="text-success-soft-foreground">
-                                    省{" "}
-                                    <MoneyValue
-                                        display="exact"
-                                        value={metrics.absNetSupplyVariance}
-                                        inheritColor
-                                    />
-                                </span>
-                            ) : metrics.netSupplyVarianceSign === "equal" ? (
-                                <span className="text-body-compact font-medium text-foreground">
-                                    与预估持平
-                                </span>
-                            ) : metrics.actionableRiskLineCount > 0 ? (
+                            metrics.actionableRiskLineCount > 0 ? (
                                 <span
                                     className={
                                         isSevereRisk
@@ -642,14 +626,16 @@ export function WorkspacePurchaseApproval({
                             )
                         }
                         detail={
-                            riskChipsSummary ? (
+                            metrics.actionableRiskLineCount > 0 ? (
                                 <button
                                     id={`${prefix}-kpi-filter-risk`}
                                     type="button"
                                     onClick={handleFilterToRisks}
                                     className="cursor-pointer text-left text-primary hover:underline"
                                 >
-                                    {riskChipsSummary} · 点击筛选
+                                    {riskChipsSummary
+                                        ? `${riskChipsSummary} · 点击筛选`
+                                        : "查看风险项"}
                                 </button>
                             ) : metrics.missingSupplyCount > 0 ? (
                                 <span className="num">

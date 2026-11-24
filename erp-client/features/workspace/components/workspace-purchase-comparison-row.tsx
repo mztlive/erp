@@ -8,6 +8,7 @@ import type { ApprovalPurchaseLine } from "@/features/approval-workflow/api/mate
 import { displayName } from "@/lib/display-name"
 import { multiplyFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
+import { PurchaseAmountDetails } from "./workspace-purchase-amount-details"
 import {
     purchaseSpecification,
     type PurchaseComparison,
@@ -47,6 +48,7 @@ export function PurchaseComparisonRow({
     const title = displayName(line.title) || "未记录商品名称"
     const spec = purchaseSpecification(line.specification)
     const sales = line.source
+    const estimatedUnitPrice = sales?.procurement_supply_price_gross
     const overSupply = Boolean(comparison.priceDifference)
     const isHighRisk = negativeMargin || comparison.highWarnings.length > 0
     const showRiskStrip = hasPurchaseRiskStrip(
@@ -198,8 +200,32 @@ export function PurchaseComparisonRow({
                     ) : (
                         <span className="text-muted-foreground">—</span>
                     )}
+                    {sales ? (
+                        <div className="mt-0.5 flex items-center justify-end gap-x-1.5 text-xs text-muted-foreground">
+                            {estimatedUnitPrice ? (
+                                <span>
+                                    预估{" "}
+                                    <MoneyValue
+                                        display="exact"
+                                        value={estimatedUnitPrice}
+                                    />
+                                </span>
+                            ) : (
+                                <span>销售未填预估价</span>
+                            )}
+                            {comparison.salesSupplyAdjustment === "increased" ||
+                            comparison.salesSupplyAdjustment === "decreased" ? (
+                                <Badge variant="warning" className="text-tiny">
+                                    {comparison.salesSupplyAdjustment ===
+                                    "increased"
+                                        ? "调高"
+                                        : "调低"}
+                                </Badge>
+                            ) : null}
+                        </div>
+                    ) : null}
                     {inputTaxRatePercent != null ? (
-                        <p className="mt-1 text-xs text-muted-foreground">
+                        <p className="mt-0.5 text-xs text-muted-foreground">
                             进项{" "}
                             <RateValue
                                 value={inputTaxRatePercent}
@@ -207,23 +233,32 @@ export function PurchaseComparisonRow({
                             />
                         </p>
                     ) : null}
-                    {comparison.priceDifferenceTotal ? (
-                        <p className="mt-0.5 text-tiny font-medium text-warning-soft-foreground">
-                            超预估 +
+                </TableCell>
+
+                <TableCell
+                    data-align="end"
+                    className="space-y-0.5 py-3 align-top whitespace-nowrap"
+                >
+                    <div className="text-xs text-muted-foreground">
+                        实际采购{" "}
+                        <MoneyValue
+                            display="exact"
+                            value={line.gross_amount}
+                            className="text-body-compact"
+                        />
+                    </div>
+                    {!comparison.fee ? (
+                        <PurchaseAmountDetails
+                            estimated={comparison.estimatedGross}
+                            difference={comparison.grossDifference}
+                        />
+                    ) : null}
+                    {line.tax_amount != null ? (
+                        <p className="text-xs text-muted-foreground">
+                            税额{" "}
                             <MoneyValue
                                 display="exact"
-                                value={comparison.priceDifferenceTotal}
-                                inheritColor
-                            />
-                        </p>
-                    ) : comparison.supplyVarianceSign === "saved" &&
-                      comparison.supplyVarianceTotal ? (
-                        <p className="mt-0.5 text-tiny text-success-soft-foreground">
-                            省{" "}
-                            <MoneyValue
-                                display="exact"
-                                value={comparison.supplyVarianceTotal.slice(1)}
-                                inheritColor
+                                value={line.tax_amount}
                             />
                         </p>
                     ) : null}
@@ -237,7 +272,7 @@ export function PurchaseComparisonRow({
                         <div className="space-y-1 text-xs">
                             <div className="flex flex-wrap items-baseline justify-end gap-x-1.5">
                                 <span className="text-muted-foreground">
-                                    售
+                                    销售单价
                                 </span>
                                 <MoneyValue
                                     display="exact"
@@ -257,35 +292,6 @@ export function PurchaseComparisonRow({
                                             ? `亏 ${comparison.marginRate.absPercent}%`
                                             : `毛利 ${comparison.marginRate.percent}%`}
                                     </span>
-                                ) : null}
-                            </div>
-                            <div className="flex flex-wrap items-center justify-end gap-x-1.5 text-muted-foreground">
-                                <span>供</span>
-                                {sales.procurement_supply_price_gross ? (
-                                    <MoneyValue
-                                        display="exact"
-                                        value={
-                                            sales.procurement_supply_price_gross
-                                        }
-                                        inheritColor
-                                        className="font-normal"
-                                    />
-                                ) : (
-                                    <span>未填预估</span>
-                                )}
-                                {comparison.salesSupplyAdjustment ===
-                                    "increased" ||
-                                comparison.salesSupplyAdjustment ===
-                                    "decreased" ? (
-                                    <Badge
-                                        variant="warning"
-                                        className="text-tiny"
-                                    >
-                                        {comparison.salesSupplyAdjustment ===
-                                        "increased"
-                                            ? "调高"
-                                            : "调低"}
-                                    </Badge>
                                 ) : null}
                             </div>
                             {onCompareSource ? (
@@ -310,24 +316,6 @@ export function PurchaseComparisonRow({
                     ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                     )}
-                </TableCell>
-
-                <TableCell
-                    data-align="end"
-                    className="py-3 align-top whitespace-nowrap"
-                >
-                    <div className="font-medium text-foreground">
-                        <MoneyValue display="exact" value={line.gross_amount} />
-                    </div>
-                    {line.tax_amount != null ? (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                            税额{" "}
-                            <MoneyValue
-                                display="exact"
-                                value={line.tax_amount}
-                            />
-                        </p>
-                    ) : null}
                 </TableCell>
             </TableRow>
 

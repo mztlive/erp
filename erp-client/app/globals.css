@@ -819,12 +819,12 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
     border-bottom-color: color-mix(in oklab, var(--grid) 75%, transparent);
 }
 .erp-detail-workspace-page
-    [data-slot="detail-inline-table"]
+    [data-slot="detail-inline-table"]:where(:not([data-inset-cells]))
     :is([data-slot="table-head"], [data-slot="table-cell"]):first-child {
     padding-inline-start: 0;
 }
 .erp-detail-workspace-page
-    [data-slot="detail-inline-table"]
+    [data-slot="detail-inline-table"]:where(:not([data-inset-cells]))
     :is([data-slot="table-head"], [data-slot="table-cell"]):last-child {
     padding-inline-end: 0;
 }

@@ -136,10 +136,8 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
     let delayDays = 0
     let priceDifference: string | null = null
     let pricePercent: string | null = null
-    let priceDifferenceTotal: string | null = null
-    let supplyVarianceUnit: string | null = null
-    let supplyVarianceTotal: string | null = null
-    let supplyVarianceSign: "over" | "saved" | "equal" | null = null
+    let estimatedGross: string | null = null
+    let grossDifference: string | null = null
     let salesLineGross: string | null = null
     let quantityExcess: string | null = null
     let partial = false
@@ -206,44 +204,17 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
                         )
                     }
                 }
-                if (
-                    sameUnit &&
-                    supplyPrice != null &&
-                    supplyPrice !== "" &&
-                    line.unit_cost_gross != null
-                ) {
-                    const order = compareDecimal(
-                        line.unit_cost_gross,
-                        supplyPrice,
-                        6,
-                    )
-                    supplyVarianceUnit = subtractFixed(
-                        line.unit_cost_gross,
-                        supplyPrice,
-                        { maxScale: 6, outputScale: 6 },
-                    )
-                    supplyVarianceSign =
-                        order > 0 ? "over" : order < 0 ? "saved" : "equal"
-                    if (line.quantity != null) {
-                        const absUnitDiff = supplyVarianceUnit.startsWith("-")
-                            ? supplyVarianceUnit.slice(1)
-                            : supplyVarianceUnit
-                        const absLineDiff = multiplyFixed(
-                            absUnitDiff,
-                            line.quantity,
-                            {
-                                leftMaxScale: 6,
-                                rightMaxScale: 6,
-                                outputScale: 2,
-                            },
-                        )
-                        supplyVarianceTotal =
-                            order < 0 ? `-${absLineDiff}` : absLineDiff
-                    }
-                    if (order > 0) {
+                if (sameUnit && supplyPrice != null && supplyPrice !== "") {
+                    if (
+                        line.unit_cost_gross != null &&
+                        compareDecimal(line.unit_cost_gross, supplyPrice, 6) > 0
+                    ) {
                         mediumWarnings.push("高于销售预估采购价")
-                        priceDifference = supplyVarianceUnit
-                        priceDifferenceTotal = supplyVarianceTotal
+                        priceDifference = subtractFixed(
+                            line.unit_cost_gross,
+                            supplyPrice,
+                            { maxScale: 6, outputScale: 6 },
+                        )
                         if (compareDecimal(supplyPrice, "0", 6) > 0) {
                             pricePercent = divideFixed(
                                 multiplyFixed(priceDifference, "100", {
@@ -257,6 +228,24 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
                                     denominatorMaxScale: 6,
                                     outputScale: 1,
                                 },
+                            )
+                        }
+                    }
+                    if (line.quantity != null) {
+                        estimatedGross = multiplyFixed(
+                            supplyPrice,
+                            line.quantity,
+                            {
+                                leftMaxScale: 6,
+                                rightMaxScale: 6,
+                                outputScale: 2,
+                            },
+                        )
+                        if (line.gross_amount != null) {
+                            grossDifference = subtractFixed(
+                                line.gross_amount,
+                                estimatedGross,
+                                { maxScale: 2, outputScale: 2 },
                             )
                         }
                     }
@@ -318,10 +307,8 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
         delayDays,
         priceDifference,
         pricePercent,
-        priceDifferenceTotal,
-        supplyVarianceUnit,
-        supplyVarianceTotal,
-        supplyVarianceSign,
+        estimatedGross,
+        grossDifference,
         salesLineGross,
         quantityExcess,
         partial,
@@ -457,10 +444,12 @@ export type PurchaseApprovalMetrics = Readonly<{
     orderMargin: PurchaseMarginSummary | null
     salesCoveredCount: number
     partialSalesCoverage: boolean
-    netSupplyVariance: string | null
-    absNetSupplyVariance: string | null
-    netSupplyVarianceSign: "over" | "saved" | "equal" | null
-    overSupplyTotal: string | null
+    purchaseAmountComparison: {
+        estimated: string
+        actual: string
+        difference: string
+        lineCount: number
+    } | null
     totalQuantity: { value: string; unit?: string } | null
     negativeMarginCount: number
     overSupplyCount: number
@@ -484,8 +473,8 @@ export function buildPurchaseApprovalMetrics(
     const feeGrossAmounts: string[] = []
     const salesGrossAmounts: string[] = []
     const comparablePurchaseAmounts: string[] = []
-    const supplyVariances: string[] = []
-    const overSupplyTotals: string[] = []
+    const estimatedPurchaseAmounts: string[] = []
+    const actualPurchaseAmounts: string[] = []
     const units = new Set<string>()
     const quantities: string[] = []
 
@@ -525,11 +514,13 @@ export function buildPurchaseApprovalMetrics(
                 comparablePurchaseAmounts.push(line.gross_amount)
                 salesCoveredCount += 1
             }
-            if (comparison.supplyVarianceTotal != null) {
-                supplyVariances.push(comparison.supplyVarianceTotal)
-            }
-            if (comparison.priceDifferenceTotal != null) {
-                overSupplyTotals.push(comparison.priceDifferenceTotal)
+            if (
+                comparison.estimatedGross != null &&
+                comparison.grossDifference != null &&
+                line.gross_amount != null
+            ) {
+                estimatedPurchaseAmounts.push(comparison.estimatedGross)
+                actualPurchaseAmounts.push(line.gross_amount)
             }
             if (line.quantity != null) {
                 quantityLineCount += 1
@@ -581,32 +572,19 @@ export function buildPurchaseApprovalMetrics(
               )
             : null
 
-    const rawNetVariance = supplyVariances.length
-        ? sumFixed(supplyVariances, {
-              maxScale: 2,
-              outputScale: 2,
-              allowNegative: true,
-          })
-        : null
-    let netSupplyVarianceSign: "over" | "saved" | "equal" | null = null
-    if (rawNetVariance != null) {
-        const cmp = compareDecimal(rawNetVariance, "0", 2)
-        netSupplyVarianceSign = cmp > 0 ? "over" : cmp < 0 ? "saved" : "equal"
+    let purchaseAmountComparison: PurchaseApprovalMetrics["purchaseAmountComparison"] =
+        null
+    if (estimatedPurchaseAmounts.length > 0) {
+        const amountScale = { maxScale: 2, outputScale: 2 }
+        const estimated = sumFixed(estimatedPurchaseAmounts, amountScale)
+        const actual = sumFixed(actualPurchaseAmounts, amountScale)
+        purchaseAmountComparison = {
+            estimated,
+            actual,
+            difference: subtractFixed(actual, estimated, amountScale),
+            lineCount: estimatedPurchaseAmounts.length,
+        }
     }
-    const absNetSupplyVariance =
-        rawNetVariance != null
-            ? rawNetVariance.startsWith("-")
-                ? rawNetVariance.slice(1)
-                : rawNetVariance
-            : null
-
-    const rawOverSupplyTotal = overSupplyTotals.length
-        ? sumFixed(overSupplyTotals, { maxScale: 2, outputScale: 2 })
-        : null
-    const overSupplyTotal =
-        rawOverSupplyTotal && compareDecimal(rawOverSupplyTotal, "0", 2) > 0
-            ? rawOverSupplyTotal
-            : null
 
     const totalQuantity =
         units.size === 1 &&
@@ -640,10 +618,7 @@ export function buildPurchaseApprovalMetrics(
             goodsLineCount > 0 &&
             salesCoveredCount > 0 &&
             salesCoveredCount < goodsLineCount,
-        netSupplyVariance: rawNetVariance,
-        absNetSupplyVariance,
-        netSupplyVarianceSign,
-        overSupplyTotal,
+        purchaseAmountComparison,
         totalQuantity,
         negativeMarginCount,
         overSupplyCount,

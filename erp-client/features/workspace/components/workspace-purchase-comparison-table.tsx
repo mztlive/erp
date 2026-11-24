@@ -30,6 +30,7 @@ import {
     ApprovalLineFilterBar,
     ApprovalLinePagination,
 } from "./workspace-approval-table-controls"
+import { PurchaseOrderAmountDetails } from "./workspace-purchase-amount-details"
 import {
     buildPurchaseApprovalMetrics,
     evaluatePurchaseLines,
@@ -195,17 +196,14 @@ export function WorkspacePurchaseComparisonTable({
             <div
                 id={`${prefix}-table-scroll`}
                 data-slot="detail-inline-table"
+                data-inset-cells
                 role="region"
                 aria-label="采购与销售明细对照"
                 className={detailWorkspaceStyles.inlineTableWrapper}
             >
-                <Table
-                    data-density="comfortable"
-                    aria-label="采购明细"
-                    className="w-full [&_:is(th,td):first-child]:ps-0"
-                >
+                <Table data-density="comfortable" aria-label="采购明细">
                     <TableCaption className="sr-only">
-                        销售数量为来源行全部需求，供给价为销售填写的预计采购含税单价。审批适用于整份采购单。
+                        预估采购金额按销售填写的预估含税单价乘以本次采购数量计算。审批适用于整份采购单。
                     </TableCaption>
                     <TableHeader>
                         <TableRow>
@@ -232,16 +230,16 @@ export function WorkspacePurchaseComparisonTable({
                             <TableHead
                                 scope="col"
                                 data-align="end"
-                                className="w-36"
+                                className="min-w-40"
                             >
-                                销售对照
+                                采购含税金额
                             </TableHead>
                             <TableHead
                                 scope="col"
                                 data-align="end"
-                                className="w-28"
+                                className="w-36"
                             >
-                                含税小计
+                                销售对照
                             </TableHead>
                         </TableRow>
                     </TableHeader>
@@ -328,31 +326,31 @@ export function WorkspacePurchaseComparisonTable({
                                     data-align="end"
                                     className="py-2.5 align-middle text-xs"
                                 >
-                                    {metrics.netSupplyVarianceSign === "over" &&
-                                    metrics.absNetSupplyVariance ? (
-                                        <span className="font-medium text-warning-soft-foreground">
-                                            净超预估 +
+                                    —
+                                </TableCell>
+                                <TableCell
+                                    data-align="end"
+                                    className="space-y-0.5 py-2.5 align-middle whitespace-nowrap"
+                                >
+                                    <div className="text-xs text-muted-foreground">
+                                        实际采购{" "}
+                                        <MoneyValue
+                                            display="exact"
+                                            value={metrics.grossTotal}
+                                            className="text-body-compact font-semibold"
+                                        />
+                                    </div>
+                                    <PurchaseOrderAmountDetails
+                                        metrics={metrics}
+                                    />
+                                    {metrics.netTotal ? (
+                                        <div className="text-xs font-normal text-muted-foreground">
+                                            不含税{" "}
                                             <MoneyValue
                                                 display="exact"
-                                                value={
-                                                    metrics.absNetSupplyVariance
-                                                }
-                                                inheritColor
+                                                value={metrics.netTotal}
                                             />
-                                        </span>
-                                    ) : metrics.netSupplyVarianceSign ===
-                                          "saved" &&
-                                      metrics.absNetSupplyVariance ? (
-                                        <span className="font-medium text-success-soft-foreground">
-                                            低于预估 -
-                                            <MoneyValue
-                                                display="exact"
-                                                value={
-                                                    metrics.absNetSupplyVariance
-                                                }
-                                                inheritColor
-                                            />
-                                        </span>
+                                        </div>
                                     ) : null}
                                 </TableCell>
                                 <TableCell
@@ -391,30 +389,6 @@ export function WorkspacePurchaseComparisonTable({
                                             —
                                         </span>
                                     )}
-                                </TableCell>
-                                <TableCell
-                                    data-align="end"
-                                    className="py-2.5 align-middle"
-                                >
-                                    {metrics.grossTotal ? (
-                                        <div className="font-semibold text-foreground">
-                                            <MoneyValue
-                                                display="exact"
-                                                value={metrics.grossTotal}
-                                            />
-                                        </div>
-                                    ) : (
-                                        "—"
-                                    )}
-                                    {metrics.netTotal ? (
-                                        <div className="mt-0.5 text-xs font-normal text-muted-foreground">
-                                            不含税{" "}
-                                            <MoneyValue
-                                                display="exact"
-                                                value={metrics.netTotal}
-                                            />
-                                        </div>
-                                    ) : null}
                                 </TableCell>
                             </TableRow>
                         </TableFooter>
