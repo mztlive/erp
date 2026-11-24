@@ -39,10 +39,13 @@ export function ApprovalSalesOrderPaper({
     submission,
     documentNo,
     submitterName,
+    hideDetailedDeliveryAddresses = false,
 }: {
     submission: ApprovalSalesSubmission | ApprovalSalesRevision
     documentNo: string
     submitterName: string | null
+    /** 采购审批场景隐藏收货人/电话/街道明细，仅保留收货点数量提示。 */
+    hideDetailedDeliveryAddresses?: boolean
 }) {
     const isSubmission = "submission_no" in submission
     const isCard = isSubmission
@@ -214,8 +217,20 @@ export function ApprovalSalesOrderPaper({
                                 </div>
                             )}
                             {(() => {
+                                const group = deliveryItemById.get(row.id)
+                                if (hideDetailedDeliveryAddresses) {
+                                    return deliverySummary.uniqueAddressCount >
+                                        1 &&
+                                        group &&
+                                        group.uniqueAddressCount > 0 ? (
+                                        <p className="num mt-1 text-xs text-muted-foreground">
+                                            收货：{group.uniqueAddressCount}{" "}
+                                            处收货点
+                                        </p>
+                                    ) : null
+                                }
                                 const hint = formatLineDeliveryHint(
-                                    deliveryItemById.get(row.id),
+                                    group,
                                     deliverySummary,
                                 )
                                 return hint ? (
@@ -387,7 +402,18 @@ export function ApprovalSalesOrderPaper({
                 },
             ]}
             remarks={submission.business_remark || undefined}
-            appendix={<DeliveryAllocationPrintAppendix lines={deliveryLines} />}
+            appendix={
+                hideDetailedDeliveryAddresses ? (
+                    deliverySummary.uniqueAddressCount > 0 ? (
+                        <p className="num text-xs text-muted-foreground">
+                            交付规模：共 {deliverySummary.uniqueAddressCount}{" "}
+                            处收货点
+                        </p>
+                    ) : undefined
+                ) : (
+                    <DeliveryAllocationPrintAppendix lines={deliveryLines} />
+                )
+            }
             footer={
                 isSubmission
                     ? "本预览保留此次审批提交的销售内容及全部明细。"

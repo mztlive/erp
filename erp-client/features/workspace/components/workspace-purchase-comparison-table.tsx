@@ -18,12 +18,8 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import type { ApprovalPurchaseLine } from "@/features/approval-workflow/api/materials"
+import { countLineDeliveryPoints } from "@/features/approval-workflow/purchase-fulfillment"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { fullDeliveryAddress } from "@/lib/delivery-address"
-import {
-    formatLineDeliveryHint,
-    type DeliveryAllocationSummary,
-} from "@/lib/delivery-allocation-summary"
 import { cn } from "@/lib/utils"
 import {
     APPROVAL_TABLE_DEFAULT_PAGE_SIZE,
@@ -52,7 +48,7 @@ export function WorkspacePurchaseComparisonTable({
     evaluatedRows: externalRows,
     metrics: externalMetrics,
     sources,
-    deliverySummary,
+    uniqueDeliveryPointCount = 0,
     prefix,
     riskOnly: controlledRiskOnly,
     onRiskOnlyChange,
@@ -60,13 +56,12 @@ export function WorkspacePurchaseComparisonTable({
     tableHandleRef,
     onPreview,
     onCompareSource,
-    onFocusDelivery,
 }: {
     lines: ApprovalPurchaseLine[]
     evaluatedRows?: readonly EvaluatedPurchaseRow[]
     metrics?: PurchaseApprovalMetrics
     sources: PurchaseSource[]
-    deliverySummary: DeliveryAllocationSummary
+    uniqueDeliveryPointCount?: number
     prefix: string
     riskOnly?: boolean
     onRiskOnlyChange?: (next: boolean) => void
@@ -74,7 +69,6 @@ export function WorkspacePurchaseComparisonTable({
     tableHandleRef?: RefObject<PurchaseComparisonTableHandle | null>
     onPreview: (revisionId: string) => void
     onCompareSource?: (target: PurchaseSourceComparisonTarget) => void
-    onFocusDelivery: (lineId: string) => void
 }) {
     const [search, setSearch] = useState("")
     const [internalRiskOnly, setInternalRiskOnly] = useState(false)
@@ -88,17 +82,6 @@ export function WorkspacePurchaseComparisonTable({
         }
         onRiskOnlyChange?.(next)
     }
-
-    const deliveryItemById = useMemo(
-        () =>
-            new Map(
-                deliverySummary.itemGroups.map((group) => [
-                    group.lineId,
-                    group,
-                ]),
-            ),
-        [deliverySummary.itemGroups],
-    )
 
     const rows = useMemo(
         () => externalRows ?? evaluatePurchaseLines(lines),
@@ -115,7 +98,7 @@ export function WorkspacePurchaseComparisonTable({
             rows.filter(({ line, hasActionableRisk }) => {
                 if (riskOnly && !hasActionableRisk) return false
                 if (!needle) return true
-                const textMatched = [
+                return [
                     String(line.line_no),
                     line.title,
                     line.specification,
@@ -126,12 +109,6 @@ export function WorkspacePurchaseComparisonTable({
                     .join(" ")
                     .toLocaleLowerCase()
                     .includes(needle)
-                if (textMatched) return true
-                return (line.delivery_allocations ?? []).some((row) =>
-                    `${row.recipient} ${row.phone} ${fullDeliveryAddress(row)}`
-                        .toLocaleLowerCase()
-                        .includes(needle),
-                )
             }),
         [needle, riskOnly, rows],
     )
@@ -245,10 +222,12 @@ export function WorkspacePurchaseComparisonTable({
                     </TableHeader>
                     <TableBody>
                         {visible.map(({ line, comparison, negativeMargin }) => {
-                            const deliveryHint = formatLineDeliveryHint(
-                                deliveryItemById.get(line.id),
-                                deliverySummary,
-                            )
+                            const lineDeliveryPointCount =
+                                uniqueDeliveryPointCount > 1
+                                    ? countLineDeliveryPoints(
+                                          line.delivery_allocations,
+                                      )
+                                    : 0
                             const lineSegment = toAutomationIdSegment(line.id)
                             return (
                                 <PurchaseComparisonRow
@@ -267,13 +246,14 @@ export function WorkspacePurchaseComparisonTable({
                                               )
                                             : undefined
                                     }
-                                    deliveryHint={deliveryHint}
+                                    deliveryPointCount={
+                                        lineDeliveryPointCount > 0
+                                            ? lineDeliveryPointCount
+                                            : undefined
+                                    }
                                     prefix={`${prefix}-line-${lineSegment}`}
                                     onPreview={onPreview}
                                     onCompareSource={onCompareSource}
-                                    onFocusDelivery={() =>
-                                        onFocusDelivery(line.id)
-                                    }
                                 />
                             )
                         })}

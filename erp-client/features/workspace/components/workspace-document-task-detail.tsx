@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useMutation } from "@tanstack/react-query"
 import { usePathname, useSearchParams } from "next/navigation"
 import { ArrowUpRightIcon, FileTextIcon, PaperclipIcon } from "lucide-react"
@@ -101,6 +101,7 @@ import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import {
     WorkspacePurchaseApproval,
     purchaseApprovalRiskReasons,
+    type WorkspacePurchaseApprovalHandle,
 } from "./workspace-purchase-approval"
 import { buildPurchaseDynamicRejectPhrases } from "./workspace-purchase-comparison-model"
 import { WorkspacePurchasePayment } from "./workspace-purchase-payment"
@@ -249,6 +250,8 @@ export function WorkspaceDocumentTaskDetail({
     >(undefined)
     const [sourceComparisonTarget, setSourceComparisonTarget] =
         useState<PurchaseSourceComparisonTarget>()
+    const purchaseApprovalHandleRef =
+        useRef<WorkspacePurchaseApprovalHandle | null>(null)
     const [highlightedExecutionId, setHighlightedExecutionId] = useState<
         string | null
     >(null)
@@ -933,7 +936,7 @@ export function WorkspaceDocumentTaskDetail({
                               railTab === "materials"
                                   ? 42
                                   : railTab === "source-sales"
-                                    ? 35
+                                    ? 38
                                     : undefined,
                           collapsed: railCollapsed,
                           onCollapsedChange: setRailCollapsed,
@@ -960,6 +963,13 @@ export function WorkspaceDocumentTaskDetail({
                                                         .source_sales,
                                                 purchaseLines:
                                                     submission.purchase_lines,
+                                                purchaseFulfillment:
+                                                    submission.purchase_fulfillment,
+                                                purchaseExtraSections:
+                                                    submission.display.source
+                                                        .extra_sections,
+                                                extraCostSummary:
+                                                    submission.extra_cost_summary,
                                                 target: sourceComparisonTarget,
                                                 onTargetChange:
                                                     setSourceComparisonTarget,
@@ -972,6 +982,12 @@ export function WorkspaceDocumentTaskDetail({
                                                         sourceRevisionId:
                                                             revisionId,
                                                     }),
+                                                onLocatePurchaseLine: (
+                                                    purchaseLineId,
+                                                ) =>
+                                                    purchaseApprovalHandleRef.current?.locateLine(
+                                                        purchaseLineId,
+                                                    ),
                                             }
                                           : undefined
                                   }
@@ -1406,6 +1422,7 @@ export function WorkspaceDocumentTaskDetail({
                                 ? handleCompareSourceSales
                                 : undefined
                         }
+                        approvalHandleRef={purchaseApprovalHandleRef}
                         activeFileId={activeMaterialFileId}
                         hideEmbeddedMaterials={showDecisionRail}
                     />

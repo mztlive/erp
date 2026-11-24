@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type ComponentProps } from "react"
+import { useMemo, useState, type ComponentProps } from "react"
 
 import {
     UnifiedMaterialViewer,
@@ -10,9 +10,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { UnifiedAuditTrail } from "@/features/approval-workflow/components/unified-audit-trail"
 import type { ApprovalRuntimeInstance } from "@/features/approval-workflow/types"
 import type { TimelineTarget } from "@/features/document-timeline/types"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { WorkspacePurchaseSourceComparison } from "./workspace-purchase-source-comparison"
+import { buildPurchaseSourceComparisonModel } from "./workspace-purchase-source-comparison-model"
 
 export type ApprovalContextRailTab =
     | "trail"
@@ -51,7 +53,7 @@ export type WorkspaceApprovalContextRailProps = Readonly<{
  * - 单层底线页签：「审批记录」|「附件对照 (N)」|「采销对照」|「单据全动态」；
  * - 「审批记录」展示倒序 `UnifiedAuditTrail`；
  * - 「附件对照」侧边对接 `UnifiedMaterialViewer (mode="docked")`，切换时自动扩宽并支持拖拽拉宽至 50% 左右对照；
- * - 「采销对照」优先展示品规、数量与交期差异。
+ * - 「采销对照」聚焦资金/票税/履约商务风控与整张来源销售单覆盖及双口径毛利。
  */
 export function WorkspaceApprovalContextRail({
     instanceId,
@@ -75,6 +77,28 @@ export function WorkspaceApprovalContextRail({
         useState<ApprovalContextRailTab>("trail")
     const hasSourceSalesTab = Boolean(sourceComparison)
     const hasTimelineTab = Boolean(timelineTarget)
+    const hasSalesLines = Boolean(
+        sourceComparison?.orders.some(
+            (order) => order.revision.commercial_lines.length > 0,
+        ),
+    )
+    const { names: unitNames } = useProductUnitNames([], hasSalesLines)
+    const sourceComparisonModel = useMemo(
+        () =>
+            sourceComparison
+                ? buildPurchaseSourceComparisonModel({
+                      orders: sourceComparison.orders,
+                      snapshots: sourceComparison.snapshots,
+                      purchaseLines: sourceComparison.purchaseLines,
+                      purchaseFulfillment: sourceComparison.purchaseFulfillment,
+                      purchaseExtraSections:
+                          sourceComparison.purchaseExtraSections,
+                      extraCostSummary: sourceComparison.extraCostSummary,
+                      unitNames,
+                  })
+                : undefined,
+        [sourceComparison, unitNames],
+    )
     const rawTab = activeTab ?? internalTab
     const currentTab: ApprovalContextRailTab =
         rawTab === "timeline" && !hasTimelineTab
@@ -141,7 +165,25 @@ export function WorkspaceApprovalContextRail({
                                 value="source-sales"
                                 className="shrink-0 gap-1 text-xs"
                             >
-                                采销对照
+                                <span>采销对照</span>
+                                {sourceComparisonModel &&
+                                sourceComparisonModel.totalAttentionCount >
+                                    0 ? (
+                                    <span
+                                        className={cn(
+                                            "num text-tiny font-medium",
+                                            sourceComparisonModel.hasSevereAttention
+                                                ? "text-destructive-soft-foreground"
+                                                : "text-warning-soft-foreground",
+                                        )}
+                                    >
+                                        (
+                                        {
+                                            sourceComparisonModel.totalAttentionCount
+                                        }
+                                        )
+                                    </span>
+                                ) : null}
                             </TabsTrigger>
                         ) : null}
                         {hasTimelineTab ? (
@@ -203,6 +245,7 @@ export function WorkspaceApprovalContextRail({
                         <WorkspacePurchaseSourceComparison
                             key={instanceId}
                             idPrefix={resolvedPrefix}
+                            precomputedModel={sourceComparisonModel}
                             {...sourceComparison}
                         />
                     </TabsContent>

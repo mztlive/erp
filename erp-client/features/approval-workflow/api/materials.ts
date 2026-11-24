@@ -139,6 +139,7 @@ export type ApprovalSalesSubmission = {
     customer_name: string
     contract_no: string | null
     settlement_party_name: string | null
+    payment_term_code?: string | null
     payment_term_name: string
     invoice_type: string
     tax_point: string
@@ -153,6 +154,7 @@ export type ApprovalSalesSubmission = {
     submitted_at: number
     lines: {
         id: string
+        sales_order_line_id?: string
         line_no: number
         item_name_snapshot: string
         sku_id: string | null

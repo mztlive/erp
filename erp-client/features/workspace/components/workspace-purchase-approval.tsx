@@ -1,6 +1,13 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import {
+    useEffect,
+    useImperativeHandle,
+    useMemo,
+    useRef,
+    useState,
+    type RefObject,
+} from "react"
 import {
     Columns2Icon,
     FileTextIcon,
@@ -11,7 +18,6 @@ import {
 
 import {
     BusinessFailureState,
-    DeliveryAllocationOverview,
     DetailWorkspaceMetricItem,
     DetailWorkspaceMetrics,
     DetailWorkspaceSection,
@@ -22,14 +28,13 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
-import type { ApprovalPurchaseFulfillment } from "@/features/approval-workflow/api/materials"
 import { ApprovalMaterialFiles } from "@/features/approval-workflow/components/approval-material-files"
 import type { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-approval-materials"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
-    buildDeliveryAllocationSummary,
-    type DeliveryAllocationLineInput,
-} from "@/lib/delivery-allocation-summary"
+    countUniqueDeliveryPoints,
+    formatPurchaseFulfillmentSummary,
+} from "@/features/approval-workflow/purchase-fulfillment"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { displayBusinessText, displayName } from "@/lib/display-name"
 import { cn } from "@/lib/utils"
 import type { WorkspaceWorkItem } from "../types"
@@ -41,7 +46,6 @@ import {
     evaluatePurchaseLines,
     parsePurchaseExtraSections,
     purchaseApprovalRiskReasons,
-    purchaseSpecification,
     type PurchaseSource,
 } from "./workspace-purchase-comparison-model"
 import {
@@ -53,30 +57,12 @@ import { WorkspaceSupplierRating } from "./workspace-supplier-rating"
 
 export { purchaseApprovalRiskReasons }
 
-function purchaseApprovalPrefix(instanceId: string) {
-    return `workspace-purchase-approval-${toAutomationIdSegment(instanceId)}`
+export interface WorkspacePurchaseApprovalHandle {
+    locateLine: (lineId: string) => void
 }
 
-function fulfillmentSummaryLabel(
-    fulfillment?: ApprovalPurchaseFulfillment | null,
-): string | null {
-    if (!fulfillment) return null
-    switch (fulfillment.responsibility) {
-        case "WAREHOUSE":
-            return fulfillment.target_warehouse_name
-                ? `入仓 · ${fulfillment.target_warehouse_name}`
-                : "采购入库"
-        case "SUPPLIER_DIRECT":
-            return "供应商直发"
-        case "ELECTRONIC":
-            return "电子交付"
-        case "SERVICE":
-            return "线下服务"
-        case "NONE":
-            return "费用单（无需履约）"
-        default:
-            return null
-    }
+function purchaseApprovalPrefix(instanceId: string) {
+    return `workspace-purchase-approval-${toAutomationIdSegment(instanceId)}`
 }
 
 export function WorkspacePurchaseApprovalSources({
@@ -181,6 +167,7 @@ export function WorkspacePurchaseApproval({
     onSelectFile,
     onOpenMaterials,
     onCompareSource,
+    approvalHandleRef,
     activeFileId,
     hideEmbeddedMaterials,
 }: {
@@ -192,6 +179,7 @@ export function WorkspacePurchaseApproval({
     onSelectFile?: (fileId: string) => void
     onOpenMaterials?: () => void
     onCompareSource?: (target: PurchaseSourceComparisonTarget) => void
+    approvalHandleRef?: RefObject<WorkspacePurchaseApprovalHandle | null>
     activeFileId?: string
     hideEmbeddedMaterials: boolean
 }) {
@@ -208,9 +196,6 @@ export function WorkspacePurchaseApproval({
     )
 
     const [riskOnly, setRiskOnly] = useState(false)
-    const [focusedDeliveryLineId, setFocusedDeliveryLineId] = useState<
-        string | null
-    >(null)
     const [highlightedLineId, setHighlightedLineId] = useState<string | null>(
         null,
     )
@@ -238,58 +223,41 @@ export function WorkspacePurchaseApproval({
         [extraSections, item],
     )
 
-    const deliveryLines = useMemo<
-        readonly DeliveryAllocationLineInput[]
-    >(() => {
-        if (!lines?.length) return []
-        return lines.map((line) => ({
-            id: line.id,
-            lineNo: line.line_no,
-            itemName: displayName(line.title) || "未记录商品名称",
-            specification: purchaseSpecification(line.specification),
-            unit: line.unitName ?? line.unit ?? "",
-            quantity: line.quantity,
-            allocations: line.delivery_allocations,
-        }))
-    }, [lines])
-
-    const deliverySummary = useMemo(
-        () => buildDeliveryAllocationSummary(deliveryLines),
-        [deliveryLines],
+    const uniqueDeliveryPointCount = useMemo(
+        () =>
+            countUniqueDeliveryPoints(
+                (lines ?? []).map((line) => line.delivery_allocations),
+            ),
+        [lines],
     )
 
-    const deliverySectionId = `${prefix}-delivery-section`
     const materialsSectionId = `${prefix}-materials-section`
     const linesSectionId = `${prefix}-lines-section`
 
-    const handleFocusDelivery = (lineId: string) => {
-        setFocusedDeliveryLineId(lineId)
-        window.requestAnimationFrame(() => {
-            document
-                .getElementById(deliverySectionId)
-                ?.scrollIntoView({ behavior: "smooth", block: "nearest" })
-        })
-    }
-
-    const handleReturnToLine = (lineId: string) => {
-        tableHandleRef.current?.revealLine(lineId)
-        setHighlightedLineId(lineId)
-        if (highlightTimerRef.current != null) {
-            window.clearTimeout(highlightTimerRef.current)
-        }
-        highlightTimerRef.current = window.setTimeout(() => {
-            setHighlightedLineId(null)
-        }, 2200)
-        window.requestAnimationFrame(() => {
+    useImperativeHandle(approvalHandleRef, () => ({
+        locateLine: (lineId: string) => {
+            tableHandleRef.current?.revealLine(lineId)
+            setHighlightedLineId(lineId)
+            if (highlightTimerRef.current != null) {
+                window.clearTimeout(highlightTimerRef.current)
+            }
+            highlightTimerRef.current = window.setTimeout(() => {
+                setHighlightedLineId(null)
+            }, 2200)
             window.requestAnimationFrame(() => {
-                document
-                    .getElementById(
-                        `${prefix}-row-${toAutomationIdSegment(lineId)}`,
-                    )
-                    ?.scrollIntoView({ behavior: "smooth", block: "center" })
+                window.requestAnimationFrame(() => {
+                    document
+                        .getElementById(
+                            `${prefix}-row-${toAutomationIdSegment(lineId)}`,
+                        )
+                        ?.scrollIntoView({
+                            behavior: "smooth",
+                            block: "center",
+                        })
+                })
             })
-        })
-    }
+        },
+    }))
 
     const handleFilterToRisks = () => {
         if (tableHandleRef.current) {
@@ -313,12 +281,6 @@ export function WorkspacePurchaseApproval({
             .getElementById(materialsSectionId)
             ?.scrollIntoView({ behavior: "smooth", block: "nearest" })
     }
-
-    const showDeliverySection = Boolean(
-        submission &&
-        (fulfillment != null ||
-            (lines && lines.length > 0 && deliverySummary.totalRows > 0)),
-    )
 
     if (materials.isPending) {
         return (
@@ -358,7 +320,10 @@ export function WorkspacePurchaseApproval({
     const fallbackTax =
         extraSections.find((field) => field.label === "税额")?.value ?? null
     const submitter = displayName(submission?.display.source.submitter_name)
-    const fulfillmentLabel = fulfillmentSummaryLabel(fulfillment)
+    const fulfillmentLabel = formatPurchaseFulfillmentSummary(
+        fulfillment,
+        uniqueDeliveryPointCount,
+    )
     const isSevereRisk =
         metrics.negativeMarginCount > 0 ||
         metrics.quantityExcessCount > 0 ||
@@ -661,7 +626,9 @@ export function WorkspacePurchaseApproval({
                         detail={
                             <>
                                 {fulfillmentLabel ? (
-                                    <span>{fulfillmentLabel}</span>
+                                    <span className="num">
+                                        {fulfillmentLabel}
+                                    </span>
                                 ) : null}
                                 {fulfillmentLabel ? (
                                     <span aria-hidden="true">·</span>
@@ -806,7 +773,7 @@ export function WorkspacePurchaseApproval({
                         evaluatedRows={evaluatedRows}
                         metrics={metrics}
                         sources={sources}
-                        deliverySummary={deliverySummary}
+                        uniqueDeliveryPointCount={uniqueDeliveryPointCount}
                         prefix={prefix}
                         riskOnly={riskOnly}
                         onRiskOnlyChange={setRiskOnly}
@@ -821,7 +788,6 @@ export function WorkspacePurchaseApproval({
                             })
                         }
                         onCompareSource={onCompareSource}
-                        onFocusDelivery={handleFocusDelivery}
                     />
                 ) : lines ? (
                     <p className="text-xs text-muted-foreground">
@@ -835,29 +801,6 @@ export function WorkspacePurchaseApproval({
                     </Alert>
                 )}
             </DetailWorkspaceSection>
-
-            {showDeliverySection ? (
-                <DeliveryAllocationOverview
-                    idPrefix={`${prefix}-delivery`}
-                    sectionId={deliverySectionId}
-                    lines={deliveryLines}
-                    summary={deliverySummary}
-                    density="compact"
-                    compactSimpleStates
-                    fulfillment={
-                        fulfillment
-                            ? {
-                                  responsibility: fulfillment.responsibility,
-                                  targetWarehouseName:
-                                      fulfillment.target_warehouse_name,
-                              }
-                            : undefined
-                    }
-                    focusedLineId={focusedDeliveryLineId}
-                    onClearFocus={() => setFocusedDeliveryLineId(null)}
-                    onReturnToLine={handleReturnToLine}
-                />
-            ) : null}
 
             {submission && !hideEmbeddedMaterials ? (
                 <DetailWorkspaceSection

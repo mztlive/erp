@@ -15,7 +15,6 @@ import {
 } from "./approval-submitted-summary"
 import {
     BusinessFailureState,
-    DeliveryAllocationPrintAppendix,
     MoneyValue,
     QuantityValue,
     RateValue,
@@ -38,6 +37,10 @@ import {
     type MaterialReference,
 } from "../hooks/use-approval-materials"
 import { displayActorName, displayReadableName } from "../display"
+import {
+    countUniqueDeliveryPoints,
+    formatPurchaseFulfillmentSummary,
+} from "../purchase-fulfillment"
 
 /** 审批专用资料预览；不加载普通业务详情，不把冻结摘要当作完整单据。 */
 export function ApprovalSubmittedMaterials({
@@ -174,6 +177,10 @@ export function ApprovalSubmittedMaterialsContent({
                         ) || "未记录单据编号"
                     }
                     submitterName={submitterName ?? null}
+                    hideDetailedDeliveryAddresses={
+                        data.document_type === "purchase_order" &&
+                        view === "source-sales"
+                    }
                 />
             ) : view === "source-sales" ? (
                 <p role="status" className="text-xs text-muted-foreground">
@@ -351,24 +358,23 @@ function ApprovalPurchaseLinesPreview({
     const grossTotal = grossAmounts.length
         ? sumFixed(grossAmounts, { maxScale: 2, outputScale: 2 })
         : null
-    const deliveryLines = lines.map((line) => ({
-        id: line.id,
-        lineNo: line.line_no,
-        itemName: displayReadableName(line.title) || "未记录商品名称",
-        specification: displayReadableName(line.specification),
-        unit: line.unitName ?? line.unit ?? "",
-        quantity: line.quantity,
-        allocations: line.delivery_allocations,
-    }))
-    const hasAllocations = lines.some(
-        (line) => (line.delivery_allocations?.length ?? 0) > 0,
+    const uniquePointCount = countUniqueDeliveryPoints(
+        lines.map((line) => line.delivery_allocations),
+    )
+    const fulfillmentSummary = formatPurchaseFulfillmentSummary(
+        fulfillment,
+        uniquePointCount,
     )
 
     return (
         <section className="space-y-4">
             <MaterialSectionHeading
                 title="采购明细"
-                note={`共 ${lines.length} 行`}
+                note={
+                    fulfillmentSummary
+                        ? `共 ${lines.length} 行 · ${fulfillmentSummary}`
+                        : `共 ${lines.length} 行`
+                }
             />
             {lines.length ? (
                 <Table
@@ -508,18 +514,17 @@ function ApprovalPurchaseLinesPreview({
                     本次提交没有采购明细。
                 </p>
             )}
-            {fulfillment?.responsibility === "WAREHOUSE" && !hasAllocations ? (
-                <p className="border-t border-border/60 pt-3 text-xs text-muted-foreground">
-                    采购入库目标仓：
+            {fulfillmentSummary ? (
+                <p className="num border-t border-border/60 pt-3 text-xs text-muted-foreground">
+                    履约安排：
                     <span className="font-medium text-foreground">
-                        {fulfillment.target_warehouse_name ||
-                            "以采购入库安排为准"}
+                        {fulfillmentSummary}
                     </span>
-                    （客户配送由仓库另行安排）。
+                    {fulfillment?.responsibility === "WAREHOUSE"
+                        ? "（客户配送由仓库另行安排）"
+                        : ""}
                 </p>
-            ) : (
-                <DeliveryAllocationPrintAppendix lines={deliveryLines} />
-            )}
+            ) : null}
         </section>
     )
 }

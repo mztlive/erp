@@ -1,5 +1,3 @@
-import { MapPinIcon } from "lucide-react"
-
 import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -27,11 +25,10 @@ export function PurchaseComparisonRow({
     comparison,
     negativeMargin,
     source,
-    deliveryHint,
+    deliveryPointCount,
     prefix,
     onPreview,
     onCompareSource,
-    onFocusDelivery,
 }: {
     rowId?: string
     highlighted?: boolean
@@ -39,11 +36,10 @@ export function PurchaseComparisonRow({
     comparison: PurchaseComparison
     negativeMargin: boolean
     source?: PurchaseSource
-    deliveryHint: string | null
+    deliveryPointCount?: number
     prefix: string
     onPreview: (revisionId: string) => void
     onCompareSource?: (target: PurchaseSourceComparisonTarget) => void
-    onFocusDelivery: () => void
 }) {
     const title = displayName(line.title) || "未记录商品名称"
     const spec = purchaseSpecification(line.specification)
@@ -129,21 +125,19 @@ export function PurchaseComparisonRow({
                                           : ""}
                                 </span>
                             ) : null}
+                            {deliveryPointCount != null &&
+                            deliveryPointCount > 0 ? (
+                                <>
+                                    <span
+                                        aria-hidden="true"
+                                        className="text-muted-foreground/45"
+                                    >
+                                        ·
+                                    </span>
+                                    <span>{deliveryPointCount} 处收货点</span>
+                                </>
+                            ) : null}
                         </p>
-                    ) : null}
-                    {deliveryHint ? (
-                        <button
-                            id={`${prefix}-delivery-jump`}
-                            type="button"
-                            onClick={onFocusDelivery}
-                            className="mt-1 inline-flex max-w-full cursor-pointer items-center gap-1 text-left text-xs text-primary/90 hover:text-primary hover:underline"
-                        >
-                            <MapPinIcon
-                                aria-hidden="true"
-                                className="size-3 shrink-0"
-                            />
-                            <span className="truncate">{deliveryHint}</span>
-                        </button>
                     ) : null}
                 </TableCell>
 
