@@ -1,83 +1,100 @@
 import { MoneyValue } from "@/components/business"
-import type { PurchaseApprovalMetrics } from "./workspace-purchase-comparison-model"
+import { cn } from "@/lib/utils"
+import type { PurchaseMarginTotals } from "./workspace-purchase-comparison-model"
+
+export function PurchaseProfitValue({ amount }: { amount: string | null }) {
+    const loss = amount?.startsWith("-")
+    const profit = amount != null && !loss && amount !== "0.00"
+
+    return (
+        <span
+            className={cn(
+                "font-medium whitespace-nowrap",
+                loss && "text-destructive-soft-foreground",
+                profit && "text-success-soft-foreground",
+            )}
+        >
+            {loss ? "亏 " : profit ? "赚 " : null}
+            <MoneyValue
+                display="exact"
+                value={loss ? amount?.slice(1) : amount}
+                inheritColor
+            />
+        </span>
+    )
+}
 
 export function PurchaseAmountDetails({
-    estimated,
-    difference,
-    comparableActual,
+    supply,
+    margin,
+    cost,
+    costLabel = "实际采购金额",
 }: {
-    estimated: string | null
-    difference: string | null
-    comparableActual?: string
+    supply: string | null
+    margin: string | null
+    cost?: string | null
+    costLabel?: string
 }) {
-    const saved = difference?.startsWith("-")
-    const isEqual = difference === "0.00"
-    const differenceLabel = saved
-        ? "低于预估"
-        : difference == null || isEqual
-          ? "差额"
-          : "超出预估"
-
     return (
         <div className="space-y-0.5 text-xs font-normal text-muted-foreground">
             <div>
-                预估采购 <MoneyValue display="exact" value={estimated} />
+                采购供给金额 <MoneyValue display="exact" value={supply} />
             </div>
-            {comparableActual != null ? (
+            {cost != null ? (
                 <div>
-                    对应实际采购{" "}
-                    <MoneyValue display="exact" value={comparableActual} />
+                    {costLabel} <MoneyValue display="exact" value={cost} />
                 </div>
             ) : null}
             <div
                 className={
-                    saved
-                        ? "font-medium text-success-soft-foreground"
-                        : difference != null && !isEqual
-                          ? "font-medium text-warning-soft-foreground"
+                    margin?.startsWith("-")
+                        ? "font-medium text-destructive-soft-foreground"
+                        : margin != null && margin !== "0.00"
+                          ? "font-medium text-success-soft-foreground"
                           : undefined
                 }
             >
-                {differenceLabel}{" "}
-                <MoneyValue
-                    display="exact"
-                    value={saved ? difference?.slice(1) : difference}
-                    inheritColor
-                />
+                采购毛利（含税）{" "}
+                <MoneyValue display="exact" value={margin} inheritColor />
             </div>
         </div>
     )
 }
 
 export function PurchaseOrderAmountDetails({
-    metrics,
+    totals,
+    goodsLineCount,
+    hasFees = false,
+    showCost = false,
 }: {
-    metrics: PurchaseApprovalMetrics
+    totals: PurchaseMarginTotals | null
+    goodsLineCount: number
+    hasFees?: boolean
+    showCost?: boolean
 }) {
-    const { purchaseAmountComparison, goodsLineCount, feeLineCount } = metrics
-    if (!purchaseAmountComparison) {
+    if (!totals) {
         return goodsLineCount > 0 ? (
             <div className="text-xs font-normal text-muted-foreground">
-                暂无可比的预估采购金额
+                暂无法核算采购毛利
             </div>
         ) : null
     }
 
-    const { estimated, actual, difference, lineCount } =
-        purchaseAmountComparison
-    const limitedScope = lineCount < goodsLineCount || feeLineCount > 0
+    const { supply, cost, margin, lineCount } = totals
+    const limitedScope = lineCount < goodsLineCount || hasFees
 
     return (
         <div className="space-y-0.5">
             <PurchaseAmountDetails
-                estimated={estimated}
-                difference={difference}
-                comparableActual={limitedScope ? actual : undefined}
+                supply={supply}
+                margin={margin}
+                cost={limitedScope || showCost ? cost : undefined}
+                costLabel={limitedScope ? "对应实际采购金额" : undefined}
             />
             {limitedScope ? (
                 <div className="num text-xs font-normal text-muted-foreground">
-                    已对比 {lineCount}/{goodsLineCount} 项商品
-                    {feeLineCount > 0 ? "，不含费用" : null}
+                    已核算 {lineCount}/{goodsLineCount} 条采购明细
+                    {hasFees ? "，不含费用" : null}
                 </div>
             ) : null}
         </div>

@@ -19,7 +19,7 @@ export type PurchaseSource = NonNullable<
     ApprovalMaterials["display"]["source_sales"]
 >[number]
 
-export type PurchaseMarginSummary = Readonly<{
+export type ExternalMarginSummary = Readonly<{
     /** 带符号毛利率（如 "16.4" 或 "-8.2"）。 */
     percent: string
     /** 无符号绝对毛利率（用于「亏 8.2%」，避免「亏 -8.2%」）。 */
@@ -30,6 +30,39 @@ export type PurchaseMarginSummary = Readonly<{
     absAmount: string
     negative: boolean
 }>
+
+export type PurchaseMarginAmounts = Readonly<{
+    supply: string
+    cost: string
+    margin: string
+}>
+
+export type PurchaseMarginTotals = PurchaseMarginAmounts &
+    Readonly<{ lineCount: number }>
+
+export function sumPurchaseMargins(
+    lines: readonly PurchaseMarginAmounts[],
+): PurchaseMarginTotals | null {
+    if (lines.length === 0) return null
+
+    const amountScale = { maxScale: 2, outputScale: 2 }
+    const supply = sumFixed(
+        lines.map((line) => line.supply),
+        amountScale,
+    )
+    const cost = sumFixed(
+        lines.map((line) => line.cost),
+        amountScale,
+    )
+    return {
+        supply,
+        cost,
+        margin: subtractFixed(supply, cost, amountScale),
+        lineCount: lines.length,
+    }
+}
+
+export const PURCHASE_SUPPLY_PRICE_RISK = "实际采购单价高于采购供给价"
 
 export type PurchaseLineRiskSeverity = "high" | "medium" | "info" | "none"
 
@@ -84,10 +117,10 @@ export function isPurchaseFeeLine(line: ApprovalPurchaseLine) {
     return !line.source && line.quantity == null && line.gross_amount != null
 }
 
-function calculatePurchaseMargin(
+function calculateExternalMargin(
     salesAmount: string,
     purchaseCost: string,
-): PurchaseMarginSummary | null {
+): ExternalMarginSummary | null {
     try {
         if (compareDecimal(salesAmount, "0", 6) <= 0) return null
         const diff = subtractFixed(salesAmount, purchaseCost, {
@@ -134,16 +167,15 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
     const infoWarnings: string[] = []
     const { salesDate, daysFromDeadline } = purchaseDeliveryComparison(line)
     let delayDays = 0
-    let priceDifference: string | null = null
-    let pricePercent: string | null = null
-    let estimatedGross: string | null = null
-    let grossDifference: string | null = null
+    let supplyUnitShortfall: string | null = null
+    let supplyUnitShortfallPercent: string | null = null
+    let supplyGrossAmount: string | null = null
+    let purchaseMargin: PurchaseMarginAmounts | null = null
     let salesLineGross: string | null = null
+    let externalGrossMargin: string | null = null
     let quantityExcess: string | null = null
     let partial = false
-    let marginRate: PurchaseMarginSummary | null = null
-    let salesSupplyAdjustment: "increased" | "decreased" | "unchanged" | null =
-        null
+    let externalMargin: ExternalMarginSummary | null = null
     let mismatchedProduct = false
     let unitMismatch = false
     let missingSource = false
@@ -151,18 +183,15 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
     let incompleteDeliveryDate = false
 
     const source = line.source
+    const salesPriceWarnings = source
+        ? salesLinePriceComparison(source.sales_prices ?? source).warnings
+        : []
     if (!fee) {
         if (!source) {
             missingSource = true
             highWarnings.push("来源销售缺失")
         } else {
-            const sourcePriceCheck = salesLinePriceComparison(
-                source.sales_prices ?? source,
-            )
-            salesSupplyAdjustment = sourcePriceCheck.adjustment
-            for (const warning of sourcePriceCheck.warnings) {
-                mediumWarnings.push(warning)
-            }
+            mediumWarnings.push(...salesPriceWarnings)
             if (
                 line.title.trim() !== source.title.trim() ||
                 purchaseSpecification(line.specification) !==
@@ -181,7 +210,7 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
             const supplyPrice = source.procurement_supply_price_gross
             if (supplyPrice == null || supplyPrice === "") {
                 missingSupply = true
-                infoWarnings.push("销售预估采购价未填写")
+                infoWarnings.push("采购供给价未填写")
             }
             try {
                 if (sameUnit && line.quantity != null) {
@@ -191,33 +220,37 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
                         { leftMaxScale: 6, rightMaxScale: 6, outputScale: 2 },
                     )
                 }
-                if (sameUnit && line.unit_cost_gross != null) {
-                    if (salesLineGross && line.gross_amount != null) {
-                        marginRate = calculatePurchaseMargin(
-                            salesLineGross,
-                            line.gross_amount,
-                        )
-                    } else {
-                        marginRate = calculatePurchaseMargin(
-                            source.unit_price_gross,
-                            line.unit_cost_gross,
-                        )
-                    }
+                if (salesLineGross != null && line.gross_amount != null) {
+                    externalMargin = calculateExternalMargin(
+                        salesLineGross,
+                        line.gross_amount,
+                    )
+                    externalGrossMargin =
+                        externalMargin?.amount ??
+                        subtractFixed(salesLineGross, line.gross_amount, {
+                            maxScale: 2,
+                            outputScale: 2,
+                        })
+                } else if (sameUnit && line.unit_cost_gross != null) {
+                    externalMargin = calculateExternalMargin(
+                        source.unit_price_gross,
+                        line.unit_cost_gross,
+                    )
                 }
                 if (sameUnit && supplyPrice != null && supplyPrice !== "") {
                     if (
                         line.unit_cost_gross != null &&
                         compareDecimal(line.unit_cost_gross, supplyPrice, 6) > 0
                     ) {
-                        mediumWarnings.push("高于销售预估采购价")
-                        priceDifference = subtractFixed(
+                        mediumWarnings.push(PURCHASE_SUPPLY_PRICE_RISK)
+                        supplyUnitShortfall = subtractFixed(
                             line.unit_cost_gross,
                             supplyPrice,
                             { maxScale: 6, outputScale: 6 },
                         )
                         if (compareDecimal(supplyPrice, "0", 6) > 0) {
-                            pricePercent = divideFixed(
-                                multiplyFixed(priceDifference, "100", {
+                            supplyUnitShortfallPercent = divideFixed(
+                                multiplyFixed(supplyUnitShortfall, "100", {
                                     leftMaxScale: 6,
                                     rightMaxScale: 0,
                                     outputScale: 6,
@@ -232,7 +265,7 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
                         }
                     }
                     if (line.quantity != null) {
-                        estimatedGross = multiplyFixed(
+                        supplyGrossAmount = multiplyFixed(
                             supplyPrice,
                             line.quantity,
                             {
@@ -242,11 +275,15 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
                             },
                         )
                         if (line.gross_amount != null) {
-                            grossDifference = subtractFixed(
-                                line.gross_amount,
-                                estimatedGross,
-                                { maxScale: 2, outputScale: 2 },
-                            )
+                            purchaseMargin = {
+                                supply: supplyGrossAmount,
+                                cost: line.gross_amount,
+                                margin: subtractFixed(
+                                    supplyGrossAmount,
+                                    line.gross_amount,
+                                    { maxScale: 2, outputScale: 2 },
+                                ),
+                            }
                         }
                     }
                 }
@@ -305,15 +342,16 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
         severity,
         salesDate,
         delayDays,
-        priceDifference,
-        pricePercent,
-        estimatedGross,
-        grossDifference,
+        supplyUnitShortfall,
+        supplyUnitShortfallPercent,
+        supplyGrossAmount,
+        purchaseMargin,
         salesLineGross,
+        externalGrossMargin,
         quantityExcess,
         partial,
-        marginRate,
-        salesSupplyAdjustment,
+        externalMargin,
+        salesPriceWarnings,
         mismatchedProduct,
         unitMismatch,
         missingSource,
@@ -327,7 +365,7 @@ export type PurchaseComparison = ReturnType<typeof purchaseComparison>
 export type EvaluatedPurchaseRow = Readonly<{
     line: ApprovalPurchaseLine
     comparison: PurchaseComparison
-    negativeMargin: boolean
+    externalLoss: boolean
     effectiveSeverity: PurchaseLineRiskSeverity
     /** 用于「仅看风险项」筛选（仅命中高危或中危可操作异常，排除纯参考缺省）。 */
     hasActionableRisk: boolean
@@ -338,20 +376,20 @@ export function evaluatePurchaseLines(
 ): EvaluatedPurchaseRow[] {
     return lines.map((line) => {
         const comparison = purchaseComparison(line)
-        const negativeMargin = isPurchaseCostAbove(
+        const externalLoss = isPurchaseCostAbove(
             line,
             line.source?.unit_price_gross,
         )
         const effectiveSeverity: PurchaseLineRiskSeverity =
-            negativeMargin || comparison.severity === "high"
+            externalLoss || comparison.severity === "high"
                 ? "high"
                 : comparison.severity
         const hasActionableRisk =
-            negativeMargin || comparison.actionableWarnings.length > 0
+            externalLoss || comparison.actionableWarnings.length > 0
         return {
             line,
             comparison,
-            negativeMargin,
+            externalLoss,
             effectiveSeverity,
             hasActionableRisk,
         }
@@ -364,24 +402,24 @@ export function purchaseApprovalRiskReasons(
 ): string[] {
     if (!lines?.length) return []
     const evaluated = evaluatePurchaseLines(lines)
-    let negativeMarginCount = 0
+    let externalLossCount = 0
     let quantityExcessCount = 0
     let mismatchCount = 0
     let delayCount = 0
-    let overSupplyCount = 0
+    let costAboveSupplyCount = 0
 
-    for (const { comparison, negativeMargin } of evaluated) {
-        if (negativeMargin) negativeMarginCount += 1
+    for (const { comparison, externalLoss } of evaluated) {
+        if (externalLoss) externalLossCount += 1
         if (comparison.quantityExcess) quantityExcessCount += 1
         if (comparison.mismatchedProduct) mismatchCount += 1
         if (comparison.delayDays > 0) delayCount += 1
-        if (comparison.priceDifference) overSupplyCount += 1
+        if (comparison.supplyUnitShortfall) costAboveSupplyCount += 1
     }
 
     const reasons: string[] = []
-    if (negativeMarginCount > 0) {
+    if (externalLossCount > 0) {
         reasons.push(
-            `存在 ${negativeMarginCount} 项采购单价高于销售含税单价（负毛利风险）`,
+            `存在 ${externalLossCount} 项实际采购单价高于对外含税售价（对外负毛利风险）`,
         )
     }
     if (quantityExcessCount > 0) {
@@ -393,8 +431,10 @@ export function purchaseApprovalRiskReasons(
     if (delayCount > 0) {
         reasons.push(`存在 ${delayCount} 项预计交期晚于客户承诺交期`)
     }
-    if (overSupplyCount > 0) {
-        reasons.push(`存在 ${overSupplyCount} 项采购单价高于销售预估采购供给价`)
+    if (costAboveSupplyCount > 0) {
+        reasons.push(
+            `存在 ${costAboveSupplyCount} 项实际采购单价高于采购供给价（采购倒挂）`,
+        )
     }
     return reasons
 }
@@ -407,13 +447,13 @@ export function buildPurchaseDynamicRejectPhrases(
     if (!lines?.length) return []
     const evaluated = evaluatePurchaseLines(lines)
     const phrases: string[] = []
-    const negativeLines = evaluated.filter((row) => row.negativeMargin)
+    const negativeLines = evaluated.filter((row) => row.externalLoss)
     if (negativeLines.length === 1) {
         phrases.push(
-            `第 ${negativeLines[0]!.line.line_no} 行负毛利，采购单价高于销售单价`,
+            `第 ${negativeLines[0]!.line.line_no} 行对外负毛利，实际采购单价高于对外售价`,
         )
     } else if (negativeLines.length > 1) {
-        phrases.push(`共 ${negativeLines.length} 项负毛利，请核对采购价格`)
+        phrases.push(`共 ${negativeLines.length} 项对外负毛利，请核对采购价格`)
     }
     if (evaluated.some((row) => row.comparison.quantityExcess)) {
         phrases.push("采购数量超过来源销售需求，请核对数量依据")
@@ -424,8 +464,8 @@ export function buildPurchaseDynamicRejectPhrases(
     if (evaluated.some((row) => row.comparison.delayDays > 0)) {
         phrases.push("预计交期晚于客户承诺交期，请协调供应商")
     }
-    if (evaluated.some((row) => row.comparison.priceDifference)) {
-        phrases.push("采购单价高于销售预估供给价")
+    if (evaluated.some((row) => row.comparison.supplyUnitShortfall)) {
+        phrases.push(PURCHASE_SUPPLY_PRICE_RISK)
     }
     if (attachmentCount === 0) {
         phrases.push("缺少报价单、合同或相关凭证附件")
@@ -441,18 +481,14 @@ export type PurchaseApprovalMetrics = Readonly<{
     goodsLineCount: number
     feeLineCount: number
     correspondingSalesTotal: string | null
-    orderMargin: PurchaseMarginSummary | null
+    externalGrossMargin: string | null
+    externalMargin: ExternalMarginSummary | null
     salesCoveredCount: number
     partialSalesCoverage: boolean
-    purchaseAmountComparison: {
-        estimated: string
-        actual: string
-        difference: string
-        lineCount: number
-    } | null
+    purchaseMargin: PurchaseMarginTotals | null
     totalQuantity: { value: string; unit?: string } | null
-    negativeMarginCount: number
-    overSupplyCount: number
+    externalLossCount: number
+    costAboveSupplyCount: number
     quantityExcessCount: number
     delayCount: number
     mismatchCount: number
@@ -473,8 +509,7 @@ export function buildPurchaseApprovalMetrics(
     const feeGrossAmounts: string[] = []
     const salesGrossAmounts: string[] = []
     const comparablePurchaseAmounts: string[] = []
-    const estimatedPurchaseAmounts: string[] = []
-    const actualPurchaseAmounts: string[] = []
+    const purchaseMargins: PurchaseMarginAmounts[] = []
     const units = new Set<string>()
     const quantities: string[] = []
 
@@ -485,8 +520,8 @@ export function buildPurchaseApprovalMetrics(
     let salesCoveredCount = 0
     let quantityLineCount = 0
 
-    let negativeMarginCount = 0
-    let overSupplyCount = 0
+    let externalLossCount = 0
+    let costAboveSupplyCount = 0
     let quantityExcessCount = 0
     let delayCount = 0
     let mismatchCount = 0
@@ -495,7 +530,7 @@ export function buildPurchaseApprovalMetrics(
     let missingSupplyCount = 0
 
     for (const row of evaluated) {
-        const { line, comparison, negativeMargin } = row
+        const { line, comparison, externalLoss } = row
         if (line.gross_amount != null) grossAmounts.push(line.gross_amount)
         if (line.net_amount != null) netAmounts.push(line.net_amount)
         else allHaveNet = false
@@ -514,13 +549,8 @@ export function buildPurchaseApprovalMetrics(
                 comparablePurchaseAmounts.push(line.gross_amount)
                 salesCoveredCount += 1
             }
-            if (
-                comparison.estimatedGross != null &&
-                comparison.grossDifference != null &&
-                line.gross_amount != null
-            ) {
-                estimatedPurchaseAmounts.push(comparison.estimatedGross)
-                actualPurchaseAmounts.push(line.gross_amount)
+            if (comparison.purchaseMargin) {
+                purchaseMargins.push(comparison.purchaseMargin)
             }
             if (line.quantity != null) {
                 quantityLineCount += 1
@@ -529,8 +559,8 @@ export function buildPurchaseApprovalMetrics(
             }
         }
 
-        if (negativeMargin) negativeMarginCount += 1
-        if (comparison.priceDifference) overSupplyCount += 1
+        if (externalLoss) externalLossCount += 1
+        if (comparison.supplyUnitShortfall) costAboveSupplyCount += 1
         if (comparison.quantityExcess) quantityExcessCount += 1
         if (comparison.delayDays > 0) delayCount += 1
         if (comparison.mismatchedProduct) mismatchCount += 1
@@ -564,27 +594,13 @@ export function buildPurchaseApprovalMetrics(
                   outputScale: 2,
               })
             : null
-    const orderMargin =
+    const externalMargin =
         correspondingSalesTotal && totalComparableCost
-            ? calculatePurchaseMargin(
+            ? calculateExternalMargin(
                   correspondingSalesTotal,
                   totalComparableCost,
               )
             : null
-
-    let purchaseAmountComparison: PurchaseApprovalMetrics["purchaseAmountComparison"] =
-        null
-    if (estimatedPurchaseAmounts.length > 0) {
-        const amountScale = { maxScale: 2, outputScale: 2 }
-        const estimated = sumFixed(estimatedPurchaseAmounts, amountScale)
-        const actual = sumFixed(actualPurchaseAmounts, amountScale)
-        purchaseAmountComparison = {
-            estimated,
-            actual,
-            difference: subtractFixed(actual, estimated, amountScale),
-            lineCount: estimatedPurchaseAmounts.length,
-        }
-    }
 
     const totalQuantity =
         units.size === 1 &&
@@ -612,16 +628,24 @@ export function buildPurchaseApprovalMetrics(
         goodsLineCount,
         feeLineCount,
         correspondingSalesTotal,
-        orderMargin,
+        externalGrossMargin:
+            externalMargin?.amount ??
+            (correspondingSalesTotal != null && totalComparableCost != null
+                ? subtractFixed(correspondingSalesTotal, totalComparableCost, {
+                      maxScale: 2,
+                      outputScale: 2,
+                  })
+                : null),
+        externalMargin,
         salesCoveredCount,
         partialSalesCoverage:
             goodsLineCount > 0 &&
             salesCoveredCount > 0 &&
             salesCoveredCount < goodsLineCount,
-        purchaseAmountComparison,
+        purchaseMargin: sumPurchaseMargins(purchaseMargins),
         totalQuantity,
-        negativeMarginCount,
-        overSupplyCount,
+        externalLossCount,
+        costAboveSupplyCount,
         quantityExcessCount,
         delayCount,
         mismatchCount,

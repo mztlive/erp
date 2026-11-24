@@ -20,13 +20,12 @@ import {
 import type { ApprovalPurchaseLine } from "@/features/approval-workflow/api/materials"
 import { countLineDeliveryPoints } from "@/features/approval-workflow/purchase-fulfillment"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { cn } from "@/lib/utils"
 import {
     APPROVAL_TABLE_DEFAULT_PAGE_SIZE,
     ApprovalLineFilterBar,
     ApprovalLinePagination,
 } from "./workspace-approval-table-controls"
-import { PurchaseOrderAmountDetails } from "./workspace-purchase-amount-details"
+import { PurchaseProfitValue } from "./workspace-purchase-amount-details"
 import {
     buildPurchaseApprovalMetrics,
     evaluatePurchaseLines,
@@ -180,7 +179,7 @@ export function WorkspacePurchaseComparisonTable({
             >
                 <Table data-density="comfortable" aria-label="采购明细">
                     <TableCaption className="sr-only">
-                        预估采购金额按销售填写的预估含税单价乘以本次采购数量计算。审批适用于整份采购单。
+                        金额含税。采购毛利按供给金额减采购成本计算，公司对外毛利按本次采购对应的销售单成交金额减采购成本计算。
                     </TableCaption>
                     <TableHeader>
                         <TableRow>
@@ -193,7 +192,7 @@ export function WorkspacePurchaseComparisonTable({
                             <TableHead
                                 scope="col"
                                 data-align="end"
-                                className="w-24"
+                                className="w-20"
                             >
                                 采购数量
                             </TableHead>
@@ -202,26 +201,43 @@ export function WorkspacePurchaseComparisonTable({
                                 data-align="end"
                                 className="w-28"
                             >
-                                采购含税单价
+                                实际采购成本
                             </TableHead>
                             <TableHead
                                 scope="col"
                                 data-align="end"
-                                className="min-w-40"
+                                className="w-24"
                             >
-                                采购含税金额
+                                采购供给单价
                             </TableHead>
                             <TableHead
                                 scope="col"
                                 data-align="end"
-                                className="w-36"
+                                className="w-28"
                             >
-                                销售对照
+                                采购毛利
+                            </TableHead>
+                            <TableHead
+                                scope="col"
+                                data-align="end"
+                                className="w-28"
+                            >
+                                销售单成交单价
+                            </TableHead>
+                            <TableHead
+                                scope="col"
+                                data-align="end"
+                                className="w-32"
+                            >
+                                公司对外毛利
+                            </TableHead>
+                            <TableHead scope="col" className="w-24">
+                                <span className="sr-only">查看价格明细</span>
                             </TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {visible.map(({ line, comparison, negativeMargin }) => {
+                        {visible.map(({ line, comparison, externalLoss }) => {
                             const lineDeliveryPointCount =
                                 uniqueDeliveryPointCount > 1
                                     ? countLineDeliveryPoints(
@@ -236,7 +252,7 @@ export function WorkspacePurchaseComparisonTable({
                                     highlighted={highlightedLineId === line.id}
                                     line={line}
                                     comparison={comparison}
-                                    negativeMargin={negativeMargin}
+                                    externalLoss={externalLoss}
                                     source={
                                         sources.length > 1
                                             ? sources.find(
@@ -260,7 +276,7 @@ export function WorkspacePurchaseComparisonTable({
                         {!visible.length ? (
                             <TableRow>
                                 <TableCell
-                                    colSpan={6}
+                                    colSpan={9}
                                     className="py-10 text-center text-xs text-muted-foreground"
                                 >
                                     {riskOnly && !search
@@ -275,7 +291,7 @@ export function WorkspacePurchaseComparisonTable({
                             <TableRow className="hover:bg-transparent">
                                 <TableCell
                                     colSpan={2}
-                                    className="py-2.5 align-middle text-xs font-medium text-muted-foreground"
+                                    className="py-2.5 align-top text-xs font-medium text-muted-foreground"
                                 >
                                     合计 · 共{" "}
                                     <span className="num text-foreground">
@@ -291,7 +307,7 @@ export function WorkspacePurchaseComparisonTable({
                                 </TableCell>
                                 <TableCell
                                     data-align="end"
-                                    className="py-2.5 align-middle text-xs font-medium text-foreground"
+                                    className="py-2.5 align-top text-xs font-medium text-foreground"
                                 >
                                     {metrics.totalQuantity ? (
                                         <QuantityValue
@@ -304,72 +320,70 @@ export function WorkspacePurchaseComparisonTable({
                                 </TableCell>
                                 <TableCell
                                     data-align="end"
-                                    className="py-2.5 align-middle text-xs"
+                                    className="py-2.5 align-top font-semibold"
+                                >
+                                    <MoneyValue
+                                        display="exact"
+                                        value={metrics.grossTotal}
+                                    />
+                                </TableCell>
+                                <TableCell
+                                    data-align="end"
+                                    className="py-2.5 align-top text-muted-foreground"
                                 >
                                     —
                                 </TableCell>
                                 <TableCell
                                     data-align="end"
-                                    className="space-y-0.5 py-2.5 align-middle whitespace-nowrap"
+                                    className="py-2.5 align-top"
                                 >
-                                    <div className="text-xs text-muted-foreground">
-                                        实际采购{" "}
-                                        <MoneyValue
-                                            display="exact"
-                                            value={metrics.grossTotal}
-                                            className="text-body-compact font-semibold"
-                                        />
-                                    </div>
-                                    <PurchaseOrderAmountDetails
-                                        metrics={metrics}
+                                    <PurchaseProfitValue
+                                        amount={
+                                            metrics.purchaseMargin?.margin ??
+                                            null
+                                        }
                                     />
-                                    {metrics.netTotal ? (
-                                        <div className="text-xs font-normal text-muted-foreground">
-                                            不含税{" "}
-                                            <MoneyValue
-                                                display="exact"
-                                                value={metrics.netTotal}
-                                            />
+                                    {metrics.purchaseMargin &&
+                                    (metrics.purchaseMargin.lineCount <
+                                        metrics.goodsLineCount ||
+                                        metrics.feeLineCount > 0) ? (
+                                        <div className="num mt-0.5 text-xs font-normal text-muted-foreground">
+                                            {metrics.purchaseMargin.lineCount <
+                                            metrics.goodsLineCount
+                                                ? `已核算 ${metrics.purchaseMargin.lineCount}/${metrics.goodsLineCount} 行`
+                                                : "商品合计"}
+                                            {metrics.feeLineCount > 0
+                                                ? " · 费用单列"
+                                                : null}
                                         </div>
                                     ) : null}
                                 </TableCell>
                                 <TableCell
                                     data-align="end"
-                                    className="py-2.5 align-middle text-xs"
+                                    className="py-2.5 align-top text-muted-foreground"
                                 >
-                                    {metrics.orderMargin ? (
-                                        <>
-                                            <div
-                                                className={cn(
-                                                    "num font-medium",
-                                                    metrics.orderMargin.negative
-                                                        ? "text-destructive-soft-foreground"
-                                                        : "text-foreground/85",
-                                                )}
-                                            >
-                                                {metrics.orderMargin.negative
-                                                    ? `整单亏 ${metrics.orderMargin.absPercent}%`
-                                                    : `整单毛利 ${metrics.orderMargin.percent}%`}
-                                            </div>
-                                            <div className="mt-0.5 text-tiny font-normal text-muted-foreground">
-                                                {metrics.orderMargin.negative
-                                                    ? "亏 "
-                                                    : "毛利额 "}
-                                                <MoneyValue
-                                                    display="exact"
-                                                    value={
-                                                        metrics.orderMargin
-                                                            .absAmount
-                                                    }
-                                                />
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <span className="text-muted-foreground">
-                                            —
-                                        </span>
-                                    )}
+                                    —
                                 </TableCell>
+                                <TableCell
+                                    data-align="end"
+                                    className="py-2.5 align-top"
+                                >
+                                    <PurchaseProfitValue
+                                        amount={metrics.externalGrossMargin}
+                                    />
+                                    {metrics.externalMargin ? (
+                                        <div className="num mt-0.5 text-xs font-normal text-muted-foreground">
+                                            {metrics.externalMargin.percent}%
+                                        </div>
+                                    ) : null}
+                                    {metrics.partialSalesCoverage ? (
+                                        <div className="num text-xs font-normal text-muted-foreground">
+                                            已核算 {metrics.salesCoveredCount}/
+                                            {metrics.goodsLineCount} 行
+                                        </div>
+                                    ) : null}
+                                </TableCell>
+                                <TableCell />
                             </TableRow>
                         </TableFooter>
                     ) : null}

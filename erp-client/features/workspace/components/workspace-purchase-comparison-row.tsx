@@ -1,19 +1,21 @@
-import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
+import { useState } from "react"
+
+import { MoneyValue, QuantityValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TableCell, TableRow } from "@/components/ui/table"
 import type { ApprovalPurchaseLine } from "@/features/approval-workflow/api/materials"
 import { displayName } from "@/lib/display-name"
-import { multiplyFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
-import { PurchaseAmountDetails } from "./workspace-purchase-amount-details"
+import { PurchaseProfitValue } from "./workspace-purchase-amount-details"
 import {
     purchaseSpecification,
     type PurchaseComparison,
     type PurchaseSource,
 } from "./workspace-purchase-comparison-model"
+import { PurchaseLinePriceDetails } from "./workspace-purchase-line-price-details"
 import {
-    hasPurchaseRiskStrip,
+    purchaseLineRiskNotes,
     PurchaseLineRiskStrip,
 } from "./workspace-purchase-line-supplement"
 import type { PurchaseSourceComparisonTarget } from "./workspace-purchase-source-comparison"
@@ -23,7 +25,7 @@ export function PurchaseComparisonRow({
     highlighted = false,
     line,
     comparison,
-    negativeMargin,
+    externalLoss,
     source,
     deliveryPointCount,
     prefix,
@@ -34,40 +36,34 @@ export function PurchaseComparisonRow({
     highlighted?: boolean
     line: ApprovalPurchaseLine
     comparison: PurchaseComparison
-    negativeMargin: boolean
+    externalLoss: boolean
     source?: PurchaseSource
     deliveryPointCount?: number
     prefix: string
     onPreview: (revisionId: string) => void
     onCompareSource?: (target: PurchaseSourceComparisonTarget) => void
 }) {
+    const [inlineDetailsOpen, setInlineDetailsOpen] = useState(false)
     const title = displayName(line.title) || "未记录商品名称"
     const spec = purchaseSpecification(line.specification)
     const sales = line.source
-    const estimatedUnitPrice = sales?.procurement_supply_price_gross
-    const overSupply = Boolean(comparison.priceDifference)
-    const isHighRisk = negativeMargin || comparison.highWarnings.length > 0
-    const showRiskStrip = hasPurchaseRiskStrip(
-        comparison,
-        negativeMargin,
-        source,
+    const useSideComparison = Boolean(onCompareSource && sales)
+    const showInlineDetails = !useSideComparison && inlineDetailsOpen
+    const compareLabel = showInlineDetails ? "收起对照" : "对照本行"
+    const canCompare =
+        sales != null || line.input_tax_rate != null || line.tax_amount != null
+    const lineNotes = purchaseLineRiskNotes(comparison, externalLoss)
+    const showRiskStrip = Boolean(
+        lineNotes.externalPriceRisk || lineNotes.warnings.length || source,
     )
-
-    const inputTaxRatePercent =
-        line.input_tax_rate != null
-            ? multiplyFixed(line.input_tax_rate, "100", {
-                  leftMaxScale: 6,
-                  rightMaxScale: 0,
-                  outputScale: 2,
-              })
-            : null
+    const inlineDetailsId = `${prefix}-prices`
 
     return (
         <>
             <TableRow
                 id={rowId}
                 className={cn(
-                    isHighRisk &&
+                    comparison.highWarnings.length > 0 &&
                         "bg-destructive-soft/35 hover:bg-destructive-soft/50",
                     highlighted &&
                         "bg-info-soft/50 ring-1 ring-inset ring-info-border",
@@ -85,9 +81,6 @@ export function PurchaseComparisonRow({
                         </span>
                         {comparison.fee ? (
                             <Badge variant="neutral">费用</Badge>
-                        ) : null}
-                        {negativeMargin ? (
-                            <Badge variant="destructive">负毛利</Badge>
                         ) : null}
                         {comparison.quantityExcess ? (
                             <Badge variant="destructive">超需求</Badge>
@@ -177,156 +170,120 @@ export function PurchaseComparisonRow({
                     data-align="end"
                     className="py-3 align-top whitespace-nowrap"
                 >
+                    <MoneyValue display="exact" value={line.gross_amount} />
                     {line.unit_cost_gross != null ? (
-                        <MoneyValue
-                            display="exact"
-                            value={line.unit_cost_gross}
-                            inheritColor={negativeMargin || overSupply}
-                            className={cn(
-                                "font-medium",
-                                negativeMargin
-                                    ? "text-destructive-soft-foreground"
-                                    : overSupply
-                                      ? "text-warning-soft-foreground"
-                                      : undefined,
-                            )}
-                        />
-                    ) : (
-                        <span className="text-muted-foreground">—</span>
-                    )}
-                    {sales ? (
-                        <div className="mt-0.5 flex items-center justify-end gap-x-1.5 text-xs text-muted-foreground">
-                            {estimatedUnitPrice ? (
-                                <span>
-                                    预估{" "}
-                                    <MoneyValue
-                                        display="exact"
-                                        value={estimatedUnitPrice}
-                                    />
-                                </span>
-                            ) : (
-                                <span>销售未填预估价</span>
-                            )}
-                            {comparison.salesSupplyAdjustment === "increased" ||
-                            comparison.salesSupplyAdjustment === "decreased" ? (
-                                <Badge variant="warning" className="text-tiny">
-                                    {comparison.salesSupplyAdjustment ===
-                                    "increased"
-                                        ? "调高"
-                                        : "调低"}
-                                </Badge>
-                            ) : null}
-                        </div>
-                    ) : null}
-                    {inputTaxRatePercent != null ? (
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                            进项{" "}
-                            <RateValue
-                                value={inputTaxRatePercent}
-                                precision={2}
-                            />
-                        </p>
-                    ) : null}
-                </TableCell>
-
-                <TableCell
-                    data-align="end"
-                    className="space-y-0.5 py-3 align-top whitespace-nowrap"
-                >
-                    <div className="text-xs text-muted-foreground">
-                        实际采购{" "}
-                        <MoneyValue
-                            display="exact"
-                            value={line.gross_amount}
-                            className="text-body-compact"
-                        />
-                    </div>
-                    {!comparison.fee ? (
-                        <PurchaseAmountDetails
-                            estimated={comparison.estimatedGross}
-                            difference={comparison.grossDifference}
-                        />
-                    ) : null}
-                    {line.tax_amount != null ? (
-                        <p className="text-xs text-muted-foreground">
-                            税额{" "}
+                        <div className="mt-0.5 text-xs text-muted-foreground">
+                            {line.unitName ? null : "单价 "}
                             <MoneyValue
                                 display="exact"
-                                value={line.tax_amount}
+                                value={line.unit_cost_gross}
+                                inheritColor
                             />
-                        </p>
+                            {line.unitName ? `/${line.unitName}` : null}
+                        </div>
                     ) : null}
                 </TableCell>
 
-                <TableCell
-                    data-align="end"
-                    className="py-3 align-top whitespace-normal"
-                >
-                    {sales ? (
-                        <div className="space-y-1 text-xs">
-                            <div className="flex flex-wrap items-baseline justify-end gap-x-1.5">
-                                <span className="text-muted-foreground">
-                                    销售单价
-                                </span>
-                                <MoneyValue
-                                    display="exact"
-                                    value={sales.unit_price_gross}
-                                    className="font-medium text-foreground/90"
-                                />
-                                {comparison.marginRate ? (
-                                    <span
-                                        className={cn(
-                                            "num",
-                                            comparison.marginRate.negative
-                                                ? "font-medium text-destructive-soft-foreground"
-                                                : "text-muted-foreground",
-                                        )}
-                                    >
-                                        {comparison.marginRate.negative
-                                            ? `亏 ${comparison.marginRate.absPercent}%`
-                                            : `毛利 ${comparison.marginRate.percent}%`}
-                                    </span>
-                                ) : null}
-                            </div>
-                            {onCompareSource ? (
-                                <Button
-                                    id={`${prefix}-source-compare`}
-                                    type="button"
-                                    variant="link"
-                                    size="xs"
-                                    className="h-auto px-0"
-                                    aria-label={`对照第 ${line.line_no} 行采购与销售`}
-                                    onClick={() =>
-                                        onCompareSource({
-                                            revisionId: sales.revision_id,
-                                            purchaseLineId: line.id,
-                                        })
-                                    }
-                                >
-                                    对照本行
-                                </Button>
-                            ) : null}
+                <TableCell data-align="end" className="py-3 align-top">
+                    <MoneyValue
+                        display="exact"
+                        value={sales?.procurement_supply_price_gross}
+                    />
+                </TableCell>
+
+                <TableCell data-align="end" className="py-3 align-top">
+                    <PurchaseProfitValue
+                        amount={comparison.purchaseMargin?.margin ?? null}
+                    />
+                </TableCell>
+
+                <TableCell data-align="end" className="py-3 align-top">
+                    <MoneyValue
+                        display="exact"
+                        value={sales?.unit_price_gross}
+                    />
+                </TableCell>
+
+                <TableCell data-align="end" className="py-3 align-top">
+                    <PurchaseProfitValue
+                        amount={comparison.externalGrossMargin}
+                    />
+                    {comparison.externalGrossMargin != null &&
+                    comparison.externalMargin ? (
+                        <div className="num mt-0.5 text-xs text-muted-foreground">
+                            {comparison.externalMargin.percent}%
                         </div>
-                    ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                    )}
+                    ) : null}
+                </TableCell>
+
+                <TableCell data-align="end" className="py-3 align-top">
+                    {canCompare ? (
+                        <Button
+                            id={`${prefix}-source-compare`}
+                            type="button"
+                            variant="outline"
+                            size="xs"
+                            aria-label={`${compareLabel}，第 ${line.line_no} 行价格`}
+                            aria-expanded={
+                                useSideComparison
+                                    ? undefined
+                                    : inlineDetailsOpen
+                            }
+                            aria-controls={
+                                showInlineDetails ? inlineDetailsId : undefined
+                            }
+                            onClick={() => {
+                                if (onCompareSource && sales) {
+                                    onCompareSource({
+                                        revisionId: sales.revision_id,
+                                        purchaseLineId: line.id,
+                                    })
+                                } else {
+                                    setInlineDetailsOpen((open) => !open)
+                                }
+                            }}
+                        >
+                            {compareLabel}
+                        </Button>
+                    ) : null}
+                    {comparison.salesPriceWarnings.length > 0 ? (
+                        <div className="mt-0.5 text-xs text-warning-soft-foreground">
+                            价格需核对
+                        </div>
+                    ) : null}
                 </TableCell>
             </TableRow>
 
             {showRiskStrip ? (
                 <TableRow className="hover:bg-transparent">
                     <TableCell
-                        colSpan={6}
+                        colSpan={9}
                         className="pt-0 pb-3 whitespace-normal"
                     >
                         <PurchaseLineRiskStrip
                             line={line}
                             comparison={comparison}
-                            negativeMargin={negativeMargin}
+                            notes={lineNotes}
                             source={source}
                             prefix={prefix}
                             onPreview={onPreview}
                         />
+                    </TableCell>
+                </TableRow>
+            ) : null}
+            {showInlineDetails ? (
+                <TableRow className="hover:bg-transparent">
+                    <TableCell
+                        id={inlineDetailsId}
+                        colSpan={9}
+                        className="pt-0 pb-3 whitespace-normal"
+                    >
+                        <div className="rounded-md border border-border/60 p-3">
+                            <PurchaseLinePriceDetails
+                                line={line}
+                                comparison={comparison}
+                            />
+                        </div>
                     </TableCell>
                 </TableRow>
             ) : null}

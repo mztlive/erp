@@ -28,7 +28,10 @@ import {
     isPurchaseFeeLine,
     purchaseComparison,
     purchaseSpecification,
-    type PurchaseMarginSummary,
+    sumPurchaseMargins,
+    type ExternalMarginSummary,
+    type PurchaseMarginAmounts,
+    type PurchaseMarginTotals,
 } from "./workspace-purchase-comparison-model"
 
 export type SourceSalesOrderEntry = NonNullable<
@@ -75,7 +78,6 @@ export type MatchedPurchaseLineSummary = Readonly<{
     delayDays: number
     mismatchedProduct: boolean
     unitMismatch: boolean
-    overSupplyAmount: string | null
 }>
 
 export type SalesLineCoverageStatus =
@@ -110,16 +112,16 @@ export type SalesLineCoverageRow = Readonly<{
     excessQuantity: string | null
     remainingQuantity: string | null
     purchaseGrossTotal: string | null
+    purchaseMargin: PurchaseMarginTotals | null
     purchaseNetTotal: string | null
     inputTaxRatesPercent: readonly string[]
     lowerInputTaxGapPoints: string | null
-    grossMargin: PurchaseMarginSummary | null
-    netMargin: PurchaseMarginSummary | null
+    grossMargin: ExternalMarginSummary | null
+    netMargin: ExternalMarginSummary | null
     taxInverted: boolean
     maxDelayDays: number
     mismatchedProduct: boolean
     unitMismatch: boolean
-    overSupply: boolean
     hasAttention: boolean
     severity: Exclude<ComparisonSeverity, "ok" | "unknown"> | "none"
     attentionTags: readonly Readonly<{
@@ -155,6 +157,8 @@ export type SourceOrderBusinessLedger = Readonly<{
     uncoveredCount: number
     coveredLineCount: number
     purchaseGoodsGrossTotal: string | null
+    purchaseGoodsLineCount: number
+    purchaseMargin: PurchaseMarginTotals | null
     purchaseGoodsNetTotal: string | null
     purchaseFeeGrossTotal: string | null
     purchaseFeeRatioPercent: string | null
@@ -162,8 +166,8 @@ export type SourceOrderBusinessLedger = Readonly<{
     correspondingSalesGrossTotal: string | null
     correspondingSalesNetTotal: string | null
     salesCoveragePercent: string | null
-    grossMargin: PurchaseMarginSummary | null
-    netMargin: PurchaseMarginSummary | null
+    grossMargin: ExternalMarginSummary | null
+    netMargin: ExternalMarginSummary | null
     vatGap: string | null
     taxDragPoints: string | null
     taxInverted: boolean
@@ -268,7 +272,7 @@ function formatDueDate(unixSecs: number | null | undefined): string | null {
 function calculateMargin(
     salesAmount: string,
     purchaseCost: string,
-): PurchaseMarginSummary | null {
+): ExternalMarginSummary | null {
     try {
         if (compareDecimal(salesAmount, "0", 6) <= 0) return null
         const diff = subtractFixed(salesAmount, purchaseCost, {
@@ -805,6 +809,7 @@ function buildOrderComparison({
     const coverageRows: SalesLineCoverageRow[] = []
 
     const orderPurchaseGoodsGross: string[] = []
+    const orderPurchaseMargins: PurchaseMarginAmounts[] = []
     const orderPurchaseGoodsNet: string[] = []
     const orderPurchaseGoodsTax: string[] = []
     const orderComparableSalesGross: string[] = []
@@ -818,7 +823,7 @@ function buildOrderComparison({
     const matchedSalesTaxRates: string[] = []
     const matchedInputTaxRates: string[] = []
     const matchedBases = new Set<"BULK" | "DROPSHIP">()
-    let hasManualOrInquiryBasis = false
+    let hasSupplyWithoutBasis = false
     let adjustedSupplyLineCount = 0
     let lowerInputTaxLineCount = 0
     let missingInputTaxCount = 0
@@ -889,6 +894,7 @@ function buildOrderComparison({
                     ? compactFixed(salesLine.quantity)
                     : null,
                 purchaseGrossTotal: null,
+                purchaseMargin: null,
                 purchaseNetTotal: null,
                 inputTaxRatesPercent: [],
                 lowerInputTaxGapPoints: null,
@@ -898,7 +904,6 @@ function buildOrderComparison({
                 maxDelayDays: 0,
                 mismatchedProduct: false,
                 unitMismatch: false,
-                overSupply: false,
                 hasAttention: false,
                 severity: "none",
                 attentionTags: [],
@@ -910,8 +915,8 @@ function buildOrderComparison({
         if (isGift) giftCoveredCount += 1
         if (salesLine.procurement_price_basis) {
             matchedBases.add(salesLine.procurement_price_basis)
-        } else {
-            hasManualOrInquiryBasis = true
+        } else if (salesLine.procurement_supply_price_gross) {
+            hasSupplyWithoutBasis = true
         }
         if (
             salesPriceCheck.adjustment === "increased" ||
@@ -924,6 +929,7 @@ function buildOrderComparison({
         const matchedSummaries: MatchedPurchaseLineSummary[] = []
         const lineQuantities: string[] = []
         const linePurchaseGross: string[] = []
+        const linePurchaseMargins: PurchaseMarginAmounts[] = []
         const linePurchaseNet: string[] = []
         const linePurchaseTax: string[] = []
         const lineSalesGrossParts: string[] = []
@@ -933,7 +939,7 @@ function buildOrderComparison({
 
         let lineHasUnitMismatch = false
         let lineHasProductMismatch = false
-        let lineHasOverSupply = false
+        let lineHasCostAboveSupply = false
         let lineMaxDelayDays = 0
         let lineMaxTaxGap: string | null = null
         let lineAllNetReady = true
@@ -942,7 +948,11 @@ function buildOrderComparison({
             const cmp = purchaseComparison(pLine)
             if (cmp.unitMismatch) lineHasUnitMismatch = true
             if (cmp.mismatchedProduct) lineHasProductMismatch = true
-            if (cmp.priceDifference) lineHasOverSupply = true
+            if (cmp.supplyUnitShortfall) lineHasCostAboveSupply = true
+            if (cmp.purchaseMargin) {
+                linePurchaseMargins.push(cmp.purchaseMargin)
+                orderPurchaseMargins.push(cmp.purchaseMargin)
+            }
             if (cmp.delayDays > lineMaxDelayDays) {
                 lineMaxDelayDays = cmp.delayDays
             }
@@ -1082,7 +1092,6 @@ function buildOrderComparison({
                 delayDays: cmp.delayDays,
                 mismatchedProduct: cmp.mismatchedProduct,
                 unitMismatch: cmp.unitMismatch,
-                overSupplyAmount: cmp.priceDifference,
             })
         }
 
@@ -1173,9 +1182,9 @@ function buildOrderComparison({
             tone: "destructive" | "warning" | "info"
         }> = []
         if (taxInverted) {
-            attentionTags.push({ label: "税后倒挂", tone: "destructive" })
+            attentionTags.push({ label: "对外税后倒挂", tone: "destructive" })
         } else if (grossMargin?.negative) {
-            attentionTags.push({ label: "负毛利", tone: "destructive" })
+            attentionTags.push({ label: "对外负毛利", tone: "destructive" })
         }
         if (coverageStatus === "excess") {
             attentionTags.push({ label: "超需求", tone: "destructive" })
@@ -1198,8 +1207,8 @@ function buildOrderComparison({
                 tone: "warning",
             })
         }
-        if (lineHasOverSupply) {
-            attentionTags.push({ label: "超预估价", tone: "warning" })
+        if (lineHasCostAboveSupply) {
+            attentionTags.push({ label: "采购倒挂", tone: "warning" })
         }
         if (
             salesPriceCheck.adjustment === "increased" ||
@@ -1260,6 +1269,7 @@ function buildOrderComparison({
             excessQuantity,
             remainingQuantity,
             purchaseGrossTotal,
+            purchaseMargin: sumPurchaseMargins(linePurchaseMargins),
             purchaseNetTotal,
             inputTaxRatesPercent: uniqueSortedRates(lineInputRatesPercent),
             lowerInputTaxGapPoints: lineMaxTaxGap,
@@ -1269,7 +1279,6 @@ function buildOrderComparison({
             maxDelayDays: lineMaxDelayDays,
             mismatchedProduct: lineHasProductMismatch,
             unitMismatch: lineHasUnitMismatch,
-            overSupply: lineHasOverSupply,
             hasAttention: attentionTags.length > 0,
             severity,
             attentionTags,
@@ -1478,7 +1487,7 @@ function buildOrderComparison({
     let taxCheck: CommercialComparisonItem
     const taxBase = {
         id: "tax" as const,
-        title: "票税与税后毛利",
+        title: "票税与对外毛利",
         salesLabel: "销售开票",
         salesValue: salesTaxDisplay,
         purchaseLabel: "采购进项",
@@ -1489,7 +1498,7 @@ function buildOrderComparison({
             ...taxBase,
             status: "severe",
             badge: "税后倒挂",
-            detail: `含税毛利 ${grossMargin.percent}%，扣除进销项税差后不含税实际亏损 ¥${netMargin.absAmount}（-${netMargin.absPercent}%）。`,
+            detail: `对外含税毛利率 ${grossMargin.percent}%，扣除进销项税差后，对外不含税亏损 ¥${netMargin.absAmount}（-${netMargin.absPercent}%）。`,
         }
     } else if (invertedTaxLineCount > 0) {
         taxCheck = {
@@ -1501,7 +1510,7 @@ function buildOrderComparison({
     } else if (lowerInputTaxLineCount > 0) {
         const dragHint =
             grossMargin && netMargin
-                ? `；对应毛利率由含税 ${grossMargin.percent}% 降至不含税 ${netMargin.percent}%`
+                ? `；对外毛利率由含税 ${grossMargin.percent}% 降至不含税 ${netMargin.percent}%`
                 : ""
         taxCheck = {
             ...taxBase,
@@ -1524,7 +1533,7 @@ function buildOrderComparison({
             ...taxBase,
             status: "unknown",
             badge: "税率待核对",
-            detail: `有 ${missingInputTaxCount} 项采购明细未记录进项税率，暂无法完整核算税后毛利。`,
+            detail: `有 ${missingInputTaxCount} 项采购明细未记录进项税率，暂无法完整核算对外不含税毛利。`,
         }
     } else if (comparableTaxLineCount > 0) {
         taxCheck = {
@@ -1533,7 +1542,7 @@ function buildOrderComparison({
             badge: "税率匹配",
             detail:
                 grossMargin && netMargin
-                    ? `采购进项不低于销项税率，不含税毛利率 ${netMargin.percent}%。`
+                    ? `采购进项不低于销项税率，对外不含税毛利率 ${netMargin.percent}%。`
                     : "采购进项税率不低于对应销售销项税率。",
         }
     } else {
@@ -1563,26 +1572,26 @@ function buildOrderComparison({
     const salesBasisText = isExpenseOrder
         ? "来源销售附加费用"
         : hasBulk && hasDropship
-          ? "集采 + 一件代发混合报价"
+          ? "集采和一件代发"
           : hasBulk
-            ? "按集采口径报供给价"
+            ? "按集采价取价"
             : hasDropship
-              ? "按一件代发口径报供给价"
-              : hasManualOrInquiryBasis
-                ? "询价或手工预估供给价"
-                : "未记录报价口径"
+              ? "按一件代发价取价"
+              : hasSupplyWithoutBasis
+                ? "已记录供给价，取价方式未记录"
+                : "未记录采购供给价"
 
     const fulfillmentBase = {
         id: "fulfillment" as const,
-        title: "履约与报价口径",
-        salesLabel: "销售测算",
+        title: "履约与采购供给取价",
+        salesLabel: "采购供给取价",
         salesValue: salesBasisText,
         purchaseLabel: "采购履约",
         purchaseValue: fulfillmentSummary,
     }
     const supplyAdjSuffix =
         adjustedSupplyLineCount > 0
-            ? `；另有 ${adjustedSupplyLineCount} 项销售手动调整过预估供给价`
+            ? `。另有 ${adjustedSupplyLineCount} 项采购供给价经过调整`
             : ""
 
     let fulfillmentCheck: CommercialComparisonItem
@@ -1590,8 +1599,8 @@ function buildOrderComparison({
         fulfillmentCheck = {
             ...fulfillmentBase,
             status: "warning",
-            badge: "口径不一致",
-            detail: `销售按集采口径预估成本，实际走供应商直发${orderUniquePoints > 1 ? `（${orderUniquePoints} 处收货点）` : ""}，请留意直发价差或运费${supplyAdjSuffix}。`,
+            badge: "供给取价与履约不同",
+            detail: `有商品按集采价确定采购供给价，实际由供应商直发${orderUniquePoints > 1 ? `（${orderUniquePoints} 处收货点）` : ""}，请核对直发成本和运费${supplyAdjSuffix}。`,
         }
     } else if (
         hasDropship &&
@@ -1601,14 +1610,14 @@ function buildOrderComparison({
             ...fulfillmentBase,
             status: "info",
             badge: "改走入仓",
-            detail: `销售按一件代发口径测算，实际采购入库，请留意二次仓配成本${supplyAdjSuffix}。`,
+            detail: `有商品按一件代发价确定采购供给价，实际采购入库，请核对仓配成本${supplyAdjSuffix}。`,
         }
     } else if (adjustedSupplyLineCount > 0) {
         fulfillmentCheck = {
             ...fulfillmentBase,
             status: "warning",
-            badge: "销售调过供给价",
-            detail: `有 ${adjustedSupplyLineCount} 项销售预估供给价与原商品底价不同，比对采购价时请同步参考原底价。`,
+            badge: "采购供给价已调整",
+            detail: `有 ${adjustedSupplyLineCount} 项采购供给价与原参考价不同。采购毛利按销售单保存的采购供给价核算。`,
         }
     } else if (!purchaseFulfillment) {
         fulfillmentCheck = {
@@ -1624,7 +1633,7 @@ function buildOrderComparison({
             badge: "口径一致",
             detail: isExpenseOrder
                 ? "本单为费用采购单，请结合整单销售金额评估费用占比。"
-                : "采购履约方式与销售报价口径一致。",
+                : "采购履约方式与采购供给取价一致。",
         }
     }
 
@@ -1671,6 +1680,8 @@ function buildOrderComparison({
             uncoveredCount,
             coveredLineCount: salesLines.length - uncoveredCount,
             purchaseGoodsGrossTotal,
+            purchaseGoodsLineCount: goodsPurchaseLines.length,
+            purchaseMargin: sumPurchaseMargins(orderPurchaseMargins),
             purchaseGoodsNetTotal,
             purchaseFeeGrossTotal: includeFeesInThisOrder
                 ? purchaseFeeGrossTotal

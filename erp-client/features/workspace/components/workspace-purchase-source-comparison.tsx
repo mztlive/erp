@@ -28,6 +28,9 @@ import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
+import { PurchaseOrderAmountDetails } from "./workspace-purchase-amount-details"
+import { purchaseComparison } from "./workspace-purchase-comparison-model"
+import { PurchaseLinePriceDetails } from "./workspace-purchase-line-price-details"
 import {
     buildPurchaseSourceComparisonModel,
     type CommercialComparisonItem,
@@ -136,8 +139,18 @@ export function WorkspacePurchaseSourceComparison({
         return model.orders[0]
     }, [model.orders, target?.revisionId])
 
-    // 从左表点击「对照本行」时自动滚动定位到对应销售行
+    // 行对照使用被选中的采购行，拆分采购时仍能看到该行自己的金额。
     const selectedPurchaseLineId = target?.purchaseLineId
+    const selectedPurchaseLine = selectedPurchaseLineId
+        ? purchaseLines?.find(
+              (line) =>
+                  line.id === selectedPurchaseLineId &&
+                  line.source?.revision_id === activeOrder?.revisionId,
+          )
+        : undefined
+    const selectedPriceDetailsId = selectedPurchaseLine
+        ? `${idPrefix}-purchase-prices-${toAutomationIdSegment(selectedPurchaseLine.id)}`
+        : undefined
     const selectedSalesRowId = useMemo(() => {
         if (!selectedPurchaseLineId || !activeOrder) return undefined
         const matchedRow = activeOrder.coverageRows.find((row) =>
@@ -149,15 +162,14 @@ export function WorkspacePurchaseSourceComparison({
     }, [activeOrder, selectedPurchaseLineId])
 
     useEffect(() => {
-        if (!selectedSalesRowId) return
-        const rowDomId = `${idPrefix}-sales-line-${toAutomationIdSegment(selectedSalesRowId)}`
+        if (!selectedPriceDetailsId) return
         const frame = window.requestAnimationFrame(() => {
             document
-                .getElementById(rowDomId)
+                .getElementById(selectedPriceDetailsId)
                 ?.scrollIntoView({ behavior: "smooth", block: "nearest" })
         })
         return () => window.cancelAnimationFrame(frame)
-    }, [idPrefix, selectedSalesRowId])
+    }, [selectedPriceDetailsId])
 
     if (!activeOrder) {
         return (
@@ -337,6 +349,26 @@ export function WorkspacePurchaseSourceComparison({
                     </p>
                 ) : null}
             </header>
+
+            {selectedPurchaseLine ? (
+                <section
+                    id={selectedPriceDetailsId}
+                    aria-labelledby={`${selectedPriceDetailsId}-title`}
+                    className="space-y-2 rounded-md border border-border/60 bg-muted/20 p-3"
+                >
+                    <h3
+                        id={`${selectedPriceDetailsId}-title`}
+                        className="text-body-compact font-semibold wrap-anywhere"
+                    >
+                        采购第 {selectedPurchaseLine.line_no} 行 ·{" "}
+                        {selectedPurchaseLine.title}
+                    </h3>
+                    <PurchaseLinePriceDetails
+                        line={selectedPurchaseLine}
+                        comparison={purchaseComparison(selectedPurchaseLine)}
+                    />
+                </section>
+            ) : null}
 
             {!activeOrder.hasFullOrder || !ledger ? (
                 <p className="border-t border-border/60 pt-3 text-xs text-muted-foreground">
@@ -605,7 +637,7 @@ export function WorkspacePurchaseSourceComparison({
                                 <>
                                     <div className="min-w-0 space-y-0.5">
                                         <p className="text-xs text-muted-foreground">
-                                            含税毛利（本单对应）
+                                            公司对外含税毛利（本单对应）
                                         </p>
                                         {ledger.grossMargin ? (
                                             <p
@@ -642,7 +674,7 @@ export function WorkspacePurchaseSourceComparison({
                                             </p>
                                         )}
                                         <p className="num text-xs text-muted-foreground">
-                                            对应销售{" "}
+                                            对应对外销售{" "}
                                             <MoneyValue
                                                 display="exact"
                                                 value={
@@ -654,7 +686,7 @@ export function WorkspacePurchaseSourceComparison({
 
                                     <div className="min-w-0 space-y-0.5">
                                         <p className="text-xs text-muted-foreground">
-                                            不含税毛利（扣税后）
+                                            公司对外不含税毛利
                                         </p>
                                         {ledger.netMargin ? (
                                             <p
@@ -696,7 +728,7 @@ export function WorkspacePurchaseSourceComparison({
                                         <p className="num text-xs text-muted-foreground">
                                             {ledger.taxInverted ? (
                                                 <span className="font-medium text-destructive-soft-foreground">
-                                                    含税盈利、税后倒挂
+                                                    对外含税盈利、税后倒挂
                                                 </span>
                                             ) : hasSignificantTaxDrag &&
                                               ledger.taxDragPoints ? (
@@ -747,6 +779,18 @@ export function WorkspacePurchaseSourceComparison({
                             )}
                         </div>
 
+                        {!ledger.isExpenseOrder ? (
+                            <PurchaseOrderAmountDetails
+                                totals={ledger.purchaseMargin}
+                                goodsLineCount={ledger.purchaseGoodsLineCount}
+                                hasFees={Boolean(
+                                    ledger.purchaseFeeGrossTotal ||
+                                    ledger.unallocatedSharedFeeTotal,
+                                )}
+                                showCost
+                            />
+                        ) : null}
+
                         {ledger.giftCoveredCount > 0 &&
                         ledger.giftPurchaseGrossTotal ? (
                             <p className="num flex items-start gap-1.5 text-xs text-info-soft-foreground">
@@ -763,7 +807,7 @@ export function WorkspacePurchaseSourceComparison({
                                         inheritColor
                                         className="font-medium"
                                     />
-                                    ），已计入上方对应毛利核算。
+                                    ），已计入上方对外毛利。
                                 </span>
                             </p>
                         ) : null}
@@ -775,7 +819,7 @@ export function WorkspacePurchaseSourceComparison({
                                     display="exact"
                                     value={ledger.unallocatedSharedFeeTotal}
                                 />{" "}
-                                跨单费用行，未分摊计入单张销售单毛利。
+                                跨单费用行，未分摊计入单张销售单对外毛利。
                             </p>
                         ) : null}
 
@@ -1069,9 +1113,9 @@ function SalesCoverageLineItem({
         <li
             id={`${idPrefix}-sales-line-${toAutomationIdSegment(row.salesLineId)}`}
             className={cn(
-                "space-y-1.5 py-2.5",
+                "space-y-1.5 px-3 py-2.5",
                 selected &&
-                    "-mx-2 rounded-md bg-info-soft/35 px-2 ring-1 ring-inset ring-info-border",
+                    "rounded-md bg-info-soft/35 ring-1 ring-inset ring-info-border",
                 isUncovered && !selected && "opacity-75",
             )}
         >
@@ -1184,34 +1228,28 @@ function SalesCoverageLineItem({
                         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-foreground/90">
                             <span>
                                 <span className="text-muted-foreground">
-                                    {row.isGift ? "赠品 " : "售 "}
+                                    {row.isGift ? "赠品 " : "对外售价 "}
                                 </span>
                                 <MoneyValue
                                     display="exact"
                                     value={row.salesUnitPriceGross ?? "0"}
                                 />
                             </span>
-                            <span>
-                                <span className="text-muted-foreground">
-                                    采{" "}
-                                </span>
-                                {singlePurchase?.unitCostGross != null ? (
+                            {singlePurchase?.unitCostGross != null ? (
+                                <span>
+                                    <span className="text-muted-foreground">
+                                        实际采购单价{" "}
+                                    </span>
                                     <MoneyValue
                                         display="exact"
                                         value={singlePurchase.unitCostGross}
                                         className="font-medium"
                                     />
-                                ) : (
-                                    <MoneyValue
-                                        display="exact"
-                                        value={row.purchaseGrossTotal}
-                                        className="font-medium"
-                                    />
-                                )}
-                            </span>
+                                </span>
+                            ) : null}
                             {row.supplyPrice ? (
                                 <span className="text-muted-foreground">
-                                    供{" "}
+                                    采购供给价{" "}
                                     <MoneyValue
                                         display="exact"
                                         value={row.supplyPrice}
@@ -1225,7 +1263,7 @@ function SalesCoverageLineItem({
                                         row.supplyAdjustment ===
                                             "decreased") ? (
                                         <>
-                                            {" · 原 "}
+                                            {" · 原参考价 "}
                                             <MoneyValue
                                                 display="exact"
                                                 value={row.originalSupplyPrice}
@@ -1236,6 +1274,21 @@ function SalesCoverageLineItem({
                                 </span>
                             ) : null}
                         </div>
+
+                        {!row.purchaseMargin && row.purchaseGrossTotal ? (
+                            <div className="text-muted-foreground">
+                                {row.isGift ? "赠品采购成本" : "实际采购金额"}{" "}
+                                <MoneyValue
+                                    display="exact"
+                                    value={row.purchaseGrossTotal}
+                                />
+                            </div>
+                        ) : null}
+                        <PurchaseOrderAmountDetails
+                            totals={row.purchaseMargin}
+                            goodsLineCount={row.matchedPurchaseLines.length}
+                            showCost
+                        />
 
                         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
                             <span
@@ -1253,16 +1306,7 @@ function SalesCoverageLineItem({
                                     : "未填"}
                             </span>
 
-                            {row.isGift ? (
-                                <span className="text-muted-foreground">
-                                    赠品采购成本{" "}
-                                    <MoneyValue
-                                        display="exact"
-                                        value={row.purchaseGrossTotal}
-                                        className="font-medium text-foreground"
-                                    />
-                                </span>
-                            ) : (
+                            {!row.isGift ? (
                                 <>
                                     {row.grossMargin ? (
                                         <span
@@ -1272,7 +1316,7 @@ function SalesCoverageLineItem({
                                                     : "text-muted-foreground",
                                             )}
                                         >
-                                            含税{" "}
+                                            对外含税毛利{" "}
                                             {row.grossMargin.negative
                                                 ? `亏 ${row.grossMargin.absPercent}%`
                                                 : `${row.grossMargin.percent}%`}
@@ -1289,14 +1333,14 @@ function SalesCoverageLineItem({
                                                       : "text-foreground/90",
                                             )}
                                         >
-                                            不含税{" "}
+                                            对外不含税毛利{" "}
                                             {row.netMargin.negative
                                                 ? `亏 ${row.netMargin.absPercent}%`
                                                 : `${row.netMargin.percent}%`}
                                         </span>
                                     ) : null}
                                 </>
-                            )}
+                            ) : null}
                         </div>
                     </div>
 

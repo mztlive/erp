@@ -83,7 +83,7 @@ function quickRejectPhrasesForDocumentType(
             ]
         case "purchase_order":
             return [
-                "采购单价高于预估供给价",
+                "实际采购单价高于采购供给价",
                 "预计交期晚于销售承诺",
                 "供应商资料或附件不全",
                 "采购数量与销售需求不符",

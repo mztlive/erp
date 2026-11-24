@@ -40,7 +40,10 @@ import { cn } from "@/lib/utils"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceApprovalResubmissionBanner } from "./workspace-approval-resubmission-banner"
 import type { WorkspacePaperTarget } from "./workspace-document-paper-dialog"
-import { PurchaseOrderAmountDetails } from "./workspace-purchase-amount-details"
+import {
+    PurchaseOrderAmountDetails,
+    PurchaseProfitValue,
+} from "./workspace-purchase-amount-details"
 import {
     buildPurchaseApprovalMetrics,
     evaluatePurchaseLines,
@@ -325,20 +328,20 @@ export function WorkspacePurchaseApproval({
         uniqueDeliveryPointCount,
     )
     const isSevereRisk =
-        metrics.negativeMarginCount > 0 ||
+        metrics.externalLossCount > 0 ||
         metrics.quantityExcessCount > 0 ||
         metrics.mismatchCount > 0
 
     const riskChipsSummary = [
-        metrics.negativeMarginCount > 0
-            ? `负毛利 ${metrics.negativeMarginCount}`
+        metrics.externalLossCount > 0
+            ? `对外负毛利 ${metrics.externalLossCount}`
             : null,
         metrics.quantityExcessCount > 0
             ? `超需求 ${metrics.quantityExcessCount}`
             : null,
         metrics.mismatchCount > 0 ? `品规差异 ${metrics.mismatchCount}` : null,
-        metrics.overSupplyCount > 0
-            ? `超预估 ${metrics.overSupplyCount}`
+        metrics.costAboveSupplyCount > 0
+            ? `采购倒挂 ${metrics.costAboveSupplyCount}`
             : null,
         metrics.delayCount > 0 ? `交期晚 ${metrics.delayCount}` : null,
     ]
@@ -433,7 +436,11 @@ export function WorkspacePurchaseApproval({
                                 {metrics.goodsLineCount > 0 ? (
                                     <div className="basis-full">
                                         <PurchaseOrderAmountDetails
-                                            metrics={metrics}
+                                            totals={metrics.purchaseMargin}
+                                            goodsLineCount={
+                                                metrics.goodsLineCount
+                                            }
+                                            hasFees={metrics.feeLineCount > 0}
                                         />
                                     </div>
                                 ) : null}
@@ -486,36 +493,21 @@ export function WorkspacePurchaseApproval({
                         label={
                             extraCost && metrics.goodsLineCount === 0
                                 ? "来源销售附加费（本单外）"
-                                : "对应销售与毛利"
+                                : metrics.partialSalesCoverage
+                                  ? "对应公司对外毛利（含税）"
+                                  : "公司对外毛利（含税）"
                         }
                         value={
-                            metrics.orderMargin ? (
-                                <span
-                                    className={cn(
-                                        "inline-flex flex-wrap items-baseline gap-x-2",
-                                        metrics.orderMargin.negative &&
-                                            "text-destructive-soft-foreground",
-                                    )}
-                                >
-                                    <span>
-                                        {metrics.orderMargin.negative
-                                            ? "亏 "
-                                            : ""}
-                                        <MoneyValue
-                                            display="exact"
-                                            value={
-                                                metrics.orderMargin.absAmount
-                                            }
-                                            inheritColor={
-                                                metrics.orderMargin.negative
-                                            }
-                                        />
-                                    </span>
-                                    <span className="num text-body-compact font-medium">
-                                        {metrics.orderMargin.negative
-                                            ? `-${metrics.orderMargin.absPercent}%`
-                                            : `${metrics.orderMargin.percent}%`}
-                                    </span>
+                            metrics.externalGrossMargin != null ? (
+                                <span className="inline-flex flex-wrap items-baseline gap-x-2">
+                                    <PurchaseProfitValue
+                                        amount={metrics.externalGrossMargin}
+                                    />
+                                    {metrics.externalMargin ? (
+                                        <span className="num text-body-compact font-medium">
+                                            {metrics.externalMargin.percent}%
+                                        </span>
+                                    ) : null}
                                 </span>
                             ) : extraCost ? (
                                 <MoneyValue
@@ -532,7 +524,7 @@ export function WorkspacePurchaseApproval({
                             metrics.correspondingSalesTotal ? (
                                 <>
                                     <span>
-                                        对应销售{" "}
+                                        对外销售金额{" "}
                                         <MoneyValue
                                             display="exact"
                                             value={
@@ -566,7 +558,7 @@ export function WorkspacePurchaseApproval({
                                     </span>
                                 </>
                             ) : (
-                                "暂无可比对的销售单价"
+                                "暂无可比对的对外售价"
                             )
                         }
                     />
@@ -605,7 +597,7 @@ export function WorkspacePurchaseApproval({
                             ) : metrics.missingSupplyCount > 0 ? (
                                 <span className="num">
                                     {metrics.missingSupplyCount}{" "}
-                                    项销售未填预估价
+                                    项采购供给价未填写
                                 </span>
                             ) : (
                                 "价格、数量与交期均正常"
@@ -761,8 +753,8 @@ export function WorkspacePurchaseApproval({
                 subtitle={
                     lines
                         ? metrics.feeLineCount > 0 && metrics.goodsLineCount > 0
-                            ? `共 ${lines.length} 行 · 含 ${metrics.feeLineCount} 项费用`
-                            : `共 ${lines.length} 行`
+                            ? `共 ${lines.length} 行 · 含 ${metrics.feeLineCount} 项费用 · 金额含税`
+                            : `共 ${lines.length} 行 · 金额含税`
                         : undefined
                 }
                 className="py-5 first:pt-4"

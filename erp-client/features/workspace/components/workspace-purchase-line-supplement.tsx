@@ -6,6 +6,7 @@ import type { ApprovalPurchaseLine } from "@/features/approval-workflow/api/mate
 import { displayBusinessText, displayName } from "@/lib/display-name"
 import { cn } from "@/lib/utils"
 import {
+    PURCHASE_SUPPLY_PRICE_RISK,
     purchaseSpecification,
     type PurchaseComparison,
     type PurchaseSource,
@@ -19,44 +20,49 @@ const warningDetails: Record<string, string> = {
 }
 
 /**
- * 仅在存在可操作审批风险（负毛利、超预估、超量、延期、品规/单位差异）或多来源销售单链接时
- * 展示紧贴主行的核对副条；纯参考缺省（未填预估价、交期资料不完整）收进单元格弱化提示，避免满屏黄条。
+ * 行内提示保留需要复核的差异，盈亏金额由主表展示，价格依据在行对照中查看。
  */
-export function hasPurchaseRiskStrip(
+export function purchaseLineRiskNotes(
     comparison: PurchaseComparison,
-    negativeMargin: boolean,
-    source?: PurchaseSource,
-): boolean {
-    return Boolean(
-        negativeMargin || comparison.actionableWarnings.length > 0 || source,
+    externalLoss: boolean,
+) {
+    const externalPriceRisk =
+        externalLoss && !comparison.externalGrossMargin?.startsWith("-")
+    const purchaseLossShown = comparison.purchaseMargin?.margin.startsWith("-")
+    const warnings = comparison.actionableWarnings.filter(
+        (warning) =>
+            !comparison.salesPriceWarnings.includes(warning) &&
+            !(purchaseLossShown && warning === PURCHASE_SUPPLY_PRICE_RISK),
     )
+    return { externalPriceRisk, warnings }
 }
 
 /**
  * 紧跟数据行的紧凑核对副条：
- * 审批人可以直接核对负毛利、单价超预估、超量、延期及品规差异。
+ * 审批人可以直接核对对外负毛利、采购倒挂、超量、延期及品规差异。
  */
 export function PurchaseLineRiskStrip({
     line,
     comparison,
-    negativeMargin,
+    notes,
     source,
     prefix,
     onPreview,
 }: {
     line: ApprovalPurchaseLine
     comparison: PurchaseComparison
-    negativeMargin: boolean
+    notes: ReturnType<typeof purchaseLineRiskNotes>
     source?: PurchaseSource
     prefix: string
     onPreview: (revisionId: string) => void
 }) {
     const mismatchedProduct = comparison.mismatchedProduct
-    const otherWarnings = comparison.actionableWarnings.filter(
+    const otherWarnings = notes.warnings.filter(
         (warning) => warning !== "商品 / 规格不一致",
     )
-    const isHighRisk = negativeMargin || comparison.highWarnings.length > 0
-    const hasRisk = negativeMargin || comparison.actionableWarnings.length > 0
+    const isHighRisk =
+        notes.externalPriceRisk || comparison.highWarnings.length > 0
+    const hasRisk = notes.externalPriceRisk || notes.warnings.length > 0
 
     return (
         <div
@@ -80,30 +86,30 @@ export function PurchaseLineRiskStrip({
                             className="mt-0.5 size-3.5 shrink-0"
                         />
                         <ul className="flex flex-wrap items-baseline gap-x-3 gap-y-1 wrap-anywhere">
-                            {negativeMargin ? (
+                            {notes.externalPriceRisk ? (
                                 <li className="font-medium">
-                                    采购单价高于销售含税单价（负毛利）
+                                    实际采购单价高于销售单含税成交单价
                                 </li>
                             ) : null}
                             {otherWarnings.map((warning) => (
                                 <li key={warning}>
-                                    {warning === "高于销售预估采购价" &&
-                                    comparison.priceDifference ? (
+                                    {warning === PURCHASE_SUPPLY_PRICE_RISK &&
+                                    comparison.supplyUnitShortfall ? (
                                         <>
-                                            单价超销售预估{" "}
+                                            实际采购单价高出采购供给价{" "}
                                             <MoneyValue
                                                 value={
-                                                    comparison.priceDifference
+                                                    comparison.supplyUnitShortfall
                                                 }
                                                 display="exact"
                                                 inheritColor
                                             />
-                                            {comparison.pricePercent ? (
+                                            {comparison.supplyUnitShortfallPercent ? (
                                                 <>
                                                     （+
                                                     <RateValue
                                                         value={
-                                                            comparison.pricePercent
+                                                            comparison.supplyUnitShortfallPercent
                                                         }
                                                         precision={1}
                                                     />

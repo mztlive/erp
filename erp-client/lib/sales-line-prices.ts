@@ -31,7 +31,7 @@ export function salesLinePriceComparison(prices: SalesLinePrices) {
                     order > 0 ? original : supply,
                     { maxScale: 4, outputScale: 4 },
                 )
-                warnings.push(`销售已${order > 0 ? "调高" : "调低"}采购供货价`)
+                warnings.push(`销售已${order > 0 ? "调高" : "调低"}采购供给价`)
             }
         }
         if (sales != null && sales !== "") {
@@ -40,14 +40,14 @@ export function salesLinePriceComparison(prices: SalesLinePrices) {
                 original !== "" &&
                 compareDecimal(sales, original, 4) < 0
             ) {
-                warnings.push("销售价低于原采购底价")
+                warnings.push("对外售价低于原采购底价")
             }
             if (
                 supply != null &&
                 supply !== "" &&
                 compareDecimal(sales, supply, 4) < 0
             ) {
-                warnings.push("销售价低于销售填写的供货价")
+                warnings.push("对外售价低于采购供给价")
             }
         }
     } catch {
