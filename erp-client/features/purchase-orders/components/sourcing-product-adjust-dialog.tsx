@@ -4,27 +4,17 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import {
     ArrowLeftIcon,
     ArrowRightIcon,
-    ChevronDownIcon,
+    CheckCircle2Icon,
     InfoIcon,
-    LayersIcon,
     MapPinIcon,
     PlusIcon,
     RotateCcwIcon,
+    ScaleIcon,
     TriangleAlertIcon,
     XIcon,
 } from "lucide-react"
-import {
-    DetailWorkspaceMeta,
-    MoneyValue,
-    QuantityValue,
-} from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import { DetailWorkspaceMeta, MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import {
-    Collapsible,
-    CollapsibleContent,
-    CollapsibleTrigger,
-} from "@/components/ui/collapsible"
 import {
     Dialog,
     DialogBody,
@@ -35,12 +25,10 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
-import {
-    findSourcingOption,
-    pickBestSourcingOption,
-} from "../lib/purchase-order-create-model"
+import { pickBestSourcingOption } from "../lib/purchase-order-create-model"
 import { sourcingFormValidationError } from "../lib/purchase-order-create-validation"
 import { canSplitSourcingProduct } from "../lib/sourcing-quantity"
 import {
@@ -51,12 +39,11 @@ import {
     type LineUpdatePatch,
 } from "../lib/sourcing/address-grouping"
 import { usesAddressQuantity } from "../lib/sourcing/delivery-editor"
-import { sourcingRouteLabel } from "../lib/sourcing/delivery-terms"
 import { buildSourcingEditorRows } from "../lib/sourcing/editor-rows"
 import {
-    sourceAccentForIndex,
-    sourceRouteBadgeVariant,
-} from "../lib/sourcing/source-palette"
+    applySourcingOptionToLine,
+    summarizeRowPricing,
+} from "../lib/sourcing/pricing"
 import type { SourcingLineInput } from "../lib/sourcing/types"
 import type {
     SourcingEditorProps,
@@ -68,6 +55,9 @@ import { SourcingDeliveryRequirementSection } from "./sourcing-delivery-plan"
 import { SourcingOptionCompareMatrix } from "./sourcing-option-compare-matrix"
 import { SourcingParticipationControl } from "./sourcing-participation-control"
 import { SourcingSourceRow } from "./sourcing-source-row"
+
+type RightPaneTab = "addresses" | "compare" | "readonly_addresses"
+type CompareIntent = "replace" | "add"
 
 function statusTone(status: string): StatusTone {
     if (status === "已就绪") return "success"
@@ -91,12 +81,10 @@ function cloneProductLines(
 }
 
 /**
- * 一体化多源协同供给分配弹窗：
- * - 顶部固定「商品身份 + 分色堆叠配平条 + 混合履约守恒等式（仓库/库存 + 供应商直发）+ 一键智能配平」；
- * - 上区（供给来源与数量分配）同屏平铺展示全部来源，支持直接行内改数量/选目标仓/改交期/比价换源，
- *   并通过按履约方式分类的比价面板精准添加新来源（现有库存 / 集采入仓 / 代发直发 / 集采直发）；
- * - 下区（交付地址分配工作区，含直发地址时同屏常驻，支持一键最大化专注 100+ 地址）实时联动，
- *   支持直发改派、按量跨源调拨及将选中地址原子转交仓库/库存来源。
+ * 全宽高左右双栏供给分配工作面（Full-Viewport Split Sheet）：
+ * - 左栏常驻「配平总览卡 + 全部已选来源卡片」，现有库存 / 集采入仓 / 代发直发 / 集采直发同屏编辑、实时守恒；
+ * - 右栏独享整屏高度，在「交付地址分配」与「候选方案比价（支持换源 & 一键拆单加入）」间零损耗切换，
+ *   彻底告别上下挤压与多层盒中套盒。
  */
 export function SourcingProductAdjustDialog({
     productId,
@@ -123,8 +111,8 @@ export function SourcingProductAdjustDialog({
     }) {
     const [showErrors, setShowErrors] = useState(false)
     const [selectedRowKey, setSelectedRowKey] = useState<string | null>(null)
-    const [addPickerOpen, setAddPickerOpen] = useState(false)
-    const [addressMaximized, setAddressMaximized] = useState(false)
+    const [rightTab, setRightTab] = useState<RightPaneTab>("addresses")
+    const [compareIntent, setCompareIntent] = useState<CompareIntent>("replace")
     const [addressSourceFilter, setAddressSourceFilter] = useState<
         string | null
     >(null)
@@ -160,6 +148,10 @@ export function SourcingProductAdjustDialog({
         row?.allocations.find(({ line }) => line.rowKey === selectedRowKey) ??
         row?.allocations[0]
     const activeRowKey = active?.line.rowKey
+    const activeSourceNumber =
+        (row?.allocations.findIndex(
+            ({ line }) => line.rowKey === activeRowKey,
+        ) ?? 0) + 1
 
     const hasDirectAddressWork = Boolean(
         row &&
@@ -168,6 +160,21 @@ export function SourcingProductAdjustDialog({
             usesAddressQuantity(row.product, line),
         ),
     )
+    const hasReadonlyAddresses = Boolean(
+        row &&
+        !hasDirectAddressWork &&
+        row.product.deliveryAllocations.length > 0,
+    )
+
+    const resolvedRightTab: RightPaneTab = (() => {
+        if (rightTab === "addresses" && !hasDirectAddressWork) {
+            return "compare"
+        }
+        if (rightTab === "readonly_addresses" && !hasReadonlyAddresses) {
+            return hasDirectAddressWork ? "addresses" : "compare"
+        }
+        return rightTab
+    })()
 
     const addressState = useMemo(
         () =>
@@ -185,6 +192,21 @@ export function SourcingProductAdjustDialog({
                     .filter(Boolean),
             ),
         [row],
+    )
+
+    const usedBasisIdsOtherThanActive = useMemo(
+        () =>
+            new Set(
+                (row?.allocations ?? [])
+                    .filter(
+                        ({ line }) =>
+                            line.rowKey !== activeRowKey &&
+                            line.selected &&
+                            line.basisId,
+                    )
+                    .map(({ line }) => line.basisId),
+            ),
+        [activeRowKey, row],
     )
 
     const unusedOptions = useMemo(
@@ -215,6 +237,74 @@ export function SourcingProductAdjustDialog({
             ? "剩余需求不足以继续拆分，或商品单位不支持拆分"
             : undefined
 
+    const pricingSummary = useMemo(
+        () => (row ? summarizeRowPricing(row) : null),
+        [row],
+    )
+
+    const headerPricingText = (() => {
+        if (!row || !pricingSummary) return ""
+        const count = row.allocations.filter(({ line }) => line.selected).length
+        const base =
+            row.allocations.length > 1
+                ? `${count || row.allocations.length} 家组合`
+                : "单源供货"
+        if (pricingSummary.kind === "stock") return `${base} · 库存核算`
+        if (
+            pricingSummary.kind === "purchase" &&
+            pricingSummary.unitCostGross
+        ) {
+            const marginText = pricingSummary.hasInvertedSource
+                ? "价格倒挂"
+                : pricingSummary.margin?.marginRateText
+                  ? `毛利 ${pricingSummary.margin.marginRateText}`
+                  : ""
+            return [base, `¥${pricingSummary.unitCostGross}`, marginText]
+                .filter(Boolean)
+                .join(" · ")
+        }
+        if (pricingSummary.kind === "multiple") {
+            return pricingSummary.hasInvertedSource
+                ? `${base} · 多价格 · 含倒挂`
+                : `${base} · 多价格`
+        }
+        return `${base} · 待选方案`
+    })()
+
+    const addressTabBadge = (() => {
+        if (!addressState || !row) return null
+        if (addressState.counts.issues > 0) {
+            return {
+                tone: "destructive" as const,
+                text: `${addressState.counts.issues} 处异常`,
+            }
+        }
+        if (isPositiveQuantity(addressState.directOverTargetQty)) {
+            return {
+                tone: "destructive" as const,
+                text: `超出 ${addressState.directOverTargetQty} ${row.product.unit}`,
+            }
+        }
+        if (isPositiveQuantity(addressState.directShortfallQty)) {
+            return {
+                tone: "warning" as const,
+                text: addressState.hasNonDirectSources
+                    ? `尚缺 ${addressState.directShortfallQty} ${row.product.unit}`
+                    : `待分 ${addressState.counts.unassigned} 处`,
+            }
+        }
+        if (addressState.hasNonDirectSources) {
+            return {
+                tone: "success" as const,
+                text: `直发已齐 ${addressState.directAssignedTotalQty}/${addressState.directTargetQty}`,
+            }
+        }
+        return {
+            tone: "success" as const,
+            text: `已全分 ${addressState.counts.total} 处`,
+        }
+    })()
+
     const fields =
         sourcingFormValidationError(props.order, props.form.state.values)
             ?.fields ?? {}
@@ -244,18 +334,18 @@ export function SourcingProductAdjustDialog({
           ]
         : []
 
-    // 打开或切换商品时，根据入口语义决定默认聚焦态并拍摄还原快照
+    // 打开或切换商品时，根据入口语义设定右栏默认页签并拍摄还原快照
     useEffect(() => {
         if (!productId) {
             setSnapshotState(null)
-            setAddPickerOpen(false)
-            setAddressMaximized(false)
+            setRightTab("addresses")
+            setCompareIntent("replace")
             setAddressSourceFilter(null)
             setActionNotice(null)
             return
         }
-        setAddPickerOpen(false)
-        setAddressMaximized(initialFocusSection === "addresses")
+        setCompareIntent("replace")
+        setRightTab(initialFocusSection === "compare" ? "compare" : "addresses")
         setAddressSourceFilter(null)
         setActionNotice(null)
         setSnapshotState((current) => {
@@ -291,8 +381,8 @@ export function SourcingProductAdjustDialog({
     const close = () => {
         setShowErrors(false)
         setSelectedRowKey(null)
-        setAddPickerOpen(false)
-        setAddressMaximized(false)
+        setRightTab("addresses")
+        setCompareIntent("replace")
         setAddressSourceFilter(null)
         setActionNotice(null)
         onClose()
@@ -302,8 +392,8 @@ export function SourcingProductAdjustDialog({
         if (!onNavigate) return
         setShowErrors(false)
         setSelectedRowKey(null)
-        setAddPickerOpen(false)
-        setAddressMaximized(false)
+        setRightTab("addresses")
+        setCompareIntent("replace")
         setAddressSourceFilter(null)
         setActionNotice(null)
         onNavigate(targetId)
@@ -350,8 +440,6 @@ export function SourcingProductAdjustDialog({
                     !previousKeys.has(line.rowKey),
             )?.rowKey
         }
-        setAddPickerOpen(false)
-        setAddressMaximized(false)
         if (addedKey) {
             setSelectedRowKey(addedKey)
             focusRowControl(addedKey)
@@ -360,20 +448,13 @@ export function SourcingProductAdjustDialog({
 
     const handleAddSourceClick = () => {
         if (!row || addDisabledReason) return
-        setAddressMaximized(false)
-        // 仅剩 1 个可选方案时一键直接添加；多个可选方案时展开按履约方式分类的比价面板让采购精准选定
         if (unusedOptions.length === 1 && props.onAddSplitWithOption) {
             handleAddSourceByOption(unusedOptions[0]!.basisId)
             return
         }
         if (props.onAddSplitWithOption && unusedOptions.length > 1) {
-            setAddPickerOpen((prev) => !prev)
-            requestAnimationFrame(() => {
-                sourcesScrollRef.current?.scrollTo({
-                    top: sourcesScrollRef.current.scrollHeight,
-                    behavior: "smooth",
-                })
-            })
+            setCompareIntent("add")
+            setRightTab("compare")
             return
         }
         const previousKeys = new Set(
@@ -399,9 +480,8 @@ export function SourcingProductAdjustDialog({
                 moveAddressKeys ? { moveAddressKeys } : undefined,
             )
             if (addedKey) {
-                setAddPickerOpen(false)
                 setSelectedRowKey(addedKey)
-                if (!addressMaximized) focusRowControl(addedKey)
+                focusRowControl(addedKey)
             }
             return
         }
@@ -446,7 +526,7 @@ export function SourcingProductAdjustDialog({
         )
         applyPatches(
             res.patches,
-            `已自动缩减直发 ${res.trimmedQty} ${row.product.unit}（释放 ${res.releasedAddressCount} 处地址），总量已重新配平。`,
+            `已自动缩减直发 ${res.trimmedQty} ${row.product.unit}（释放 ${res.releasedAddressCount} 处地址），总量已配平。`,
         )
     }
 
@@ -471,7 +551,7 @@ export function SourcingProductAdjustDialog({
         )
         if (res.patches.length === 0) {
             setActionNotice(
-                "当前暂无可继续直发分配的剩余地址（可能存在不配送地区），请在下方地址表核对。",
+                "当前暂无可继续直发分配的剩余地址（可能存在不配送地区），请在右侧地址表核对。",
             )
             return
         }
@@ -515,8 +595,9 @@ export function SourcingProductAdjustDialog({
                     path.endsWith(".deliveryAllocations"),
                 )
             setSelectedRowKey(firstInvalid.line.rowKey)
-            if (!onlyAddressErrors) {
-                setAddressMaximized(false)
+            if (onlyAddressErrors) {
+                setRightTab("addresses")
+            } else {
                 focusRowControl(firstInvalid.line.rowKey, true)
             }
             return
@@ -538,7 +619,7 @@ export function SourcingProductAdjustDialog({
             }}
         >
             <DialogContent
-                size="2xl"
+                size="full"
                 scroll="body"
                 closeButtonId="sourcing-product-adjust-close"
                 finalFocus={() =>
@@ -555,8 +636,8 @@ export function SourcingProductAdjustDialog({
             >
                 {row ? (
                     <>
-                        {/* 页头：商品身份 + 本次下单开关 */}
-                        <DialogHeader className="border-border/60 bg-card py-2.5">
+                        {/* 全宽顶栏：商品身份 + 综合价格摘要 + 本次下单开关 */}
+                        <DialogHeader className="border-border/70 bg-card py-2.5">
                             <div className="flex flex-wrap items-center justify-between gap-3">
                                 <div className="min-w-0 flex-1 space-y-0.5">
                                     <div className="flex flex-wrap items-center gap-2">
@@ -603,7 +684,19 @@ export function SourcingProductAdjustDialog({
                                     />
                                 </div>
 
-                                <div className="flex shrink-0 items-center gap-2">
+                                <div className="flex shrink-0 items-center gap-3">
+                                    {headerPricingText ? (
+                                        <span
+                                            className={cn(
+                                                "hidden text-xs md:inline",
+                                                pricingSummary?.hasInvertedSource
+                                                    ? "font-medium text-destructive"
+                                                    : "text-muted-foreground",
+                                            )}
+                                        >
+                                            {headerPricingText}
+                                        </span>
+                                    ) : null}
                                     <SourcingParticipationControl
                                         idPrefix={`sourcing-product-adjust-${productSeg}`}
                                         itemName={row.product.itemName}
@@ -620,515 +713,374 @@ export function SourcingProductAdjustDialog({
                                 </div>
                             </div>
                             <DialogDescription className="sr-only">
-                                同屏查看和分配多个供给来源（现有库存、集采入仓、代发直发、集采直发）的数量、目标仓、交期与收货地址。修改实时存入草稿。
+                                左侧管理全部供给来源与数量配平，右侧全屏处理交付地址分配与候选方案比价。修改实时存入草稿。
                             </DialogDescription>
                         </DialogHeader>
 
-                        {/* 全局多源配平进度条：分色堆叠 + 混合履约守恒等式 + 一键智能配平 */}
-                        <SourcingAllocationSummary
-                            row={row}
-                            addressState={addressState}
-                            canSplitNewSource={!addDisabledReason}
-                            onTrimDirectExcess={() => handleTrimDirectExcess()}
-                            onFillDirectShortfall={() =>
-                                handleFillDirectShortfall()
-                            }
-                            onSplitResidual={
-                                !addDisabledReason
-                                    ? () => splitResidual()
-                                    : undefined
-                            }
-                        />
-
-                        {/* 主工作面：上区（全部来源同屏平铺编辑）+ 下区（地址矩阵实时联动） */}
-                        <DialogBody className="flex h-[min(78dvh,50rem)] min-h-0 flex-auto flex-col overflow-hidden p-0">
-                            {/* 全局校验错误条（始终可见） */}
-                            {allProductErrors.length > 0 ? (
-                                <div
-                                    id="sourcing-product-adjust-source-errors"
-                                    role="alert"
-                                    tabIndex={-1}
-                                    className="flex shrink-0 items-start gap-2 border-b border-destructive-border bg-destructive-soft px-4 py-2 text-xs text-destructive-soft-foreground outline-none sm:px-6"
-                                >
-                                    <TriangleAlertIcon
-                                        aria-hidden="true"
-                                        className="mt-0.5 size-3.5 shrink-0"
-                                    />
-                                    <div className="space-y-0.5">
-                                        {allProductErrors.map((message) => (
-                                            <p key={message}>{message}</p>
-                                        ))}
-                                    </div>
-                                </div>
-                            ) : null}
-
-                            {/* 暂缓下单提示 */}
-                            {!included ? (
-                                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-surface-sunken px-4 py-2 text-xs text-muted-foreground sm:px-6">
-                                    <span className="flex items-center gap-2">
-                                        <InfoIcon
-                                            aria-hidden="true"
-                                            className="size-3.5 shrink-0"
-                                        />
-                                        <span>
-                                            当前已暂缓下单：本次提交不会包含此商品，所配方案保存在草稿中。
-                                        </span>
-                                    </span>
-                                    <Button
-                                        id={`sourcing-editor-${productSeg}-enable-participation`}
-                                        type="button"
-                                        variant="outline"
-                                        size="xs"
-                                        className="bg-card"
-                                        onClick={() =>
-                                            onSetParticipation(
-                                                [row.product.salesOrderLineId],
-                                                true,
-                                            )
-                                        }
-                                    >
-                                        恢复本次下单
-                                    </Button>
-                                </div>
-                            ) : null}
-
-                            {/* 操作反馈轻量条 */}
-                            {actionNotice ? (
-                                <div
-                                    role="status"
-                                    className="flex shrink-0 items-center justify-between gap-2 border-b border-info-border/70 bg-info-soft/50 px-4 py-1.5 text-xs text-info-soft-foreground sm:px-6"
-                                >
-                                    <span>{actionNotice}</span>
-                                    <button
-                                        id={`sourcing-product-adjust-${productSeg}-notice-dismiss`}
-                                        type="button"
-                                        aria-label="关闭提示"
-                                        className="cursor-pointer hover:text-foreground"
-                                        onClick={() => setActionNotice(null)}
-                                    >
-                                        <XIcon className="size-3.5" />
-                                    </button>
-                                </div>
-                            ) : null}
-
-                            {/* 上区：供给来源与配量（专注地址模式时收拢为单行实时概览条，否则全部平铺同屏编辑） */}
-                            <section
-                                aria-label="供给来源列表"
-                                className={cn(
-                                    "flex min-h-0 flex-col bg-card",
-                                    addressMaximized && hasDirectAddressWork
-                                        ? "shrink-0 border-b border-border/70"
-                                        : hasDirectAddressWork
-                                          ? addPickerOpen
-                                              ? "max-h-[64%] shrink-0 border-b-2 border-border/80"
-                                              : "max-h-[48%] shrink-0 border-b-2 border-border/80"
-                                          : "flex-1",
-                                )}
+                        {/* 全局校验错误条与暂缓提示条 */}
+                        {allProductErrors.length > 0 ? (
+                            <div
+                                id="sourcing-product-adjust-source-errors"
+                                role="alert"
+                                tabIndex={-1}
+                                className="flex shrink-0 items-start gap-2 border-b border-destructive-border bg-destructive-soft px-5 py-2 text-xs text-destructive-soft-foreground outline-none"
                             >
-                                {addressMaximized && hasDirectAddressWork ? (
-                                    <div className="flex flex-wrap items-center justify-between gap-2 bg-surface-sunken/60 px-4 py-2 sm:px-6">
-                                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-                                            <span className="text-xs font-medium text-muted-foreground">
-                                                供给来源：
-                                            </span>
-                                            {row.allocations.map(
-                                                ({ line }, idx) => {
-                                                    const opt =
-                                                        findSourcingOption(
-                                                            row.product,
-                                                            line.basisId,
-                                                        )
-                                                    const isStock =
-                                                        opt?.sourceType ===
-                                                        "EXISTING_STOCK"
-                                                    const label = isStock
-                                                        ? opt.warehouseName ||
-                                                          opt.supplierName
-                                                        : opt?.supplierName ||
-                                                          "未选供应商"
-                                                    const route = opt
-                                                        ? sourcingRouteLabel(
-                                                              opt,
-                                                          )
-                                                        : "待选"
-                                                    const accent =
-                                                        sourceAccentForIndex(
-                                                            idx,
-                                                        )
-                                                    const hasErr = Boolean(
+                                <TriangleAlertIcon
+                                    aria-hidden="true"
+                                    className="mt-0.5 size-3.5 shrink-0"
+                                />
+                                <div className="space-y-0.5">
+                                    {allProductErrors.map((message) => (
+                                        <p key={message}>{message}</p>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : null}
+
+                        {!included ? (
+                            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-surface-sunken px-5 py-2 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-2">
+                                    <InfoIcon
+                                        aria-hidden="true"
+                                        className="size-3.5 shrink-0"
+                                    />
+                                    <span>
+                                        当前已暂缓下单：本次提交不会包含此商品，所配方案保留在草稿中。
+                                    </span>
+                                </span>
+                                <Button
+                                    id={`sourcing-editor-${productSeg}-enable-participation`}
+                                    type="button"
+                                    variant="outline"
+                                    size="xs"
+                                    className="bg-card"
+                                    onClick={() =>
+                                        onSetParticipation(
+                                            [row.product.salesOrderLineId],
+                                            true,
+                                        )
+                                    }
+                                >
+                                    恢复本次下单
+                                </Button>
+                            </div>
+                        ) : null}
+
+                        {actionNotice ? (
+                            <div
+                                role="status"
+                                className="flex shrink-0 items-center justify-between gap-2 border-b border-info-border/70 bg-info-soft/50 px-5 py-1.5 text-xs text-info-soft-foreground"
+                            >
+                                <span>{actionNotice}</span>
+                                <button
+                                    id={`sourcing-product-adjust-${productSeg}-notice-dismiss`}
+                                    type="button"
+                                    aria-label="关闭提示"
+                                    className="cursor-pointer hover:text-foreground"
+                                    onClick={() => setActionNotice(null)}
+                                >
+                                    <XIcon className="size-3.5" />
+                                </button>
+                            </div>
+                        ) : null}
+
+                        {/* 主工作面：全高左右双栏（左栏供给与配量，右栏地址矩阵 / 比价选源） */}
+                        <DialogBody className="flex min-h-0 flex-1 flex-col overflow-y-auto p-0 lg:flex-row lg:overflow-hidden">
+                            {/* 左栏：供给方案与配量（恒定可见，宽 430–490px） */}
+                            <aside className="flex w-full shrink-0 flex-col border-b border-border/70 bg-sidebar lg:h-full lg:w-[27rem] lg:overflow-hidden lg:border-r lg:border-b-0 xl:w-[30.5rem]">
+                                <div className="shrink-0 p-4 pb-2.5">
+                                    <SourcingAllocationSummary
+                                        row={row}
+                                        addressState={addressState}
+                                        canSplitNewSource={!addDisabledReason}
+                                        onTrimDirectExcess={() =>
+                                            handleTrimDirectExcess()
+                                        }
+                                        onFillDirectShortfall={() =>
+                                            handleFillDirectShortfall()
+                                        }
+                                        onSplitResidual={
+                                            !addDisabledReason
+                                                ? () => splitResidual()
+                                                : undefined
+                                        }
+                                    />
+                                </div>
+
+                                <section
+                                    aria-label="供给来源列表"
+                                    className="flex min-h-0 flex-1 flex-col"
+                                >
+                                    <div className="flex shrink-0 items-center justify-between gap-2 px-4 py-1.5">
+                                        <h3 className="text-xs font-semibold text-muted-foreground">
+                                            供给来源（{row.allocations.length}）
+                                        </h3>
+                                        <Button
+                                            id={`sourcing-product-${productSeg}-split`}
+                                            type="button"
+                                            variant="outline"
+                                            size="xs"
+                                            className="bg-card"
+                                            disabled={Boolean(
+                                                addDisabledReason,
+                                            )}
+                                            title={
+                                                addDisabledReason ??
+                                                `还可添加 ${unusedOptions.length} 个供给方案`
+                                            }
+                                            onClick={handleAddSourceClick}
+                                        >
+                                            <PlusIcon aria-hidden="true" />
+                                            添加来源
+                                        </Button>
+                                    </div>
+
+                                    <div
+                                        id="sourcing-product-adjust-body"
+                                        ref={sourcesScrollRef}
+                                        className="min-h-0 flex-1 space-y-2.5 overflow-y-auto overscroll-contain px-4 pt-1 pb-4"
+                                    >
+                                        {row.allocations.map(
+                                            ({ line, index }, idx) => (
+                                                <SourcingSourceRow
+                                                    key={line.rowKey}
+                                                    form={props.form}
+                                                    order={props.order}
+                                                    product={row.product}
+                                                    row={row}
+                                                    line={line}
+                                                    index={index}
+                                                    sourceNumber={idx + 1}
+                                                    isActive={
+                                                        line.rowKey ===
+                                                        activeRowKey
+                                                    }
+                                                    isMultiSource={
+                                                        row.allocations.length >
+                                                        1
+                                                    }
+                                                    canRemove={
+                                                        row.allocations.length >
+                                                        1
+                                                    }
+                                                    errors={
                                                         errorsByRowKey.get(
                                                             line.rowKey,
-                                                        )?.length,
-                                                    )
-                                                    return (
-                                                        <button
-                                                            key={line.rowKey}
-                                                            id={`sourcing-source-${toAutomationIdSegment(line.rowKey)}-edit`}
-                                                            type="button"
-                                                            aria-label={`编辑 ${label} · ${route}，分配数量 ${line.quantity || "待填写"}${row.product.unit}${hasErr ? "，待调整" : ""}`}
-                                                            onClick={() => {
-                                                                setSelectedRowKey(
-                                                                    line.rowKey,
-                                                                )
-                                                                setAddressMaximized(
-                                                                    false,
-                                                                )
-                                                            }}
-                                                            className={cn(
-                                                                "inline-flex max-w-64 cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors outline-none hover:bg-card focus-visible:ring-2 focus-visible:ring-ring",
-                                                                hasErr
-                                                                    ? "border-destructive/50 bg-destructive-soft/40 text-destructive-soft-foreground"
-                                                                    : "border-border/70 bg-card text-foreground",
-                                                                !line.selected &&
-                                                                    "border-dashed opacity-65",
-                                                            )}
-                                                        >
-                                                            <span
-                                                                aria-hidden="true"
-                                                                className={cn(
-                                                                    "size-2 shrink-0 rounded-full",
-                                                                    accent.barClass,
-                                                                )}
-                                                            />
-                                                            <span className="num font-semibold">
-                                                                源{idx + 1}
-                                                            </span>
-                                                            <Badge
-                                                                variant={sourceRouteBadgeVariant(
-                                                                    opt,
-                                                                )}
-                                                                className="h-4.5 px-1 text-tiny"
-                                                            >
-                                                                {route}
-                                                            </Badge>
-                                                            <span className="truncate">
-                                                                {label}
-                                                            </span>
-                                                            <span className="num font-semibold">
-                                                                {line.quantity ||
-                                                                    "0"}{" "}
-                                                                {
-                                                                    row.product
-                                                                        .unit
-                                                                }
-                                                            </span>
-                                                        </button>
-                                                    )
-                                                },
-                                            )}
-                                        </div>
-                                        <div className="flex shrink-0 items-center gap-1.5">
-                                            <Button
-                                                id={`sourcing-product-${productSeg}-split`}
-                                                type="button"
-                                                variant="outline"
-                                                size="xs"
-                                                className="bg-card"
-                                                disabled={Boolean(
-                                                    addDisabledReason,
-                                                )}
-                                                title={
-                                                    addDisabledReason ??
-                                                    `共 ${row.product.options.length} 个可用方案`
-                                                }
-                                                onClick={handleAddSourceClick}
-                                            >
-                                                <PlusIcon aria-hidden="true" />
-                                                添加来源
-                                            </Button>
-                                            <Button
-                                                id={`sourcing-product-${productSeg}-expand-sources`}
-                                                type="button"
-                                                variant="ghost"
-                                                size="xs"
-                                                onClick={() =>
-                                                    setAddressMaximized(false)
-                                                }
-                                            >
-                                                展开编辑来源
-                                            </Button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <>
-                                        {/* 来源区小标题栏 */}
-                                        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-sidebar/60 px-4 py-2 sm:px-6">
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                <h3 className="flex items-center gap-1.5 text-body-compact font-semibold text-foreground">
-                                                    <LayersIcon
-                                                        aria-hidden="true"
-                                                        className="size-3.5 text-primary"
-                                                    />
-                                                    供货来源与数量分配
-                                                </h3>
-                                                <span className="num rounded-sm bg-muted px-1.5 py-0.5 text-tiny font-medium text-muted-foreground">
-                                                    {row.allocations.length > 1
-                                                        ? `已拆 ${row.allocations.length} 源`
-                                                        : `共 ${row.product.options.length} 个可选方案`}
-                                                </span>
-                                                {row.allocations.length > 1 ? (
-                                                    <span className="hidden text-xs text-muted-foreground lg:inline">
-                                                        支持现有库存、集采入仓、代发/集采直发同屏混配，实时守恒
-                                                    </span>
-                                                ) : null}
-                                            </div>
-                                            <div className="flex shrink-0 items-center gap-1.5">
-                                                <Button
-                                                    id={`sourcing-product-${productSeg}-split`}
-                                                    type="button"
-                                                    variant={
-                                                        addPickerOpen
-                                                            ? "secondary"
-                                                            : "outline"
+                                                        ) ?? []
                                                     }
-                                                    size="xs"
-                                                    className={
-                                                        !addPickerOpen
-                                                            ? "bg-card"
+                                                    addressState={addressState}
+                                                    isAddressFiltered={
+                                                        addressSourceFilter ===
+                                                        line.rowKey
+                                                    }
+                                                    isCompareTarget={
+                                                        resolvedRightTab ===
+                                                            "compare" &&
+                                                        compareIntent ===
+                                                            "replace" &&
+                                                        line.rowKey ===
+                                                            activeRowKey
+                                                    }
+                                                    onActivate={() =>
+                                                        setSelectedRowKey(
+                                                            line.rowKey,
+                                                        )
+                                                    }
+                                                    onOpenCompare={() => {
+                                                        setSelectedRowKey(
+                                                            line.rowKey,
+                                                        )
+                                                        setCompareIntent(
+                                                            "replace",
+                                                        )
+                                                        setRightTab("compare")
+                                                    }}
+                                                    onRemove={() =>
+                                                        removeSource(
+                                                            line.rowKey,
+                                                        )
+                                                    }
+                                                    onToggleAddressFilter={
+                                                        hasDirectAddressWork
+                                                            ? () => {
+                                                                  setRightTab(
+                                                                      "addresses",
+                                                                  )
+                                                                  setAddressSourceFilter(
+                                                                      (curr) =>
+                                                                          curr ===
+                                                                          line.rowKey
+                                                                              ? null
+                                                                              : line.rowKey,
+                                                                  )
+                                                              }
                                                             : undefined
                                                     }
-                                                    disabled={Boolean(
-                                                        addDisabledReason,
-                                                    )}
-                                                    aria-expanded={
-                                                        addPickerOpen
-                                                    }
-                                                    title={
-                                                        addDisabledReason ??
-                                                        `还可添加 ${unusedOptions.length} 个供给方案`
-                                                    }
-                                                    onClick={
-                                                        handleAddSourceClick
-                                                    }
-                                                >
-                                                    <PlusIcon aria-hidden="true" />
-                                                    {addPickerOpen
-                                                        ? "收起候选方案"
-                                                        : row.allocations
-                                                                .length === 1
-                                                          ? "拆单添加来源"
-                                                          : `添加来源（余 ${unusedOptions.length}）`}
-                                                </Button>
-                                            </div>
-                                        </div>
-
-                                        {/* 来源行平铺滚动区 */}
-                                        <div
-                                            id="sourcing-product-adjust-body"
-                                            ref={sourcesScrollRef}
-                                            className="@container/sourcing min-h-0 flex-1 space-y-2.5 overflow-y-auto overscroll-contain px-4 py-3 sm:px-6"
-                                        >
-                                            {row.allocations.map(
-                                                ({ line, index }, idx) => (
-                                                    <SourcingSourceRow
-                                                        key={line.rowKey}
-                                                        form={props.form}
-                                                        order={props.order}
-                                                        product={row.product}
-                                                        row={row}
-                                                        line={line}
-                                                        index={index}
-                                                        sourceNumber={idx + 1}
-                                                        isActive={
-                                                            line.rowKey ===
-                                                            activeRowKey
-                                                        }
-                                                        isMultiSource={
-                                                            row.allocations
-                                                                .length > 1
-                                                        }
-                                                        canRemove={
-                                                            row.allocations
-                                                                .length > 1
-                                                        }
-                                                        errors={
-                                                            errorsByRowKey.get(
-                                                                line.rowKey,
-                                                            ) ?? []
-                                                        }
-                                                        addressState={
-                                                            addressState
-                                                        }
-                                                        isAddressFiltered={
-                                                            addressSourceFilter ===
-                                                            line.rowKey
-                                                        }
-                                                        defaultCompareOpen={
-                                                            initialFocusSection ===
-                                                                "compare" &&
-                                                            idx === 0
-                                                        }
-                                                        onActivate={() =>
-                                                            setSelectedRowKey(
-                                                                line.rowKey,
-                                                            )
-                                                        }
-                                                        onRemove={() =>
-                                                            removeSource(
-                                                                line.rowKey,
-                                                            )
-                                                        }
-                                                        onToggleAddressFilter={
-                                                            hasDirectAddressWork
-                                                                ? () =>
-                                                                      setAddressSourceFilter(
-                                                                          (
-                                                                              curr,
-                                                                          ) =>
-                                                                              curr ===
-                                                                              line.rowKey
-                                                                                  ? null
-                                                                                  : line.rowKey,
-                                                                      )
-                                                                : undefined
-                                                        }
-                                                        onTrimDirectExcessForSource={(
+                                                    onTrimDirectExcessForSource={(
+                                                        rk,
+                                                        excessQty,
+                                                    ) =>
+                                                        handleTrimDirectExcess(
                                                             rk,
                                                             excessQty,
-                                                        ) =>
-                                                            handleTrimDirectExcess(
-                                                                rk,
-                                                                excessQty,
-                                                            )
-                                                        }
-                                                        onFillDirectShortfallForSource={(
+                                                        )
+                                                    }
+                                                    onFillDirectShortfallForSource={(
+                                                        rk,
+                                                        shortfallQty,
+                                                    ) =>
+                                                        handleFillDirectShortfall(
                                                             rk,
                                                             shortfallQty,
-                                                        ) =>
-                                                            handleFillDirectShortfall(
-                                                                rk,
-                                                                shortfallQty,
-                                                            )
-                                                        }
-                                                        onApplyPatches={
-                                                            applyPatches
-                                                        }
-                                                    />
-                                                ),
-                                            )}
+                                                        )
+                                                    }
+                                                    onApplyPatches={
+                                                        applyPatches
+                                                    }
+                                                />
+                                            ),
+                                        )}
 
-                                            {/* 按履约方式分类的新增来源比价面板 */}
-                                            {addPickerOpen ? (
-                                                <div className="space-y-2 rounded-lg border border-primary/35 bg-info-soft/20 p-3">
-                                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                                        <div>
-                                                            <p className="text-body-compact font-semibold text-foreground">
-                                                                选择要添加的新来源（按履约方式筛选）
-                                                            </p>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                点击任意未添加方案即可加入拆单；若有未覆盖缺口将自动带入余量。
-                                                            </p>
-                                                        </div>
-                                                        <Button
-                                                            id={`sourcing-product-${productSeg}-add-picker-close`}
-                                                            type="button"
-                                                            variant="ghost"
-                                                            size="xs"
-                                                            onClick={() =>
-                                                                setAddPickerOpen(
-                                                                    false,
-                                                                )
-                                                            }
+                                        {!addDisabledReason ? (
+                                            <button
+                                                id={`sourcing-product-${productSeg}-split-footer`}
+                                                type="button"
+                                                onClick={handleAddSourceClick}
+                                                className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-border bg-card/60 px-3 py-2.5 text-xs font-medium text-muted-foreground transition-colors outline-none hover:border-primary/45 hover:bg-card hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+                                            >
+                                                <PlusIcon
+                                                    aria-hidden="true"
+                                                    className="size-3.5"
+                                                />
+                                                添加新来源（支持库存 / 集采入仓
+                                                / 代发直发混配，余{" "}
+                                                {unusedOptions.length} 个方案）
+                                            </button>
+                                        ) : null}
+                                    </div>
+                                </section>
+                            </aside>
+
+                            {/* 右栏：全高主工作区（交付地址分配 / 候选方案比价 / 客户收货地址） */}
+                            <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card">
+                                {/* 飞书底线页签栏 */}
+                                <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/70 bg-card px-5">
+                                    <Tabs
+                                        value={resolvedRightTab}
+                                        onValueChange={(nextTab) => {
+                                            if (
+                                                nextTab === "addresses" ||
+                                                nextTab === "compare" ||
+                                                nextTab === "readonly_addresses"
+                                            ) {
+                                                setRightTab(nextTab)
+                                                if (nextTab === "compare") {
+                                                    setCompareIntent("replace")
+                                                }
+                                            }
+                                        }}
+                                    >
+                                        <TabsList
+                                            variant="line"
+                                            aria-label="右侧供给工作区视图"
+                                            className="gap-6"
+                                        >
+                                            {hasDirectAddressWork ? (
+                                                <TabsTrigger
+                                                    id="sourcing-product-adjust-tab-addresses"
+                                                    value="addresses"
+                                                    className="cursor-pointer gap-2 text-foreground/75 hover:text-primary after:bottom-0 hover:after:opacity-35 data-active:font-semibold data-active:text-primary"
+                                                >
+                                                    <MapPinIcon
+                                                        aria-hidden="true"
+                                                        className="size-3.5"
+                                                    />
+                                                    <span>交付地址分配</span>
+                                                    {addressTabBadge ? (
+                                                        <span
+                                                            className={cn(
+                                                                "num inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-tiny font-medium",
+                                                                addressTabBadge.tone ===
+                                                                    "destructive"
+                                                                    ? "bg-destructive-soft text-destructive-soft-foreground"
+                                                                    : addressTabBadge.tone ===
+                                                                        "warning"
+                                                                      ? "bg-warning-soft text-warning-soft-foreground"
+                                                                      : "bg-success-soft text-success-soft-foreground",
+                                                            )}
                                                         >
-                                                            <XIcon aria-hidden="true" />
-                                                            关闭
-                                                        </Button>
-                                                    </div>
-                                                    <SourcingOptionCompareMatrix
-                                                        idPrefix={`sourcing-add-${productSeg}`}
-                                                        order={props.order}
-                                                        product={row.product}
-                                                        selectedBasisId=""
-                                                        usedBasisIds={
-                                                            usedBasisIdsAll
-                                                        }
-                                                        recommendedBasisId={
-                                                            recommendedBasisId
-                                                        }
-                                                        mode="add"
-                                                        onSelect={(option) =>
-                                                            handleAddSourceByOption(
-                                                                option.basisId,
-                                                            )
-                                                        }
-                                                    />
-                                                </div>
-                                            ) : null}
-
-                                            {/* 纯仓发/库存且存在客户地址时，底部折叠展示只读收货地址要求 */}
-                                            {!hasDirectAddressWork &&
-                                            row.product.deliveryAllocations
-                                                .length > 0 ? (
-                                                <Collapsible className="rounded-lg border border-border/70 bg-surface-sunken/50">
-                                                    <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2">
-                                                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                            <MapPinIcon
-                                                                aria-hidden="true"
-                                                                className="size-3.5 shrink-0 text-muted-foreground"
-                                                            />
-                                                            <span>
-                                                                客户收货地址共{" "}
-                                                                <strong className="num font-medium text-foreground">
-                                                                    {
-                                                                        row
-                                                                            .product
-                                                                            .deliveryAllocations
-                                                                            .length
-                                                                    }
-                                                                </strong>{" "}
-                                                                处（
-                                                                <QuantityValue
-                                                                    value={
-                                                                        row
-                                                                            .product
-                                                                            .remainingQuantity
-                                                                    }
-                                                                    unit={
-                                                                        row
-                                                                            .product
-                                                                            .unit
-                                                                    }
-                                                                    className="font-medium text-foreground"
+                                                            {addressTabBadge.tone ===
+                                                            "success" ? (
+                                                                <CheckCircle2Icon
+                                                                    aria-hidden="true"
+                                                                    className="size-3"
                                                                 />
-                                                                ）·
-                                                                当前由仓库/库存出库时统一安排，如需部分直发请添加代发/集采直发来源。
-                                                            </span>
+                                                            ) : null}
+                                                            {
+                                                                addressTabBadge.text
+                                                            }
                                                         </span>
-                                                        <CollapsibleTrigger
-                                                            id={`sourcing-product-${productSeg}-readonly-addr-toggle`}
-                                                            render={
-                                                                <Button
-                                                                    type="button"
-                                                                    variant="ghost"
-                                                                    size="xs"
-                                                                    className="group"
-                                                                />
-                                                            }
-                                                        >
-                                                            查看收货地址
-                                                            <ChevronDownIcon className="size-3.5 transition-transform group-data-[panel-open]:rotate-180" />
-                                                        </CollapsibleTrigger>
-                                                    </div>
-                                                    <CollapsibleContent>
-                                                        <div className="border-t border-border/60 bg-card">
-                                                            <SourcingDeliveryRequirementSection
-                                                                product={
-                                                                    row.product
-                                                                }
-                                                                condensed
-                                                            />
-                                                        </div>
-                                                    </CollapsibleContent>
-                                                </Collapsible>
+                                                    ) : null}
+                                                </TabsTrigger>
                                             ) : null}
-                                        </div>
-                                    </>
-                                )}
-                            </section>
 
-                            {/* 下区：交付地址分配工作区（含直发地址时同屏实时联动） */}
-                            {hasDirectAddressWork ? (
-                                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                                            <TabsTrigger
+                                                id="sourcing-product-adjust-tab-compare"
+                                                value="compare"
+                                                className="cursor-pointer gap-2 text-foreground/75 hover:text-primary after:bottom-0 hover:after:opacity-35 data-active:font-semibold data-active:text-primary"
+                                            >
+                                                <ScaleIcon
+                                                    aria-hidden="true"
+                                                    className="size-3.5"
+                                                />
+                                                <span>
+                                                    {compareIntent === "add" &&
+                                                    resolvedRightTab ===
+                                                        "compare"
+                                                        ? "选择并添加新来源"
+                                                        : "候选方案比价"}
+                                                </span>
+                                                <span className="num rounded-sm bg-muted px-1.5 py-0 text-tiny font-medium text-muted-foreground">
+                                                    {row.product.options.length}
+                                                </span>
+                                            </TabsTrigger>
+
+                                            {hasReadonlyAddresses ? (
+                                                <TabsTrigger
+                                                    id="sourcing-product-adjust-tab-readonly-addresses"
+                                                    value="readonly_addresses"
+                                                    className="cursor-pointer gap-2 text-foreground/75 hover:text-primary after:bottom-0 hover:after:opacity-35 data-active:font-semibold data-active:text-primary"
+                                                >
+                                                    <MapPinIcon
+                                                        aria-hidden="true"
+                                                        className="size-3.5"
+                                                    />
+                                                    <span>客户收货地址</span>
+                                                    <span className="num rounded-sm bg-muted px-1.5 py-0 text-tiny font-medium text-muted-foreground">
+                                                        {
+                                                            row.product
+                                                                .deliveryAllocations
+                                                                .length
+                                                        }{" "}
+                                                        处
+                                                    </span>
+                                                </TabsTrigger>
+                                            ) : null}
+                                        </TabsList>
+                                    </Tabs>
+
+                                    {resolvedRightTab === "compare" ? (
+                                        <p className="hidden text-xs text-muted-foreground xl:block">
+                                            {compareIntent === "add"
+                                                ? "点击任意未加入方案直接新增到左侧拆单，若有缺口自动带入余量"
+                                                : `可直接替换左侧 源${activeSourceNumber}，或点「+ 拆单」新增为独立来源`}
+                                        </p>
+                                    ) : null}
+                                </div>
+
+                                {/* 右栏正文 */}
+                                {resolvedRightTab === "addresses" &&
+                                hasDirectAddressWork ? (
                                     <SourcingAddressEditor
                                         form={props.form}
                                         row={row}
@@ -1136,10 +1088,6 @@ export function SourcingProductAdjustDialog({
                                         sourceFilter={addressSourceFilter}
                                         onSourceFilterChange={
                                             setAddressSourceFilter
-                                        }
-                                        isMaximized={addressMaximized}
-                                        onToggleMaximize={() =>
-                                            setAddressMaximized((prev) => !prev)
                                         }
                                         onSplitResidual={
                                             !addDisabledReason
@@ -1152,12 +1100,69 @@ export function SourcingProductAdjustDialog({
                                                 : undefined
                                         }
                                     />
-                                </div>
-                            ) : null}
+                                ) : resolvedRightTab === "readonly_addresses" &&
+                                  hasReadonlyAddresses ? (
+                                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                                        <SourcingDeliveryRequirementSection
+                                            product={row.product}
+                                            condensed
+                                            note="当前已选来源均由仓库/库存出库时统一安排客户地址；如需部分直发，请切到「候选方案比价」拆单加入代发或集采直发来源。"
+                                        />
+                                    </div>
+                                ) : (
+                                    <SourcingOptionCompareMatrix
+                                        idPrefix={`sourcing-compare-${productSeg}`}
+                                        order={props.order}
+                                        product={row.product}
+                                        selectedBasisId={
+                                            compareIntent === "replace"
+                                                ? (active?.line.basisId ?? "")
+                                                : ""
+                                        }
+                                        usedBasisIds={
+                                            compareIntent === "add"
+                                                ? usedBasisIdsAll
+                                                : usedBasisIdsOtherThanActive
+                                        }
+                                        recommendedBasisId={recommendedBasisId}
+                                        activeSourceNumber={
+                                            compareIntent === "replace"
+                                                ? activeSourceNumber
+                                                : undefined
+                                        }
+                                        mode={compareIntent}
+                                        fullHeight
+                                        canAddAsNewSource={!addDisabledReason}
+                                        onSelect={(option) => {
+                                            if (compareIntent === "add") {
+                                                handleAddSourceByOption(
+                                                    option.basisId,
+                                                )
+                                                return
+                                            }
+                                            if (!active) return
+                                            applySourcingOptionToLine(
+                                                props.form,
+                                                row.product,
+                                                active.index,
+                                                option,
+                                            )
+                                        }}
+                                        onAddAsNewSource={
+                                            !addDisabledReason
+                                                ? (option) =>
+                                                      handleAddSourceByOption(
+                                                          option.basisId,
+                                                      )
+                                                : undefined
+                                        }
+                                    />
+                                )}
+                            </main>
                         </DialogBody>
 
-                        {/* 精简底栏 */}
-                        <DialogFooter className="items-center border-border/60 bg-card sm:justify-between">
+                        {/* 全宽底栏 */}
+                        <DialogFooter className="items-center border-border/70 bg-card sm:justify-between">
                             <div className="flex flex-wrap items-center gap-2.5">
                                 {onRestoreProductLines &&
                                 snapshotState &&

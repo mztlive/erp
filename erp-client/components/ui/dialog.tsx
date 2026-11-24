@@ -69,7 +69,7 @@ const DIALOG_SIZE_CLASS: Record<DialogSize, string> = {
     lg: "sm:max-w-2xl max-h-[85dvh]",
     xl: "sm:max-w-4xl max-h-[88dvh]",
     "2xl": "sm:max-w-6xl max-h-[92dvh]",
-    full: "w-[calc(100vw-2rem)] max-w-none h-[calc(100dvh-2rem)]",
+    full: "inset-0 h-dvh max-h-dvh w-screen max-w-none rounded-none border-0 shadow-none",
 }
 
 type DialogLayoutContextValue = {
@@ -105,7 +105,10 @@ function DialogContent({
                 data-size={size}
                 data-scroll={scroll}
                 className={cn(
-                    "fixed top-1/2 left-1/2 z-50 w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overscroll-contain rounded-xl border border-border/80 bg-popover text-body-compact text-popover-foreground shadow-lg duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+                    "fixed z-50 overscroll-contain bg-popover text-body-compact text-popover-foreground outline-none",
+                    size === "full"
+                        ? "duration-150 data-open:animate-in data-open:fade-in-0 data-open:slide-in-from-right-4 data-closed:animate-out data-closed:fade-out-0 data-closed:slide-out-to-right-4"
+                        : "top-1/2 left-1/2 w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border/80 shadow-lg duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
                     DIALOG_SIZE_CLASS[size],
                     scroll === "body"
                         ? "flex flex-col overflow-hidden p-0"

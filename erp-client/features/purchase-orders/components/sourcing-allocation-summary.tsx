@@ -21,7 +21,6 @@ import {
 } from "../lib/sourcing/address-grouping"
 import { sourcingRouteLabel } from "../lib/sourcing/delivery-terms"
 import type { SourcingEditorRow } from "../lib/sourcing/editor-rows"
-import { summarizeRowPricing } from "../lib/sourcing/pricing"
 import { quantityUnits } from "../lib/sourcing/quantity"
 import { sourceAccentForIndex } from "../lib/sourcing/source-palette"
 
@@ -34,10 +33,9 @@ type BarSegment = {
 }
 
 /**
- * 顶部全局多源配平条：
- * - 分色堆叠进度条直观呈现每个来源（现有库存 / 集采入仓 / 代发直发 / 集采直发）的占比与超配溢出；
- * - 当存在混合履约时显式展示「总需求 = 仓库/库存统筹 + 供应商直发」守恒等式；
- * - 提供一键配平动作（直发自动缩减多余地址 / 直发一键补配余量 / 剩余缺口拆新源）。
+ * 左侧栏顶部配平总览卡：
+ * - 极简轻白卡呈现总分配进度、分色堆叠条与各来源图例；
+ * - 混合履约时点明「仓库/库存统筹 + 供应商直发（额度）」，失衡时就地给出一键配平动作。
  */
 export function SourcingAllocationSummary({
     row,
@@ -90,7 +88,6 @@ export function SourcingAllocationSummary({
 
     const partial = included && !excess && !complete && diffText !== "—"
 
-    // 构造各已启用来源的分色堆叠片段（全定点 BigInt 计算宽度百分比，零浮点误差）
     const denomUnits =
         allocatedUnits > demandUnits ? allocatedUnits : demandUnits
     const segments: BarSegment[] = []
@@ -107,12 +104,11 @@ export function SourcingAllocationSummary({
                 const basisPctTimes10 = (units * BigInt(1000)) / denomUnits
                 const whole = basisPctTimes10 / BigInt(10)
                 const tenths = basisPctTimes10 % BigInt(10)
-                const widthPercent = `${whole.toString()}.${tenths.toString()}%`
                 segments.push({
                     key: line.rowKey,
                     label: `源${idx + 1} ${route}`,
                     qty,
-                    widthPercent,
+                    widthPercent: `${whole.toString()}.${tenths.toString()}%`,
                     barClass: sourceAccentForIndex(idx).barClass,
                 })
             } catch {
@@ -120,38 +116,6 @@ export function SourcingAllocationSummary({
             }
         })
     }
-
-    // 价格与毛利紧凑摘要
-    const pricingSummary = summarizeRowPricing(row)
-    const pricingText = (() => {
-        const activeCount = row.allocations.filter(
-            ({ line }) => line.selected,
-        ).length
-        const base =
-            row.allocations.length > 1
-                ? `${activeCount || row.allocations.length} 家组合`
-                : "单源供货"
-        if (pricingSummary.kind === "stock") return `${base} · 库存核算`
-        if (
-            pricingSummary.kind === "purchase" &&
-            pricingSummary.unitCostGross
-        ) {
-            const marginText = pricingSummary.hasInvertedSource
-                ? "价格倒挂"
-                : pricingSummary.margin?.marginRateText
-                  ? `毛利 ${pricingSummary.margin.marginRateText}`
-                  : ""
-            return [base, `¥${pricingSummary.unitCostGross}`, marginText]
-                .filter(Boolean)
-                .join(" · ")
-        }
-        if (pricingSummary.kind === "multiple") {
-            return pricingSummary.hasInvertedSource
-                ? `${base} · 多价格 · 含倒挂`
-                : `${base} · 多价格`
-        }
-        return `${base} · 待选方案`
-    })()
 
     const showMixedEquation = Boolean(
         included &&
@@ -174,111 +138,151 @@ export function SourcingAllocationSummary({
         onFillDirectShortfall,
     )
 
+    const hasQuickAction =
+        hasDirectOverTarget ||
+        hasDirectShortfall ||
+        (partial && canSplitNewSource && Boolean(onSplitResidual))
+
     return (
         <div
             className={cn(
-                "shrink-0 border-b border-border/70 px-4 py-2.5 sm:px-6",
-                excess
-                    ? "bg-destructive-soft/45"
-                    : complete
-                      ? "bg-success-soft/35"
-                      : "bg-surface-sunken",
+                "shrink-0 rounded-lg border bg-card p-3.5 shadow-2xs",
+                excess ? "border-destructive-border" : "border-border/75",
             )}
             aria-label="商品分配进度"
         >
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
-                {/* 左侧：配平数字与混合模式守恒等式 */}
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-xs">
-                    <span className="inline-flex items-baseline gap-1">
-                        <span className="text-muted-foreground">已分配</span>
-                        <span
-                            className={cn(
-                                "text-body-compact font-semibold",
-                                excess
-                                    ? "text-destructive"
-                                    : complete
-                                      ? "text-success-soft-foreground"
-                                      : "text-foreground",
-                            )}
-                        >
-                            <QuantityValue
-                                value={included ? row.quantity : "0"}
-                                unit=""
-                            />
-                        </span>
-                        <span className="text-muted-foreground">/</span>
+            <div className="flex items-baseline justify-between gap-2">
+                <div className="flex items-baseline gap-1.5">
+                    <span className="text-xs text-muted-foreground">
+                        已分配
+                    </span>
+                    <span
+                        className={cn(
+                            "text-value-compact font-semibold tracking-tight",
+                            excess
+                                ? "text-destructive"
+                                : complete
+                                  ? "text-success-soft-foreground"
+                                  : "text-foreground",
+                        )}
+                    >
                         <QuantityValue
-                            value={row.product.remainingQuantity}
-                            unit={row.product.unit}
-                            className="font-medium text-foreground"
+                            value={included ? row.quantity : "0"}
+                            unit=""
                         />
                     </span>
+                    <span className="text-xs text-muted-foreground">/</span>
+                    <QuantityValue
+                        value={row.product.remainingQuantity}
+                        unit={row.product.unit}
+                        className="text-body-compact font-medium text-muted-foreground"
+                    />
+                </div>
 
-                    {excess ? (
-                        <span className="num inline-flex items-center gap-1 rounded-sm bg-destructive-soft px-1.5 py-0.5 text-tiny font-semibold text-destructive-soft-foreground">
-                            <TriangleAlertIcon
-                                aria-hidden="true"
-                                className="size-3"
-                            />
-                            超出 {diffText} {row.product.unit}
-                        </span>
-                    ) : complete ? (
-                        <span className="inline-flex items-center gap-1 rounded-sm bg-success-soft px-1.5 py-0.5 text-tiny font-medium text-success-soft-foreground">
-                            <CheckCircle2Icon
-                                aria-hidden="true"
-                                className="size-3"
-                            />
-                            已配平
-                        </span>
-                    ) : partial ? (
-                        <span className="num inline-flex items-center gap-1 rounded-sm bg-warning-soft px-1.5 py-0.5 text-tiny font-medium text-warning-soft-foreground">
-                            尚缺 {diffText} {row.product.unit}
-                        </span>
-                    ) : !included ? (
-                        <span className="rounded-sm bg-muted px-1.5 py-0.5 text-tiny text-muted-foreground">
-                            已暂缓
-                        </span>
+                {excess ? (
+                    <span className="num inline-flex items-center gap-1 rounded-sm bg-destructive-soft px-2 py-0.5 text-xs font-semibold text-destructive-soft-foreground">
+                        <TriangleAlertIcon
+                            aria-hidden="true"
+                            className="size-3"
+                        />
+                        超出 {diffText} {row.product.unit}
+                    </span>
+                ) : complete ? (
+                    <span className="inline-flex items-center gap-1 rounded-sm bg-success-soft px-2 py-0.5 text-xs font-medium text-success-soft-foreground">
+                        <CheckCircle2Icon
+                            aria-hidden="true"
+                            className="size-3"
+                        />
+                        已配平
+                    </span>
+                ) : partial ? (
+                    <span className="num inline-flex items-center gap-1 rounded-sm bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning-soft-foreground">
+                        尚缺 {diffText} {row.product.unit}
+                    </span>
+                ) : !included ? (
+                    <span className="rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                        已暂缓
+                    </span>
+                ) : null}
+            </div>
+
+            {/* 分色堆叠配平条 */}
+            <div
+                className="mt-2.5 flex h-2 w-full overflow-hidden rounded-full bg-muted"
+                aria-hidden="true"
+            >
+                {segments.map((seg) => (
+                    <div
+                        key={seg.key}
+                        title={`${seg.label}：${seg.qty} ${row.product.unit}`}
+                        className={cn(
+                            "h-full border-r border-card/80 transition-[width] duration-200 last:border-r-0",
+                            excess ? "bg-destructive/80" : seg.barClass,
+                        )}
+                        style={{ width: seg.widthPercent }}
+                    />
+                ))}
+            </div>
+
+            {/* 多源图例与混合履约守恒公式 */}
+            {segments.length > 1 || showMixedEquation ? (
+                <div className="mt-2 space-y-1">
+                    {segments.length > 1 ? (
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-tiny text-muted-foreground">
+                            {segments.map((seg) => (
+                                <span
+                                    key={seg.key}
+                                    className="inline-flex items-center gap-1"
+                                >
+                                    <span
+                                        aria-hidden="true"
+                                        className={cn(
+                                            "size-1.5 rounded-full",
+                                            seg.barClass,
+                                        )}
+                                    />
+                                    <span>{seg.label}</span>
+                                    <span className="num font-medium text-foreground">
+                                        {seg.qty}
+                                    </span>
+                                </span>
+                            ))}
+                        </div>
                     ) : null}
 
                     {showMixedEquation && addressState ? (
-                        <>
-                            <span
-                                aria-hidden="true"
-                                className="hidden text-border sm:inline"
+                        <p className="text-xs text-muted-foreground">
+                            仓库/库存统筹{" "}
+                            <strong className="num font-medium text-foreground">
+                                {addressState.nonDirectTotalQty}{" "}
+                                {row.product.unit}
+                            </strong>
+                            {" + "}直发{" "}
+                            <strong
+                                className={cn(
+                                    "num font-medium",
+                                    isPositiveQuantity(
+                                        addressState.directOverTargetQty,
+                                    )
+                                        ? "text-destructive"
+                                        : "text-foreground",
+                                )}
                             >
-                                |
+                                {addressState.directAssignedTotalQty}{" "}
+                                {row.product.unit}
+                            </strong>
+                            <span className="num">
+                                （直发额度 {addressState.directTargetQty}{" "}
+                                {row.product.unit}）
                             </span>
-                            <span className="text-muted-foreground">
-                                仓库/库存统筹{" "}
-                                <strong className="num font-semibold text-foreground">
-                                    {addressState.nonDirectTotalQty}{" "}
-                                    {row.product.unit}
-                                </strong>
-                                {" + "}供应商直发{" "}
-                                <strong
-                                    className={cn(
-                                        "num font-semibold",
-                                        isPositiveQuantity(
-                                            addressState.directOverTargetQty,
-                                        )
-                                            ? "text-destructive"
-                                            : "text-foreground",
-                                    )}
-                                >
-                                    {addressState.directAssignedTotalQty}{" "}
-                                    {row.product.unit}
-                                </strong>
-                                <span className="num text-muted-foreground">
-                                    （直发额度 {addressState.directTargetQty}{" "}
-                                    {row.product.unit}）
-                                </span>
-                            </span>
-                        </>
+                        </p>
                     ) : null}
                 </div>
+            ) : null}
 
-                {/* 右侧：一键智能配平动作 + 综合报价摘要 */}
-                <div className="flex flex-wrap items-center gap-2">
+            {/* 失衡时就地提供一键配平动作 */}
+            {hasQuickAction ? (
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-border/50 pt-2.5">
                     {hasDirectOverTarget && addressState ? (
                         <Button
                             id={`${idPrefix}-trim-direct`}
@@ -320,61 +324,8 @@ export function SourcingAllocationSummary({
                             余量 {diffText} {row.product.unit} 拆给新来源
                         </Button>
                     ) : null}
-
-                    <span
-                        className={cn(
-                            "hidden text-xs md:inline",
-                            pricingSummary.hasInvertedSource
-                                ? "font-medium text-destructive"
-                                : "text-muted-foreground",
-                        )}
-                    >
-                        {pricingText}
-                    </span>
                 </div>
-            </div>
-
-            {/* 分色堆叠配平条 + 多源图例 */}
-            <div className="mt-2 flex items-center gap-3">
-                <div
-                    className="relative flex h-2 flex-1 overflow-hidden rounded-full bg-border/75"
-                    aria-hidden="true"
-                >
-                    {segments.map((seg) => (
-                        <div
-                            key={seg.key}
-                            title={`${seg.label}：${seg.qty} ${row.product.unit}`}
-                            className={cn(
-                                "h-full border-r border-card/80 transition-[width] duration-200 last:border-r-0",
-                                excess ? "bg-destructive/80" : seg.barClass,
-                            )}
-                            style={{ width: seg.widthPercent }}
-                        />
-                    ))}
-                </div>
-                {segments.length > 1 ? (
-                    <div className="hidden shrink-0 flex-wrap items-center gap-2.5 text-tiny text-muted-foreground lg:flex">
-                        {segments.map((seg) => (
-                            <span
-                                key={seg.key}
-                                className="inline-flex items-center gap-1"
-                            >
-                                <span
-                                    aria-hidden="true"
-                                    className={cn(
-                                        "size-2 rounded-full",
-                                        seg.barClass,
-                                    )}
-                                />
-                                <span>{seg.label}</span>
-                                <span className="num font-medium text-foreground">
-                                    {seg.qty}
-                                </span>
-                            </span>
-                        ))}
-                    </div>
-                ) : null}
-            </div>
+            ) : null}
         </div>
     )
 }
