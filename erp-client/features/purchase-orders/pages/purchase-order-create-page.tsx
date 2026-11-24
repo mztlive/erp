@@ -1442,7 +1442,20 @@ function PurchaseOrderCreateSurface({
             />
         ) : undefined
 
+    const includedProductCount = editorRows.filter(
+        (row) => row.selected || row.partiallySelected,
+    ).length
     const sourcingTotalItems = [
+        {
+            id: "included-products",
+            label: "本次提交",
+            value: `${includedProductCount} 项`,
+        },
+        {
+            id: "excluded-products",
+            label: "暂不分配",
+            value: `${editorRows.length - includedProductCount} 项`,
+        },
         {
             id: "orders",
             label: "将创建采购单",

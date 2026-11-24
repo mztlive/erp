@@ -13,10 +13,7 @@ import { cn } from "@/lib/utils"
 import type { PurchaseOrderCreateFormApi } from "../lib/purchase-order-create-form-types"
 import type { SourcingEditorRow } from "../lib/sourcing/editor-rows"
 import type { SourcingSalesOrder } from "../lib/sourcing/types"
-import type {
-    SourcingBatchSelectionProps,
-    SourcingParticipationProps,
-} from "./create-sourcing/types"
+import type { SourcingBatchSelectionProps } from "./create-sourcing/types"
 import { SourcingProductExpandedSources } from "./sourcing-product-expanded-sources"
 import { sourcingProductColumns } from "./sourcing-product-table-columns"
 
@@ -34,31 +31,29 @@ export function SourcingProductList({
     onSelect,
     checkedProductIds,
     onToggleChecked,
-    onSetParticipation,
     onSyncWarehouseToOthers,
     pagination,
     onPaginationChange,
     activeId,
     scrollable = true,
-}: SourcingBatchSelectionProps &
-    SourcingParticipationProps & {
-        form: PurchaseOrderCreateFormApi
-        order: SourcingSalesOrder
-        rows: SourcingEditorRow[]
-        toolbarLeft?: ReactNode
-        toolbarActions?: ReactNode
-        selectionBar?: ReactNode
-        onSelect: (id: string, section?: "compare" | "addresses") => void
-        onSyncWarehouseToOthers: (
-            warehouseId: string,
-            warehouseName: string,
-            excludeSalesOrderLineId: string,
-        ) => void
-        pagination: PaginationState
-        onPaginationChange: (value: PaginationState) => void
-        activeId?: string | null
-        scrollable?: boolean
-    }) {
+}: SourcingBatchSelectionProps & {
+    form: PurchaseOrderCreateFormApi
+    order: SourcingSalesOrder
+    rows: SourcingEditorRow[]
+    toolbarLeft?: ReactNode
+    toolbarActions?: ReactNode
+    selectionBar?: ReactNode
+    onSelect: (id: string, section?: "compare" | "addresses") => void
+    onSyncWarehouseToOthers: (
+        warehouseId: string,
+        warehouseName: string,
+        excludeSalesOrderLineId: string,
+    ) => void
+    pagination: PaginationState
+    onPaginationChange: (value: PaginationState) => void
+    activeId?: string | null
+    scrollable?: boolean
+}) {
     const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(
         new Set(),
     )
@@ -90,7 +85,6 @@ export function SourcingProductList({
                 pageRowIds,
                 checkedProductIds,
                 onToggleChecked,
-                onSetParticipation,
                 expandedIds,
                 onEdit: onSelect,
                 onSyncWarehouseToOthers,
@@ -108,7 +102,6 @@ export function SourcingProductList({
             pageRowIds,
             checkedProductIds,
             onToggleChecked,
-            onSetParticipation,
             expandedIds,
             onSelect,
             onSyncWarehouseToOthers,
@@ -147,7 +140,7 @@ export function SourcingProductList({
                     getRowId={(row) => row.product.salesOrderLineId}
                     rowCount={rows.length}
                     rowLabel={(row) => row.product.itemName}
-                    caption="供给分配商品表：左侧复选框用于批量操作，右侧开关控制是否纳入本次分配，单源行支持直接修改来源、目标仓、数量与交期。"
+                    caption="供给分配商品表。勾选左侧复选框后，可在批量操作栏设置本次分配范围。单源行可直接修改来源、目标仓、数量与交期。"
                     manualPagination={false}
                     pagination={{ ...pagination, pageIndex }}
                     onPaginationChange={onPaginationChange}

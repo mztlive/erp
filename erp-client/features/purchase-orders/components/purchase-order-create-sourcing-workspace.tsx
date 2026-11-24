@@ -216,12 +216,12 @@ export function PurchaseOrderCreateSourcingWorkspace({
             ? [
                   {
                       value: "included" as const,
-                      label: "本次下单",
+                      label: "本次分配",
                       count: counts.included,
                   },
                   {
                       value: "excluded" as const,
-                      label: "暂缓下单",
+                      label: "暂不分配",
                       count: counts.excluded,
                   },
               ]
@@ -323,7 +323,6 @@ export function PurchaseOrderCreateSourcingWorkspace({
                 checkedProductIds={checkedProductIds}
                 onToggleChecked={onToggleChecked}
                 onClearChecked={onClearChecked}
-                onSetParticipation={onSetParticipation}
                 onSyncWarehouseToOthers={onSyncWarehouseToOthers}
                 pagination={pagination}
                 onPaginationChange={setPagination}

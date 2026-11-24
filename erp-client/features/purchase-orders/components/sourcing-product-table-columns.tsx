@@ -67,7 +67,6 @@ export function sourcingProductColumns({
     pageRowIds,
     checkedProductIds,
     onToggleChecked,
-    onSetParticipation,
     expandedIds,
     onToggleExpanded,
     onEdit,
@@ -78,7 +77,6 @@ export function sourcingProductColumns({
     pageRowIds: readonly string[]
     checkedProductIds: ReadonlySet<string>
     onToggleChecked: (ids: readonly string[], checked: boolean) => void
-    onSetParticipation: (ids: readonly string[], included: boolean) => void
     expandedIds: ReadonlySet<string>
     onToggleExpanded: (id: string) => void
     onEdit: (id: string, section?: "compare" | "addresses") => void
@@ -739,14 +737,13 @@ export function sourcingProductColumns({
         },
         {
             id: "statusActions",
-            header: "参与与精调",
+            header: "状态 / 调整",
             enableHiding: false,
             cell: ({ row: { original: row } }) => {
-                const included = row.selected || row.partiallySelected
                 const id = toAutomationIdSegment(row.product.salesOrderLineId)
                 const issueText = row.issues[0]
                 return (
-                    <div className="flex flex-col items-end gap-1.5 whitespace-normal">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
                         <div className="flex items-center justify-end gap-1.5">
                             <StatusBadge
                                 label={row.status}
@@ -779,54 +776,24 @@ export function sourcingProductColumns({
                             ) : null}
                         </div>
 
-                        <div className="flex items-center justify-end gap-2">
-                            <label
-                                htmlFor={`sourcing-list-${id}-select`}
-                                className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground select-none hover:text-foreground"
-                            >
-                                <NativeCheckbox
-                                    id={`sourcing-list-${id}-select`}
-                                    aria-label={`本次分配 ${row.product.itemName}`}
-                                    checked={included}
-                                    onCheckedChange={(checked) =>
-                                        onSetParticipation(
-                                            [row.product.salesOrderLineId],
-                                            checked,
-                                        )
-                                    }
-                                />
-                                <span
-                                    className={cn(
-                                        "whitespace-nowrap",
-                                        included &&
-                                            "font-medium text-foreground",
-                                    )}
-                                >
-                                    {included ? "本次分配" : "暂不分配"}
-                                </span>
-                            </label>
-
-                            <Button
-                                id={`sourcing-list-${id}-edit`}
-                                type="button"
-                                variant="outline"
-                                size="xs"
-                                aria-label={`调整 ${row.product.itemName}`}
-                                onClick={() =>
-                                    onEdit(row.product.salesOrderLineId)
-                                }
-                            >
-                                <SlidersHorizontalIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                />
-                                调整
-                            </Button>
-                        </div>
+                        <Button
+                            id={`sourcing-list-${id}-edit`}
+                            type="button"
+                            variant="outline"
+                            size="xs"
+                            aria-label={`调整 ${row.product.itemName}`}
+                            onClick={() => onEdit(row.product.salesOrderLineId)}
+                        >
+                            <SlidersHorizontalIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            调整
+                        </Button>
                     </div>
                 )
             },
-            meta: { label: "参与与精调", width: "reference", align: "end" },
+            meta: { label: "状态 / 调整", width: "reference", align: "end" },
         },
     ]
 }

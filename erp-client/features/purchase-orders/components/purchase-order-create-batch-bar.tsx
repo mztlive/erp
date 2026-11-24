@@ -827,7 +827,6 @@ export function PurchaseOrderCreateSelectionBar({
                     </Dialog>
                 ) : null}
 
-                {/* 4. 恢复下单 / 暂缓下单 */}
                 {excludedCheckedCount > 0 ? (
                     <Button
                         id="procurement-orders-create-batch-include"
@@ -839,7 +838,7 @@ export function PurchaseOrderCreateSelectionBar({
                         onClick={() => onBatchSetParticipation(true)}
                     >
                         <CheckSquareIcon aria-hidden="true" />
-                        恢复本次下单
+                        纳入本次分配
                     </Button>
                 ) : null}
                 {includedCheckedCount > 0 ? (
@@ -853,7 +852,7 @@ export function PurchaseOrderCreateSelectionBar({
                         onClick={() => onBatchSetParticipation(false)}
                     >
                         <PauseCircleIcon aria-hidden="true" />
-                        暂缓下单
+                        暂不分配
                     </Button>
                 ) : null}
             </div>
