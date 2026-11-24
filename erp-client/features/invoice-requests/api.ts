@@ -306,7 +306,6 @@ export type SalesOrderInvoiceCandidateLine = {
     unit?: string
     unitName?: string
     lineAmount: string | null
-    isGift: boolean
     selectable: boolean
     disabledReason?: string
 }
@@ -420,7 +419,6 @@ export async function getSalesOrderInvoiceLines(
                     : name || spec
             const content = rawContent.slice(0, INVOICE_CONTENT_LIMIT)
             const isVoucher = textOf(line.line_type) === "VOUCHER"
-            const isGift = textOf(line.pricing_mode) === "GIFT"
             const cardCountText =
                 typeof line.card_count === "number" &&
                 Number.isSafeInteger(line.card_count) &&
@@ -448,7 +446,6 @@ export async function getSalesOrderInvoiceLines(
                 unit_price: unitPrice,
             })
             const hasPositiveAmount =
-                !isGift &&
                 Boolean(content) &&
                 isPositiveInvoiceDecimal(quantity, INVOICE_QUANTITY_SCALE) &&
                 isPositiveInvoiceDecimal(unitPrice, INVOICE_UNIT_PRICE_SCALE) &&
@@ -466,13 +463,10 @@ export async function getSalesOrderInvoiceLines(
                     ? "张"
                     : cleanSnapshotLabel(line.unit_name) || undefined,
                 lineAmount,
-                isGift,
                 selectable: hasPositiveAmount,
-                disabledReason: isGift
-                    ? "赠品行，不可开票"
-                    : !hasPositiveAmount
-                      ? "金额为零或缺少单价，不可直接带入"
-                      : undefined,
+                disabledReason: hasPositiveAmount
+                    ? undefined
+                    : "金额为零或缺少单价，不可直接带入",
             }
         },
     )

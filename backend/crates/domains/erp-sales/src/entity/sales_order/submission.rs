@@ -473,7 +473,11 @@ pub struct SalesOrderSubmissionLine {
     /// 含税成交单价快照。
     pub unit_price_gross: Option<UnitPrice>,
     /// 成交价编辑方式；历史缺省保留为手工价。
-    #[serde(default, skip_serializing_if = "SalesPricingMode::is_manual")]
+    #[serde(
+        default,
+        deserialize_with = "SalesPricingMode::deserialize_stored",
+        skip_serializing_if = "SalesPricingMode::is_manual"
+    )]
     pub pricing_mode: SalesPricingMode,
     /// 按地址分配的交付数量；历史未指定时为空。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -523,6 +527,9 @@ impl SalesOrderSubmissionLine {
         let spec_snapshot = normalize_optional_text(data.spec_snapshot, "规格", SPEC_MAX_LEN)?;
         let unit_snapshot = normalize_optional_text(data.unit_snapshot, "单位", UNIT_MAX_LEN)?;
 
+        if let Some(goods) = &data.goods {
+            super::types::ensure_positive_sales_price(goods.unit_price_gross)?;
+        }
         let built = build_line_groups(data.line_type, data.goods, data.voucher, data.sales_tax_rate)?;
         built.ensure_supply_price()?;
 
@@ -596,31 +603,39 @@ mod tests {
         UnitPrice::from_str(value).unwrap()
     }
 
-    // 回归检查：普通商品和赠品均须填写采购供给价；显式零价允许提交。
+    // 回归检查：商品采购供给价必填，允许显式填零。
     #[test]
-    fn submission_requires_supply_price_including_gifts() {
-        for gift in [false, true] {
-            for supply in [None, Some(price("0")), Some(price("8.5000"))] {
-                let mut data = line_data(1);
-                let goods = data.goods.as_mut().unwrap();
-                goods.procurement_supply_price_gross = supply;
-                if gift {
-                    goods.pricing_mode = SalesPricingMode::Gift;
-                    goods.unit_price_gross = price("0");
-                }
+    fn submission_requires_supply_price() {
+        for supply in [None, Some(price("0")), Some(price("8.5000"))] {
+            let mut data = line_data(1);
+            let goods = data.goods.as_mut().unwrap();
+            goods.procurement_supply_price_gross = supply;
 
-                let result = SalesOrderSubmissionLine::new(
-                    SalesOrderSubmissionLineId::new("sl-supply"),
-                    SalesOrderSubmissionId::new("s-supply"),
-                    data,
-                );
-                if supply.is_none() {
-                    assert_eq!(result.unwrap_err().to_string(), "请填写采购供给价");
-                } else {
-                    assert_eq!(result.unwrap().procurement_supply_price_gross, supply);
-                }
+            let result = SalesOrderSubmissionLine::new(
+                SalesOrderSubmissionLineId::new("sl-supply"),
+                SalesOrderSubmissionId::new("s-supply"),
+                data,
+            );
+            if supply.is_none() {
+                assert_eq!(result.unwrap_err().to_string(), "请填写采购供给价");
+            } else {
+                assert_eq!(result.unwrap().procurement_supply_price_gross, supply);
             }
         }
+    }
+
+    #[test]
+    fn submission_rejects_legacy_zero_sales_price() {
+        let mut data = line_data(1);
+        data.goods.as_mut().unwrap().unit_price_gross = price("0");
+
+        let error = SalesOrderSubmissionLine::new(
+            SalesOrderSubmissionLineId::new("sl-zero"),
+            SalesOrderSubmissionId::new("s-zero"),
+            data,
+        )
+        .unwrap_err();
+        assert_eq!(error.to_string(), "含税成交单价必须大于 0");
     }
 
     fn goods_line() -> GoodsLineFields {

@@ -103,12 +103,7 @@ export function allocationBaseline(line: SalesOrderDraftLineInput) {
 }
 
 export function productIdentity(line: SalesOrderDraftLineInput) {
-    return JSON.stringify([
-        line.sku,
-        line.skuRevisionId,
-        line.unit,
-        line.pricingMode === "GIFT",
-    ])
+    return JSON.stringify([line.sku, line.skuRevisionId, line.unit])
 }
 
 export function workbookSnapshot(context: DeliveryWorkbookContext) {
@@ -127,12 +122,7 @@ export function workbookSnapshot(context: DeliveryWorkbookContext) {
 }
 
 export function productLabel(line: SalesOrderDraftLineInput, index: number) {
-    return [
-        index + 1,
-        line.name,
-        line.specification,
-        line.pricingMode === "GIFT" ? "赠品" : "销售",
-    ]
+    return [index + 1, line.name, line.specification]
         .filter(Boolean)
         .join(" · ")
 }

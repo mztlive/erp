@@ -18,7 +18,6 @@ export type ArrangementLineMeta = Readonly<{
     unit?: string
     unitName?: string
     sku?: string
-    isGift?: boolean
 }>
 
 export type DerivedAllocationRow = Readonly<{
@@ -48,7 +47,6 @@ export type DerivedArrangementLine = Readonly<{
     lineId: string
     itemName: string
     sku?: string
-    isGift: boolean
     unit: string
     unitCode: string
     quantity: string
@@ -70,7 +68,6 @@ export type DerivedAddressGroupItem = Readonly<{
     lineId: string
     itemName: string
     sku?: string
-    isGift: boolean
     unit: string
     unitCode: string
     quantity: string
@@ -283,7 +280,6 @@ export function deriveArrangementSummary(
         const unitCode = meta?.unit?.trim() || line.unit
         const unit = meta?.unitName ?? unitNames?.get(unitCode.trim()) ?? ""
         const sku = meta?.sku && meta.sku !== "无规格" ? meta.sku : undefined
-        const isGift = Boolean(meta?.isGift)
 
         // 先按收件身份聚合已发快照（同一收件人可能分多批发货）
         const shippedByIdentity = new Map<
@@ -379,7 +375,6 @@ export function deriveArrangementSummary(
                 lineId: line.line_id,
                 itemName: line.item_name,
                 sku,
-                isGift,
                 unit,
                 unitCode,
                 quantity,
@@ -449,7 +444,6 @@ export function deriveArrangementSummary(
             lineId: line.line_id,
             itemName: line.item_name,
             sku,
-            isGift,
             unit,
             unitCode,
             quantity: line.quantity,

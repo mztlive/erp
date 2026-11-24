@@ -69,7 +69,7 @@ type SalesLine = {
     sku_revision_id: string
     quantity: string
     unit_price_gross: string
-    pricing_mode: "MANUAL" | "GIFT"
+    pricing_mode: "MANUAL"
     gross_amount: string
     reference_prices?: Prices
 }

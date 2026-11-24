@@ -951,8 +951,8 @@ export function SalesOrderCreateLineItemTable({
                                         }
                                     >
                                         {inquiryLocked
-                                            ? "优先带入询价销售价，可修改；未填销售价的商品须补填。赠品单价为 0、不收款。"
-                                            : "由销售填写含税成交单价；勾选赠品后单价固定为 0、不收款。"}
+                                            ? "优先带入询价销售价，可修改。未填销售价的商品须补填。"
+                                            : "由销售填写大于 0 的含税成交单价。"}
                                     </DetailHint>
                                 </span>
                             </TableHead>

@@ -9,7 +9,7 @@ const RESTRICTION_LABEL = {
     VIRTUAL_PRODUCT: "虚拟商品",
     INSTALLATION: "安装服务",
     APPOINTMENT: "预约服务",
-    GIFT_SELECTION: "赠品选购",
+    GIFT_SELECTION: "供应商附加履约要求",
     EXTENDED_WARRANTY: "延保服务",
     PERSONALIZED_PRICE: "专属报价条件",
     OTHER_REQUIRED_PROCESS: "供应商附加履约要求",

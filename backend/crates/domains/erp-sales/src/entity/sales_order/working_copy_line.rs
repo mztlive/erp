@@ -96,7 +96,7 @@ pub struct SalesOrderWorkingCopyLine {
     /// 含税成交单价快照。
     pub unit_price_gross: Option<UnitPrice>,
     /// 成交价编辑方式；历史缺省保留为手工价。
-    #[serde(default)]
+    #[serde(default, deserialize_with = "SalesPricingMode::deserialize_stored")]
     pub pricing_mode: SalesPricingMode,
     /// 按地址分配的交付数量；历史未指定时为空。
     /// 空列表也须写出：草稿行按 `$set` 更新，省略字段会留下已清空的旧地址。

@@ -16,9 +16,11 @@ import type { WorkspaceWorkItem } from "../types"
 export function WorkspaceRejectionNotice({
     item,
     actionable,
+    actionHint,
 }: {
     item: WorkspaceWorkItem
     actionable: boolean
+    actionHint?: string
 }) {
     const isRejected =
         item.approval?.status === "REJECTED" ||
@@ -91,7 +93,8 @@ export function WorkspaceRejectionNotice({
                 )}
                 {actionable && (
                     <p className="text-muted-foreground">
-                        请按意见修改或补充说明。重提后从第一个节点审批，仅保存修改会保留当前待办。
+                        {actionHint ??
+                            "请按意见修改或补充说明。重提后从第一个节点审批，仅保存修改会保留当前待办。"}
                     </p>
                 )}
                 {history.isError && (

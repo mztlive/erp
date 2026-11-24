@@ -105,6 +105,7 @@ import { RequestMaterials } from "./request-materials"
 import { RequestReviewHistory } from "./request-review-history"
 import { RequestSubmissionHistory } from "./request-submission-history"
 import { RequestPaymentExecution } from "./request-payment-execution"
+import { RequestReworkWorkspace } from "./request-rework-workspace"
 import {
     RequestDetailContent,
     RequestDetailWorkspaceContent,
@@ -130,6 +131,9 @@ export function RequestDetail({
     hasExternalPrimaryAction = false,
     approvalRoundNo,
     renderResubmission,
+    inlineRework = false,
+    reworkCanAbandon = false,
+    reworkAbandonAction,
 }: {
     request: PaymentRequest
     task?: PaymentTaskContext
@@ -142,6 +146,9 @@ export function RequestDetail({
     hasExternalPrimaryAction?: boolean
     approvalRoundNo?: number
     renderResubmission?: (request: PaymentRequest) => ReactNode
+    inlineRework?: boolean
+    reworkCanAbandon?: boolean
+    reworkAbandonAction?: ReactNode
 }) {
     const [editOpen, setEditOpen] = useState(false)
     const [submitOpen, setSubmitOpen] = useState(false)
@@ -197,6 +204,28 @@ export function RequestDetail({
                 request={request}
                 task={task}
                 onTaskCompleted={onTaskCompleted}
+            />
+        )
+    }
+
+    const canInlineRework =
+        inlineRework &&
+        isReworkTask &&
+        Boolean(task) &&
+        (request.status === "rejected" ||
+            request.status === "draft" ||
+            request.status === "withdrawn") &&
+        (actions.has("EDIT") || actions.has("SUBMIT"))
+
+    if (canInlineRework) {
+        return (
+            <RequestReworkWorkspace
+                request={request}
+                idPrefix={reviewId}
+                onSelectFile={onSelectFile}
+                onTaskCompleted={onTaskCompleted}
+                canAbandon={reworkCanAbandon}
+                abandonAction={reworkAbandonAction}
             />
         )
     }
@@ -1450,10 +1479,18 @@ export function PaymentRequestTaskReview({
                         value={request.description}
                         span="full"
                     />
-                    {request.close_reason ? (
+                    {request.status === "closed" && request.close_reason ? (
                         <WorkspaceFactItem
                             label="关闭原因"
                             value={request.close_reason}
+                            span="full"
+                        />
+                    ) : null}
+                    {request.status === "withdrawn" &&
+                    request.withdraw_reason ? (
+                        <WorkspaceFactItem
+                            label="撤回原因"
+                            value={request.withdraw_reason}
                             span="full"
                         />
                     ) : null}

@@ -17,7 +17,6 @@ import {
     QuickPreviewSheet,
     detailWorkspaceStyles,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { SheetClose } from "@/components/ui/sheet"
@@ -602,9 +601,6 @@ function ProductDetailBlock({
                         <h3 className="font-semibold text-foreground">
                             {line.itemName}
                         </h3>
-                        {line.isGift ? (
-                            <Badge variant="secondary">赠品</Badge>
-                        ) : null}
                         {line.isComplete ? (
                             <StatusBadge
                                 tone="success"

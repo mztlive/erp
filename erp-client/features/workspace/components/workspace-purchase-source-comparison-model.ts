@@ -102,7 +102,6 @@ export type SalesLineCoverageRow = Readonly<{
     specification: string
     unitCode: string | null
     unitLabel: string | null
-    isGift: boolean
     welfareLabel: string | null
     salesQuantity: string | null
     salesUnitPriceGross: string | null
@@ -160,7 +159,6 @@ export type SourceOrderBusinessLedger = Readonly<{
     salesNetTotal: string
     salesTaxTotal: string
     totalSalesLineCount: number
-    giftSalesLineCount: number
     fullCount: number
     partialCount: number
     excessCount: number
@@ -188,8 +186,6 @@ export type SourceOrderBusinessLedger = Readonly<{
     vatGap: string | null
     taxDragPoints: string | null
     taxInverted: boolean
-    giftCoveredCount: number
-    giftPurchaseGrossTotal: string | null
     isFullOrderCovered: boolean
     extraCostSummary: Readonly<{
         occurredGrossTotal: string
@@ -899,7 +895,6 @@ function buildOrderComparison({
     const orderComparableCostGross: string[] = []
     const orderComparableCostNet: string[] = []
     const orderComparableCostTax: string[] = []
-    const giftPurchaseGrossAmounts: string[] = []
 
     const matchedSalesTaxRates: string[] = []
     const matchedInputTaxRates: string[] = []
@@ -918,13 +913,8 @@ function buildOrderComparison({
     let excessCount = 0
     let mismatchCount = 0
     let uncoveredCount = 0
-    let giftSalesLineCount = 0
-    let giftCoveredCount = 0
 
     for (const salesLine of salesLines) {
-        const isGift = salesLine.pricing_mode === "GIFT"
-        if (isGift) giftSalesLineCount += 1
-
         const matched = assignedPurchaseLinesBySalesId.get(salesLine.id) ?? []
         const duplicateGroupSize =
             duplicateGroupSizeBySalesId.get(salesLine.id) ?? 1
@@ -948,7 +938,6 @@ function buildOrderComparison({
                 specification: purchaseSpecification(salesLine.spec_snapshot),
                 unitCode: salesLine.base_unit_code ?? null,
                 unitLabel: salesUnitLabel,
-                isGift,
                 welfareLabel: salesLine.welfare_scenario
                     ? welfareScenarioLabel(salesLine.welfare_scenario)
                     : null,
@@ -995,7 +984,6 @@ function buildOrderComparison({
             continue
         }
 
-        if (isGift) giftCoveredCount += 1
         if (salesLine.procurement_price_basis) {
             matchedBases.add(salesLine.procurement_price_basis)
         } else if (salesLine.procurement_supply_price_gross) {
@@ -1082,7 +1070,6 @@ function buildOrderComparison({
             if (pLine.gross_amount != null) {
                 linePurchaseGross.push(pLine.gross_amount)
                 orderPurchaseGoodsGross.push(pLine.gross_amount)
-                if (isGift) giftPurchaseGrossAmounts.push(pLine.gross_amount)
             }
             if (pLine.net_amount != null && pLine.tax_amount != null) {
                 linePurchaseNet.push(pLine.net_amount)
@@ -1247,11 +1234,11 @@ function buildOrderComparison({
                 : null
 
         const grossMargin =
-            !isGift && lineSalesGrossTotal && purchaseGrossTotal
+            lineSalesGrossTotal && purchaseGrossTotal
                 ? calculateMargin(lineSalesGrossTotal, purchaseGrossTotal)
                 : null
         const netMargin =
-            !isGift && lineSalesNetTotal && purchaseNetTotal
+            lineSalesNetTotal && purchaseNetTotal
                 ? calculateMargin(lineSalesNetTotal, purchaseNetTotal)
                 : null
 
@@ -1340,7 +1327,6 @@ function buildOrderComparison({
             specification: purchaseSpecification(salesLine.spec_snapshot),
             unitCode: salesLine.base_unit_code ?? null,
             unitLabel: salesUnitLabel,
-            isGift,
             welfareLabel: salesLine.welfare_scenario
                 ? welfareScenarioLabel(salesLine.welfare_scenario)
                 : null,
@@ -1582,10 +1568,6 @@ function buildOrderComparison({
                   2,
               )
             : null
-
-    const giftPurchaseGrossTotal = giftPurchaseGrossAmounts.length
-        ? sumFixed(giftPurchaseGrossAmounts, { maxScale: 2, outputScale: 2 })
-        : null
 
     const resolvedExtraCost =
         extraCostSummary &&
@@ -1889,7 +1871,6 @@ function buildOrderComparison({
             salesNetTotal: revision.net_amount,
             salesTaxTotal: revision.tax_amount,
             totalSalesLineCount: salesLines.length,
-            giftSalesLineCount,
             fullCount,
             partialCount,
             excessCount,
@@ -1925,8 +1906,6 @@ function buildOrderComparison({
             vatGap,
             taxDragPoints,
             taxInverted: orderTaxInverted,
-            giftCoveredCount,
-            giftPurchaseGrossTotal,
             isFullOrderCovered:
                 !isExpenseOrder &&
                 salesLines.length > 0 &&
@@ -1946,7 +1925,7 @@ function buildOrderComparison({
 /**
  * 构建采购审批「采销对照」模型（纯基于本次审批冻结数据）：
  * 1. 商务、资金（垫资/账期）、票税（进销项税差与税后不含税毛利）及履约口径对照；
- * 2. 整张来源销售单的全局覆盖进度、含税/不含税双口径毛利、赠品与未含明细清单。
+ * 2. 整张来源销售单的全局覆盖进度、含税/不含税双口径毛利及未含明细清单。
  */
 export function buildPurchaseSourceComparisonModel({
     orders,

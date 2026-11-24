@@ -5,6 +5,7 @@ use erp_core::ids::{SkuId, SkuRevisionId};
 use super::SalesOrderEditableDraftRequest;
 use crate::entity::sales_inquiry::SalesInquiry;
 use crate::entity::sales_order::inquiry_source::{InquirySalesSourceRequest, copied_delivery};
+use crate::entity::sales_order::types::ensure_positive_sales_price;
 use crate::entity::sales_order::{LineType, SalesPricingMode};
 use crate::{Error, Result};
 
@@ -38,11 +39,9 @@ impl SalesOrderEditableDraftRequest {
                 .as_mut()
                 .ok_or_else(|| Error::ValidationError("询价转销售必须明确填写商品成交价".into()))?;
             if line.line_type != LineType::GoodsService || goods.pricing_mode == SalesPricingMode::Auto {
-                return Err(Error::ValidationError(
-                    "询价转销售须明确确认成交价或赠品，不能自动采用供给价".into(),
-                ));
+                return Err(Error::ValidationError("询价转销售须明确确认含税成交价".into()));
             }
-            goods.pricing_mode.ensure_price(goods.unit_price_gross)?;
+            ensure_positive_sales_price(goods.unit_price_gross)?;
 
             line.item_name_snapshot.clone_from(&demand.product_name);
             line.spec_snapshot = Some(demand.specification.clone());
@@ -148,11 +147,6 @@ mod tests {
             draft("MANUAL", "0")
                 .with_inquiry_source(&inquiry(), &source(), Instant::from_unix_secs(100))
                 .is_err()
-        );
-        assert!(
-            draft("GIFT", "0")
-                .with_inquiry_source(&inquiry(), &source(), Instant::from_unix_secs(100))
-                .is_ok()
         );
 
         assert!(

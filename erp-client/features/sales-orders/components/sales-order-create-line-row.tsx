@@ -117,7 +117,7 @@ function ProcurementOwnerInline({
 /**
  * 实物与服务高密度明细行：
  * - 第一基准线对齐所有核心编辑控件（数量、成交单价、供给单价、交付日、收货地址、小计）；
- * - 第二行紧凑承载次级元信息（规格与采购负责人、赠品切换、取价方式与供给额、地址明细/进度、行毛利）。
+ * - 第二行紧凑承载次级元信息（规格与采购负责人、取价方式与供给额、地址明细/进度、行毛利）。
  */
 export const SalesOrderCreateLineRow = React.memo(
     function SalesOrderCreateLineRow({
@@ -416,7 +416,7 @@ export const SalesOrderCreateLineRow = React.memo(
                     </div>
                 </TableCell>
 
-                {/* 4. 含税成交单价 + 赠品切换 */}
+                {/* 4. 含税成交单价 */}
                 <TableCell data-align="end" className="w-32 py-2.5 align-top">
                     <div className="space-y-1">
                         <form.AppField
@@ -430,8 +430,6 @@ export const SalesOrderCreateLineRow = React.memo(
                                         const invalid =
                                             field.state.meta.isTouched &&
                                             !field.state.meta.isValid
-                                        const isGift =
-                                            modeField.state.value === "GIFT"
                                         return (
                                             <Field
                                                 className="gap-0.5"
@@ -451,10 +449,7 @@ export const SalesOrderCreateLineRow = React.memo(
                                                     type="text"
                                                     inputMode="decimal"
                                                     value={field.state.value}
-                                                    disabled={isGift}
-                                                    placeholder={
-                                                        isGift ? "0" : "请填写"
-                                                    }
+                                                    placeholder="请填写"
                                                     aria-invalid={
                                                         invalid || undefined
                                                     }
@@ -473,43 +468,6 @@ export const SalesOrderCreateLineRow = React.memo(
                                                         )
                                                     }}
                                                 />
-                                                <div className="flex items-center justify-end gap-1.5 pt-0.5">
-                                                    <NativeCheckbox
-                                                        id={`${linePrefix}-gift`}
-                                                        aria-label={`${line.name || "该商品"}为赠品（单价为 0，不收款）`}
-                                                        checked={isGift}
-                                                        onCheckedChange={(
-                                                            checked,
-                                                        ) => {
-                                                            modeField.handleChange(
-                                                                checked
-                                                                    ? "GIFT"
-                                                                    : "MANUAL",
-                                                            )
-                                                            form.setFieldValue(
-                                                                `lineItems[${rowIndex}].priceSource`,
-                                                                undefined,
-                                                            )
-                                                            form.setFieldValue(
-                                                                `lineItems[${rowIndex}].unitPriceGross`,
-                                                                checked
-                                                                    ? "0"
-                                                                    : "",
-                                                            )
-                                                        }}
-                                                    />
-                                                    <label
-                                                        htmlFor={`${linePrefix}-gift`}
-                                                        className={cn(
-                                                            "cursor-pointer select-none text-xs",
-                                                            isGift
-                                                                ? "font-medium text-primary"
-                                                                : "text-muted-foreground",
-                                                        )}
-                                                    >
-                                                        赠品
-                                                    </label>
-                                                </div>
                                                 {invalid ? (
                                                     <FieldError
                                                         errors={toFieldErrors(

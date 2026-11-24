@@ -178,16 +178,6 @@ impl SalesOrderWorkingCopy {
 // 校验完整目标保留稳定明细身份，并满足业务性质和行号约束。
 // 结果：明细身份、数量及跨行约束均成立时成功。
 // 原明细缺失、目标重复、行性质或行号非法时拒绝。
-// 明细是否为赠品。
-//
-// 输入约定：
-// - `business_type`：原销售单不可变业务性质
-// - `original`：原草稿完整明细
-// - `target`：本次完整目标明细
-fn is_gift(data: &SalesOrderWorkingCopyLineData) -> bool {
-    data.goods.as_ref().is_some_and(|goods| goods.pricing_mode.is_gift())
-}
-
 fn validate_target_lines(
     business_type: crate::entity::sales_order::BusinessType,
     original: &[SalesOrderWorkingCopyLine],
@@ -220,8 +210,11 @@ fn validate_target_lines(
         {
             return Err(Error::ValidationError("原商品身份不可替换，请将原行数量归零并新增商品".into()));
         }
-        if is_gift(data) != is_gift(&previous) {
-            return Err(Error::ValidationError("赠品标记不可修改，请将原行数量归零并新增明细".into()));
+    }
+
+    for (_, line) in target {
+        if let Some(goods) = &line.goods {
+            goods.ensure_active_sales_price()?;
         }
     }
 
@@ -786,11 +779,10 @@ mod tests {
     }
 
     #[test]
-    fn draft_edit_rejects_toggling_gift_on_existing_line() {
+    fn draft_edit_rejects_zero_sales_price_on_active_line() {
         let (_, mut copy, lines) = fixture();
         let mut target = lines[0].draft_data().unwrap();
         let goods = target.goods.as_mut().unwrap();
-        goods.pricing_mode = crate::entity::sales_order::SalesPricingMode::Gift;
         goods.unit_price_gross = "0".parse().unwrap();
         let error = copy
             .edit_change_lines(
@@ -801,14 +793,16 @@ mod tests {
                 "sales-1",
             )
             .unwrap_err();
-        assert!(error.to_string().contains("赠品标记不可修改"));
+        assert_eq!(error.to_string(), "含税成交单价必须大于 0");
     }
 
     #[test]
     fn draft_edit_preserves_stable_line_and_zero_amounts_for_zero_quantity() {
         let (_, mut copy, lines) = fixture();
         let mut target = lines[0].draft_data().unwrap();
-        target.goods.as_mut().unwrap().quantity = "0".parse().unwrap();
+        let goods = target.goods.as_mut().unwrap();
+        goods.quantity = "0".parse().unwrap();
+        goods.unit_price_gross = "0".parse().unwrap();
         let saved = copy
             .edit_change_lines(
                 "change-1",

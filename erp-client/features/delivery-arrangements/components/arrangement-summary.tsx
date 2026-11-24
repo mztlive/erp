@@ -17,7 +17,6 @@ import {
     DetailWorkspaceSection,
     detailWorkspaceStyles,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import {
@@ -522,11 +521,6 @@ function UnsetArrangementView({
                                 <TableCell className="whitespace-normal">
                                     <div className="flex flex-wrap items-center gap-1.5 font-medium text-foreground">
                                         <span>{line.itemName}</span>
-                                        {line.isGift ? (
-                                            <Badge variant="secondary">
-                                                赠品
-                                            </Badge>
-                                        ) : null}
                                     </div>
                                 </TableCell>
                                 <TableCell
@@ -699,9 +693,6 @@ function SingleLineCompactView({
                     <span className="font-medium text-foreground">
                         {line.itemName}
                     </span>
-                    {line.isGift ? (
-                        <Badge variant="secondary">赠品</Badge>
-                    ) : null}
                     <span className="num text-xs text-muted-foreground">
                         已安排{" "}
                         {formatArrangementQuantity(
@@ -853,11 +844,6 @@ function MultiLineSummaryTable({
                                             <div className="min-w-0 space-y-0.5">
                                                 <div className="flex flex-wrap items-center gap-1.5 font-medium text-foreground">
                                                     <span>{line.itemName}</span>
-                                                    {line.isGift ? (
-                                                        <Badge variant="secondary">
-                                                            赠品
-                                                        </Badge>
-                                                    ) : null}
                                                 </div>
                                                 {line.hasShipped ? (
                                                     <p className="num inline-flex items-center gap-1 text-xs text-info-soft-foreground">

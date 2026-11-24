@@ -12,7 +12,6 @@ import {
 import { MapPinIcon, TriangleAlertIcon } from "lucide-react"
 
 import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import {
     Table,
     TableBody,
@@ -189,11 +188,7 @@ export function WorkspaceSalesComparisonTable({
                     销售明细
                 </h2>
                 <span className="num text-xs text-muted-foreground">
-                    共 {rows.length} 项
-                    {metrics.giftCount > 0
-                        ? ` · 含 ${metrics.giftCount} 项赠品`
-                        : ""}{" "}
-                    · 金额含税
+                    共 {rows.length} 项 · 金额含税
                 </span>
             </div>
             <ApprovalLineFilterBar
@@ -509,9 +504,6 @@ function SalesComparisonRow({
                             {line.line_no}
                         </span>
                         <span className="font-medium">{entry.name}</span>
-                        {entry.isGift ? (
-                            <Badge variant="neutral">赠品</Badge>
-                        ) : null}
                     </div>
                     {meta.length ? (
                         <p className="num mt-0.5 text-xs text-muted-foreground">
@@ -584,7 +576,7 @@ function SalesComparisonRow({
                             <div className="min-w-0 text-xs">
                                 <div>
                                     <span className="mr-1 text-tiny text-muted-foreground">
-                                        {entry.isGift ? "赠品成本" : "供给价"}
+                                        供给价
                                     </span>
                                     {hasSupplyPrice ? (
                                         <MoneyValue

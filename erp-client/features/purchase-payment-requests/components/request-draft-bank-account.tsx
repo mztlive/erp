@@ -95,6 +95,18 @@ export function RequestDraftBankAccount({
                                         {account.account_number_masked}
                                     </span>
                                 </p>
+                                <p className="text-xs text-muted-foreground">
+                                    联行号：
+                                    {account.bank_routing_number ? (
+                                        <span className="num text-foreground">
+                                            {account.bank_routing_number}
+                                        </span>
+                                    ) : (
+                                        <span className="text-warning-soft-foreground">
+                                            未填写
+                                        </span>
+                                    )}
+                                </p>
                             </div>
                             <Button
                                 id={`${id}-change`}

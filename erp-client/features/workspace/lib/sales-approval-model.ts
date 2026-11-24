@@ -51,7 +51,6 @@ export type EvaluatedSalesLine = Readonly<{
     name: string
     spec: string | undefined
     welfare: string | undefined
-    isGift: boolean
     negativeMargin: boolean
     belowOriginalFloor: boolean
     priceAdjusted: boolean
@@ -69,10 +68,9 @@ export type SalesApprovalMetrics = Readonly<{
     isCard: boolean
     lineCount: number
     totalQuantity: { value: string; unit?: string } | null
-    /** 商品与服务单据：按已填成本行汇总的预估成本、毛利额与毛利率（计入赠品成本）。 */
+    /** 商品与服务单据：按已填成本行汇总的预估成本、毛利额与毛利率。 */
     coveredRevenue: string | null
     estimatedCostTotal: string | null
-    giftCostTotal: string | null
     estimatedMargin: MarginSummary | null
     costCoveredCount: number
     costExpectedCount: number
@@ -88,7 +86,6 @@ export type SalesApprovalMetrics = Readonly<{
     priceAdjustedCount: number
     otherPriceRiskCount: number
     missingSupplyCount: number
-    giftCount: number
     highRiskLineCount: number
     riskLineCount: number
 }>
@@ -115,7 +112,7 @@ export function isNegativeMarginLine(
     line: SalesApprovalLine,
     isCard: boolean,
 ): boolean {
-    if (isCard || line.pricing_mode === "GIFT") return false
+    if (isCard) return false
     const unitPrice = line.unit_price_gross
     const supplyPrice = line.procurement_supply_price_gross
     if (
@@ -137,7 +134,7 @@ export function isBelowOriginalFloorLine(
     line: SalesApprovalLine,
     isCard: boolean,
 ): boolean {
-    if (isCard || line.pricing_mode === "GIFT") return false
+    if (isCard) return false
     const unitPrice = line.unit_price_gross
     const originalPrice = line.original_procurement_supply_price_gross
     if (
@@ -383,20 +380,18 @@ export function evaluateSalesApprovalLines(
         const rawSpec = displayBusinessText(line.spec_snapshot, line.sku_id)
         const spec = rawSpec && rawSpec !== "无规格" ? rawSpec : undefined
         const welfare = welfareScenarioLabel(line.welfare_scenario ?? "")
-        const isGift = line.pricing_mode === "GIFT"
         const negativeMargin = isNegativeMarginLine(line, isCard)
         const belowOriginalFloor = isBelowOriginalFloorLine(line, isCard)
         const priceCheck = isCard ? null : salesLinePriceComparison(line)
         const priceAdjusted = Boolean(priceCheck && priceCheck.change != null)
         const missingSupply =
             !isCard &&
-            !isGift &&
             (line.procurement_supply_price_gross == null ||
                 line.procurement_supply_price_gross === "")
 
         let margin: MarginSummary | null = null
         let marginBasis: EvaluatedSalesLine["marginBasis"] = "unit"
-        if (!isCard && !isGift) {
+        if (!isCard) {
             if (
                 line.procurement_supply_price_gross &&
                 line.quantity &&
@@ -480,7 +475,6 @@ export function evaluateSalesApprovalLines(
             name,
             spec,
             welfare: welfare || undefined,
-            isGift,
             negativeMargin,
             belowOriginalFloor,
             priceAdjusted,
@@ -507,8 +501,6 @@ export function buildSalesApprovalMetrics(
 
     let coveredRevenue = "0"
     let coveredCost = "0"
-    let giftCost = "0"
-    let hasGiftCost = false
     let costCoveredCount = 0
     let costExpectedCount = 0
 
@@ -520,7 +512,6 @@ export function buildSalesApprovalMetrics(
     let priceAdjustedCount = 0
     let otherPriceRiskCount = 0
     let missingSupplyCount = 0
-    let giftCount = 0
     let highRiskLineCount = 0
     let riskLineCount = 0
 
@@ -542,7 +533,6 @@ export function buildSalesApprovalMetrics(
             otherPriceRiskCount += 1
         }
         if (entry.missingSupply) missingSupplyCount += 1
-        if (entry.isGift) giftCount += 1
         if (entry.severity === "high") highRiskLineCount += 1
         if (entry.hasRisk) riskLineCount += 1
 
@@ -572,48 +562,25 @@ export function buildSalesApprovalMetrics(
             }
         } else {
             const supply = entry.line.procurement_supply_price_gross
-            if (entry.isGift) {
-                if (supply != null && supply !== "" && qty != null) {
-                    try {
-                        const lineCost = multiplyFixed(supply, qty, {
-                            leftMaxScale: 6,
-                            rightMaxScale: 6,
-                            outputScale: 2,
-                        })
-                        giftCost = sumFixed([giftCost, lineCost], {
-                            maxScale: 2,
-                            outputScale: 2,
-                        })
-                        coveredCost = sumFixed([coveredCost, lineCost], {
-                            maxScale: 2,
-                            outputScale: 2,
-                        })
-                        hasGiftCost = true
-                    } catch {
-                        // 忽略异常数值
-                    }
-                }
-            } else {
-                costExpectedCount += 1
-                if (supply != null && supply !== "" && qty != null) {
-                    try {
-                        const lineCost = multiplyFixed(supply, qty, {
-                            leftMaxScale: 6,
-                            rightMaxScale: 6,
-                            outputScale: 2,
-                        })
-                        coveredRevenue = sumFixed(
-                            [coveredRevenue, entry.line.gross_amount],
-                            { maxScale: 2, outputScale: 2 },
-                        )
-                        coveredCost = sumFixed([coveredCost, lineCost], {
-                            maxScale: 2,
-                            outputScale: 2,
-                        })
-                        costCoveredCount += 1
-                    } catch {
-                        // 忽略异常数值
-                    }
+            costExpectedCount += 1
+            if (supply != null && supply !== "" && qty != null) {
+                try {
+                    const lineCost = multiplyFixed(supply, qty, {
+                        leftMaxScale: 6,
+                        rightMaxScale: 6,
+                        outputScale: 2,
+                    })
+                    coveredRevenue = sumFixed(
+                        [coveredRevenue, entry.line.gross_amount],
+                        { maxScale: 2, outputScale: 2 },
+                    )
+                    coveredCost = sumFixed([coveredCost, lineCost], {
+                        maxScale: 2,
+                        outputScale: 2,
+                    })
+                    costCoveredCount += 1
+                } catch {
+                    // 忽略异常数值
                 }
             }
         }
@@ -663,10 +630,7 @@ export function buildSalesApprovalMetrics(
         totalQuantity,
         coveredRevenue: costCoveredCount > 0 ? coveredRevenue : null,
         estimatedCostTotal:
-            !isCard && (costCoveredCount > 0 || hasGiftCost)
-                ? coveredCost
-                : null,
-        giftCostTotal: hasGiftCost ? giftCost : null,
+            !isCard && costCoveredCount > 0 ? coveredCost : null,
         estimatedMargin,
         costCoveredCount,
         costExpectedCount,
@@ -683,7 +647,6 @@ export function buildSalesApprovalMetrics(
         priceAdjustedCount,
         otherPriceRiskCount,
         missingSupplyCount,
-        giftCount,
         highRiskLineCount,
         riskLineCount,
     }

@@ -12,7 +12,6 @@ import {
     QuantityValue,
     detailWorkspaceStyles,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import {
@@ -184,11 +183,6 @@ export function SalesOrderDeliveryOverview({
                                         <TableCell className="min-w-48 whitespace-normal">
                                             <div className="flex flex-wrap items-center gap-1.5 font-medium text-foreground">
                                                 <span>{line.name}</span>
-                                                {line.isGift ? (
-                                                    <Badge variant="secondary">
-                                                        赠品
-                                                    </Badge>
-                                                ) : null}
                                             </div>
                                             {showSku || line.dueDate ? (
                                                 <p className="num mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">

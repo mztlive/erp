@@ -45,7 +45,7 @@ pub(crate) fn validate_amount_triple(
     Ok(())
 }
 
-// 校验销售提交表头金额：恒等式成立且含税合计大于 0（§4.4.4：不得只含赠品明细）。
+// 校验销售提交表头金额：恒等式成立且含税合计大于 0。
 // 恒等式不成立或含税合计不大于 0 时返回错误。
 //
 // 输入约定：
@@ -59,7 +59,7 @@ pub(crate) fn validate_submission_amounts(
 ) -> Result<()> {
     validate_amount_triple(gross_amount, net_amount, tax_amount)?;
     if gross_amount.to_decimal() <= rust_decimal::Decimal::ZERO {
-        return Err(Error::from("销售单含税金额必须大于 0，不能只有赠品明细"));
+        return Err(Error::from("销售单含税金额必须大于 0"));
     }
     Ok(())
 }
@@ -78,7 +78,7 @@ mod tests {
     fn submission_amounts_require_positive_gross() {
         assert!(validate_submission_amounts(amount("106.00"), amount("100.00"), amount("6.00")).is_ok());
         let err = validate_submission_amounts(amount("0"), amount("0"), amount("0")).unwrap_err();
-        assert!(err.to_string().contains("不能只有赠品明细"));
+        assert!(err.to_string().contains("销售单含税金额必须大于 0"));
         assert!(validate_submission_amounts(amount("10.00"), amount("9.00"), amount("0.50")).is_err());
     }
 }

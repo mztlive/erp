@@ -71,9 +71,9 @@ const draftLineSchema = z.object({
         .optional(),
     quantity: decimalInput("数量", 6, { positive: true }),
     unit: z.string().trim().min(1, "请输入单位"),
-    unitPriceGross: decimalInput("含税单价", 4),
+    unitPriceGross: decimalInput("含税成交单价", 4, { positive: true }),
     deliveryAllocations: deliveryAllocationsSchema,
-    pricingMode: z.enum(["AUTO", "MANUAL", "GIFT"]).optional(),
+    pricingMode: z.enum(["AUTO", "MANUAL"]).optional(),
     priceSource: z.literal("selection").optional(),
     referencePrices: salesReferencePriceSchema.optional(),
     procurementPriceBasis: z.enum(["BULK", "DROPSHIP"]).optional(),
@@ -96,7 +96,7 @@ const draftRowSchema = z.object({
     unit: z.string(),
     unitPriceGross: z.string(),
     deliveryAllocations: deliveryAllocationsSchema,
-    pricingMode: z.enum(["AUTO", "MANUAL", "GIFT"]).optional(),
+    pricingMode: z.enum(["AUTO", "MANUAL"]).optional(),
     priceSource: z.literal("selection").optional(),
     referencePrices: salesReferencePriceSchema.optional(),
     procurementPriceBasis: z.enum(["BULK", "DROPSHIP"]).optional(),
@@ -145,23 +145,6 @@ const createSalesOrderSchema = z
         lineItems: z.array(draftLineSchema).min(1, "至少需要一条销售明细"),
     })
     .superRefine((value, context) => {
-        value.lineItems.forEach((line, index) => {
-            const gift = line.pricingMode === "GIFT"
-            if (!gift && !/[1-9]/.test(line.unitPriceGross)) {
-                context.addIssue({
-                    code: "custom",
-                    path: ["lineItems", index, "unitPriceGross"],
-                    message: "含税单价必须大于 0；随单赠送请勾选赠品",
-                })
-            }
-            if (gift && /[1-9]/.test(line.unitPriceGross)) {
-                context.addIssue({
-                    code: "custom",
-                    path: ["lineItems", index, "unitPriceGross"],
-                    message: "赠品的含税单价必须为 0",
-                })
-            }
-        })
         value.lineItems.forEach((line, index) => {
             if (!line.deliveryAllocations?.length) return
             try {

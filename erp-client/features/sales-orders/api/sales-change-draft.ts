@@ -21,7 +21,7 @@ export type SalesChangeDraftLine = {
         quantity: string
         unit_price_gross: string
         delivery_allocations?: SalesDeliveryAllocation[]
-        pricing_mode?: "AUTO" | "MANUAL" | "GIFT"
+        pricing_mode?: "AUTO" | "MANUAL"
         [field: string]: unknown
     }
     voucher: null | {

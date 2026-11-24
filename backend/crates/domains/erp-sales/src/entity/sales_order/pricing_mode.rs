@@ -1,8 +1,6 @@
 //! 销售成交单价的编辑方式；历史行保留手工成交价。
 
-use erp_core::money::UnitPrice;
-use erp_core::{Error, Result};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// 销售草稿成交价采用数量参考价或用户手工价格。
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -13,8 +11,6 @@ pub enum SalesPricingMode {
     /// 保留用户录入的成交单价；缺省历史行使用该模式。
     #[default]
     Manual,
-    /// 赠品明细：成交单价固定为 0，按普通明细选源、履约和验收，不形成应收（§4.4.4）。
-    Gift,
 }
 
 impl SalesPricingMode {
@@ -24,27 +20,17 @@ impl SalesPricingMode {
         *self == Self::Manual
     }
 
-    /// 判断是否为赠品明细。
-    /// 结果：赠品模式返回 `true`。
-    pub fn is_gift(&self) -> bool {
-        *self == Self::Gift
-    }
-
-    /// 校验成交单价与赠品标记一致：赠品必须为 0，非赠品必须大于 0。
-    /// 结果：一致时返回 `Ok(())`。
-    /// 赠品单价不为 0，或非赠品单价不大于 0 时返回错误。
-    ///
-    /// 输入约定：
-    /// - `unit_price_gross`：含税成交单价
-    pub fn ensure_price(&self, unit_price_gross: UnitPrice) -> Result<()> {
-        let price = unit_price_gross.to_decimal();
-        match (self.is_gift(), price.is_zero()) {
-            (true, false) => Err(Error::from("赠品明细的含税成交单价必须为 0")),
-            (false, _) if price <= rust_decimal::Decimal::ZERO => {
-                Err(Error::from("含税成交单价必须大于 0；随单赠送的商品请标记为赠品"))
-            },
-            _ => Ok(()),
+    // 读出旧单据时统一使用手工模式，保留已记录的成交单价和金额。
+    pub(crate) fn deserialize_stored<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(remote = "SalesPricingMode", rename_all = "SCREAMING_SNAKE_CASE")]
+        enum StoredPricingMode {
+            Auto,
+            #[serde(alias = "GIFT")]
+            Manual,
         }
+
+        StoredPricingMode::deserialize(deserializer)
     }
 }
 
@@ -54,7 +40,6 @@ mod tests {
     use super::super::working_copy_test_support::line_data;
     use super::*;
 
-    // 回归检查：历史缺省模式使用手工价，并保持已有序列化及命令载荷形状。
     #[test]
     fn historical_goods_default_to_manual_without_serialization_drift() {
         let goods = line_data(1).goods.unwrap();
@@ -64,21 +49,32 @@ mod tests {
         assert_eq!(restored.pricing_mode, SalesPricingMode::Manual);
         assert_eq!(serde_json::to_value(restored).unwrap(), historical);
 
-        let automatic = GoodsLineFields { pricing_mode: SalesPricingMode::Auto, ..goods.clone() };
+        let automatic = GoodsLineFields { pricing_mode: SalesPricingMode::Auto, ..goods };
         assert_eq!(serde_json::to_value(automatic).unwrap()["pricing_mode"], "AUTO");
-        let gift = GoodsLineFields { pricing_mode: SalesPricingMode::Gift, ..goods };
-        assert_eq!(serde_json::to_value(gift).unwrap()["pricing_mode"], "GIFT");
     }
 
     #[test]
-    fn gift_price_must_be_zero_and_others_positive() {
-        use std::str::FromStr;
-        let zero = UnitPrice::from_str("0").unwrap();
-        let positive = UnitPrice::from_str("9.90").unwrap();
-        assert!(SalesPricingMode::Gift.ensure_price(zero).is_ok());
-        assert!(SalesPricingMode::Gift.ensure_price(positive).is_err());
-        assert!(SalesPricingMode::Manual.ensure_price(positive).is_ok());
-        assert!(SalesPricingMode::Manual.ensure_price(zero).is_err());
-        assert!(SalesPricingMode::Auto.ensure_price(zero).is_err());
+    fn legacy_mode_is_read_from_stored_lines_and_rejected_in_requests() {
+        use crate::entity::sales_order::{
+            SalesOrderWorkingCopyId, SalesOrderWorkingCopyLine, SalesOrderWorkingCopyLineId,
+        };
+
+        let mut data = line_data(1);
+        let zero = "0".parse().unwrap();
+        data.goods.as_mut().unwrap().unit_price_gross = zero;
+        let line = SalesOrderWorkingCopyLine::new(
+            SalesOrderWorkingCopyLineId::new("line"),
+            SalesOrderWorkingCopyId::new("draft"),
+            data,
+        )
+        .unwrap();
+        let mut stored = bson::serialize_to_document(&line).unwrap();
+        stored.insert("pricing_mode", "GIFT");
+
+        let restored: SalesOrderWorkingCopyLine = bson::deserialize_from_document(stored).unwrap();
+        assert_eq!(restored, line);
+        assert_eq!(restored.pricing_mode, SalesPricingMode::Manual);
+        assert_eq!(restored.unit_price_gross, Some(zero));
+        assert!(serde_json::from_value::<SalesPricingMode>(serde_json::json!("GIFT")).is_err());
     }
 }

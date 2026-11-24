@@ -207,15 +207,13 @@ export function calculateGrossProfit(
     try {
         const margins = lineItems.map((line) => {
             const supplyPrice = line.procurementSupplyPrice?.trim()
-            const sellingPrice =
-                line.pricingMode === "GIFT" ? "0" : line.unitPriceGross.trim()
+            const sellingPrice = line.unitPriceGross.trim()
             if (
                 !line.sku.trim() ||
                 !supplyPrice ||
                 !sellingPrice ||
                 compareDecimal(line.quantity, "0", 6) <= 0 ||
-                (line.pricingMode !== "GIFT" &&
-                    compareDecimal(sellingPrice, "0", 4) <= 0)
+                compareDecimal(sellingPrice, "0", 4) <= 0
             ) {
                 throw new Error("INCOMPLETE_MARGIN_INPUT")
             }

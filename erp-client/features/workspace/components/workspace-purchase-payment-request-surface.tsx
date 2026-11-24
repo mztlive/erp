@@ -242,7 +242,9 @@ function PaymentRequestSurface({
     const requestQuery = usePaymentRequestQuery(
         item.businessObjectId,
         scopedWorkItemId,
-        loadFiles && !isApprovalInstance,
+        (loadFiles ||
+            (isRework && fullPage && !inspectorMode && canReadSensitive)) &&
+            !isApprovalInstance,
     )
     const submissionQuery = usePaymentSubmissionQuery(
         item.businessObjectId,
@@ -401,6 +403,38 @@ function PaymentRequestSurface({
         </Button>
     )
     const approvalRoundNo = item.approval?.currentRoundNo
+    const isActionableReworkPage = Boolean(
+        isRework &&
+        fullPage &&
+        !inspectorMode &&
+        canReadSensitive &&
+        item.status === "OPEN" &&
+        item.allowedActions.includes("PROCESS"),
+    )
+    const canInlineRework = Boolean(
+        isActionableReworkPage &&
+        resolvedRequest &&
+        (resolvedRequest.status === "rejected" ||
+            resolvedRequest.status === "draft" ||
+            resolvedRequest.status === "withdrawn") &&
+        resolvedRequest.allowed_actions.some((action) => {
+            const upper = action.toUpperCase()
+            return upper === "EDIT" || upper === "SUBMIT"
+        }),
+    )
+    const canAbandonRework = Boolean(
+        reworkTask &&
+        reworkTask.status === "OPEN" &&
+        reworkTask.allowedActions.includes("ABANDON_REWORK"),
+    )
+    const reworkAbandonAction =
+        canInlineRework && reworkTask ? (
+            <WorkspaceApprovalReworkActions
+                item={reworkTask}
+                abandonOnly
+                onTaskCompleted={onTaskCompleted}
+            />
+        ) : undefined
     const body = canReadSensitive ? (
         <PurchasePaymentRequestTask
             item={
@@ -411,8 +445,13 @@ function PaymentRequestSurface({
             onSelectFile={showDecisionRail ? selectFile : undefined}
             activeFileId={activeFileId}
             hideEmbeddedMaterials={showDecisionRail}
-            hasExternalPrimaryAction={Boolean(reworkTask && canReadSensitive)}
+            hasExternalPrimaryAction={Boolean(
+                reworkTask && canReadSensitive && !canInlineRework,
+            )}
             approvalRoundNo={approvalRoundNo}
+            inlineRework={canInlineRework}
+            reworkCanAbandon={canAbandonRework}
+            reworkAbandonAction={reworkAbandonAction}
             renderResubmission={
                 isPaymentExecution
                     ? undefined
@@ -435,7 +474,10 @@ function PaymentRequestSurface({
     )
 
     return (
-        <div ref={rootRef} className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div
+            ref={rootRef}
+            className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col"
+        >
             <WorkspaceProcessingPane
                 archetype={
                     isPaymentExecution
@@ -629,17 +671,27 @@ function PaymentRequestSurface({
                             actionable={Boolean(
                                 reworkTask?.allowedActions.includes("PROCESS"),
                             )}
+                            actionHint={
+                                canInlineRework
+                                    ? "请直接在下方按意见修改并填写重提说明。重提后从第一个节点重新审批，暂存修改将保留当前待办。"
+                                    : undefined
+                            }
                         />
                     ) : null
                 }
                 footer={
                     <>
-                        {reworkTask && canReadSensitive && (
-                            <WorkspaceApprovalReworkActions
-                                item={reworkTask}
-                                onTaskCompleted={onTaskCompleted}
-                            />
-                        )}
+                        {reworkTask &&
+                            canReadSensitive &&
+                            !canInlineRework &&
+                            !(
+                                isActionableReworkPage && requestQuery.isPending
+                            ) && (
+                                <WorkspaceApprovalReworkActions
+                                    item={reworkTask}
+                                    onTaskCompleted={onTaskCompleted}
+                                />
+                            )}
                         {bodyHost && createPortal(body, bodyHost)}
                     </>
                 }

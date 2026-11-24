@@ -63,15 +63,14 @@ export function calculateRowGrossProfit(
     line: SalesOrderDraftLineInput,
 ): string | null {
     const supplyPrice = line.procurementSupplyPrice?.trim() ?? ""
-    const sellingPrice =
-        line.pricingMode === "GIFT" ? "0" : line.unitPriceGross.trim()
+    const sellingPrice = line.unitPriceGross.trim()
     if (
         !line.sku.trim() ||
         !supplyPrice ||
         !sellingPrice ||
         !isPositiveDecimal(line.quantity, 6) ||
         !isNonNegativeDecimal(supplyPrice, 4) ||
-        (line.pricingMode !== "GIFT" && !isPositiveDecimal(sellingPrice, 4))
+        !isPositiveDecimal(sellingPrice, 4)
     ) {
         return null
     }
@@ -104,8 +103,7 @@ export function evaluateSalesLineHealth(
 ): SalesLineHealth {
     const missingSku = !line.sku.trim()
     const missingQuantity = !isPositiveDecimal(line.quantity, 6)
-    const isGift = line.pricingMode === "GIFT"
-    const missingPrice = !isGift && !isPositiveDecimal(line.unitPriceGross, 4)
+    const missingPrice = !isPositiveDecimal(line.unitPriceGross, 4)
     const missingSupplyPrice =
         !line.procurementSupplyPrice?.trim() ||
         !isNonNegativeDecimal(line.procurementSupplyPrice, 4)

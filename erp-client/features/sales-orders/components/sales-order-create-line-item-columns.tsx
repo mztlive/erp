@@ -9,10 +9,7 @@ import {
 } from "@/components/business"
 import { DetailHint } from "@/components/business/detail-presentation"
 import { StatusBadge } from "@/components/ui/status-badge"
-import {
-    SalesOrderCreateLineGiftToggle,
-    SalesOrderCreateLinePriceEditor,
-} from "@/features/sales-orders/components/sales-order-create-line-price-editor"
+import { SalesOrderCreateLinePriceEditor } from "@/features/sales-orders/components/sales-order-create-line-price-editor"
 import { SalesOrderCreateLineSkuEditor } from "@/features/sales-orders/components/sales-order-create-line-sku-editor"
 import { SkuThumbnail } from "@/features/sales-orders/components/sku-thumbnail"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
@@ -214,8 +211,8 @@ export function buildSalesOrderCreateLineItemColumns(
                             }
                         >
                             {inquiryLocked
-                                ? "优先带入询价销售价，可修改；未填销售价的商品须补填。赠品单价为 0、不收款。"
-                                : "由销售填写含税成交单价；勾选赠品后单价固定为 0、不收款。"}
+                                ? "优先带入询价销售价，可修改。未填销售价的商品须补填。"
+                                : "由销售填写大于 0 的含税成交单价。"}
                         </DetailHint>
                     </span>
                 ) : (
@@ -238,19 +235,6 @@ export function buildSalesOrderCreateLineItemColumns(
         },
         ...(nature === "physical_service"
             ? ([
-                  {
-                      id: "isGift",
-                      header: "赠品",
-                      align: "center",
-                      renderValue: ({ item }) =>
-                          item.pricingMode === "GIFT" ? "是" : "—",
-                      renderEditor: ({ rowIndex }) => (
-                          <SalesOrderCreateLineGiftToggle
-                              form={form}
-                              rowIndex={rowIndex}
-                          />
-                      ),
-                  },
                   {
                       id: "procurementPriceBasis",
                       header: "取价方式",

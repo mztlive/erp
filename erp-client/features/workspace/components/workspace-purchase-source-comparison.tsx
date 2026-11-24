@@ -13,7 +13,6 @@ import {
     CrosshairIcon,
     FileCheck2Icon,
     // FileTextIcon,
-    GiftIcon,
     InfoIcon,
     MessageSquareTextIcon,
     ReceiptTextIcon,
@@ -1465,76 +1464,38 @@ function OrderLedgerSection({
                             </div>
                         </div>
 
-                        {/* 4. 紧凑胶囊脚注（赠品 / 跨单费用） */}
-                        {(ledger.giftCoveredCount > 0 &&
-                            ledger.giftPurchaseGrossTotal) ||
-                        ledger.unallocatedSharedFeeTotal ? (
+                        {ledger.unallocatedSharedFeeTotal ? (
                             <div className="flex flex-wrap items-center gap-1.5">
-                                {ledger.giftCoveredCount > 0 &&
-                                ledger.giftPurchaseGrossTotal ? (
-                                    <Tooltip>
-                                        <TooltipTrigger
-                                            render={
-                                                <button
-                                                    id={`${idPrefix}-ledger-gift-info`}
-                                                    type="button"
-                                                    aria-label="赠品采购成本说明"
-                                                    className="num inline-flex cursor-help items-center gap-1 rounded-full bg-info-soft px-2 py-0.5 text-xs text-info-soft-foreground"
-                                                />
+                                <Tooltip>
+                                    <TooltipTrigger
+                                        render={
+                                            <button
+                                                id={`${idPrefix}-ledger-shared-fee-info`}
+                                                type="button"
+                                                aria-label="跨单费用未分摊说明"
+                                                className="num inline-flex cursor-help items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                                            />
+                                        }
+                                    >
+                                        <InfoIcon
+                                            aria-hidden="true"
+                                            className="size-3 shrink-0"
+                                        />
+                                        跨单费{" "}
+                                        <MoneyValue
+                                            display="exact"
+                                            value={
+                                                ledger.unallocatedSharedFeeTotal
                                             }
-                                        >
-                                            <GiftIcon
-                                                aria-hidden="true"
-                                                className="size-3 shrink-0"
-                                            />
-                                            赠品 {ledger.giftCoveredCount} 项{" "}
-                                            <MoneyValue
-                                                display="exact"
-                                                value={
-                                                    ledger.giftPurchaseGrossTotal
-                                                }
-                                                inheritColor
-                                            />
-                                        </TooltipTrigger>
-                                        <TooltipContent className="block">
-                                            本单含 {ledger.giftCoveredCount}{" "}
-                                            项销售赠品，采购成本已计入上方对外毛利。
-                                        </TooltipContent>
-                                    </Tooltip>
-                                ) : null}
-
-                                {ledger.unallocatedSharedFeeTotal ? (
-                                    <Tooltip>
-                                        <TooltipTrigger
-                                            render={
-                                                <button
-                                                    id={`${idPrefix}-ledger-shared-fee-info`}
-                                                    type="button"
-                                                    aria-label="跨单费用未分摊说明"
-                                                    className="num inline-flex cursor-help items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-                                                />
-                                            }
-                                        >
-                                            <InfoIcon
-                                                aria-hidden="true"
-                                                className="size-3 shrink-0"
-                                            />
-                                            跨单费{" "}
-                                            <MoneyValue
-                                                display="exact"
-                                                value={
-                                                    ledger.unallocatedSharedFeeTotal
-                                                }
-                                                inheritColor
-                                                className="font-normal"
-                                            />{" "}
-                                            未分摊
-                                        </TooltipTrigger>
-                                        <TooltipContent className="block">
-                                            本采购单含跨单费用行，未分摊计入单张销售单对外毛利。
-                                        </TooltipContent>
-                                    </Tooltip>
-                                ) : null}
+                                            inheritColor
+                                            className="font-normal"
+                                        />{" "}
+                                        未分摊
+                                    </TooltipTrigger>
+                                    <TooltipContent className="block">
+                                        本采购单含跨单费用行，未分摊计入单张销售单对外毛利。
+                                    </TooltipContent>
+                                </Tooltip>
                             </div>
                         ) : null}
                     </>
@@ -1730,7 +1691,7 @@ function SalesCoverageLineItem({
                 isUncovered && !selected && "opacity-75",
             )}
         >
-            {/* 行头：序号 + 品名 + 赠品 + 定位捷径 + 状态 */}
+            {/* 行头：序号 + 品名 + 定位捷径 + 状态 */}
             <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1 space-y-0.5">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -1740,9 +1701,6 @@ function SalesCoverageLineItem({
                         <span className="text-body-compact font-medium wrap-anywhere text-foreground">
                             {row.title}
                         </span>
-                        {row.isGift ? (
-                            <Badge variant="neutral">赠品</Badge>
-                        ) : null}
                     </div>
                     {row.specification || row.welfareLabel ? (
                         <p className="wrap-anywhere text-muted-foreground">
@@ -2004,7 +1962,7 @@ function SalesCoverageLineItem({
 
                             <div className="min-w-0">
                                 <div className="text-muted-foreground">
-                                    {row.isGift ? "赠品价" : "对外价"}
+                                    对外价
                                 </div>
                                 <div
                                     className={cn(
@@ -2080,8 +2038,7 @@ function SalesCoverageLineItem({
                                     </TooltipContent>
                                 </Tooltip>
 
-                                {!row.isGift &&
-                                (row.grossMargin || row.netMargin) ? (
+                                {row.grossMargin || row.netMargin ? (
                                     <span className="inline-flex items-center gap-1 text-muted-foreground">
                                         <span>毛利</span>
                                         {row.grossMargin ? (
@@ -2223,11 +2180,7 @@ function SalesCoverageLineItem({
                                     </div>
                                 ) : row.purchaseGrossTotal ? (
                                     <div className="num flex items-center justify-between text-muted-foreground">
-                                        <span>
-                                            {row.isGift
-                                                ? "赠品采购成本"
-                                                : "实际采购额"}
-                                        </span>
+                                        <span>实际采购额</span>
                                         <MoneyValue
                                             display="exact"
                                             value={row.purchaseGrossTotal}

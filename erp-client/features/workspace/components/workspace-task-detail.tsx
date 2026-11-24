@@ -28,7 +28,7 @@ export function WorkspaceTaskDetail(props: WorkspaceTaskDetailProps) {
                 )}
                 aria-label="当前工作台任务"
             >
-                <div className="min-h-0 flex-1">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                     <WorkspaceTaskSurfaceBoundary
                         workItemId={props.item.workItemId}
                     >

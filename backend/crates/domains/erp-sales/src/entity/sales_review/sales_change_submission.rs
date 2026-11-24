@@ -551,7 +551,11 @@ pub struct SalesChangeSubmissionLine {
     /// 含税成交单价快照。
     pub unit_price_gross: Option<UnitPrice>,
     /// 成交价编辑方式；历史缺省保留为手工价。
-    #[serde(default, skip_serializing_if = "SalesPricingMode::is_manual")]
+    #[serde(
+        default,
+        deserialize_with = "SalesPricingMode::deserialize_stored",
+        skip_serializing_if = "SalesPricingMode::is_manual"
+    )]
     pub pricing_mode: SalesPricingMode,
     /// 按地址分配的交付数量；历史未指定时为空。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -601,6 +605,9 @@ impl SalesChangeSubmissionLine {
         let spec_snapshot = normalize_optional_text(data.spec_snapshot, "规格", SPEC_MAX_LEN)?;
         let unit_snapshot = normalize_optional_text(data.unit_snapshot, "单位", UNIT_MAX_LEN)?;
 
+        if let Some(goods) = &data.goods {
+            goods.ensure_active_sales_price()?;
+        }
         let built = build_line_groups(data.line_type, data.goods, data.voucher, data.sales_tax_rate)?;
         built.ensure_supply_price()?;
 
@@ -696,6 +703,26 @@ mod tests {
                 assert!(result.unwrap().procurement_supply_price_gross.is_none());
             } else {
                 assert_eq!(result.unwrap_err().to_string(), "请填写采购供给价");
+            }
+        }
+    }
+
+    #[test]
+    fn change_submission_accepts_zero_sales_price_only_for_removed_lines() {
+        for quantity in ["0", "3"] {
+            let mut data = line_data(1);
+            let goods = data.goods.as_mut().unwrap();
+            goods.quantity = qty(quantity);
+            goods.unit_price_gross = price("0");
+            let result = SalesChangeSubmissionLine::new(
+                SalesChangeSubmissionLineId::new("csl-zero"),
+                SalesChangeSubmissionId::new("cs-zero"),
+                data,
+            );
+            if quantity == "0" {
+                assert_eq!(result.unwrap().gross_amount, amt("0"));
+            } else {
+                assert_eq!(result.unwrap_err().to_string(), "含税成交单价必须大于 0");
             }
         }
     }

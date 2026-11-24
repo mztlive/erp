@@ -58,6 +58,7 @@ type BankAccount = {
     account_name: string
     bank_name: string
     bank_branch_name?: string | null
+    bank_routing_number?: string | null
     account_number_masked: string
     is_default?: boolean
 }
@@ -252,7 +253,14 @@ function mapRequest(dto: RequestDto): PaymentRequest {
         paid_amount: paid,
         closed_amount: closed,
         unpaid_amount: unpaid,
-        close_reason: dto.last_reason ?? undefined,
+        close_reason:
+            dto.status === "closed"
+                ? (dto.last_reason ?? undefined)
+                : undefined,
+        withdraw_reason:
+            dto.status === "withdrawn"
+                ? (dto.last_reason ?? undefined)
+                : undefined,
         attachment_ids: dto.data.attachment_ids,
         attachments: dto.attachments ?? [],
         approval: dto.approval,

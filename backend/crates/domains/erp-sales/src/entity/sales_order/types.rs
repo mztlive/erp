@@ -280,6 +280,22 @@ pub struct GoodsLineFields {
     pub delivery_allocations: Vec<SalesDeliveryAllocation>,
 }
 
+pub(crate) fn ensure_positive_sales_price(unit_price_gross: UnitPrice) -> Result<()> {
+    if unit_price_gross.to_decimal() <= Decimal::ZERO {
+        return Err(Error::from("含税成交单价必须大于 0"));
+    }
+    Ok(())
+}
+
+impl GoodsLineFields {
+    pub(crate) fn ensure_active_sales_price(&self) -> Result<()> {
+        if self.quantity.to_decimal().is_zero() {
+            return Ok(());
+        }
+        ensure_positive_sales_price(self.unit_price_gross)
+    }
+}
+
 // 读取卡券张数时兼容无符号整数和数字字符串；非法或超出 `u32` 范围的值由反序列化拒绝。
 fn deserialize_u32_from_number_or_string<'de, D>(deserializer: D) -> std::result::Result<u32, D::Error>
 where
@@ -448,7 +464,10 @@ pub(crate) fn build_line_groups(
 }
 
 fn normalize_goods(mut fields: GoodsLineFields) -> Result<GoodsLineFields> {
-    fields.pricing_mode.ensure_price(fields.unit_price_gross)?;
+    // 历史零价行仍可重建工作副本；写入新成交明细时另行校验正价。
+    if fields.unit_price_gross.to_decimal() < Decimal::ZERO {
+        return Err(Error::from("含税成交单价不能为负数"));
+    }
     fields.delivery_allocations =
         SalesDeliveryAllocation::validate_all(fields.delivery_allocations, fields.quantity)?;
     fields.base_unit_code = normalize_required_text(
@@ -858,7 +877,7 @@ mod tests {
         assert_eq!(built.tax_amount, amt("3.90"));
     }
 
-    // 回归检查：采购供给价不改变销售行金额：赠品与普通行均允许零价，负数拒绝。
+    // 回归检查：采购供给价不改变销售行金额，采购供给价允许为零。
     #[test]
     fn procurement_supply_price_is_kept_without_affecting_amounts() {
         let goods = |mode: SalesPricingMode, unit: &str, supply: Option<&str>| GoodsLineFields {
@@ -885,15 +904,15 @@ mod tests {
         assert_eq!(built.goods.unwrap().procurement_supply_price_gross, Some(price("6.5000")));
         assert_eq!(built.gross_amount, amt("29.97"));
 
-        let gift = build_line_groups(
+        let historical_zero_price = build_line_groups(
             LineType::GoodsService,
-            Some(goods(SalesPricingMode::Gift, "0", Some("0"))),
+            Some(goods(SalesPricingMode::Manual, "0", Some("0"))),
             None,
             rate("0.130000"),
         )
         .unwrap();
-        assert_eq!(gift.goods.unwrap().procurement_supply_price_gross, Some(price("0")));
-        assert_eq!(gift.gross_amount, amt("0"));
+        assert_eq!(historical_zero_price.goods.unwrap().procurement_supply_price_gross, Some(price("0")));
+        assert_eq!(historical_zero_price.gross_amount, amt("0"));
 
         let negative = goods(SalesPricingMode::Manual, "9.9900", Some("-0.0100"));
         let Err(error) = build_line_groups(LineType::GoodsService, Some(negative), None, rate("0.130000"))

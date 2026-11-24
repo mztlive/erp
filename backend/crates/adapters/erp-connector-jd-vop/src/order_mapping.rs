@@ -229,7 +229,7 @@ fn build_tree_facts(
                 continue;
             }
             if source.line_type.as_ref().is_some_and(|kind| !matches!(kind.0.as_str(), "0" | "1")) {
-                return Err(mapping("京东订单含未支持的赠品或延保履约"));
+                return Err(mapping("京东订单含系统尚不支持的附加履约明细"));
             }
             let frozen = by_sku
                 .get(source.sku_id.0.as_str())

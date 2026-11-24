@@ -8,7 +8,6 @@ import {
     MoneyValue,
     detailWorkspaceStyles,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import {
     Table,
     TableBody,
@@ -82,9 +81,6 @@ function CardLineItemsTable({ order }: { order: SalesOrderDetailView }) {
                             <TableCell className="min-w-44 whitespace-normal">
                                 <div className="flex flex-wrap items-center gap-2 font-medium">
                                     <span>{line.name}</span>
-                                    {line.isGift ? (
-                                        <Badge variant="secondary">赠品</Badge>
-                                    ) : null}
                                 </div>
                                 {line.sku && line.sku !== "无规格" ? (
                                     <div className="num mt-0.5 text-xs text-muted-foreground">
@@ -157,7 +153,6 @@ export function OverviewPanel({
                             line.sku && line.sku !== "无规格"
                                 ? line.sku
                                 : undefined,
-                        isGift: line.isGift,
                     },
                 ]),
             ),

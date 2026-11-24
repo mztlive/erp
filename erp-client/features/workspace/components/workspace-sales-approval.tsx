@@ -687,10 +687,7 @@ function SalesDecisionBand({
                                         毛利额＝已核算销售行含税小计 −
                                         含税供给成本
                                     </p>
-                                    <p>
-                                        成本按供给价 ×
-                                        数量汇总，含已记录的赠品成本。
-                                    </p>
+                                    <p>成本按供给价 × 数量汇总。</p>
                                     <p>毛利率＝毛利额 ÷ 已核算销售行含税小计</p>
                                     {metrics.coveredRevenue != null &&
                                     metrics.estimatedCostTotal != null ? (
@@ -706,16 +703,6 @@ function SalesDecisionBand({
                                                 value={
                                                     metrics.estimatedCostTotal
                                                 }
-                                                inheritColor
-                                            />
-                                        </p>
-                                    ) : null}
-                                    {metrics.giftCostTotal != null ? (
-                                        <p>
-                                            其中赠品成本{" "}
-                                            <MoneyValue
-                                                display="exact"
-                                                value={metrics.giftCostTotal}
                                                 inheritColor
                                             />
                                         </p>
@@ -783,9 +770,6 @@ function SalesDecisionBand({
                                     成本覆盖 {metrics.costCoveredCount}/
                                     {metrics.costExpectedCount} 项销售明细
                                 </span>
-                                {metrics.giftCostTotal != null ? (
-                                    <span>含已记录赠品成本</span>
-                                ) : null}
                             </>
                         )}
                     </p>

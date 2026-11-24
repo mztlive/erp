@@ -87,7 +87,6 @@ export const salesChangeDraftSchema = z.object({
                         (value) => /^\d+(?:\.\d{1,4})?$/.test(value.trim()),
                         "含税单价最多4位小数",
                     ),
-                gift: z.boolean(),
                 taxRate: z
                     .string()
                     .refine(validSalesTaxRate, "税率应在0至1之间，最多6位小数"),
@@ -118,23 +117,14 @@ export const salesChangeDraftSchema = z.object({
                         message: "请填写采购供给价",
                     })
                 if (
-                    line.source.goods &&
-                    !line.gift &&
+                    (!line.source.goods ||
+                        positiveSalesDecimal(line.quantity, 6)) &&
                     !positiveSalesDecimal(line.unitPrice, 4)
                 )
                     context.addIssue({
                         code: "custom",
                         path: ["unitPrice"],
-                        message: "含税单价须大于0；随单赠送请勾选赠品",
-                    })
-                if (
-                    !line.source.goods &&
-                    !positiveSalesDecimal(line.unitPrice, 4)
-                )
-                    context.addIssue({
-                        code: "custom",
-                        path: ["unitPrice"],
-                        message: "含税单价须大于0，最多4位小数",
+                        message: "含税成交单价须大于 0",
                     })
                 if (
                     line.source.goods &&

@@ -59,6 +59,8 @@ type AbandonIssue =
 type ReworkActionsProps = {
     item: WorkspaceWorkItem
     onTaskCompleted?: (workItemId: string) => void
+    /** 原地返工工作面已承载主修改/重提动作时，仅保留「放弃本次办理」及其确认/恢复流。 */
+    abandonOnly?: boolean
 }
 
 function resolveFinancialDraftKind(
@@ -83,7 +85,11 @@ export function WorkspaceApprovalReworkActions(props: ReworkActionsProps) {
     return <ReworkActions key={props.item.workItemId} {...props} />
 }
 
-function ReworkActions({ item, onTaskCompleted }: ReworkActionsProps) {
+function ReworkActions({
+    item,
+    onTaskCompleted,
+    abandonOnly = false,
+}: ReworkActionsProps) {
     const router = useRouter()
     const profile = useAccountProfileQuery()
     const mutation = useAbandonApprovalReworkMutation()
@@ -319,22 +325,25 @@ function ReworkActions({ item, onTaskCompleted }: ReworkActionsProps) {
                             {issue.message}
                         </p>
                     )}
-                    {canProcess && supportsInlineEdit && href && (
-                        <Button
-                            id={`${id}-edit`}
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={pending}
-                            onClick={openInWorkspaceTab}
-                        >
-                            打开原单页面
-                            <ArrowUpRightIcon
-                                data-icon="inline-end"
-                                aria-hidden="true"
-                            />
-                        </Button>
-                    )}
+                    {!abandonOnly &&
+                        canProcess &&
+                        supportsInlineEdit &&
+                        href && (
+                            <Button
+                                id={`${id}-edit`}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={pending}
+                                onClick={openInWorkspaceTab}
+                            >
+                                打开原单页面
+                                <ArrowUpRightIcon
+                                    data-icon="inline-end"
+                                    aria-hidden="true"
+                                />
+                            </Button>
+                        )}
                     {canAbandon && (
                         <Button
                             id={`${id}-abandon`}
@@ -347,7 +356,7 @@ function ReworkActions({ item, onTaskCompleted }: ReworkActionsProps) {
                             放弃本次办理
                         </Button>
                     )}
-                    {canProcess && supportsInlineEdit ? (
+                    {!abandonOnly && canProcess && supportsInlineEdit ? (
                         <Button
                             id={`${id}-inline-edit`}
                             type="button"
@@ -362,7 +371,7 @@ function ReworkActions({ item, onTaskCompleted }: ReworkActionsProps) {
                             />
                             就地修改并重提
                         </Button>
-                    ) : canProcess && href ? (
+                    ) : !abandonOnly && canProcess && href ? (
                         <Button
                             id={`${id}-edit`}
                             type="button"

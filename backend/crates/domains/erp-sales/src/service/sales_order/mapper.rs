@@ -130,6 +130,11 @@ fn build_working_copy_line_datas(
             .get(&line.line_no)
             .map(|stable| stable.base.id.clone())
             .ok_or_else(|| Error::ValidationError(format!("行号 {} 无对应稳定明细", line.line_no)))?;
+        let mut goods = line.goods.clone();
+        if let Some(goods) = &mut goods {
+            crate::entity::sales_order::types::ensure_positive_sales_price(goods.unit_price_gross)?;
+            goods.pricing_mode = SalesPricingMode::Manual;
+        }
         datas.push(SalesOrderWorkingCopyLineData {
             sales_order_line_id: SalesOrderLineId::new(stable_id),
             line_no: line.line_no,
@@ -138,12 +143,7 @@ fn build_working_copy_line_datas(
             item_name_snapshot: line.item_name_snapshot.clone(),
             spec_snapshot: line.spec_snapshot.clone(),
             unit_snapshot: line.unit_snapshot.clone(),
-            goods: line.goods.clone().map(|mut goods| {
-                if goods.pricing_mode == SalesPricingMode::Auto {
-                    goods.pricing_mode = SalesPricingMode::Manual;
-                }
-                goods
-            }),
+            goods,
             voucher: line.voucher.clone(),
         });
     }
@@ -525,11 +525,10 @@ mod tests {
         line
     }
 
-    // 回归检查：赠品保持零价及供给成本；普通成交价保留，旧自动模式转为手工模式。
+    // 回归检查：成交价及供给成本保留，旧自动模式转为手工模式。
     #[test]
-    fn working_copy_mapping_preserves_gifts_and_entered_prices() {
+    fn working_copy_mapping_preserves_entered_prices() {
         for (mode, price, expected_mode, gross) in [
-            ("GIFT", "0", SalesPricingMode::Gift, "0"),
             ("MANUAL", "37.12", SalesPricingMode::Manual, "111.36"),
             ("AUTO", "37.12", SalesPricingMode::Manual, "111.36"),
         ] {
@@ -550,14 +549,12 @@ mod tests {
         }
     }
 
-    // 回归检查：映射不能放宽成交规则：非赠品零价及赠品非零价仍须拒绝。
+    // 草稿保存对所有成交方式均要求正价。
     #[test]
-    fn working_copy_mapping_rejects_price_mode_mismatches() {
-        for (mode, price, message) in [
-            ("GIFT", "1", "赠品明细的含税成交单价必须为 0"),
-            ("MANUAL", "0", "含税成交单价必须大于 0；随单赠送的商品请标记为赠品"),
-            ("AUTO", "0", "含税成交单价必须大于 0；随单赠送的商品请标记为赠品"),
-        ] {
+    fn working_copy_mapping_rejects_nonpositive_sales_prices() {
+        for (mode, price, message) in
+            [("MANUAL", "0", "含税成交单价必须大于 0"), ("AUTO", "0", "含税成交单价必须大于 0")]
+        {
             let line = priced_draft_line(mode, price);
             let order_id = SalesOrderId::new("order-1");
             let stable = build_stable_lines(&order_id, std::slice::from_ref(&line)).unwrap();

@@ -163,7 +163,7 @@ export type ApprovalSalesSubmission = {
         base_unit_code?: string | null
         unit_name?: string
         welfare_scenario?: string | null
-        pricing_mode?: "MANUAL" | "GIFT"
+        pricing_mode?: "MANUAL" | "AUTO"
         quantity: string | null
         delivery_allocations?: {
             recipient: string

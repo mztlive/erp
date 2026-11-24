@@ -22,6 +22,9 @@ type PaymentRequestTaskProps = {
     hasExternalPrimaryAction?: boolean
     approvalRoundNo?: number
     renderResubmission?: (request: PaymentRequest) => ReactNode
+    inlineRework?: boolean
+    reworkCanAbandon?: boolean
+    reworkAbandonAction?: ReactNode
 }
 
 /** 使用当前任务读取申请及限定来源，发起人历史跟踪使用普通申请资格。 */
@@ -48,6 +51,9 @@ function CurrentPaymentTask({
     hasExternalPrimaryAction,
     approvalRoundNo,
     renderResubmission,
+    inlineRework,
+    reworkCanAbandon,
+    reworkAbandonAction,
 }: PaymentRequestTaskProps) {
     const [completed, setCompleted] = useState(false)
     const scoped =
@@ -107,6 +113,9 @@ function CurrentPaymentTask({
             hasExternalPrimaryAction={hasExternalPrimaryAction}
             approvalRoundNo={approvalRoundNo}
             renderResubmission={renderResubmission}
+            inlineRework={inlineRework}
+            reworkCanAbandon={reworkCanAbandon}
+            reworkAbandonAction={reworkAbandonAction}
             onDecisionApplied={(view) => {
                 setCompleted(true)
                 onDecisionApplied?.(view)

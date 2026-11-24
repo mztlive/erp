@@ -206,11 +206,6 @@ export function ApprovalSalesOrderPaper({
                                     )}
                                 </div>
                             )}
-                            {row.pricing_mode === "GIFT" && (
-                                <div className="mt-1 text-xs text-muted-foreground">
-                                    赠品
-                                </div>
-                            )}
                             {row.welfare_scenario && (
                                 <div className="mt-1 text-xs text-muted-foreground">
                                     {welfareScenarioLabel(row.welfare_scenario)}

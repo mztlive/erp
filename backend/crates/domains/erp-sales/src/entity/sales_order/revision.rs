@@ -469,7 +469,11 @@ pub struct SalesOrderGoodsServiceLineRevision {
     /// 含税成交单价快照。
     pub unit_price_gross: UnitPrice,
     /// 成交价编辑方式；历史缺省保留为手工价。
-    #[serde(default, skip_serializing_if = "SalesPricingMode::is_manual")]
+    #[serde(
+        default,
+        deserialize_with = "SalesPricingMode::deserialize_stored",
+        skip_serializing_if = "SalesPricingMode::is_manual"
+    )]
     pub pricing_mode: SalesPricingMode,
     /// 按地址分配的交付数量；历史未指定时为空。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

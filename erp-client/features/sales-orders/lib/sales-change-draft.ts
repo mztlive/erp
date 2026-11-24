@@ -26,8 +26,6 @@ export type SalesChangeDraftValues = {
         deliveryAllocations: (SalesDeliveryAllocation & { rowKey: string })[]
         quantity: string
         unitPrice: string
-        /** 赠品明细：单价固定为 0；原明细的赠品标记不可修改。 */
-        gift: boolean
         taxRate: string
         faceValue: string
         cardCount: string
@@ -55,7 +53,6 @@ export function salesChangeDraftValues(
                 line.goods?.unit_price_gross ??
                 line.voucher?.unit_price_gross ??
                 "0",
-            gift: line.goods?.pricing_mode === "GIFT",
             taxRate: compactFixed(line.sales_tax_rate),
             faceValue: line.voucher?.face_value ?? "1",
             cardCount: String(line.voucher?.card_count ?? 1),
@@ -233,8 +230,8 @@ export function salesChangeTargetLines(
                     procurement_supply_price_gross:
                         value.supplyPrice.trim() || null,
                     quantity: value.quantity,
-                    unit_price_gross: value.gift ? "0" : value.unitPrice,
-                    pricing_mode: value.gift ? "GIFT" : "MANUAL",
+                    unit_price_gross: value.unitPrice,
+                    pricing_mode: "MANUAL",
                 },
             }
         if (!line.voucher) throw new Error("原明细缺少业务字段")
@@ -406,7 +403,6 @@ export function salesChangePickedLine(
         supplyPrice: "",
         quantity: preserveQuantity ? (template?.quantity ?? "1") : "1",
         unitPrice: "",
-        gift: false,
         taxRate: source.sales_tax_rate,
         deliveryAllocations: [],
         faceValue: "1",

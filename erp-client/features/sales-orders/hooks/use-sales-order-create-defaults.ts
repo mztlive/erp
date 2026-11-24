@@ -57,11 +57,9 @@ export function useSalesOrderCreateDefaults({
                                   line.deliveryAllocations ?? [],
                               )
                             : line.quantity,
-                        unitPriceGross:
-                            line.pricingMode === "GIFT" ||
-                            line.unitPriceGross.trim()
-                                ? line.unitPriceGross
-                                : (source?.unitPriceGross ?? ""),
+                        unitPriceGross: line.unitPriceGross.trim()
+                            ? line.unitPriceGross
+                            : (source?.unitPriceGross ?? ""),
                         procurementPriceBasis: undefined,
                         procurementSupplyPrice:
                             source?.procurementSupplyPrice ?? "",

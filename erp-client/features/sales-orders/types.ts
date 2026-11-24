@@ -9,7 +9,7 @@ export type SalesOrderCreateIntent = "SAVE_DRAFT" | "SUBMIT"
 
 export type SalesProcurementPriceBasis = "BULK" | "DROPSHIP"
 
-export type SalesLinePricingMode = "AUTO" | "MANUAL" | "GIFT"
+export type SalesLinePricingMode = "AUTO" | "MANUAL"
 
 /** 精确 SKU 修订的含税销售参考价；供应商采购成本另行保存。 */
 export type SalesSkuReferencePrices = {
@@ -146,8 +146,6 @@ export type SalesOrderLineItem = {
     procurementPriceBasis?: SalesProcurementPriceBasis
     /** 对客户承诺的明细最晚交付日（实物/服务）。 */
     dueDate?: string
-    /** 赠品明细：成交价为 0，不形成应收。 */
-    isGift?: boolean
 }
 
 export type ProcurementProgressStatus =

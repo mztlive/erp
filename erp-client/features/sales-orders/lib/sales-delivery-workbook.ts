@@ -22,18 +22,20 @@ import {
 
 const sheetName = "收货安排"
 const metadataName = "收货安排记录"
-const version = "sales-delivery-arrangements-v1"
+const legacyVersion = "sales-delivery-arrangements-v1"
+const version = "sales-delivery-arrangements-v2"
 const addressHeaders = addressColumns.map(([name]) => name)
 const headers = [
     "明细编号",
     "商品名称",
     "规格",
-    "类型",
     "单位",
     "销售数量",
     ...addressHeaders,
     "原地址编号",
 ]
+const productDisplayColumnCount = 3
+const legacyHeaders = [...headers.slice(0, 3), "类型", ...headers.slice(3)]
 const maxRows = 20_000
 const maxFileBytes = 5 * 1024 * 1024
 const productHeaders = [
@@ -73,7 +75,6 @@ function productCells(
         String(index + 1),
         line.name.trim(),
         line.specification?.trim() ?? "",
-        line.pricingMode === "GIFT" ? "赠品" : "销售",
         unitName,
     ]
 }
@@ -87,19 +88,19 @@ export async function createSalesDeliveryWorkbook(
     setColumns(
         sheet,
         headers,
-        [12, 30, 23, 10, 10, 14, 16, 20, 16, 17, 17, 46, 14, 14],
+        [12, 30, 23, 10, 14, 16, 20, 16, 17, 17, 46, 14, 14],
     )
     sheet.views = [
         { state: "frozen", xSplit: 2, ySplit: 1, showGridLines: false },
     ]
     sheet.getColumn(headers.length).hidden = true
-    sheet.autoFilter = { from: "A1", to: "M1" }
-    sheet.getColumn(8).alignment = { horizontal: "left" }
+    sheet.autoFilter = { from: "A1", to: "L1" }
+    sheet.getColumn(7).alignment = { horizontal: "left" }
     sheet.getRow(1).eachCell((cell, index) => {
         cell.fill = {
             type: "pattern",
             pattern: "solid",
-            fgColor: { argb: index <= 6 ? "FFF1F3F5" : "FFDDEDEB" },
+            fgColor: { argb: index <= 5 ? "FFF1F3F5" : "FFDDEDEB" },
         }
     })
     const notes = workbook.addWorksheet("填写说明")
@@ -200,13 +201,29 @@ function readAddressCells(getCell: (index: number) => string) {
     return { cells, errors }
 }
 
+function readProductIdentity(identity: string, legacy: boolean) {
+    if (!legacy) return identity
+    const parts: unknown = JSON.parse(identity)
+    // V1 的第四项是明细类型标记。新旧表格均通过稳定行键和 SKU 身份定位商品。
+    if (
+        !Array.isArray(parts) ||
+        parts.length !== 4 ||
+        typeof parts[3] !== "boolean"
+    )
+        throw new Error("文件中的商品明细记录损坏，请重新导出")
+    return JSON.stringify(parts.slice(0, 3))
+}
+
 function readExportedRows(
     sheet: Worksheet,
     metadata: Worksheet,
     context: DeliveryWorkbookContext,
+    legacy: boolean,
 ): DeliveryImportSource {
+    const expectedHeaders = legacy ? legacyHeaders : headers
+    const displayCount = productDisplayColumnCount + (legacy ? 1 : 0)
     if (
-        headers.some(
+        expectedHeaders.some(
             (header, index) =>
                 readCell(sheet.getRow(1).getCell(index + 1)) !== header,
         )
@@ -220,7 +237,7 @@ function readExportedRows(
     metadata.eachRow((row, index) => {
         if (index === 1) return
         const [id, lineKey, identity, baseline, ...display] = Array.from(
-            { length: 8 },
+            { length: 4 + displayCount },
             (_, column) => readCell(row.getCell(column + 1)),
         )
         if (
@@ -232,7 +249,11 @@ function readExportedRows(
             baselines.has(lineKey)
         )
             throw new Error("文件中的商品明细记录损坏，请重新导出")
-        products.set(id, { lineKey, identity, display })
+        products.set(id, {
+            lineKey,
+            identity: readProductIdentity(identity, legacy),
+            display,
+        })
         baselines.set(lineKey, baseline)
     })
     const current = new Map(context.lines.map((line) => [line.rowKey, line]))
@@ -240,7 +261,10 @@ function readExportedRows(
     sheet.eachRow((row, index) => {
         if (index === 1) return
         const { cells, errors } = readAddressCells((column) =>
-            readCell(row.getCell(column + 7), column === 1 || column === 6),
+            readCell(
+                row.getCell(column + displayCount + 3),
+                column === 1 || column === 6,
+            ),
         )
         if (!errors.length && !cells.some(Boolean)) return
         let lineKey = ""
@@ -270,10 +294,10 @@ function readExportedRows(
                     "商品资料与明细编号不一致，请复制导出文件中的完整商品行",
                 )
             lineKey = line.rowKey
-            label = [id, ...product.display.slice(0, 3)]
+            label = [id, ...product.display.slice(0, 2)]
                 .filter(Boolean)
                 .join(" · ")
-            addressId = readCell(row.getCell(headers.length))
+            addressId = readCell(row.getCell(expectedHeaders.length))
         } catch (error) {
             errors.push((error as Error).message)
         }
@@ -367,16 +391,23 @@ export async function readSalesDeliveryWorkbook(
     )
         throw new Error("工作表最多支持 20,000 行地址、100 列，请清理多余行列")
     if (metadata) {
+        const format = readCell(metadata.getCell("A1"))
         if (
-            readCell(metadata.getCell("A1")) !== version ||
+            (format !== version && format !== legacyVersion) ||
             readCell(metadata.getCell("B1")) !== (await workbookScope(context))
         )
             throw new Error("此文件不属于当前销售单或客户，请重新导出收货安排")
-        return readExportedRows(sheet, metadata, context)
+        return readExportedRows(
+            sheet,
+            metadata,
+            context,
+            format === legacyVersion,
+        )
     }
     if (
         readCell(sheet.getCell("A1")) === headers[0] ||
-        readCell(sheet.getCell("N1")) === headers[13]
+        readCell(sheet.getCell(headers.length)) === headers.at(-1) ||
+        readCell(sheet.getCell(legacyHeaders.length)) === legacyHeaders.at(-1)
     )
         throw new Error("导出文件缺少商品明细记录，请从当前销售单重新导出")
     return readCustomerSheet(sheet, context, target)

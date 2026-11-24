@@ -16,6 +16,7 @@ export type PaymentRecipient = {
     account_name: string
     bank_name: string
     bank_branch_name?: string | null
+    bank_routing_number?: string | null
     account_number_masked: string
 }
 
@@ -100,6 +101,7 @@ export type PaymentRequest = {
     unpaid_amount: string
     closed_amount: string
     close_reason?: string
+    withdraw_reason?: string
     lines: RequestLine[]
     /** 本申请上传的附件，编辑时不回写展示材料中的采购、销售来源附件。 */
     attachment_ids: string[]

@@ -359,7 +359,7 @@ export function ExpensePurchaseCreateDialog({
                         ) : null}
                     </div>
                     <DialogDescription>
-                        为本单发生、由我方承担的第三方费用（物流、包装、上门安装等）创建费用采购单，提交后进入采购审批；客户另付费请改单加明细，赠品请作为赠品行。
+                        为本单发生、由我方承担的第三方费用（物流、包装、上门安装等）创建费用采购单，提交后进入采购审批；客户另付费请改单加明细。
                     </DialogDescription>
                     {showModeSwitcher ? (
                         <div className="pt-1">
