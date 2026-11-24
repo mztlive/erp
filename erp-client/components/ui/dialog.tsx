@@ -40,7 +40,7 @@ function DialogOverlay({
         <DialogPrimitive.Backdrop
             data-slot="dialog-overlay"
             className={cn(
-                "fixed inset-0 isolate z-50 bg-overlay duration-100 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+                "fixed inset-0 isolate z-50 bg-overlay transition-opacity duration-200 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0",
                 className,
             )}
             {...props}
@@ -107,7 +107,7 @@ function DialogContent({
                 className={cn(
                     "fixed z-50 overscroll-contain bg-popover text-body-compact text-popover-foreground outline-none",
                     size === "full"
-                        ? "duration-150 data-open:animate-in data-open:fade-in-0 data-open:slide-in-from-right-4 data-closed:animate-out data-closed:fade-out-0 data-closed:slide-out-to-right-4"
+                        ? "transition-[translate,transform,opacity] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] data-ending-style:translate-x-full data-ending-style:opacity-0 data-starting-style:translate-x-full data-starting-style:opacity-0"
                         : "top-1/2 left-1/2 w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border/80 shadow-lg duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
                     DIALOG_SIZE_CLASS[size],
                     scroll === "body"

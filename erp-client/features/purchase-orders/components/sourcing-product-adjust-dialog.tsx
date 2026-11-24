@@ -117,10 +117,17 @@ export function SourcingProductAdjustDialog({
         string | null
     >(null)
     const [actionNotice, setActionNotice] = useState<string | null>(null)
+    const [lastOpenProductId, setLastOpenProductId] = useState<string | null>(
+        productId,
+    )
     const [snapshotState, setSnapshotState] = useState<{
         productId: string
         lines: SourcingLineInput[]
     } | null>(null)
+
+    if (productId && lastOpenProductId !== productId) {
+        setLastOpenProductId(productId)
+    }
 
     const lastProductId = useRef(productId)
     const sourcesScrollRef = useRef<HTMLDivElement>(null)
@@ -130,7 +137,17 @@ export function SourcingProductAdjustDialog({
         props.order,
         props.form.state.values.lines,
     )
-    const row = rows.find((item) => item.product.salesOrderLineId === productId)
+    const liveRow = rows.find(
+        (item) => item.product.salesOrderLineId === productId,
+    )
+    // 关闭收起动画期间保留上一次打开的商品内容，避免内容瞬间清空导致滑出动画白屏
+    const row =
+        liveRow ??
+        (lastOpenProductId
+            ? rows.find(
+                  (item) => item.product.salesOrderLineId === lastOpenProductId,
+              )
+            : undefined)
     const navigation = (navigationIds ?? []).flatMap((id) => {
         const found = rows.find((item) => item.product.salesOrderLineId === id)
         return found ? [found] : []
@@ -613,7 +630,7 @@ export function SourcingProductAdjustDialog({
 
     return (
         <Dialog
-            open={Boolean(row)}
+            open={Boolean(liveRow)}
             onOpenChange={(open) => {
                 if (!open) close()
             }}
@@ -1084,6 +1101,7 @@ export function SourcingProductAdjustDialog({
                                     <SourcingAddressEditor
                                         form={props.form}
                                         row={row}
+                                        activeRowKey={activeRowKey}
                                         canSplitNewSource={!addDisabledReason}
                                         sourceFilter={addressSourceFilter}
                                         onSourceFilterChange={

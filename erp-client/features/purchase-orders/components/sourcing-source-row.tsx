@@ -990,6 +990,7 @@ export function SourcingSourceRow({
 
     return (
         <div
+            onPointerDownCapture={onActivate}
             onFocusCapture={onActivate}
             className={cn(
                 "rounded-lg border bg-card p-3.5 shadow-2xs transition-colors",

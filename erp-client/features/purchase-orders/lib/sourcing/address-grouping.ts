@@ -838,6 +838,35 @@ export function buildSetSliceQuantityPatch(
     return buildLinePatch(index, line, nextRows)
 }
 
+/** 为指定直发来源在某地址上增量填充未覆盖数量（若已有分配则在原量上叠加，不覆盖原值）。 */
+export function buildAddSliceQuantityPatch(
+    product: SourcingProductLine,
+    allLines: readonly SourcingLineInput[],
+    targetRowKey: string,
+    baseRow: PurchaseDeliveryAllocation,
+    addQty: string,
+): LineUpdatePatch | null {
+    if (!isPositiveQuantity(addQty)) return null
+    const index = allLines.findIndex((line) => line.rowKey === targetRowKey)
+    if (index < 0) return null
+    const line = allLines[index]!
+    const rows = normalizeRowsForLine(product, line)
+    const key = deliveryKey(baseRow)
+    const existing = rows.find((item) => deliveryKey(item) === key)
+    const existingQty =
+        existing && isPositiveQuantity(existing.quantity)
+            ? compactFixed(existing.quantity.trim())
+            : "0"
+    const nextQty = safeAdd([existingQty, compactFixed(addQty.trim())])
+    return buildSetSliceQuantityPatch(
+        product,
+        allLines,
+        targetRowKey,
+        baseRow,
+        nextQty,
+    )
+}
+
 export type QuotaAllocationPreview = Readonly<{
     patches: readonly LineUpdatePatch[]
     allocatedQty: string
