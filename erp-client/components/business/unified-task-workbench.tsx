@@ -41,6 +41,8 @@ export type UnifiedTaskWorkbenchContextRail = Readonly<{
     label?: string
     collapsed?: boolean
     onCollapsedChange?: (collapsed: boolean) => void
+    /** 允许全宽执行型作业面挂载按需展开的右侧参考对照轨（默认折叠，不占常规工作宽度）。 */
+    allowOnFullWidth?: boolean
     content: ReactNode
 }>
 
@@ -159,9 +161,10 @@ export function UnifiedTaskWorkbench({
     const [isWideContainer, setIsWideContainer] = useState<boolean>(false)
 
     const railAllowed =
-        !fullWidth &&
-        (archetype === "decision" || archetype === "investigation") &&
-        Boolean(contextRail)
+        Boolean(contextRail) &&
+        ((!fullWidth &&
+            (archetype === "decision" || archetype === "investigation")) ||
+            Boolean(contextRail?.allowOnFullWidth))
 
     const collapsible = contextRail?.collapsible ?? true
     const resizable = contextRail?.resizable ?? false
@@ -383,7 +386,14 @@ export function UnifiedTaskWorkbench({
                                 minSize={`${100 - maxRailPct}%`}
                                 className="flex min-h-0 min-w-0 flex-col"
                             >
-                                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-4 @[1120px]/workspace:pr-6">
+                                <div
+                                    className={cn(
+                                        "min-h-0 flex-1 pr-4 @[1120px]/workspace:pr-6",
+                                        fullWidth
+                                            ? "flex flex-col overflow-hidden pr-0 @[1120px]/workspace:pr-0"
+                                            : "overflow-y-auto overscroll-contain",
+                                    )}
+                                >
                                     {mainCanvas}
                                 </div>
                             </ResizablePanel>

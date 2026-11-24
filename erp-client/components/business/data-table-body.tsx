@@ -169,7 +169,13 @@ export function DataTableBody<TData>({
                                         "bg-row-selected",
                                 )}
                                 onClick={(event) => {
-                                    if (isInteractiveRowTarget(event.target))
+                                    if (
+                                        !(event.target instanceof Node) ||
+                                        !event.currentTarget.contains(
+                                            event.target,
+                                        ) ||
+                                        isInteractiveRowTarget(event.target)
+                                    )
                                         return
                                     if (selectOnRowClick) {
                                         if (row.getCanSelect())
@@ -179,7 +185,13 @@ export function DataTableBody<TData>({
                                     ;(onRowPreview ?? onRowOpen)?.(row.original)
                                 }}
                                 onKeyDown={(event) => {
-                                    if (isInteractiveRowTarget(event.target))
+                                    if (
+                                        !(event.target instanceof Node) ||
+                                        !event.currentTarget.contains(
+                                            event.target,
+                                        ) ||
+                                        isInteractiveRowTarget(event.target)
+                                    )
                                         return
                                     if (event.key === "ArrowDown") {
                                         event.preventDefault()

@@ -5,6 +5,8 @@ import {
     ArrowLeftIcon,
     ArrowRightIcon,
     PlusIcon,
+    RotateCcwIcon,
+    SplitIcon,
     TriangleAlertIcon,
 } from "lucide-react"
 import { DetailWorkspaceMeta, MoneyValue } from "@/components/business"
@@ -22,19 +24,21 @@ import {
 } from "@/components/ui/dialog"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import { findSourcingOption } from "../lib/purchase-order-create-model"
 import { sourcingFormValidationError } from "../lib/purchase-order-create-validation"
+import { canSplitSourcingProduct } from "../lib/sourcing-quantity"
 import { sourcingRouteLabel } from "../lib/sourcing/delivery-terms"
 import { buildSourcingEditorRows } from "../lib/sourcing/editor-rows"
-import { canSplitSourcingProduct } from "../lib/sourcing-quantity"
+import type { SourcingLineInput } from "../lib/sourcing/types"
 import type {
-    SourcingParticipationProps,
     SourcingEditorProps,
+    SourcingParticipationProps,
 } from "./create-sourcing/types"
+import { SourcingAllocationSummary } from "./sourcing-allocation-summary"
 import { SourcingParticipationControl } from "./sourcing-participation-control"
 import { SourcingProductEditor } from "./sourcing-product-editor"
 import { SourcingSourceList } from "./sourcing-source-list"
-import { SourcingAllocationSummary } from "./sourcing-allocation-summary"
 
 function statusTone(status: string): StatusTone {
     if (status === "已就绪") return "success"
@@ -43,11 +47,31 @@ function statusTone(status: string): StatusTone {
     return "neutral"
 }
 
-/** 左侧比较全部来源，右侧编辑一个来源；全部字段继续使用整单共享草稿。 */
+function cloneProductLines(
+    lines: readonly SourcingLineInput[],
+    salesOrderLineId: string,
+): SourcingLineInput[] {
+    return lines
+        .filter((line) => line.salesOrderLineId === salesOrderLineId)
+        .map((line) => ({
+            ...line,
+            deliveryAllocations: line.deliveryAllocations?.map((item) => ({
+                ...item,
+            })),
+        }))
+}
+
+/**
+ * 全宽单商品供给精调弹窗：
+ * 顶部动态来源条取代固定左栏，正文完整释放给「比价选源矩阵 + 一体化地址分配」；
+ * 支持自由切品比对、单商品修改还原与一键把剩余缺口拆给新来源。
+ */
 export function SourcingProductAdjustDialog({
     productId,
+    initialFocusSection,
     onClose,
     onSetParticipation,
+    onRestoreProductLines,
     navigationIds,
     onNavigate,
     returnFocusId,
@@ -55,17 +79,27 @@ export function SourcingProductAdjustDialog({
 }: SourcingEditorProps &
     SourcingParticipationProps & {
         productId: string | null
+        initialFocusSection?: "compare" | "addresses" | null
         onClose: () => void
+        onRestoreProductLines?: (
+            salesOrderLineId: string,
+            snapshot: SourcingLineInput[],
+        ) => void
         navigationIds?: readonly string[]
         onNavigate?: (id: string) => void
         returnFocusId?: string
     }) {
     const [showErrors, setShowErrors] = useState(false)
     const [selectedRowKey, setSelectedRowKey] = useState<string | null>(null)
+    const [snapshotState, setSnapshotState] = useState<{
+        productId: string
+        lines: SourcingLineInput[]
+    } | null>(null)
     const lastProductId = useRef(productId)
     const bodyRef = useRef<HTMLDivElement>(null)
     const listRef = useRef<HTMLDivElement>(null)
     if (productId) lastProductId.current = productId
+
     const rows = buildSourcingEditorRows(
         props.order,
         props.form.state.values.lines,
@@ -83,6 +117,7 @@ export function SourcingProductAdjustDialog({
         ...navigation.slice(0, Math.max(0, position)),
     ].filter((item) => item.needsAttention)
     const nextPending = pendingItems[0]
+
     const active =
         row?.allocations.find(({ line }) => line.rowKey === selectedRowKey) ??
         row?.allocations[0]
@@ -95,14 +130,27 @@ export function SourcingProductAdjustDialog({
         row && active
             ? findSourcingOption(row.product, active.line.basisId)
             : undefined
-    const addDisabledReason =
-        !row || (!row.selected && !row.partiallySelected)
-            ? "恢复本次分配后可添加来源"
-            : row.allocations.length >= row.product.options.length
-              ? "可用来源均已添加"
-              : !canSplitSourcingProduct(row.product, row.allocations.length)
-                ? "剩余需求不足以继续拆分，或商品单位不支持拆分"
-                : undefined
+
+    const addDisabledReason = !row
+        ? undefined
+        : row.allocations.length >= row.product.options.length
+          ? "可用来源均已添加"
+          : !canSplitSourcingProduct(row.product, row.allocations.length)
+            ? "剩余需求不足以继续拆分，或商品单位不支持拆分"
+            : undefined
+
+    const hasResidualDemand = (() => {
+        if (!row) return false
+        try {
+            return (
+                compareDecimal(row.quantity, row.product.remainingQuantity, 6) <
+                0
+            )
+        } catch {
+            return false
+        }
+    })()
+
     const fields =
         sourcingFormValidationError(props.order, props.form.state.values)
             ?.fields ?? {}
@@ -124,21 +172,63 @@ export function SourcingProductAdjustDialog({
     )
     const activeErrors = activeRowKey ? (errors.get(activeRowKey) ?? []) : []
 
+    // 记录进入每个商品时的草稿快照，支持一键“还原此商品修改”
     useEffect(() => {
-        bodyRef.current?.scrollTo({ top: 0 })
+        if (!productId) {
+            setSnapshotState(null)
+            return
+        }
+        setSnapshotState((current) => {
+            if (current?.productId === productId) return current
+            return {
+                productId,
+                lines: cloneProductLines(
+                    props.form.state.values.lines,
+                    productId,
+                ),
+            }
+        })
+    }, [productId, props.form.state.values.lines])
+
+    const currentProductLines = productId
+        ? cloneProductLines(props.form.state.values.lines, productId)
+        : []
+    const isDirtyForProduct =
+        Boolean(snapshotState && snapshotState.productId === productId) &&
+        JSON.stringify(currentProductLines) !==
+            JSON.stringify(snapshotState?.lines ?? [])
+
+    useEffect(() => {
         if (!activeRowKey) return
+        if (initialFocusSection === "addresses") {
+            requestAnimationFrame(() => {
+                bodyRef.current
+                    ?.querySelector('[aria-label="本来源交付地址"]')
+                    ?.scrollIntoView({ block: "start", behavior: "smooth" })
+            })
+        } else {
+            bodyRef.current?.scrollTo({ top: 0 })
+        }
         const target = document.getElementById(
             `sourcing-source-${toAutomationIdSegment(activeRowKey)}-edit`,
         )
         if (target && listRef.current?.contains(target))
             target.scrollIntoView({ block: "nearest", inline: "nearest" })
-    }, [activeRowKey])
+    }, [activeRowKey, initialFocusSection])
 
     const close = () => {
         setShowErrors(false)
         setSelectedRowKey(null)
         onClose()
     }
+
+    const navigateFreely = (targetId: string) => {
+        if (!onNavigate) return
+        setShowErrors(false)
+        setSelectedRowKey(null)
+        onNavigate(targetId)
+    }
+
     const focusEditor = (rowKey: string, invalid = false) => {
         requestAnimationFrame(() => {
             const target = invalid
@@ -149,13 +239,14 @@ export function SourcingProductAdjustDialog({
                       `procurement-orders-create-row-${toAutomationIdSegment(rowKey)}-quantity`,
                   ) ??
                   document.getElementById(
-                      `sourcing-delivery-${toAutomationIdSegment(rowKey)}-add`,
+                      `procurement-orders-create-row-${toAutomationIdSegment(rowKey)}-sourcing-option`,
                   ))
             if (!target || !bodyRef.current?.contains(target)) return
             target.scrollIntoView({ block: "nearest", inline: "nearest" })
             target.focus({ preventScroll: true })
         })
     }
+
     const addSplit = () => {
         if (!row) return
         const previousKeys = new Set(
@@ -171,6 +262,22 @@ export function SourcingProductAdjustDialog({
         setSelectedRowKey(added.rowKey)
         focusEditor(added.rowKey)
     }
+
+    const splitResidual = () => {
+        if (!row) return
+        if (props.onAddResidualSplit) {
+            const addedKey = props.onAddResidualSplit(
+                row.product.salesOrderLineId,
+            )
+            if (addedKey) {
+                setSelectedRowKey(addedKey)
+                focusEditor(addedKey)
+            }
+            return
+        }
+        addSplit()
+    }
+
     const removeSource = (rowKey: string) => {
         if (!row || row.allocations.length <= 1) return
         const index = row.allocations.findIndex(
@@ -192,7 +299,8 @@ export function SourcingProductAdjustDialog({
                 ?.focus({ preventScroll: true })
         })
     }
-    const finish = async (nextId?: string) => {
+
+    const finish = async () => {
         if (!row) return
         const prefixes = row.allocations.map(({ index }) => `lines[${index}].`)
         for (const [name, field] of Object.entries(props.form.fieldInfo)) {
@@ -203,10 +311,9 @@ export function SourcingProductAdjustDialog({
                 instance.store.state.meta.isTouched
             )
                 continue
-            instance.setMeta((previous) => ({ ...previous, isTouched: true }))
+            instance.setMeta((prev) => ({ ...prev, isTouched: true }))
         }
         await props.form.validate("change")
-        // 从整单值校验，不能只检查右侧当前挂载的字段。
         const currentErrors =
             sourcingFormValidationError(props.order, props.form.state.values)
                 ?.fields ?? {}
@@ -221,15 +328,12 @@ export function SourcingProductAdjustDialog({
             focusEditor(invalid.line.rowKey, true)
             return
         }
-        if (nextId && onNavigate) {
-            setShowErrors(false)
-            setSelectedRowKey(null)
-            onNavigate(nextId)
-        } else close()
+        close()
     }
 
     const supplyRefPrice =
         row?.product.salesPrices?.procurement_supply_price_gross
+    const salesUnitPrice = row?.product.salesPrices?.unit_price_gross
 
     return (
         <Dialog
@@ -248,7 +352,7 @@ export function SourcingProductAdjustDialog({
                         : null) ??
                     (lastProductId.current
                         ? document.getElementById(
-                              `sourcing-summary-${toAutomationIdSegment(lastProductId.current)}-adjust`,
+                              `sourcing-list-${toAutomationIdSegment(lastProductId.current)}-edit`,
                           )
                         : null) ??
                     document.getElementById("sourcing-products-search")
@@ -273,6 +377,16 @@ export function SourcingProductAdjustDialog({
                                             row.product.itemSku ? (
                                                 <span key="sku" className="num">
                                                     {row.product.itemSku}
+                                                </span>
+                                            ) : null,
+                                            salesUnitPrice ? (
+                                                <span key="sales-price">
+                                                    含税售价{" "}
+                                                    <MoneyValue
+                                                        display="exact"
+                                                        value={salesUnitPrice}
+                                                        className="font-medium [&_[data-slot=money-value-number]]:text-foreground"
+                                                    />
                                                 </span>
                                             ) : null,
                                             supplyRefPrice ? (
@@ -312,44 +426,19 @@ export function SourcingProductAdjustDialog({
                                 </div>
                             </div>
                             <DialogDescription className="sr-only">
-                                左侧比较并选择来源，右侧调整当前来源。修改保留在草稿中，整单预览后统一提交。
+                                顶部切换或拆分供给来源，正文比价选源并分配数量与收货地址。修改保留在草稿中，整单预览后统一提交。
                             </DialogDescription>
                         </DialogHeader>
 
                         <SourcingAllocationSummary row={row} />
 
-                        <DialogBody className="grid h-[min(74dvh,46rem)] min-h-0 flex-auto grid-rows-[minmax(6rem,auto)_minmax(0,1fr)] overflow-hidden p-0 lg:grid-cols-[18rem_minmax(0,1fr)] lg:grid-rows-1">
+                        <DialogBody className="flex h-[min(74dvh,48rem)] min-h-0 flex-auto flex-col overflow-hidden p-0">
                             <section
-                                className="flex max-h-44 min-h-0 min-w-0 flex-col border-b border-border/60 bg-sidebar lg:max-h-none lg:border-r lg:border-b-0"
+                                ref={listRef}
+                                className="flex shrink-0 flex-wrap items-center justify-between gap-2.5 border-b border-border/60 bg-sidebar px-4 py-2.5 sm:px-6"
                                 aria-label="供给来源列表"
                             >
-                                <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-4 py-2.5">
-                                    <div className="flex items-center gap-1.5">
-                                        <h3 className="text-body-compact font-semibold text-foreground">
-                                            供给来源
-                                        </h3>
-                                        <span className="num rounded-sm bg-muted px-1.5 py-0.5 text-tiny font-medium text-muted-foreground">
-                                            {row.allocations.length}
-                                        </span>
-                                    </div>
-                                    <Button
-                                        id={`sourcing-product-${toAutomationIdSegment(row.product.salesOrderLineId)}-split`}
-                                        type="button"
-                                        variant="outline"
-                                        size="xs"
-                                        disabled={Boolean(addDisabledReason)}
-                                        onClick={addSplit}
-                                        title={addDisabledReason}
-                                    >
-                                        <PlusIcon />
-                                        添加来源
-                                    </Button>
-                                </div>
-
-                                <div
-                                    ref={listRef}
-                                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
-                                >
+                                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                                     <SourcingSourceList
                                         row={row}
                                         activeRowKey={activeRowKey}
@@ -359,23 +448,47 @@ export function SourcingProductAdjustDialog({
                                     />
                                 </div>
 
-                                <div className="shrink-0 border-t border-border/60 px-4 py-2 text-xs text-muted-foreground">
-                                    {addDisabledReason
-                                        ? addDisabledReason
-                                        : `共 ${row.product.options.length} 个可用供给方案，支持多源拆分`}
+                                <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                                    {hasResidualDemand && !addDisabledReason ? (
+                                        <Button
+                                            id={`sourcing-product-${toAutomationIdSegment(row.product.salesOrderLineId)}-split-residual`}
+                                            type="button"
+                                            variant="secondary"
+                                            size="xs"
+                                            onClick={splitResidual}
+                                        >
+                                            <SplitIcon aria-hidden="true" />
+                                            剩余缺口拆给新来源
+                                        </Button>
+                                    ) : null}
+                                    <Button
+                                        id={`sourcing-product-${toAutomationIdSegment(row.product.salesOrderLineId)}-split`}
+                                        type="button"
+                                        variant="outline"
+                                        size="xs"
+                                        disabled={Boolean(addDisabledReason)}
+                                        onClick={addSplit}
+                                        title={
+                                            addDisabledReason ??
+                                            `共 ${row.product.options.length} 个可用供给方案，支持多源拆分`
+                                        }
+                                    >
+                                        <PlusIcon aria-hidden="true" />
+                                        添加来源
+                                    </Button>
                                 </div>
                             </section>
 
                             <section
                                 id="sourcing-product-adjust-detail"
-                                className="flex min-h-0 min-w-0 flex-col bg-card"
+                                className="flex min-h-0 min-w-0 flex-1 flex-col bg-card"
                                 aria-label="当前来源编辑"
                             >
                                 {active && row.allocations.length > 1 ? (
-                                    <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-2.5 lg:px-6">
+                                    <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-card px-4 py-2 sm:px-6">
                                         <div className="flex items-center gap-2">
                                             <h3 className="text-body-compact font-semibold text-foreground">
-                                                来源 {activeIndex + 1}
+                                                正在编辑：来源 {activeIndex + 1}
                                             </h3>
                                             {activeOption ? (
                                                 <Badge
@@ -453,6 +566,15 @@ export function SourcingProductAdjustDialog({
                                             {...props}
                                             condensed
                                             activeRowKey={active.line.rowKey}
+                                            defaultCompareOpen={
+                                                initialFocusSection ===
+                                                "compare"
+                                            }
+                                            onSplitResidual={
+                                                !addDisabledReason
+                                                    ? splitResidual
+                                                    : undefined
+                                            }
                                             onSetParticipation={
                                                 onSetParticipation
                                             }
@@ -470,15 +592,39 @@ export function SourcingProductAdjustDialog({
 
                         <DialogFooter className="items-center border-border/60 bg-card sm:justify-between">
                             <div className="flex flex-wrap items-center gap-2.5">
+                                {onRestoreProductLines && snapshotState ? (
+                                    <Button
+                                        id="sourcing-product-adjust-restore"
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        disabled={!isDirtyForProduct}
+                                        onClick={() => {
+                                            onRestoreProductLines(
+                                                snapshotState.productId,
+                                                snapshotState.lines,
+                                            )
+                                            setShowErrors(false)
+                                            setSelectedRowKey(
+                                                snapshotState.lines[0]
+                                                    ?.rowKey ?? null,
+                                            )
+                                        }}
+                                    >
+                                        <RotateCcwIcon aria-hidden="true" />
+                                        还原此商品修改
+                                    </Button>
+                                ) : null}
                                 {showErrors && row.issues.length ? (
                                     <StatusBadge
                                         tone="destructive"
                                         label={`还有 ${row.issues.length} 项需调整`}
                                     />
-                                ) : null}
-                                <p className="text-xs text-muted-foreground">
-                                    仅更新草稿，整单预览后统一提交
-                                </p>
+                                ) : (
+                                    <p className="text-xs text-muted-foreground">
+                                        实时存入草稿，整单预览后统一提交
+                                    </p>
+                                )}
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                                 {onNavigate ? (
@@ -493,7 +639,7 @@ export function SourcingProductAdjustDialog({
                                                 disabled={!previous}
                                                 onClick={() =>
                                                     previous &&
-                                                    void finish(
+                                                    navigateFreely(
                                                         previous.product
                                                             .salesOrderLineId,
                                                     )
@@ -515,7 +661,7 @@ export function SourcingProductAdjustDialog({
                                                 disabled={!next}
                                                 onClick={() =>
                                                     next &&
-                                                    void finish(
+                                                    navigateFreely(
                                                         next.product
                                                             .salesOrderLineId,
                                                     )
@@ -532,7 +678,7 @@ export function SourcingProductAdjustDialog({
                                             disabled={!nextPending}
                                             onClick={() =>
                                                 nextPending &&
-                                                void finish(
+                                                navigateFreely(
                                                     nextPending.product
                                                         .salesOrderLineId,
                                                 )

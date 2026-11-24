@@ -1,32 +1,67 @@
 "use client"
 
-import { useMemo, useState, type ReactNode } from "react"
-import { SearchIcon, XIcon } from "lucide-react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { SearchIcon, TriangleAlertIcon, XIcon } from "lucide-react"
+import type { PaginationState } from "@/components/business/data-table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import type { PaginationState } from "@/components/business/data-table"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { findSourcingOption } from "../lib/purchase-order-create-model"
 import { buildSourcingEditorRows } from "../lib/sourcing/editor-rows"
+import { summarizeRowPricing } from "../lib/sourcing/pricing"
+import type { SourcingLineInput } from "../lib/sourcing/types"
 import type {
-    SourcingEditorProps,
     SourcingBatchSelectionProps,
+    SourcingEditorProps,
     SourcingParticipationProps,
 } from "./create-sourcing/types"
-import { SourcingProductList } from "./sourcing-product-list"
 import { SourcingProductAdjustDialog } from "./sourcing-product-adjust-dialog"
+import { SourcingProductList } from "./sourcing-product-list"
 
-type StatusFilter = "all" | "pending" | "excluded"
+type StatusFilter = "all" | "pending" | "included" | "excluded" | "inverted"
 
-/** 全宽商品表格负责对比和定位；来源编辑复用整单表单，筛选与分页不修改草稿。 */
+export type SourcingFocusRequest = Readonly<{
+    salesOrderLineId: string
+    openDialog?: boolean
+    section?: "compare" | "addresses"
+    token: number
+}>
+
+/**
+ * 统一供给分配主工作区（工作台与独立建单页共用）：
+ * 单行工具条整合筛选/搜索/批量辅助，表内直接高频编辑，复杂多源/多地址走全宽精调弹窗。
+ */
 export function PurchaseOrderCreateSourcingWorkspace({
-    toolbar,
-    selectedProductIds,
-    onToggleProducts,
+    toolbarActions,
+    selectionBar,
+    checkedProductIds,
+    onToggleChecked,
+    onClearChecked,
     onSetParticipation,
+    onSyncWarehouseToOthers,
+    onRestoreProductLines,
+    onVisibleIdsChange,
+    focusRequest,
+    scrollable = true,
     ...props
 }: SourcingEditorProps &
     SourcingBatchSelectionProps &
-    SourcingParticipationProps & { toolbar: ReactNode }) {
+    SourcingParticipationProps & {
+        toolbarActions: ReactNode
+        selectionBar?: ReactNode
+        onSyncWarehouseToOthers: (
+            warehouseId: string,
+            warehouseName: string,
+            excludeSalesOrderLineId: string,
+        ) => void
+        onRestoreProductLines: (
+            salesOrderLineId: string,
+            snapshot: SourcingLineInput[],
+        ) => void
+        onVisibleIdsChange?: (ids: readonly string[]) => void
+        focusRequest?: SourcingFocusRequest | null
+        scrollable?: boolean
+    }) {
     const { form, order } = props
     const [query, setQuery] = useState("")
     const [status, setStatus] = useState<StatusFilter>("all")
@@ -34,124 +69,242 @@ export function PurchaseOrderCreateSourcingWorkspace({
         pageIndex: 0,
         pageSize: 50,
     })
-    const [editingId, setEditingId] = useState<string | null>(null)
+    const [editingState, setEditingState] = useState<{
+        id: string
+        section?: "compare" | "addresses"
+    } | null>(null)
+    const [highlightedId, setHighlightedId] = useState<string | null>(null)
     const [returnFocusId, setReturnFocusId] = useState<string>()
     const [navigationIds, setNavigationIds] = useState<string[]>([])
+
     const rows = useMemo(
         () => buildSourcingEditorRows(order, form.state.values.lines),
         [order, form.state.values.lines],
     )
-    const counts = {
-        all: rows.length,
-        pending: rows.filter((row) => row.needsAttention).length,
-        excluded: rows.filter((row) => !row.selected && !row.partiallySelected)
-            .length,
-    }
-    const visible = rows.filter(
-        (row) =>
-            (status === "all" ||
-                (status === "pending"
-                    ? row.needsAttention
-                    : !row.selected && !row.partiallySelected)) &&
-            `${row.product.itemName} ${row.product.itemSku ?? ""}`
-                .toLocaleLowerCase()
-                .includes(query.trim().toLocaleLowerCase()),
+
+    const invertedIds = useMemo(
+        () =>
+            new Set(
+                rows
+                    .filter(
+                        (row) =>
+                            (row.selected || row.partiallySelected) &&
+                            summarizeRowPricing(row).hasInvertedSource,
+                    )
+                    .map((row) => row.product.salesOrderLineId),
+            ),
+        [rows],
     )
+
+    const counts = useMemo(
+        () => ({
+            all: rows.length,
+            pending: rows.filter((row) => row.needsAttention).length,
+            included: rows.filter(
+                (row) => row.selected || row.partiallySelected,
+            ).length,
+            excluded: rows.filter(
+                (row) => !row.selected && !row.partiallySelected,
+            ).length,
+            inverted: invertedIds.size,
+        }),
+        [invertedIds, rows],
+    )
+
+    const visible = useMemo(() => {
+        const keyword = query.trim().toLocaleLowerCase()
+        return rows.filter((row) => {
+            if (status === "pending" && !row.needsAttention) return false
+            if (
+                status === "included" &&
+                !row.selected &&
+                !row.partiallySelected
+            )
+                return false
+            if (
+                status === "excluded" &&
+                (row.selected || row.partiallySelected)
+            )
+                return false
+            if (
+                status === "inverted" &&
+                !invertedIds.has(row.product.salesOrderLineId)
+            )
+                return false
+            if (!keyword) return true
+            const supplierNames = row.allocations
+                .map(({ line }) => {
+                    const opt = findSourcingOption(row.product, line.basisId)
+                    return `${opt?.supplierName ?? ""} ${opt?.warehouseName ?? ""}`
+                })
+                .join(" ")
+            return `${row.product.itemName} ${row.product.itemSku ?? ""} ${supplierNames}`
+                .toLocaleLowerCase()
+                .includes(keyword)
+        })
+    }, [invertedIds, query, rows, status])
+
+    useEffect(() => {
+        onVisibleIdsChange?.(visible.map((row) => row.product.salesOrderLineId))
+    }, [onVisibleIdsChange, visible])
+
+    // 响应底栏「点击定位待完善」或预览弹窗「回改」的外部定位请求
+    useEffect(() => {
+        if (!focusRequest) return
+        const targetId = focusRequest.salesOrderLineId
+        setQuery("")
+        setStatus("all")
+        setHighlightedId(targetId)
+        const targetIndex = rows.findIndex(
+            (row) => row.product.salesOrderLineId === targetId,
+        )
+        if (targetIndex >= 0) {
+            setPagination((current) => ({
+                ...current,
+                pageIndex: Math.floor(targetIndex / current.pageSize),
+            }))
+        }
+        if (focusRequest.openDialog) {
+            setNavigationIds(rows.map((row) => row.product.salesOrderLineId))
+            setEditingState({ id: targetId, section: focusRequest.section })
+        }
+    }, [focusRequest, rows])
+
     const changeQuery = (value: string) => {
         setQuery(value)
         setPagination((current) => ({ ...current, pageIndex: 0 }))
     }
+
+    const openEditor = (id: string, section?: "compare" | "addresses") => {
+        setReturnFocusId(`sourcing-list-${toAutomationIdSegment(id)}-edit`)
+        setNavigationIds(visible.map((row) => row.product.salesOrderLineId))
+        setHighlightedId(id)
+        setEditingState({ id, section })
+    }
+
+    const toolbarLeft = (
+        <div className="flex flex-wrap items-center gap-2.5">
+            <div
+                role="group"
+                aria-label="商品方案状态"
+                className="flex flex-wrap items-center gap-1"
+            >
+                {(
+                    [
+                        ["all", "全部"],
+                        ["pending", "待调整"],
+                        ["included", "本次分配"],
+                        ["excluded", "暂不分配"],
+                    ] as const
+                ).map(([value, label]) => (
+                    <Button
+                        key={value}
+                        id={`sourcing-products-filter-${value}`}
+                        type="button"
+                        size="xs"
+                        variant={status === value ? "secondary" : "ghost"}
+                        aria-pressed={status === value}
+                        onClick={() => {
+                            setStatus(value)
+                            setPagination((current) => ({
+                                ...current,
+                                pageIndex: 0,
+                            }))
+                        }}
+                    >
+                        {label}{" "}
+                        <span className="num text-muted-foreground">
+                            {counts[value]}
+                        </span>
+                    </Button>
+                ))}
+                {counts.inverted > 0 ? (
+                    <Button
+                        id="sourcing-products-filter-inverted"
+                        type="button"
+                        size="xs"
+                        variant={status === "inverted" ? "secondary" : "ghost"}
+                        aria-pressed={status === "inverted"}
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => {
+                            setStatus("inverted")
+                            setPagination((current) => ({
+                                ...current,
+                                pageIndex: 0,
+                            }))
+                        }}
+                    >
+                        <TriangleAlertIcon aria-hidden="true" />
+                        价格倒挂 <span className="num">{counts.inverted}</span>
+                    </Button>
+                ) : null}
+            </div>
+
+            <div className="relative w-52 sm:w-64">
+                <SearchIcon
+                    aria-hidden="true"
+                    className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+                />
+                <Input
+                    id="sourcing-products-search"
+                    aria-label="搜索商品名称、规格或供应商"
+                    placeholder="搜商品、规格或供应商"
+                    className="h-control-sm pr-7 pl-8 text-xs"
+                    value={query}
+                    onChange={(event) => changeQuery(event.target.value)}
+                />
+                {query ? (
+                    <Button
+                        id="sourcing-products-search-clear"
+                        type="button"
+                        size="icon-xs"
+                        variant="ghost"
+                        aria-label="清除商品搜索"
+                        className="absolute top-1/2 right-0.5 -translate-y-1/2"
+                        onClick={() => changeQuery("")}
+                    >
+                        <XIcon />
+                    </Button>
+                ) : null}
+            </div>
+        </div>
+    )
+
     return (
         <section
             aria-label="供给商品列表"
             className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
         >
-            <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border/60 px-4 py-3">
-                <div className="relative min-w-40 flex-1">
-                    <SearchIcon
-                        aria-hidden="true"
-                        className="pointer-events-none absolute top-2.5 left-3 size-4 text-muted-foreground"
-                    />
-                    <Input
-                        id="sourcing-products-search"
-                        aria-label="搜索商品名称或规格编号"
-                        placeholder="搜索商品名称或规格编号"
-                        className="h-9 pr-9 pl-9"
-                        value={query}
-                        onChange={(event) => changeQuery(event.target.value)}
-                    />
-                    {query ? (
-                        <Button
-                            id="sourcing-products-search-clear"
-                            type="button"
-                            size="icon-sm"
-                            variant="ghost"
-                            aria-label="清除商品搜索"
-                            className="absolute top-0.5 right-0.5"
-                            onClick={() => changeQuery("")}
-                        >
-                            <XIcon />
-                        </Button>
-                    ) : null}
-                </div>
-                <div
-                    role="group"
-                    aria-label="商品方案状态"
-                    className="flex flex-wrap gap-1"
-                >
-                    {(
-                        [
-                            ["all", "全部"],
-                            ["pending", "待调整"],
-                            ["excluded", "暂不分配"],
-                        ] as const
-                    ).map(([value, label]) => (
-                        <Button
-                            key={value}
-                            id={`sourcing-products-filter-${value}`}
-                            type="button"
-                            size="sm"
-                            variant={status === value ? "secondary" : "ghost"}
-                            aria-pressed={status === value}
-                            onClick={() => {
-                                setStatus(value)
-                                setPagination((current) => ({
-                                    ...current,
-                                    pageIndex: 0,
-                                }))
-                            }}
-                        >
-                            {label} {counts[value]}
-                        </Button>
-                    ))}
-                </div>
-            </div>
             <SourcingProductList
+                form={form}
+                order={order}
                 rows={visible}
-                totalCount={rows.length}
-                toolbar={toolbar}
-                selectedProductIds={selectedProductIds}
-                onToggleProducts={onToggleProducts}
+                toolbarLeft={toolbarLeft}
+                toolbarActions={toolbarActions}
+                selectionBar={selectionBar}
+                checkedProductIds={checkedProductIds}
+                onToggleChecked={onToggleChecked}
+                onClearChecked={onClearChecked}
+                onSetParticipation={onSetParticipation}
+                onSyncWarehouseToOthers={onSyncWarehouseToOthers}
                 pagination={pagination}
                 onPaginationChange={setPagination}
-                activeId={editingId}
-                onSelect={(id) => {
-                    setReturnFocusId(
-                        `sourcing-list-${toAutomationIdSegment(id)}-edit`,
-                    )
-                    setNavigationIds(
-                        visible.map((row) => row.product.salesOrderLineId),
-                    )
-                    setEditingId(id)
-                }}
+                activeId={editingState?.id ?? highlightedId}
+                scrollable={scrollable}
+                onSelect={openEditor}
             />
             <SourcingProductAdjustDialog
                 {...props}
-                productId={editingId}
-                onClose={() => setEditingId(null)}
+                productId={editingState?.id ?? null}
+                initialFocusSection={editingState?.section ?? null}
+                onClose={() => setEditingState(null)}
                 onSetParticipation={onSetParticipation}
+                onRestoreProductLines={onRestoreProductLines}
                 navigationIds={navigationIds}
-                onNavigate={setEditingId}
+                onNavigate={(nextId) => {
+                    setHighlightedId(nextId)
+                    setEditingState({ id: nextId })
+                }}
                 returnFocusId={returnFocusId}
             />
         </section>

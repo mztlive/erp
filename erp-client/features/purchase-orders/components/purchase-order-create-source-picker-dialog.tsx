@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { SearchIcon, XIcon } from "lucide-react"
 
 import {
     MoneyValue,
@@ -17,6 +18,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { PurchaseOrderCreateSwitchList } from "@/features/purchase-orders/components/purchase-order-create-switch-list"
 import {
     summarizeSourcingOrder,
@@ -51,8 +53,20 @@ export function PurchaseOrderCreateSourcePickerDialog({
     onSelect,
 }: PurchaseOrderCreateSourcePickerDialogProps) {
     const [draftId, setDraftId] = React.useState(selectedSalesOrderId)
+    const [query, setQuery] = React.useState("")
     const wasOpenRef = React.useRef(open)
+    const filteredWorkspace = React.useMemo(() => {
+        const keyword = query.trim().toLocaleLowerCase()
+        if (!keyword) return workspace
+        return workspace.filter((order) =>
+            `${order.salesOrderNo} ${order.customerName} ${order.contractNumber ?? ""}`
+                .toLocaleLowerCase()
+                .includes(keyword),
+        )
+    }, [query, workspace])
     const draftOrder =
+        filteredWorkspace.find((order) => order.salesOrderId === draftId) ??
+        filteredWorkspace[0] ??
         workspace.find((order) => order.salesOrderId === draftId) ??
         workspace[0]
 
@@ -61,6 +75,7 @@ export function PurchaseOrderCreateSourcePickerDialog({
         wasOpenRef.current = open
         if (!justOpened) return
         setDraftId(selectedSalesOrderId || workspace[0]?.salesOrderId || "")
+        setQuery("")
     }, [open, selectedSalesOrderId, workspace])
 
     return (
@@ -77,16 +92,53 @@ export function PurchaseOrderCreateSourcePickerDialog({
 
                 <DialogBody className="flex flex-col overflow-hidden p-0 md:flex-row">
                     {workspace.length > 1 ? (
-                        <PurchaseOrderCreateSwitchList
-                            label="待分配供给销售单"
-                            activeId={draftOrder?.salesOrderId ?? ""}
-                            items={workspace.map((order) => ({
-                                id: order.salesOrderId,
-                                title: order.salesOrderNo,
-                                description: `${order.customerName} · ${order.lines.length} 行`,
-                            }))}
-                            onSelect={setDraftId}
-                        />
+                        <div className="flex w-full shrink-0 flex-col border-b border-border bg-muted/40 md:w-72 md:border-r md:border-b-0">
+                            {workspace.length >= 4 ? (
+                                <div className="border-b border-border/60 p-3">
+                                    <div className="relative">
+                                        <SearchIcon
+                                            aria-hidden="true"
+                                            className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+                                        />
+                                        <Input
+                                            id="procurement-orders-create-source-picker-search"
+                                            aria-label="搜索待分配销售单"
+                                            placeholder="搜索单号、客户或合同"
+                                            className="h-control-sm bg-card pr-7 pl-8 text-xs"
+                                            value={query}
+                                            onChange={(event) =>
+                                                setQuery(event.target.value)
+                                            }
+                                        />
+                                        {query ? (
+                                            <Button
+                                                id="procurement-orders-create-source-picker-search-clear"
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon-xs"
+                                                aria-label="清除搜索"
+                                                className="absolute top-1/2 right-0.5 -translate-y-1/2"
+                                                onClick={() => setQuery("")}
+                                            >
+                                                <XIcon />
+                                            </Button>
+                                        ) : null}
+                                    </div>
+                                </div>
+                            ) : null}
+                            <div className="min-h-0 flex-1 overflow-y-auto">
+                                <PurchaseOrderCreateSwitchList
+                                    label="待分配供给销售单"
+                                    activeId={draftOrder?.salesOrderId ?? ""}
+                                    items={filteredWorkspace.map((order) => ({
+                                        id: order.salesOrderId,
+                                        title: order.salesOrderNo,
+                                        description: `${order.customerName} · ${order.lines.length} 行`,
+                                    }))}
+                                    onSelect={setDraftId}
+                                />
+                            </div>
+                        </div>
                     ) : null}
 
                     <PaperDocumentViewport

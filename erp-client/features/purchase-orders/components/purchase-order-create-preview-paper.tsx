@@ -35,6 +35,7 @@ export function PurchaseOrderPreviewPaper({
     audience = "internal",
     deliveryMode = "interactive",
     deliveryAttachmentName,
+    onInspectAddresses,
 }: {
     preview: PurchaseOrderPreview
     index: number
@@ -42,6 +43,7 @@ export function PurchaseOrderPreviewPaper({
     audience?: "internal" | "supplier"
     deliveryMode?: PurchaseDeliveryPlanMode
     deliveryAttachmentName?: string
+    onInspectAddresses?: () => void
 }) {
     const isSupplierView = audience === "supplier"
     const documentNumber = isSupplierView
@@ -299,6 +301,7 @@ export function PurchaseOrderPreviewPaper({
                         mode={deliveryMode}
                         attachmentFileName={deliveryAttachmentName}
                         idPrefix={`purchase-create-preview-${toAutomationIdSegment(preview.key)}-delivery`}
+                        onInspectAllAddresses={onInspectAddresses}
                     />
                 }
             />

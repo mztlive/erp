@@ -1,11 +1,23 @@
 "use client"
 
 import * as React from "react"
-
-import { PaperDocumentViewport, QuantityValue } from "@/components/business"
+import {
+    ArrowUpRightIcon,
+    DownloadIcon,
+    FileTextIcon,
+    LayoutGridIcon,
+    MapPinIcon,
+    PackageCheckIcon,
+    TriangleAlertIcon,
+} from "lucide-react"
+import {
+    MoneyValue,
+    PaperDocumentViewport,
+    QuantityValue,
+} from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Dialog,
     DialogBody,
@@ -15,18 +27,37 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { PurchaseOrderCreateSwitchList } from "@/features/purchase-orders/components/purchase-order-create-switch-list"
+import { LoadingButton } from "@/components/ui/loading-button"
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
+import { toast } from "@/components/ui/toast"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import { cn } from "@/lib/utils"
 import type {
     PurchaseOrderPreview,
     SourcingSalesOrder,
     StockAllocationPreviewLine,
-} from "@/features/purchase-orders/lib/purchase-order-create-model"
-import { PURCHASE_TYPE_LABEL } from "@/features/purchase-orders/types"
+} from "../lib/purchase-order-create-model"
+import {
+    countPurchaseDeliveryRows,
+    shouldBundleDeliveryWorkbook,
+} from "../lib/purchase-delivery-plan"
 import type { SourcingEditorRow } from "../lib/sourcing/editor-rows"
-import { DownloadIcon } from "lucide-react"
-import { toast } from "@/components/ui/toast"
-import { shouldBundleDeliveryWorkbook } from "../lib/purchase-delivery-plan"
+import {
+    comparePurchaseCostToSalesPrice,
+    summarizeRowPricing,
+} from "../lib/sourcing/pricing"
+import { PURCHASE_TYPE_LABEL } from "../types"
+import { PurchaseDeliveryPlanExplorer } from "./purchase-delivery-plan"
 import { PurchaseOrderPreviewPaper } from "./purchase-order-create-preview-paper"
+
+type PreviewRightTab = "paper" | "addresses" | "overview"
 
 export type PurchaseOrderCreatePreviewDialogProps = {
     open: boolean
@@ -40,10 +71,14 @@ export type PurchaseOrderCreatePreviewDialogProps = {
     onOpenChange: (open: boolean) => void
     description?: string
     onConfirm: () => void
+    /** 从预览中直接定位回主表修改某商品。 */
+    onLocateProduct?: (salesOrderLineId: string) => void
 }
 
 /**
- * 弹出式供给分配预览：展示库存预留，并按拆单结果预览待提交采购单。
+ * 升级版供给分配预览弹窗：
+ * - 左侧固定核对轨整合待创建采购单、现有库存分配、价格倒挂风控与暂不分配清单，不再竖向挤压纸面高度；
+ * - 右侧支持「采购单纸面 / 收货地址明细 / 分单总览表」同层切换，彻底消除 Dialog 内再弹 Sheet 的套娃。
  */
 export function PurchaseOrderCreatePreviewDialog({
     open,
@@ -56,9 +91,11 @@ export function PurchaseOrderCreatePreviewDialog({
     actionError,
     onOpenChange,
     onConfirm,
+    onLocateProduct,
     description,
 }: PurchaseOrderCreatePreviewDialogProps) {
     const [activeKey, setActiveKey] = React.useState("")
+    const [rightTab, setRightTab] = React.useState<PreviewRightTab>("paper")
     const [downloadProgress, setDownloadProgress] = React.useState<
         number | null
     >(null)
@@ -117,15 +154,70 @@ export function PurchaseOrderCreatePreviewDialog({
             setDownloadProgress(null)
         }
     }
+
     const excluded = scopeRows.filter(
         (row) => !row.selected && !row.partiallySelected,
     )
     const partial = scopeRows.filter((row) => row.status === "部分分配")
+
+    // 统计参与本次提交商品中的价格倒挂预警（采购含税单价 > 销售含税单价）
+    const marginAlerts = React.useMemo(() => {
+        const items: {
+            salesOrderLineId: string
+            itemName: string
+            unitCostGross: string
+            salesUnitPriceGross: string
+            absSpread: string
+        }[] = []
+        for (const row of scopeRows) {
+            if (!row.selected && !row.partiallySelected) continue
+            const summary = summarizeRowPricing(row)
+            if (
+                summary.hasInvertedSource &&
+                summary.highestInvertedCost &&
+                summary.salesUnitPriceGross
+            ) {
+                const cmp = comparePurchaseCostToSalesPrice(
+                    summary.highestInvertedCost,
+                    summary.salesUnitPriceGross,
+                )
+                items.push({
+                    salesOrderLineId: row.product.salesOrderLineId,
+                    itemName: row.product.itemName,
+                    unitCostGross: summary.highestInvertedCost,
+                    salesUnitPriceGross: summary.salesUnitPriceGross,
+                    absSpread: cmp?.absSpread ?? "0",
+                })
+            }
+        }
+        return items
+    }, [scopeRows])
+
+    const invertedLineIds = React.useMemo(
+        () => new Set(marginAlerts.map((item) => item.salesOrderLineId)),
+        [marginAlerts],
+    )
+
     const activePreview =
         previews.find((preview) => preview.key === activeKey) ?? previews[0]
     const activeIndex = activePreview
         ? previews.findIndex((preview) => preview.key === activePreview.key)
         : -1
+
+    const activeAddressCount = activePreview
+        ? countPurchaseDeliveryRows(
+              activePreview.lines,
+              activePreview.fulfillmentResponsibility === "WAREHOUSE",
+          )
+        : 0
+
+    const showLeftRail =
+        previews.length > 1 ||
+        stockAllocations.length > 0 ||
+        excluded.length > 0 ||
+        partial.length > 0 ||
+        marginAlerts.length > 0
+
     const allocationSummary =
         stockAllocations.length > 0 && previews.length > 0
             ? `将建立 ${stockAllocations.length} 条库存预留，并按供应商创建 ${previews.length} 张采购单提交审批。`
@@ -141,9 +233,25 @@ export function PurchaseOrderCreatePreviewDialog({
 
     React.useEffect(() => {
         if (!open) return
+        setRightTab("paper")
         if (previews.some((preview) => preview.key === activeKey)) return
         setActiveKey(previews[0]?.key ?? "")
     }, [activeKey, open, previews])
+
+    React.useEffect(() => {
+        if (rightTab === "addresses" && activeAddressCount === 0) {
+            setRightTab("paper")
+        }
+        if (rightTab === "overview" && previews.length <= 1) {
+            setRightTab("paper")
+        }
+    }, [activeAddressCount, previews.length, rightTab])
+
+    const locateAndClose = (salesOrderLineId: string) => {
+        if (!onLocateProduct) return
+        onOpenChange(false)
+        onLocateProduct(salesOrderLineId)
+    }
 
     return (
         <Dialog
@@ -159,73 +267,30 @@ export function PurchaseOrderCreatePreviewDialog({
                 closeButtonId="procurement-orders-create-preview-close"
                 showCloseButton={!creating && !unresolved && !downloading}
             >
-                <DialogHeader className="text-left">
-                    <DialogTitle>预览供给分配</DialogTitle>
+                <DialogHeader className="border-border/60 bg-card py-3 text-left">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <DialogTitle>预览供给分配</DialogTitle>
+                        {scopeRows.length > 0 ? (
+                            <Badge variant="neutral" className="h-5">
+                                本次分配 {scopeRows.length - excluded.length} /{" "}
+                                {scopeRows.length} 项
+                            </Badge>
+                        ) : null}
+                        {marginAlerts.length > 0 ? (
+                            <Badge variant="destructive" className="h-5">
+                                <TriangleAlertIcon aria-hidden="true" />
+                                {marginAlerts.length} 项采购价高于售价
+                            </Badge>
+                        ) : null}
+                    </div>
                     <DialogDescription>
                         {description ?? allocationSummary}
                     </DialogDescription>
                 </DialogHeader>
 
                 <DialogBody className="flex flex-col overflow-hidden p-0">
-                    {scopeRows.length > 0 ? (
-                        <div className="shrink-0 border-b border-border px-overlay-padding py-3 text-body-compact">
-                            <p className="font-medium">
-                                本次分配 {scopeRows.length - excluded.length} 项
-                                · 暂不分配 {excluded.length} 项
-                            </p>
-                            {excluded.length > 0 || partial.length > 0 ? (
-                                <div className="mt-2 max-h-32 space-y-1 overflow-auto text-xs text-muted-foreground">
-                                    {excluded.map((row) => (
-                                        <p key={row.product.salesOrderLineId}>
-                                            {row.product.itemName} · 暂不分配 ·
-                                            本次不提交
-                                        </p>
-                                    ))}
-                                    {partial.map((row) => (
-                                        <p key={row.product.salesOrderLineId}>
-                                            {row.product.itemName} · 本次{" "}
-                                            <QuantityValue
-                                                value={row.quantity}
-                                                unit={row.product.unit}
-                                            />{" "}
-                                            · 剩余{" "}
-                                            <QuantityValue
-                                                value={row.remainingQuantity}
-                                                unit={row.product.unit}
-                                            />
-                                        </p>
-                                    ))}
-                                    <p>
-                                        未分配的需求仍需后续处理，本次确认不会将其标为完成。
-                                    </p>
-                                </div>
-                            ) : null}
-                        </div>
-                    ) : null}
-
-                    {stockAllocations.length > 0 ? (
-                        <div className="shrink-0 px-overlay-padding pt-4">
-                            <Alert>
-                                <AlertTitle>现有库存分配</AlertTitle>
-                                <AlertDescription>
-                                    <ul className="mt-2 space-y-1">
-                                        {stockAllocations.map((line, index) => (
-                                            <li
-                                                key={`${line.salesOrderLineId}:${line.warehouseName}:${index}`}
-                                            >
-                                                {line.itemName} ·{" "}
-                                                {line.warehouseName} ·{" "}
-                                                {line.quantity} {line.unit}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </AlertDescription>
-                            </Alert>
-                        </div>
-                    ) : null}
-
                     {actionError ? (
-                        <div className="shrink-0 px-overlay-padding pt-4">
+                        <div className="shrink-0 border-b border-border/60 px-overlay-padding py-3">
                             <Alert variant="destructive">
                                 <AlertTitle>{actionError.title}</AlertTitle>
                                 <AlertDescription>
@@ -236,39 +301,541 @@ export function PurchaseOrderCreatePreviewDialog({
                     ) : null}
 
                     <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-                        {previews.length > 1 ? (
-                            <PurchaseOrderCreateSwitchList
-                                label="将创建的采购单"
-                                activeId={activePreview?.key ?? ""}
-                                items={previews.map((preview, index) => ({
-                                    id: preview.key,
-                                    title: `${index + 1}. ${preview.supplierName}`,
-                                    description: `${PURCHASE_TYPE_LABEL[preview.purchaseType]} · ${preview.paymentTermLabel}${preview.targetWarehouseName ? ` · ${preview.targetWarehouseName}` : ""} · ${preview.lines.length} 行`,
-                                }))}
-                                onSelect={setActiveKey}
-                            />
+                        {showLeftRail ? (
+                            <aside
+                                aria-label="分单与核对摘要"
+                                className="flex max-h-56 w-full shrink-0 flex-col gap-3 overflow-y-auto overscroll-contain border-b border-border/60 bg-sidebar p-3 md:max-h-none md:w-76 md:border-r md:border-b-0"
+                            >
+                                {previews.length > 0 ? (
+                                    <nav aria-label="将创建的采购单">
+                                        <p className="mb-2 px-1 text-xs font-medium text-muted-foreground">
+                                            将创建的采购单{" "}
+                                            <span className="num">
+                                                {previews.length}
+                                            </span>
+                                        </p>
+                                        <ul className="space-y-1.5">
+                                            {previews.map((preview, index) => {
+                                                const active =
+                                                    preview.key ===
+                                                        activePreview?.key &&
+                                                    rightTab !== "overview"
+                                                const addrCount =
+                                                    countPurchaseDeliveryRows(
+                                                        preview.lines,
+                                                        preview.fulfillmentResponsibility ===
+                                                            "WAREHOUSE",
+                                                    )
+                                                const hasInverted =
+                                                    preview.lines.some((line) =>
+                                                        invertedLineIds.has(
+                                                            line.salesOrderLineId,
+                                                        ),
+                                                    )
+                                                return (
+                                                    <li key={preview.key}>
+                                                        <button
+                                                            id={`procurement-orders-create-switch-${toAutomationIdSegment(preview.key)}`}
+                                                            type="button"
+                                                            data-testid={`purchase-create-switch-${preview.key}`}
+                                                            aria-current={
+                                                                active
+                                                                    ? "true"
+                                                                    : undefined
+                                                            }
+                                                            onClick={() => {
+                                                                setActiveKey(
+                                                                    preview.key,
+                                                                )
+                                                                if (
+                                                                    rightTab ===
+                                                                    "overview"
+                                                                ) {
+                                                                    setRightTab(
+                                                                        "paper",
+                                                                    )
+                                                                }
+                                                            }}
+                                                            className={cn(
+                                                                "w-full cursor-pointer rounded-lg border px-3 py-2 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                                                active
+                                                                    ? "border-primary/50 bg-card shadow-xs ring-1 ring-primary/15"
+                                                                    : "border-border/60 bg-card/60 hover:border-border hover:bg-card",
+                                                            )}
+                                                        >
+                                                            <div className="flex items-start justify-between gap-2">
+                                                                <span className="num min-w-0 truncate text-body-compact font-medium text-foreground">
+                                                                    {index + 1}.{" "}
+                                                                    {
+                                                                        preview.supplierName
+                                                                    }
+                                                                </span>
+                                                                {hasInverted ? (
+                                                                    <TriangleAlertIcon
+                                                                        aria-label="含价格倒挂行"
+                                                                        className="mt-0.5 size-3.5 shrink-0 text-destructive"
+                                                                    />
+                                                                ) : null}
+                                                            </div>
+                                                            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                                                {
+                                                                    preview.routeLabel
+                                                                }
+                                                                {" · "}
+                                                                {
+                                                                    preview.paymentTermLabel
+                                                                }
+                                                                {preview.targetWarehouseName
+                                                                    ? ` · ${preview.targetWarehouseName}`
+                                                                    : ""}
+                                                            </p>
+                                                            <div className="mt-1.5 flex items-baseline justify-between gap-2 border-t border-border/50 pt-1.5 text-xs">
+                                                                <span className="num text-muted-foreground">
+                                                                    {
+                                                                        preview
+                                                                            .lines
+                                                                            .length
+                                                                    }{" "}
+                                                                    行
+                                                                    {addrCount >
+                                                                    0
+                                                                        ? ` · ${addrCount} 地址`
+                                                                        : ""}
+                                                                </span>
+                                                                <MoneyValue
+                                                                    display="exact"
+                                                                    value={
+                                                                        preview
+                                                                            .totals
+                                                                            .gross
+                                                                    }
+                                                                    className="font-semibold text-foreground"
+                                                                />
+                                                            </div>
+                                                        </button>
+                                                    </li>
+                                                )
+                                            })}
+                                        </ul>
+                                    </nav>
+                                ) : null}
+
+                                {stockAllocations.length > 0 ? (
+                                    <section
+                                        aria-label="现有库存分配"
+                                        className="rounded-lg border border-info-border/70 bg-info-soft/45 p-3"
+                                    >
+                                        <h3 className="flex items-center gap-1.5 text-xs font-semibold text-info-soft-foreground">
+                                            <PackageCheckIcon
+                                                aria-hidden="true"
+                                                className="size-3.5 shrink-0"
+                                            />
+                                            现有库存分配
+                                        </h3>
+                                        <ul className="mt-2 space-y-1 text-xs text-foreground">
+                                            {stockAllocations.map(
+                                                (line, index) => (
+                                                    <li
+                                                        key={`${line.salesOrderLineId}:${line.warehouseName}:${index}`}
+                                                        className="leading-5"
+                                                    >
+                                                        {line.itemName} ·{" "}
+                                                        {line.warehouseName} ·{" "}
+                                                        {line.quantity}{" "}
+                                                        {line.unit}
+                                                    </li>
+                                                ),
+                                            )}
+                                        </ul>
+                                    </section>
+                                ) : null}
+
+                                {marginAlerts.length > 0 ? (
+                                    <section
+                                        aria-label="价格倒挂风险提醒"
+                                        className="rounded-lg border border-destructive-border bg-destructive-soft/50 p-3"
+                                    >
+                                        <h3 className="flex items-center gap-1.5 text-xs font-semibold text-destructive-soft-foreground">
+                                            <TriangleAlertIcon
+                                                aria-hidden="true"
+                                                className="size-3.5 shrink-0"
+                                            />
+                                            采购价高于售价（
+                                            {marginAlerts.length}）
+                                        </h3>
+                                        <ul className="mt-2 space-y-1.5 text-xs">
+                                            {marginAlerts.map((alert) => (
+                                                <li
+                                                    key={alert.salesOrderLineId}
+                                                    className="flex items-start justify-between gap-2"
+                                                >
+                                                    <div className="min-w-0">
+                                                        <p className="truncate font-medium text-foreground">
+                                                            {alert.itemName}
+                                                        </p>
+                                                        <p className="num text-tiny text-destructive-soft-foreground">
+                                                            采 ¥
+                                                            {
+                                                                alert.unitCostGross
+                                                            }{" "}
+                                                            / 售 ¥
+                                                            {
+                                                                alert.salesUnitPriceGross
+                                                            }
+                                                            （高 ¥
+                                                            {alert.absSpread}）
+                                                        </p>
+                                                    </div>
+                                                    {onLocateProduct ? (
+                                                        <Button
+                                                            id={`procurement-orders-create-preview-fix-margin-${toAutomationIdSegment(alert.salesOrderLineId)}`}
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="xs"
+                                                            className="h-5 shrink-0 px-1.5 text-tiny"
+                                                            onClick={() =>
+                                                                locateAndClose(
+                                                                    alert.salesOrderLineId,
+                                                                )
+                                                            }
+                                                        >
+                                                            回改
+                                                        </Button>
+                                                    ) : null}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </section>
+                                ) : null}
+
+                                {excluded.length > 0 || partial.length > 0 ? (
+                                    <section
+                                        aria-label="未全量分配商品"
+                                        className="rounded-lg border border-border/70 bg-card p-3"
+                                    >
+                                        <h3 className="text-xs font-semibold text-foreground">
+                                            留待后续处理（
+                                            {excluded.length + partial.length}）
+                                        </h3>
+                                        <ul className="mt-1.5 space-y-1.5 text-xs text-muted-foreground">
+                                            {partial.map((row) => (
+                                                <li
+                                                    key={
+                                                        row.product
+                                                            .salesOrderLineId
+                                                    }
+                                                    className="flex items-center justify-between gap-2"
+                                                >
+                                                    <span className="min-w-0 truncate">
+                                                        {row.product.itemName} ·
+                                                        剩{" "}
+                                                        <QuantityValue
+                                                            value={
+                                                                row.remainingQuantity
+                                                            }
+                                                            unit={
+                                                                row.product.unit
+                                                            }
+                                                        />
+                                                    </span>
+                                                    {onLocateProduct ? (
+                                                        <Button
+                                                            id={`procurement-orders-create-preview-fix-partial-${toAutomationIdSegment(row.product.salesOrderLineId)}`}
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="xs"
+                                                            className="h-5 shrink-0 px-1.5 text-tiny"
+                                                            onClick={() =>
+                                                                locateAndClose(
+                                                                    row.product
+                                                                        .salesOrderLineId,
+                                                                )
+                                                            }
+                                                        >
+                                                            回改
+                                                        </Button>
+                                                    ) : null}
+                                                </li>
+                                            ))}
+                                            {excluded.map((row) => (
+                                                <li
+                                                    key={
+                                                        row.product
+                                                            .salesOrderLineId
+                                                    }
+                                                    className="flex items-center justify-between gap-2"
+                                                >
+                                                    <span className="min-w-0 truncate">
+                                                        {row.product.itemName} ·
+                                                        暂不分配
+                                                    </span>
+                                                    {onLocateProduct ? (
+                                                        <Button
+                                                            id={`procurement-orders-create-preview-fix-excluded-${toAutomationIdSegment(row.product.salesOrderLineId)}`}
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="xs"
+                                                            className="h-5 shrink-0 px-1.5 text-tiny"
+                                                            onClick={() =>
+                                                                locateAndClose(
+                                                                    row.product
+                                                                        .salesOrderLineId,
+                                                                )
+                                                            }
+                                                        >
+                                                            纳入
+                                                        </Button>
+                                                    ) : null}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                        <p className="mt-2 text-tiny text-muted-foreground">
+                                            未分配需求本次不提交，待办将继续保留。
+                                        </p>
+                                    </section>
+                                ) : null}
+                            </aside>
                         ) : null}
 
-                        <PaperDocumentViewport
-                            fitMode="width"
-                            className="bg-transparent"
-                            role="region"
-                            aria-label="采购单预览"
-                            tabIndex={0}
-                            fitKey={activePreview?.key ?? "empty"}
-                        >
-                            {activePreview ? (
-                                <PurchaseOrderPreviewPaper
-                                    preview={activePreview}
-                                    index={Math.max(activeIndex, 0)}
-                                    sourceOrder={sourceOrder}
+                        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                            {activePreview &&
+                            (activeAddressCount > 0 || previews.length > 1) ? (
+                                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-card px-4 py-2">
+                                    <div
+                                        role="group"
+                                        aria-label="预览视图切换"
+                                        className="flex flex-wrap items-center gap-1"
+                                    >
+                                        <Button
+                                            id="procurement-orders-create-preview-tab-paper"
+                                            type="button"
+                                            size="xs"
+                                            variant={
+                                                rightTab === "paper"
+                                                    ? "secondary"
+                                                    : "ghost"
+                                            }
+                                            aria-pressed={rightTab === "paper"}
+                                            onClick={() => setRightTab("paper")}
+                                        >
+                                            <FileTextIcon aria-hidden="true" />
+                                            采购单纸面
+                                        </Button>
+                                        {activeAddressCount > 0 ? (
+                                            <Button
+                                                id="procurement-orders-create-preview-tab-addresses"
+                                                type="button"
+                                                size="xs"
+                                                variant={
+                                                    rightTab === "addresses"
+                                                        ? "secondary"
+                                                        : "ghost"
+                                                }
+                                                aria-pressed={
+                                                    rightTab === "addresses"
+                                                }
+                                                onClick={() =>
+                                                    setRightTab("addresses")
+                                                }
+                                            >
+                                                <MapPinIcon aria-hidden="true" />
+                                                收货地址明细（
+                                                {activeAddressCount}）
+                                            </Button>
+                                        ) : null}
+                                        {previews.length > 1 ? (
+                                            <Button
+                                                id="procurement-orders-create-preview-tab-overview"
+                                                type="button"
+                                                size="xs"
+                                                variant={
+                                                    rightTab === "overview"
+                                                        ? "secondary"
+                                                        : "ghost"
+                                                }
+                                                aria-pressed={
+                                                    rightTab === "overview"
+                                                }
+                                                onClick={() =>
+                                                    setRightTab("overview")
+                                                }
+                                            >
+                                                <LayoutGridIcon aria-hidden="true" />
+                                                分单总览（{previews.length}）
+                                            </Button>
+                                        ) : null}
+                                    </div>
+                                    <span className="num text-xs text-muted-foreground">
+                                        {rightTab === "overview"
+                                            ? `共 ${previews.length} 张采购单`
+                                            : `${activeIndex + 1} / ${previews.length} · ${activePreview.supplierName}`}
+                                    </span>
+                                </div>
+                            ) : null}
+
+                            {rightTab === "overview" && previews.length > 1 ? (
+                                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">
+                                    <div className="overflow-hidden rounded-lg border border-border/80 bg-card">
+                                        <Table data-density="compact">
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>
+                                                        采购单 / 供应商
+                                                    </TableHead>
+                                                    <TableHead>
+                                                        履约 / 目标仓
+                                                    </TableHead>
+                                                    <TableHead>
+                                                        采购类型 / 付款
+                                                    </TableHead>
+                                                    <TableHead data-align="end">
+                                                        明细 / 地址
+                                                    </TableHead>
+                                                    <TableHead data-align="end">
+                                                        含税合计
+                                                    </TableHead>
+                                                    <TableHead data-align="end">
+                                                        查看
+                                                    </TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {previews.map(
+                                                    (preview, index) => {
+                                                        const addrCount =
+                                                            countPurchaseDeliveryRows(
+                                                                preview.lines,
+                                                                preview.fulfillmentResponsibility ===
+                                                                    "WAREHOUSE",
+                                                            )
+                                                        return (
+                                                            <TableRow
+                                                                key={
+                                                                    preview.key
+                                                                }
+                                                            >
+                                                                <TableCell className="font-medium">
+                                                                    {index + 1}.{" "}
+                                                                    {
+                                                                        preview.supplierName
+                                                                    }
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <div>
+                                                                        {
+                                                                            preview.routeLabel
+                                                                        }
+                                                                    </div>
+                                                                    {preview.targetWarehouseName ? (
+                                                                        <div className="text-xs text-muted-foreground">
+                                                                            {
+                                                                                preview.targetWarehouseName
+                                                                            }
+                                                                        </div>
+                                                                    ) : null}
+                                                                </TableCell>
+                                                                <TableCell className="text-xs text-muted-foreground">
+                                                                    {
+                                                                        PURCHASE_TYPE_LABEL[
+                                                                            preview
+                                                                                .purchaseType
+                                                                        ]
+                                                                    }
+                                                                    {" · "}
+                                                                    {
+                                                                        preview.paymentTermLabel
+                                                                    }
+                                                                </TableCell>
+                                                                <TableCell
+                                                                    data-align="end"
+                                                                    className="num text-xs"
+                                                                >
+                                                                    {
+                                                                        preview
+                                                                            .lines
+                                                                            .length
+                                                                    }{" "}
+                                                                    行
+                                                                    {addrCount >
+                                                                    0
+                                                                        ? ` / ${addrCount} 址`
+                                                                        : ""}
+                                                                </TableCell>
+                                                                <TableCell data-align="end">
+                                                                    <MoneyValue
+                                                                        display="exact"
+                                                                        value={
+                                                                            preview
+                                                                                .totals
+                                                                                .gross
+                                                                        }
+                                                                        className="font-semibold"
+                                                                    />
+                                                                </TableCell>
+                                                                <TableCell data-align="end">
+                                                                    <Button
+                                                                        id={`procurement-orders-create-overview-open-${toAutomationIdSegment(preview.key)}`}
+                                                                        type="button"
+                                                                        variant="ghost"
+                                                                        size="xs"
+                                                                        onClick={() => {
+                                                                            setActiveKey(
+                                                                                preview.key,
+                                                                            )
+                                                                            setRightTab(
+                                                                                "paper",
+                                                                            )
+                                                                        }}
+                                                                    >
+                                                                        纸面
+                                                                        <ArrowUpRightIcon aria-hidden="true" />
+                                                                    </Button>
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        )
+                                                    },
+                                                )}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </div>
+                            ) : rightTab === "addresses" && activePreview ? (
+                                <PurchaseDeliveryPlanExplorer
+                                    lines={activePreview.lines}
+                                    supplierName={activePreview.supplierName}
+                                    documentLabel={`预览 ${Math.max(activeIndex, 0) + 1}`}
+                                    idPrefix={`procurement-orders-create-preview-addr-${toAutomationIdSegment(activePreview.key)}`}
                                 />
                             ) : (
-                                <p className="text-xs text-muted-foreground">
-                                    本次全部由现有库存满足，不会创建采购单。
-                                </p>
+                                <PaperDocumentViewport
+                                    fitMode="width"
+                                    role="region"
+                                    aria-label="采购单预览"
+                                    tabIndex={0}
+                                    fitKey={activePreview?.key ?? "empty"}
+                                >
+                                    {activePreview ? (
+                                        <PurchaseOrderPreviewPaper
+                                            preview={activePreview}
+                                            index={Math.max(activeIndex, 0)}
+                                            sourceOrder={sourceOrder}
+                                            onInspectAddresses={
+                                                activeAddressCount > 0
+                                                    ? () =>
+                                                          setRightTab(
+                                                              "addresses",
+                                                          )
+                                                    : undefined
+                                            }
+                                        />
+                                    ) : (
+                                        <p className="text-xs text-muted-foreground">
+                                            本次全部由现有库存满足，不会创建采购单。
+                                        </p>
+                                    )}
+                                </PaperDocumentViewport>
                             )}
-                        </PaperDocumentViewport>
+                        </div>
                     </div>
                 </DialogBody>
 

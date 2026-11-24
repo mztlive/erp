@@ -47,6 +47,7 @@ export function PurchaseDeliveryPlan({
     mode = "interactive",
     attachmentFileName,
     idPrefix = "purchase-delivery-plan",
+    onInspectAllAddresses,
 }: {
     lines: readonly PurchaseDeliveryPlanLine[]
     warehouse: boolean
@@ -57,6 +58,8 @@ export function PurchaseDeliveryPlan({
     /** export-summary 模式下提示查阅的配套 Excel 文件名。 */
     attachmentFileName?: string
     idPrefix?: string
+    /** 在外层弹窗内嵌展示全部地址时注入此回调，避免在 Dialog 上再套开 QuickPreviewSheet。 */
+    onInspectAllAddresses?: () => void
 }) {
     const summary = React.useMemo(
         () => buildPurchaseDeliveryPlanSummary(lines),
@@ -162,7 +165,11 @@ export function PurchaseDeliveryPlan({
                         variant="outline"
                         size="xs"
                         className="print:hidden"
-                        onClick={() => setSheetOpen(true)}
+                        onClick={() =>
+                            onInspectAllAddresses
+                                ? onInspectAllAddresses()
+                                : setSheetOpen(true)
+                        }
                     >
                         <MapPinIcon
                             data-icon="inline-start"
@@ -204,7 +211,7 @@ export function PurchaseDeliveryPlan({
                 <GroupedDeliveryTables groups={summary.itemGroups} />
             ) : null}
 
-            {canViewAddresses ? (
+            {canViewAddresses && !onInspectAllAddresses ? (
                 <QuickPreviewSheet
                     idPrefix={`${idPrefix}-sheet`}
                     open={sheetOpen}
@@ -344,6 +351,172 @@ export function PurchaseDeliveryPlan({
                 </QuickPreviewSheet>
             ) : null}
         </section>
+    )
+}
+
+/** 可直接嵌入弹窗 Tab 的收货地址明细检索与导出面板（避免在 Dialog 上嵌套 Sheet）。 */
+export function PurchaseDeliveryPlanExplorer({
+    lines,
+    supplierName,
+    documentLabel,
+    idPrefix = "purchase-delivery-explorer",
+}: {
+    lines: readonly PurchaseDeliveryPlanLine[]
+    supplierName?: string
+    documentLabel?: string
+    idPrefix?: string
+}) {
+    const summary = React.useMemo(
+        () => buildPurchaseDeliveryPlanSummary(lines),
+        [lines],
+    )
+    const [query, setQuery] = React.useState("")
+    const [viewBy, setViewBy] = React.useState<"item" | "address">("item")
+    const [exporting, setExporting] = React.useState(false)
+
+    React.useEffect(() => {
+        setQuery("")
+        setViewBy("item")
+    }, [idPrefix, documentLabel, supplierName])
+
+    const normalizedQuery = query.trim().toLocaleLowerCase()
+    const filteredItemGroups = React.useMemo(
+        () => filterItemGroups(summary.itemGroups, normalizedQuery),
+        [summary.itemGroups, normalizedQuery],
+    )
+    const filteredAddressGroups = React.useMemo(
+        () => filterAddressGroups(summary.addressGroups, normalizedQuery),
+        [summary.addressGroups, normalizedQuery],
+    )
+    const matchedRows = filteredItemGroups.reduce(
+        (total, group) => total + group.allocations.length,
+        0,
+    )
+
+    async function handleExportWorkbook() {
+        if (exporting) return
+        setExporting(true)
+        try {
+            const { downloadPurchaseDeliveryWorkbook } =
+                await import("../lib/purchase-delivery-workbook")
+            await downloadPurchaseDeliveryWorkbook({
+                documentLabel,
+                supplierName: supplierName || "采购单",
+                lines,
+            })
+            toast.add({
+                title: "发货地址明细表已下载",
+                description: "已保存为 Excel（.xlsx），可直接用于发单打单。",
+                type: "success",
+            })
+        } catch {
+            toast.add({
+                title: "发货地址明细表导出失败",
+                description: "请稍后重试。",
+                type: "error",
+            })
+        } finally {
+            setExporting(false)
+        }
+    }
+
+    return (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-card">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/60 bg-surface-sunken px-5 py-2.5">
+                <div className="relative min-w-48 flex-1">
+                    <SearchIcon
+                        aria-hidden="true"
+                        className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <Input
+                        id={`${idPrefix}-search`}
+                        aria-label="搜索收货人、电话、地址或商品"
+                        placeholder="搜索收货人、电话、地址或商品…"
+                        className="h-control-sm bg-card pr-7 pl-8 text-xs"
+                        value={query}
+                        onChange={(event) => setQuery(event.target.value)}
+                    />
+                    {query ? (
+                        <Button
+                            id={`${idPrefix}-search-clear`}
+                            type="button"
+                            size="icon-xs"
+                            variant="ghost"
+                            aria-label="清除搜索"
+                            className="absolute top-1/2 right-0.5 -translate-y-1/2"
+                            onClick={() => setQuery("")}
+                        >
+                            <XIcon />
+                        </Button>
+                    ) : null}
+                </div>
+                <div
+                    role="group"
+                    aria-label="地址查看维度"
+                    className="flex shrink-0 items-center gap-1"
+                >
+                    <Button
+                        id={`${idPrefix}-view-item`}
+                        type="button"
+                        size="xs"
+                        variant={viewBy === "item" ? "secondary" : "ghost"}
+                        aria-pressed={viewBy === "item"}
+                        onClick={() => setViewBy("item")}
+                    >
+                        按商品
+                    </Button>
+                    <Button
+                        id={`${idPrefix}-view-address`}
+                        type="button"
+                        size="xs"
+                        variant={viewBy === "address" ? "secondary" : "ghost"}
+                        aria-pressed={viewBy === "address"}
+                        onClick={() => setViewBy("address")}
+                    >
+                        按收货地址
+                    </Button>
+                </div>
+                <span className="num text-xs text-muted-foreground">
+                    {viewBy === "item"
+                        ? `显示 ${matchedRows} / ${summary.totalRows} 条`
+                        : `显示 ${filteredAddressGroups.length} / ${summary.uniqueAddressCount} 处`}
+                </span>
+                <LoadingButton
+                    id={`${idPrefix}-export-xlsx`}
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    loading={exporting}
+                    disabled={exporting || summary.totalRows === 0}
+                    onClick={() => void handleExportWorkbook()}
+                >
+                    <DownloadIcon data-icon="inline-start" aria-hidden="true" />
+                    {exporting ? "导出中…" : "导出 Excel"}
+                </LoadingButton>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
+                {summary.totalRows === 0 ? (
+                    <p className="py-10 text-center text-xs text-muted-foreground">
+                        本单暂无指定收货地址。
+                    </p>
+                ) : viewBy === "item" ? (
+                    filteredItemGroups.length > 0 ? (
+                        <GroupedDeliveryTables groups={filteredItemGroups} />
+                    ) : (
+                        <p className="py-10 text-center text-xs text-muted-foreground">
+                            未找到匹配的收货地址，请调整搜索词后重试。
+                        </p>
+                    )
+                ) : filteredAddressGroups.length > 0 ? (
+                    <AddressGroupedList groups={filteredAddressGroups} />
+                ) : (
+                    <p className="py-10 text-center text-xs text-muted-foreground">
+                        未找到匹配的收货地址，请调整搜索词后重试。
+                    </p>
+                )}
+            </div>
+        </div>
     )
 }
 

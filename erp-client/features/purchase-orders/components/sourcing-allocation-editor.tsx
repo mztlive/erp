@@ -1,40 +1,45 @@
 "use client"
 
-import { RequiredMark } from "@/components/ui/required-mark"
-
-import { Trash2Icon } from "lucide-react"
+import { useMemo, useState } from "react"
+import { ScaleIcon, Trash2Icon } from "lucide-react"
 import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { RequiredMark } from "@/components/ui/required-mark"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { multiplyFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
-import { findSourcingOption } from "../lib/purchase-order-create-model"
-import { sourcingQuantityStep } from "../lib/sourcing-quantity"
+import {
+    findSourcingOption,
+    pickBestSourcingOption,
+} from "../lib/purchase-order-create-model"
 import type {
     SourcingLineInput,
     SourcingProductLine,
 } from "../lib/purchase-order-create-model"
-import {
-    SourcingExpectedDeliveryField,
-    SourcingOptionField,
-    SourcingTargetWarehouseField,
-} from "./create-sourcing/sourcing-fields"
-import type { SourcingEditorProps } from "./create-sourcing/types"
-import { SourcingDeliveryEditor } from "./sourcing-delivery-plan"
-import { SourcingAddressEditor } from "./sourcing-address-editor"
+import { sourcingQuantityStep } from "../lib/sourcing-quantity"
 import { usesAddressQuantity } from "../lib/sourcing/delivery-editor"
-import { SourcingRecommendationHint } from "./sourcing-recommendation-hint"
-import { SourcingCompactFacts } from "./sourcing-compact-facts"
 import {
     deliverySummary,
     deliveryTermLabel,
     sourcingRouteLabel,
     warehouseDeliveryTerm,
 } from "../lib/sourcing/delivery-terms"
+import { applySourcingOptionToLine } from "../lib/sourcing/pricing"
+import {
+    SourcingExpectedDeliveryField,
+    SourcingOptionField,
+    SourcingTargetWarehouseField,
+} from "./create-sourcing/sourcing-fields"
+import type { SourcingEditorProps } from "./create-sourcing/types"
+import { SourcingAddressEditor } from "./sourcing-address-editor"
+import { SourcingCompactFacts } from "./sourcing-compact-facts"
+import { SourcingDeliveryEditor } from "./sourcing-delivery-plan"
+import { SourcingOptionCompareMatrix } from "./sourcing-option-compare-matrix"
+import { SourcingRecommendationHint } from "./sourcing-recommendation-hint"
 
-/** 调整区沿用正式表单字段；按来源、数量与交期、交付地址的顺序填写。 */
+/** 调整区沿用正式表单字段；支持原位展开可视化比价矩阵，按来源、数量与交期、交付地址顺序填写。 */
 export function SourcingAllocationEditor({
     form,
     order,
@@ -43,21 +48,25 @@ export function SourcingAllocationEditor({
     index,
     canRemove,
     onRemoveSplit,
+    onSplitResidual,
     compact = false,
     condensed = false,
     expandDeliverySummary = false,
     showParticipation = true,
     participationLabel = "本次分配",
+    defaultCompareOpen = false,
 }: Pick<SourcingEditorProps, "form" | "order" | "onRemoveSplit"> & {
     product: SourcingProductLine
     line: SourcingLineInput
     index: number
     canRemove: boolean
+    onSplitResidual?: () => void
     compact?: boolean
     condensed?: boolean
     expandDeliverySummary?: boolean
     showParticipation?: boolean
     participationLabel?: string
+    defaultCompareOpen?: boolean
 }) {
     const option = findSourcingOption(product, line.basisId)
     const isStock = option?.sourceType === "EXISTING_STOCK"
@@ -67,10 +76,41 @@ export function SourcingAllocationEditor({
     const addressDriven =
         expandDeliverySummary && usesAddressQuantity(product, line)
     const id = `procurement-orders-create-row-${toAutomationIdSegment(line.rowKey)}`
+
+    const [compareOpen, setCompareOpen] = useState(
+        () => defaultCompareOpen || !line.basisId,
+    )
+
+    const usedBasisIds = useMemo(
+        () =>
+            new Set(
+                form.state.values.lines
+                    .filter(
+                        (entry) =>
+                            entry.salesOrderLineId === line.salesOrderLineId &&
+                            entry.rowKey !== line.rowKey &&
+                            entry.selected &&
+                            entry.basisId,
+                    )
+                    .map((entry) => entry.basisId),
+            ),
+        [form.state.values.lines, line.rowKey, line.salesOrderLineId],
+    )
+
+    const recommendedBasisId = useMemo(
+        () =>
+            pickBestSourcingOption(
+                product.options,
+                product.remainingQuantity,
+                product,
+            )?.basisId,
+        [product],
+    )
+
     return (
         <div
             key={line.rowKey}
-            className={cn(!line.selected && "bg-surface-sunken/50")}
+            className={cn(!line.selected && "bg-surface-sunken/40")}
         >
             <div
                 className={cn(
@@ -127,17 +167,38 @@ export function SourcingAllocationEditor({
                 >
                     <div className="min-w-0 space-y-1.5">
                         <div className="flex min-h-5 flex-wrap items-center justify-between gap-2">
-                            <p className="text-xs font-medium text-foreground/75">
-                                供给来源
-                                <RequiredMark />
-                            </p>
-                            <SourcingRecommendationHint
-                                id={`${id}-recommendation`}
-                                form={form}
-                                order={order}
-                                product={product}
-                                index={index}
-                            />
+                            <div className="flex items-center gap-2">
+                                <p className="text-xs font-medium text-foreground/75">
+                                    供给来源
+                                    <RequiredMark />
+                                </p>
+                                <SourcingRecommendationHint
+                                    id={`${id}-recommendation`}
+                                    form={form}
+                                    order={order}
+                                    product={product}
+                                    index={index}
+                                />
+                            </div>
+                            {condensed && product.options.length > 1 ? (
+                                <Button
+                                    id={`${id}-compare-toggle`}
+                                    type="button"
+                                    size="xs"
+                                    variant={
+                                        compareOpen ? "secondary" : "outline"
+                                    }
+                                    aria-expanded={compareOpen}
+                                    onClick={() =>
+                                        setCompareOpen((prev) => !prev)
+                                    }
+                                >
+                                    <ScaleIcon aria-hidden="true" />
+                                    {compareOpen
+                                        ? "收起比价表"
+                                        : `比价选源（${product.options.length}）`}
+                                </Button>
+                            ) : null}
                         </div>
                         <SourcingOptionField
                             form={form}
@@ -171,6 +232,26 @@ export function SourcingAllocationEditor({
                         </div>
                     ) : null}
                 </div>
+
+                {condensed && compareOpen && product.options.length > 0 ? (
+                    <SourcingOptionCompareMatrix
+                        idPrefix={id}
+                        order={order}
+                        product={product}
+                        selectedBasisId={line.basisId}
+                        usedBasisIds={usedBasisIds}
+                        recommendedBasisId={recommendedBasisId}
+                        onSelect={(picked) => {
+                            applySourcingOptionToLine(
+                                form,
+                                product,
+                                index,
+                                picked,
+                            )
+                            setCompareOpen(false)
+                        }}
+                    />
+                ) : null}
 
                 {!addressDriven ? (
                     <div
@@ -261,6 +342,7 @@ export function SourcingAllocationEditor({
                     product={product}
                     line={line}
                     index={index}
+                    onSplitResidual={onSplitResidual}
                 />
             ) : (
                 <div

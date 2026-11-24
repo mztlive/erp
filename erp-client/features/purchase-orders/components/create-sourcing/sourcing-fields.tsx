@@ -18,6 +18,8 @@ import {
     sourcingRouteLabel,
 } from "../../lib/sourcing/delivery-terms"
 import { bulkMinimumOptionState } from "../../lib/sourcing/bulk-minimum"
+import { applySourcingOptionToLine } from "../../lib/sourcing/pricing"
+import { formatCurrencyFixed } from "@/lib/fixed-decimal"
 
 /** 只有「采购 + 入仓」方案必须在建单前选定目标仓。 */
 export function SourcingTargetWarehouseField({
@@ -201,18 +203,28 @@ export function SourcingOptionField({
                     placeholder="选择履约方案"
                     options={product.options.map((option) => {
                         const minimum = bulkMinimumOptionState(order, option)
+                        const priceText =
+                            option.sourceType === "PURCHASE" &&
+                            option.unitCostGross
+                                ? formatCurrencyFixed(option.unitCostGross, {
+                                      maxScale: 4,
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 4,
+                                  })
+                                : ""
                         return {
                             value: option.basisId,
                             disabled: minimum.disabled,
                             label:
                                 option.sourceType === "EXISTING_STOCK"
-                                    ? `${option.warehouseName || option.supplierName} · 可用 ${option.sourceAvailableQuantity ?? option.maxCreateQuantity}`
+                                    ? `${option.warehouseName || option.supplierName} · 现有库存 · 可用 ${option.sourceAvailableQuantity ?? option.maxCreateQuantity}`
                                     : [
                                           option.supplierName,
                                           option.inquirySource
                                               ? "询价专项报价"
                                               : "通用供给",
                                           sourcingRouteLabel(option),
+                                          priceText,
                                           minimum.label,
                                           showDeliverySummary
                                               ? deliverySummary(option, product)
@@ -220,37 +232,13 @@ export function SourcingOptionField({
                                       ]
                                           .filter(Boolean)
                                           .join(" · "),
-                            keywords: `${option.sourceType} ${option.supplierId} ${option.warehouseName ?? ""} ${option.fulfillmentResponsibility}`,
+                            keywords: `${option.sourceType} ${option.supplierId} ${option.supplierName} ${option.warehouseName ?? ""} ${option.fulfillmentResponsibility} ${sourcingRouteLabel(option)}`,
                         }
                     })}
                     onValueChange={(value: string) => {
                         const option = findSourcingOption(product, value)
                         if (!option) return
-                        const lines = form.state.values.lines
-                        const current = lines[index]?.quantity ?? ""
-                        if (!current || current === product.remainingQuantity) {
-                            form.setFieldValue(
-                                `lines[${index}].quantity`,
-                                option.maxCreateQuantity,
-                            )
-                        }
-                        form.setFieldValue(
-                            `lines[${index}].expectedDeliveryDate`,
-                            option.expectedDeliveryDate,
-                        )
-                        if (
-                            option.sourceType !== "PURCHASE" ||
-                            option.fulfillmentResponsibility !== "WAREHOUSE"
-                        ) {
-                            form.setFieldValue(
-                                `lines[${index}].targetWarehouseId`,
-                                "",
-                            )
-                            form.setFieldValue(
-                                `lines[${index}].targetWarehouseName`,
-                                "",
-                            )
-                        }
+                        applySourcingOptionToLine(form, product, index, option)
                     }}
                 />
             )}
