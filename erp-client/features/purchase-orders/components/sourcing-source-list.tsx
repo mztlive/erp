@@ -14,7 +14,8 @@ import { sourcingRouteLabel } from "../lib/sourcing/delivery-terms"
 import type { SourcingEditorRow } from "../lib/sourcing/editor-rows"
 
 /**
- * 顶部横向来源条：单来源时紧凑一行不浪费弹窗宽度，多来源时横向并排对比数量、单价与异常。
+ * 多来源切换条（仅拆分为 2 个及以上来源时展示）：
+ * 紧凑横向并排展示各来源承接量、地址数、单价与异常状态，一键切换编辑或移除。
  */
 export function SourcingSourceList({
     row,
@@ -37,8 +38,8 @@ export function SourcingSourceList({
                 const isStock = option?.sourceType === "EXISTING_STOCK"
                 const name = isStock
                     ? option.warehouseName || option.supplierName
-                    : option?.supplierName || "请选择来源"
-                const route = option ? sourcingRouteLabel(option) : "尚未选源"
+                    : option?.supplierName || "请选择供应商"
+                const route = option ? sourcingRouteLabel(option) : "待选方案"
                 const active = line.rowKey === activeRowKey
                 const id = `sourcing-source-${toAutomationIdSegment(line.rowKey)}`
                 const hasError = Boolean(errors.get(line.rowKey)?.length)
@@ -50,15 +51,14 @@ export function SourcingSourceList({
                     <li
                         key={line.rowKey}
                         className={cn(
-                            "group/source relative flex min-w-0 items-center rounded-lg border transition-colors",
-                            canRemove ? "max-w-72" : "max-w-full",
+                            "group/source relative flex min-w-0 max-w-72 items-center rounded-lg border transition-colors",
                             active
                                 ? hasError
                                     ? "border-destructive/60 bg-card shadow-xs ring-1 ring-destructive/20"
-                                    : "border-primary/50 bg-card shadow-xs ring-1 ring-primary/15"
+                                    : "border-primary/55 bg-card shadow-xs ring-1 ring-primary/15"
                                 : hasError
                                   ? "border-destructive/40 bg-destructive-soft/25 hover:border-destructive/60 hover:bg-card"
-                                  : "border-border/70 bg-card/70 hover:border-border hover:bg-card",
+                                  : "border-border/70 bg-card/80 hover:border-border hover:bg-card",
                             !line.selected && "border-dashed opacity-70",
                         )}
                     >
@@ -74,11 +74,16 @@ export function SourcingSourceList({
                                 canRemove && "pr-8",
                             )}
                         >
-                            {canRemove ? (
-                                <span className="num shrink-0 rounded-sm bg-muted px-1.5 py-0.5 text-tiny font-semibold text-muted-foreground">
-                                    源{idx + 1}
-                                </span>
-                            ) : null}
+                            <span
+                                className={cn(
+                                    "num shrink-0 rounded-sm px-1.5 py-0.5 text-tiny font-semibold",
+                                    active
+                                        ? "bg-primary text-primary-foreground"
+                                        : "bg-muted text-muted-foreground",
+                                )}
+                            >
+                                源{idx + 1}
+                            </span>
                             <div className="min-w-0">
                                 <div className="flex items-center gap-1.5">
                                     <span
@@ -120,7 +125,7 @@ export function SourcingSourceList({
                                         />
                                     ) : null}
                                 </div>
-                                <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground">
+                                <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 text-xs text-muted-foreground">
                                     <span>
                                         {line.quantity ? (
                                             <QuantityValue
@@ -132,7 +137,7 @@ export function SourcingSourceList({
                                             "待填写"
                                         )}
                                         {addressCount !== null
-                                            ? ` · ${addressCount} 地址`
+                                            ? `（${addressCount} 处）`
                                             : ""}
                                     </span>
                                     <span>·</span>

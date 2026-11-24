@@ -7,8 +7,11 @@ export type SourcingEditorProps = {
     order: SourcingSalesOrder
     onAddSplit: (salesOrderLineId: string) => void
     onRemoveSplit: (rowKey: string) => void
-    /** 一键把剩余未覆盖需求或未分配地址拆给新来源，返回新增 rowKey。 */
-    onAddResidualSplit?: (salesOrderLineId: string) => string | undefined
+    /** 一键把剩余未覆盖需求或指定地址拆给新来源，返回新增 rowKey。 */
+    onAddResidualSplit?: (
+        salesOrderLineId: string,
+        options?: { moveAddressKeys?: readonly string[] },
+    ) => string | undefined
 }
 
 /**

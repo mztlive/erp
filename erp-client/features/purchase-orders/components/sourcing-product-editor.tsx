@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { InfoIcon, PlusIcon } from "lucide-react"
+import { InfoIcon, PlusIcon, SplitIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
@@ -18,12 +18,17 @@ import { SourcingDeliveryRequirementSection } from "./sourcing-delivery-plan"
 import { SourcingParticipationControl } from "./sourcing-participation-control"
 
 /**
- * 商品编辑区：暂不分配时仅展示提示而不锁死表单，方便采购员先预配方案再开启提交。
+ * 商品供货方案编辑区（步骤 ①）：
+ * 暂缓下单时仅展示温和提示而不锁死表单，方便采购员预先配置方案并保留草稿。
  */
 export function SourcingProductEditor({
     row,
     onSetParticipation,
     onSplitResidual,
+    onAddSplitAction,
+    addSplitDisabledReason,
+    onGoToAddresses,
+    hideAddressEditor = false,
     showParticipation = true,
     condensed = false,
     activeRowKey,
@@ -33,6 +38,10 @@ export function SourcingProductEditor({
     SourcingParticipationProps & {
         row: SourcingEditorRow
         onSplitResidual?: () => void
+        onAddSplitAction?: () => void
+        addSplitDisabledReason?: string
+        onGoToAddresses?: () => void
+        hideAddressEditor?: boolean
         showParticipation?: boolean
         condensed?: boolean
         activeRowKey?: string
@@ -104,14 +113,14 @@ export function SourcingProductEditor({
                 </div>
             ) : !included ? (
                 <div className={cn("pt-3.5", insetClass)}>
-                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-surface-sunken px-3 py-2 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-surface-sunken px-3.5 py-2 text-xs text-muted-foreground">
                         <span className="flex items-center gap-2">
                             <InfoIcon
                                 aria-hidden="true"
                                 className="size-3.5 shrink-0"
                             />
                             <span>
-                                暂不分配：本次不提交，仍可预先配置并保留草稿。
+                                当前已暂缓下单：本次提交不会包含此商品，配置将保存在草稿中。
                             </span>
                         </span>
                         <Button
@@ -126,18 +135,18 @@ export function SourcingProductEditor({
                                 )
                             }
                         >
-                            纳入本次分配
+                            恢复本次下单
                         </Button>
                     </div>
                 </div>
             ) : activeRowKey && !visibleAllocations[0]?.line.selected ? (
                 <div className={cn("pt-3.5", insetClass)}>
-                    <p className="flex items-center gap-2 rounded-md border border-border/60 bg-surface-sunken px-3 py-2 text-xs text-muted-foreground">
+                    <p className="flex items-center gap-2 rounded-lg border border-border/70 bg-surface-sunken px-3.5 py-2 text-xs text-muted-foreground">
                         <InfoIcon
                             aria-hidden="true"
                             className="size-3.5 shrink-0"
                         />
-                        <span>此来源暂不参与分配，修改仅保留在草稿中。</span>
+                        <span>此来源当前已暂停使用，修改仅保留在草稿中。</span>
                     </p>
                 </div>
             ) : null}
@@ -149,14 +158,27 @@ export function SourcingProductEditor({
                             compact
                             condensed={condensed}
                             expandDeliverySummary={Boolean(activeRowKey)}
+                            hideAddressEditor={hideAddressEditor}
                             showParticipation={
                                 !activeRowKey && row.allocations.length > 1
                             }
                             participationLabel="本次使用此来源"
                             defaultCompareOpen={defaultCompareOpen}
-                            onSplitResidual={onSplitResidual}
+                            onAddSplit={
+                                row.allocations.length === 1
+                                    ? onAddSplitAction
+                                    : undefined
+                            }
+                            canAddSplit={
+                                row.allocations.length === 1 &&
+                                row.product.options.length > 1
+                            }
+                            addSplitDisabledReason={addSplitDisabledReason}
+                            onGoToAddresses={onGoToAddresses}
                             key={line.rowKey}
-                            {...props}
+                            form={form}
+                            order={order}
+                            onRemoveSplit={props.onRemoveSplit}
                             product={row.product}
                             line={line}
                             index={index}
@@ -182,7 +204,7 @@ export function SourcingProductEditor({
                             }
                         >
                             <PlusIcon />
-                            拆分给其他来源
+                            拆单给多家
                         </Button>
                     ) : null}
                     {commonWarehouse && targets.length > 0 ? (
@@ -228,22 +250,46 @@ export function SourcingProductEditor({
                         </p>
                     ) : null}
                     {row.status === "部分分配" ? (
-                        <p className="flex items-center gap-2 rounded-md border border-warning-border bg-warning-soft/60 px-3 py-2 text-xs text-warning-soft-foreground">
-                            <InfoIcon
-                                aria-hidden="true"
-                                className="size-3.5 shrink-0"
-                            />
-                            <span>
-                                本次尚未覆盖全部需求，可点击上方「添加来源」或「剩余缺口拆给新来源」；提交后剩余缺口将继续保留。
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning-border bg-warning-soft/65 px-3.5 py-2.5 text-xs text-warning-soft-foreground">
+                            <span className="flex items-center gap-2">
+                                <InfoIcon
+                                    aria-hidden="true"
+                                    className="size-3.5 shrink-0"
+                                />
+                                <span>
+                                    尚有{" "}
+                                    <span className="num font-semibold">
+                                        {row.remainingQuantity}{" "}
+                                        {row.product.unit}
+                                    </span>{" "}
+                                    未分配；若需本次全量履约，可将剩余缺口拆给其他供应商。
+                                </span>
                             </span>
-                        </p>
+                            {onSplitResidual ? (
+                                <Button
+                                    id={`sourcing-editor-${toAutomationIdSegment(row.product.salesOrderLineId)}-split-residual`}
+                                    type="button"
+                                    variant="outline"
+                                    size="xs"
+                                    className="bg-card text-foreground"
+                                    onClick={onSplitResidual}
+                                >
+                                    <SplitIcon aria-hidden="true" />
+                                    剩余缺口拆给新来源
+                                </Button>
+                            ) : null}
+                        </div>
                     ) : null}
                 </div>
                 {showRequirements ? (
                     <SourcingDeliveryRequirementSection
                         product={row.product}
                         condensed={condensed}
-                        note={routed ? "客户地址由仓库发货时安排。" : undefined}
+                        note={
+                            routed
+                                ? "当前方式由仓库统一发货，客户收货地址将在仓库出库时安排。"
+                                : undefined
+                        }
                     />
                 ) : null}
             </div>

@@ -875,15 +875,19 @@ function PurchaseOrderCreateSurface({
         [lines, selectedOrder, writeLines],
     )
 
-    /** 一键将剩余缺口（或剩余未分配地址）拆给新来源，返回新增 rowKey。 */
+    /** 一键将剩余缺口（或指定/剩余未分配地址）拆给新来源，返回新增 rowKey。 */
     const addResidualSplitLine = React.useCallback(
-        (salesOrderLineId: string): string | undefined => {
+        (
+            salesOrderLineId: string,
+            options?: { moveAddressKeys?: readonly string[] },
+        ): string | undefined => {
             if (!selectedOrder) return undefined
             const product = selectedOrder.lines.find(
                 (line) => line.salesOrderLineId === salesOrderLineId,
             )
             if (!product) return undefined
-            const existingLines = lines.filter(
+            const liveLines = form.state.values.lines
+            const existingLines = liveLines.filter(
                 (line) => line.salesOrderLineId === salesOrderLineId,
             )
             if (!canSplitSourcingProduct(product, existingLines.length)) {
@@ -905,11 +909,50 @@ function PurchaseOrderCreateSurface({
                 return undefined
             }
 
+            const moveKeys = options?.moveAddressKeys?.length
+                ? new Set(options.moveAddressKeys)
+                : null
+
+            // 若指定了要迁出的地址集合，先从同商品现有直发来源中释放这些地址
+            const baseLines = moveKeys
+                ? liveLines.map((line) => {
+                      if (
+                          line.salesOrderLineId !== salesOrderLineId ||
+                          !usesAddressQuantity(product, line)
+                      ) {
+                          return line
+                      }
+                      const currentRows =
+                          line.deliveryAllocations ??
+                          sourcingDeliveryAllocations(product, line)
+                      const nextRows = currentRows.filter(
+                          (row) =>
+                              !moveKeys.has(
+                                  JSON.stringify([
+                                      row.recipient,
+                                      row.phone,
+                                      row.region_code,
+                                      row.address,
+                                  ]),
+                              ),
+                      )
+                      return {
+                          ...line,
+                          deliveryAllocations: nextRows,
+                          quantity: deliveryQuantity(nextRows),
+                      }
+                  })
+                : liveLines
+
+            const updatedExistingLines = baseLines.filter(
+                (line) => line.salesOrderLineId === salesOrderLineId,
+            )
+
             // 计算剩余未分配总量
             let residualQty = product.remainingQuantity
             try {
                 const allocated = sumFixed(
-                    existingLines
+                    updatedExistingLines
                         .filter((line) => line.selected)
                         .map((line) => line.quantity || "0"),
                     { maxScale: 6, outputScale: 6 },
@@ -925,9 +968,69 @@ function PurchaseOrderCreateSurface({
                 residualQty = ""
             }
 
+            const targetAvailableRows = availableDeliveryRows(
+                product,
+                {
+                    rowKey: "__probe__",
+                    salesOrderLineId,
+                    selected: true,
+                    quantity: "",
+                    basisId: candidates[0]!.basisId,
+                    expectedDeliveryDate: candidates[0]!.expectedDeliveryDate,
+                },
+                baseLines,
+            ).filter((addr) => {
+                if (compareDecimal(addr.quantity, "0", 6) <= 0) return false
+                if (!moveKeys) return true
+                return moveKeys.has(
+                    JSON.stringify([
+                        addr.recipient,
+                        addr.phone,
+                        addr.region_code,
+                        addr.address,
+                    ]),
+                )
+            })
+
+            // 优先选择能覆盖最多待分配/指定地址的候选方案（避免拆给同样不配送的供应商）
+            const preferredCandidates =
+                targetAvailableRows.length > 0
+                    ? (() => {
+                          const scored = candidates.map((candidate) => {
+                              const deliverableCount =
+                                  candidate.sourceType === "EXISTING_STOCK" ||
+                                  candidate.fulfillmentResponsibility ===
+                                      "WAREHOUSE"
+                                      ? targetAvailableRows.length
+                                      : targetAvailableRows.filter((addr) =>
+                                            addressDeliverable(
+                                                candidate,
+                                                addr.region_code,
+                                            ),
+                                        ).length
+                              return { candidate, deliverableCount }
+                          })
+                          const bestCoverage = Math.max(
+                              ...scored.map((item) => item.deliverableCount),
+                          )
+                          return bestCoverage > 0
+                              ? scored
+                                    .filter(
+                                        (item) =>
+                                            item.deliverableCount ===
+                                            bestCoverage,
+                                    )
+                                    .map((item) => item.candidate)
+                              : candidates
+                      })()
+                    : candidates
+
             const option =
-                pickBestSourcingOption(candidates, residualQty, product) ??
-                candidates[0]
+                pickBestSourcingOption(
+                    preferredCandidates,
+                    residualQty,
+                    product,
+                ) ?? preferredCandidates[0]!
             const newRowKey = `${salesOrderLineId}:${crypto.randomUUID()}`
             const draftLine: SourcingLineInput = {
                 rowKey: newRowKey,
@@ -940,19 +1043,13 @@ function PurchaseOrderCreateSurface({
                 expectedDeliveryDate: option.expectedDeliveryDate,
             }
 
-            // 若新来源是带地址直发，自动承接所有未分配且本源可配送的地址
+            // 若新来源是带地址直发，自动承接指定（或全部未分配）且本源可配送的地址
             if (usesAddressQuantity(product, draftLine)) {
-                const available = availableDeliveryRows(
-                    product,
-                    draftLine,
-                    lines,
-                ).filter(
-                    (addr) =>
-                        addressDeliverable(option, addr.region_code) &&
-                        compareDecimal(addr.quantity, "0", 6) > 0,
+                const assignable = targetAvailableRows.filter((addr) =>
+                    addressDeliverable(option, addr.region_code),
                 )
-                draftLine.deliveryAllocations = available
-                draftLine.quantity = deliveryQuantity(available)
+                draftLine.deliveryAllocations = assignable
+                draftLine.quantity = deliveryQuantity(assignable)
             } else if (residualQty && compareDecimal(residualQty, "0", 6) > 0) {
                 try {
                     draftLine.quantity =
@@ -968,15 +1065,15 @@ function PurchaseOrderCreateSurface({
                 }
             }
 
-            const lastIndex = lines.findLastIndex(
+            const lastIndex = baseLines.findLastIndex(
                 (line) => line.salesOrderLineId === salesOrderLineId,
             )
-            const next = [...lines]
+            const next = [...baseLines]
             next.splice(lastIndex + 1, 0, draftLine)
             writeLines(next)
             return newRowKey
         },
-        [lines, selectedOrder, writeLines],
+        [form, selectedOrder, writeLines],
     )
 
     const removeSplitLine = React.useCallback(
