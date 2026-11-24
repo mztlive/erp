@@ -1603,3 +1603,559 @@ export function buildTransferAddressesToNonDirectPatches(
         cappedByMax,
     }
 }
+
+export type OptionAddressCoverage = Readonly<{
+    totalCount: number
+    deliverableCount: number
+    notDeliverableCount: number
+    freightExtraCount: number
+    allDeliverable: boolean
+    allFreightIncluded: boolean
+}>
+
+/**
+ * 统计单个供给方案对全部剩余地址（或指定地址子集）的精确配送覆盖率。
+ * 仓库/库存方案由出库时统筹安排，视作全部地址可覆盖。
+ */
+export function computeOptionAddressCoverage(
+    option: SourcingSupplierOption,
+    product: SourcingProductLine,
+    scopeAddressKeys?: ReadonlySet<string>,
+): OptionAddressCoverage {
+    const baseRemaining = remainingDeliveryAllocations(product).filter((row) =>
+        isPositiveQuantity(row.quantity),
+    )
+    const scoped = scopeAddressKeys
+        ? baseRemaining.filter((row) => scopeAddressKeys.has(deliveryKey(row)))
+        : baseRemaining
+    const totalCount = scoped.length
+    if (totalCount === 0) {
+        return {
+            totalCount: 0,
+            deliverableCount: 0,
+            notDeliverableCount: 0,
+            freightExtraCount: 0,
+            allDeliverable: true,
+            allFreightIncluded: true,
+        }
+    }
+    if (
+        option.sourceType === "EXISTING_STOCK" ||
+        option.fulfillmentResponsibility !== "SUPPLIER_DIRECT"
+    ) {
+        return {
+            totalCount,
+            deliverableCount: totalCount,
+            notDeliverableCount: 0,
+            freightExtraCount: 0,
+            allDeliverable: true,
+            allFreightIncluded: true,
+        }
+    }
+    let deliverableCount = 0
+    let notDeliverableCount = 0
+    let freightExtraCount = 0
+    for (const row of scoped) {
+        const term = addressDeliveryTerm(option, row.region_code)
+        if (term === "NOT_DELIVERABLE") {
+            notDeliverableCount += 1
+        } else {
+            deliverableCount += 1
+            if (term === "FREIGHT_EXTRA") freightExtraCount += 1
+        }
+    }
+    return {
+        totalCount,
+        deliverableCount,
+        notDeliverableCount,
+        freightExtraCount,
+        allDeliverable: notDeliverableCount === 0,
+        allFreightIncluded:
+            notDeliverableCount === 0 && freightExtraCount === 0,
+    }
+}
+
+/**
+ * 一步将指定地址划归某个直发来源，并在「直发 + 仓库/库存」混配出现超配时自动扣减非直发来源数量以维持总量守恒：
+ * - 若地址从其他直发来源迁入，直发总量不变，不触动仓库数量；
+ * - 若地址从仓库统筹池迁入直发导致总分配超出商品需求，且存在已选非直发来源，按仓库优先（保留现货）自动扣减多余量。
+ */
+export function buildAssignDirectWithWarehouseBalancePatches(
+    product: SourcingProductLine,
+    allLines: readonly SourcingLineInput[],
+    targetDirectRowKey: string,
+    addressKeys: ReadonlySet<string>,
+): {
+    patches: LineUpdatePatch[]
+    assignedCount: number
+    skippedUndeliverableCount: number
+    autoReducedWarehouseQty: string
+} {
+    const baseResult = buildBatchAssignPatches(
+        product,
+        allLines,
+        targetDirectRowKey,
+        addressKeys,
+        "move_full",
+    )
+    if (baseResult.patches.length === 0 || baseResult.assignedCount === 0) {
+        return { ...baseResult, autoReducedWarehouseQty: "0" }
+    }
+
+    const patchByIndex = new Map<number, LineUpdatePatch>(
+        baseResult.patches.map((p) => [p.index, p]),
+    )
+    const nextLines = allLines.map(
+        (line, idx) => patchByIndex.get(idx)?.nextLine ?? line,
+    )
+
+    const demandUnits = quantityUnits(product.remainingQuantity)
+    let totalAllocatedUnits = BigInt(0)
+    const nonDirectEntries: Array<{
+        index: number
+        line: SourcingLineInput
+        isStock: boolean
+        units: bigint
+    }> = []
+
+    nextLines.forEach((line, index) => {
+        if (
+            !line.selected ||
+            line.salesOrderLineId !== product.salesOrderLineId
+        ) {
+            return
+        }
+        let units = BigInt(0)
+        if (isPositiveQuantity(line.quantity || "0")) {
+            try {
+                units = quantityUnits(compactFixed(line.quantity.trim()))
+            } catch {
+                units = BigInt(0)
+            }
+        }
+        totalAllocatedUnits += units
+        if (!usesAddressQuantity(product, line) && units > BigInt(0)) {
+            const option = findSourcingOption(product, line.basisId)
+            nonDirectEntries.push({
+                index,
+                line,
+                isStock: option?.sourceType === "EXISTING_STOCK",
+                units,
+            })
+        }
+    })
+
+    let autoReducedUnits = BigInt(0)
+    if (totalAllocatedUnits > demandUnits && nonDirectEntries.length > 0) {
+        let excess = totalAllocatedUnits - demandUnits
+        // 优先扣减集采入仓，尽量保留已预留的现有库存
+        nonDirectEntries.sort((a, b) =>
+            a.isStock === b.isStock ? 0 : a.isStock ? 1 : -1,
+        )
+        for (const entry of nonDirectEntries) {
+            if (excess <= BigInt(0)) break
+            const reduce = minimumUnits(entry.units, excess)
+            if (reduce <= BigInt(0)) continue
+            const nextQty = entry.units - reduce
+            patchByIndex.set(entry.index, {
+                index: entry.index,
+                nextLine: {
+                    ...entry.line,
+                    quantity: formatQuantityUnits(nextQty),
+                },
+            })
+            autoReducedUnits += reduce
+            excess -= reduce
+        }
+    }
+
+    return {
+        patches: [...patchByIndex.values()],
+        assignedCount: baseResult.assignedCount,
+        skippedUndeliverableCount: baseResult.skippedUndeliverableCount,
+        autoReducedWarehouseQty: formatQuantityUnits(autoReducedUnits),
+    }
+}
+
+/**
+ * 将选中地址释放直发并自动划入当前已选的仓库/库存统筹池（支持单个或多个非直发来源自动顺延配平）。
+ */
+export function buildTransferAddressesToWarehousePoolPatches(
+    product: SourcingProductLine,
+    allLines: readonly SourcingLineInput[],
+    addressKeys: ReadonlySet<string>,
+    preferredNonDirectRowKey?: string,
+): {
+    patches: LineUpdatePatch[]
+    releasedCount: number
+    transferredQty: string
+    cappedByMax: boolean
+} {
+    const nonDirectLines = allLines.flatMap((line, index) => {
+        if (
+            !line.selected ||
+            line.salesOrderLineId !== product.salesOrderLineId ||
+            usesAddressQuantity(product, line)
+        ) {
+            return []
+        }
+        const option = findSourcingOption(product, line.basisId)
+        if (!option) return []
+        return [
+            {
+                index,
+                line,
+                option,
+                isStock: option.sourceType === "EXISTING_STOCK",
+            },
+        ]
+    })
+
+    if (nonDirectLines.length === 0) {
+        const clearPatches = buildClearAddressesPatches(
+            product,
+            allLines,
+            addressKeys,
+        )
+        return {
+            patches: clearPatches,
+            releasedCount: addressKeys.size,
+            transferredQty: "0",
+            cappedByMax: false,
+        }
+    }
+
+    // 优先使用指定目标仓，否则现有库存优先、再按集采入仓单价从低到高承接
+    const ordered = [...nonDirectLines].sort((a, b) => {
+        if (preferredNonDirectRowKey) {
+            if (a.line.rowKey === preferredNonDirectRowKey) return -1
+            if (b.line.rowKey === preferredNonDirectRowKey) return 1
+        }
+        if (a.isStock !== b.isStock) return a.isStock ? -1 : 1
+        try {
+            return compareDecimal(
+                a.option.unitCostGross,
+                b.option.unitCostGross,
+                4,
+            )
+        } catch {
+            return 0
+        }
+    })
+
+    if (ordered.length === 1) {
+        return buildTransferAddressesToNonDirectPatches(
+            product,
+            allLines,
+            ordered[0]!.line.rowKey,
+            addressKeys,
+        )
+    }
+
+    // 多非直发来源：先释放直发，再依次将释放的数量填入有容量的库存/入仓源
+    const firstResult = buildTransferAddressesToNonDirectPatches(
+        product,
+        allLines,
+        ordered[0]!.line.rowKey,
+        addressKeys,
+    )
+    if (!firstResult.cappedByMax) return firstResult
+
+    const patchByIndex = new Map<number, LineUpdatePatch>(
+        firstResult.patches.map((p) => [p.index, p]),
+    )
+    const workingLines = allLines.map(
+        (line, idx) => patchByIndex.get(idx)?.nextLine ?? line,
+    )
+
+    const demandUnits = quantityUnits(product.remainingQuantity)
+    let totalAllocatedUnits = BigInt(0)
+    workingLines.forEach((line) => {
+        if (
+            !line.selected ||
+            line.salesOrderLineId !== product.salesOrderLineId
+        ) {
+            return
+        }
+        if (isPositiveQuantity(line.quantity || "0")) {
+            try {
+                totalAllocatedUnits += quantityUnits(
+                    compactFixed(line.quantity.trim()),
+                )
+            } catch {
+                // 忽略非法值
+            }
+        }
+    })
+
+    let extraTransferred = quantityUnits(firstResult.transferredQty)
+    let remainingShortfall =
+        demandUnits > totalAllocatedUnits
+            ? demandUnits - totalAllocatedUnits
+            : BigInt(0)
+
+    for (const candidate of ordered.slice(1)) {
+        if (remainingShortfall <= BigInt(0)) break
+        const live = workingLines[candidate.index]!
+        const currentUnits = isPositiveQuantity(live.quantity || "0")
+            ? quantityUnits(compactFixed(live.quantity.trim()))
+            : BigInt(0)
+        const maxStr = candidate.isStock
+            ? (candidate.option.sourceAvailableQuantity ??
+              candidate.option.maxCreateQuantity)
+            : candidate.option.maxCreateQuantity
+        const capUnits = quantityUnits(maxStr)
+        const headroom =
+            capUnits > currentUnits ? capUnits - currentUnits : BigInt(0)
+        const add = minimumUnits(remainingShortfall, headroom)
+        if (add <= BigInt(0)) continue
+        const nextLine = {
+            ...live,
+            selected: true,
+            quantity: formatQuantityUnits(currentUnits + add),
+        }
+        patchByIndex.set(candidate.index, {
+            index: candidate.index,
+            nextLine,
+        })
+        workingLines[candidate.index] = nextLine
+        extraTransferred += add
+        remainingShortfall -= add
+    }
+
+    return {
+        patches: [...patchByIndex.values()],
+        releasedCount: firstResult.releasedCount,
+        transferredQty: formatQuantityUnits(extraTransferred),
+        cappedByMax: remainingShortfall > BigInt(0),
+    }
+}
+
+/**
+ * 一键「按低价包邮自动分配」：
+ * 针对当前已选的全部供给来源，按以下优先级自动路由每个地址并配平总量：
+ * 1) 保留已选现有库存的优先消化（优先把直发不可配 / 运费另计的地址留给仓库统筹）；
+ * 2) 其余地址优先分给「包邮/配送」且含税单价最低的直发源，其次选「运费另计」的最低价直发源；
+ * 3) 所有直发源均不可配送或超出可供量的余量，自动汇总给已选集采入仓/现有库存源承接。
+ */
+export function buildAutoAllocateLowestPricePatches(
+    product: SourcingProductLine,
+    allLines: readonly SourcingLineInput[],
+): {
+    patches: LineUpdatePatch[]
+    directAddressCount: number
+    warehouseAddressCount: number
+    unassignedCount: number
+} {
+    const productLines = allLines
+        .map((line, index) => ({
+            line,
+            index,
+            option: findSourcingOption(product, line.basisId),
+        }))
+        .filter(
+            (
+                item,
+            ): item is {
+                line: SourcingLineInput
+                index: number
+                option: SourcingSupplierOption
+            } =>
+                item.line.salesOrderLineId === product.salesOrderLineId &&
+                item.line.selected &&
+                Boolean(item.option),
+        )
+
+    const directStates = productLines
+        .filter(({ line }) => usesAddressQuantity(product, line))
+        .sort((a, b) => {
+            try {
+                const priceCmp = compareDecimal(
+                    a.option.unitCostGross,
+                    b.option.unitCostGross,
+                    4,
+                )
+                if (priceCmp !== 0) return priceCmp
+            } catch {
+                // ignore
+            }
+            const aDate = a.option.expectedDeliveryDate || "9999-99-99"
+            const bDate = b.option.expectedDeliveryDate || "9999-99-99"
+            return aDate.localeCompare(bDate)
+        })
+        .map((item) => ({
+            ...item,
+            remainingCap: quantityUnits(item.option.maxCreateQuantity),
+            rows: new Map<string, PurchaseDeliveryAllocation>(),
+        }))
+
+    const nonDirectStates = productLines
+        .filter(({ line }) => !usesAddressQuantity(product, line))
+        .sort((a, b) => {
+            const aStock = a.option.sourceType === "EXISTING_STOCK"
+            const bStock = b.option.sourceType === "EXISTING_STOCK"
+            if (aStock !== bStock) return aStock ? -1 : 1
+            try {
+                return compareDecimal(
+                    a.option.unitCostGross,
+                    b.option.unitCostGross,
+                    4,
+                )
+            } catch {
+                return 0
+            }
+        })
+        .map((item) => ({
+            ...item,
+            isStock: item.option.sourceType === "EXISTING_STOCK",
+            cap: quantityUnits(
+                item.option.sourceType === "EXISTING_STOCK"
+                    ? (item.option.sourceAvailableQuantity ??
+                          item.option.maxCreateQuantity)
+                    : item.option.maxCreateQuantity,
+            ),
+            assigned: BigInt(0),
+        }))
+
+    const baseRemaining = remainingDeliveryAllocations(product).filter((row) =>
+        isPositiveQuantity(row.quantity),
+    )
+    if (baseRemaining.length === 0 || directStates.length === 0) {
+        return {
+            patches: [],
+            directAddressCount: 0,
+            warehouseAddressCount: 0,
+            unassignedCount: 0,
+        }
+    }
+
+    const stepStr = sourcingQuantityStep(product.quantityScale) ?? "1"
+    const stepUnits = quantityUnits(stepStr)
+
+    // 计算需为现有库存预留的仓发量（若有现货且已选，优先消化现货）
+    const totalStockCap = nonDirectStates
+        .filter((s) => s.isStock)
+        .reduce((acc, s) => acc + s.cap, BigInt(0))
+    const totalDemandUnits = quantityUnits(product.remainingQuantity)
+    const maxDirectBudget =
+        totalDemandUnits > totalStockCap
+            ? totalDemandUnits - totalStockCap
+            : BigInt(0)
+
+    // 给每个地址按「直发友好度」打分：全包邮优先走直发，运费另计次之，不可配留给仓库
+    const scoredAddresses = baseRemaining.map((row, idx) => {
+        const key = deliveryKey(row)
+        const demandUnits = quantityUnits(compactFixed(row.quantity))
+        let bestDirectRank = 2 // 0=包邮, 1=运费另计, 2=均不可配
+        for (const src of directStates) {
+            const term = addressDeliveryTerm(src.option, row.region_code)
+            if (term === "NOT_DELIVERABLE") continue
+            const rank = term === "FREIGHT_EXTRA" ? 1 : 0
+            if (rank < bestDirectRank) bestDirectRank = rank
+        }
+        return { row, key, demandUnits, bestDirectRank, idx }
+    })
+
+    scoredAddresses.sort((a, b) => {
+        if (a.bestDirectRank !== b.bestDirectRank) {
+            return a.bestDirectRank - b.bestDirectRank
+        }
+        return a.idx - b.idx
+    })
+
+    let directBudgetLeft = maxDirectBudget
+    let directAddressCount = 0
+    let remainingForWarehouseUnits = BigInt(0)
+    let warehouseAddressCount = 0
+    let unassignedCount = 0
+
+    for (const addr of scoredAddresses) {
+        let addrLeft = addr.demandUnits
+        let assignedAnyDirect = false
+
+        if (directBudgetLeft >= stepUnits && addr.bestDirectRank < 2) {
+            // 优先匹配包邮且单价最低的直发源，其次运费另计且单价最低
+            const rankedDirect = directStates
+                .map((src, pos) => ({
+                    src,
+                    pos,
+                    term: addressDeliveryTerm(src.option, addr.row.region_code),
+                }))
+                .filter(
+                    (item) =>
+                        item.term !== "NOT_DELIVERABLE" &&
+                        item.src.remainingCap >= stepUnits,
+                )
+                .sort((a, b) => {
+                    const aExtra = a.term === "FREIGHT_EXTRA" ? 1 : 0
+                    const bExtra = b.term === "FREIGHT_EXTRA" ? 1 : 0
+                    if (aExtra !== bExtra) return aExtra - bExtra
+                    return a.pos - b.pos
+                })
+
+            for (const { src } of rankedDirect) {
+                if (addrLeft < stepUnits || directBudgetLeft < stepUnits) break
+                const rawTake = minimumUnits(
+                    addrLeft,
+                    src.remainingCap,
+                    directBudgetLeft,
+                )
+                const take = (rawTake / stepUnits) * stepUnits
+                if (take <= BigInt(0)) continue
+                src.rows.set(addr.key, {
+                    ...addr.row,
+                    quantity: formatQuantityUnits(take),
+                })
+                src.remainingCap -= take
+                directBudgetLeft -= take
+                addrLeft -= take
+                assignedAnyDirect = true
+            }
+        }
+
+        if (assignedAnyDirect) directAddressCount += 1
+        if (addrLeft > BigInt(0)) {
+            if (nonDirectStates.length > 0) {
+                remainingForWarehouseUnits += addrLeft
+                if (!assignedAnyDirect) warehouseAddressCount += 1
+            } else {
+                unassignedCount += 1
+            }
+        }
+    }
+
+    // 把剩余未走直发的总量按「现有库存优先 → 低价入仓优先」填回非直发来源
+    let warehouseNeed = remainingForWarehouseUnits
+    for (const nd of nonDirectStates) {
+        if (warehouseNeed <= BigInt(0)) {
+            nd.assigned = BigInt(0)
+            continue
+        }
+        const take = minimumUnits(warehouseNeed, nd.cap)
+        nd.assigned = take
+        warehouseNeed -= take
+    }
+    if (warehouseNeed > BigInt(0)) {
+        unassignedCount += 1
+    }
+
+    const patches: LineUpdatePatch[] = [
+        ...directStates.map((src) =>
+            buildLinePatch(src.index, src.line, [...src.rows.values()]),
+        ),
+        ...nonDirectStates.map((nd) => ({
+            index: nd.index,
+            nextLine: {
+                ...nd.line,
+                quantity: formatQuantityUnits(nd.assigned),
+            },
+        })),
+    ]
+
+    return {
+        patches,
+        directAddressCount,
+        warehouseAddressCount,
+        unassignedCount,
+    }
+}

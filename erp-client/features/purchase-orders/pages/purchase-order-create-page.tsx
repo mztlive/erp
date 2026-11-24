@@ -80,6 +80,7 @@ import {
 } from "../hooks/use-sourcing-command"
 import { useSourcingParticipation } from "../hooks/use-sourcing-participation"
 import { canSplitSourcingProduct } from "../lib/sourcing-quantity"
+import { buildFillDirectShortfallPatches } from "../lib/sourcing/address-grouping"
 import { sourcingDeliveryAllocations } from "../lib/sourcing/delivery"
 import {
     availableDeliveryRows,
@@ -929,21 +930,38 @@ function PurchaseOrderCreateSurface({
             }
 
             if (usesAddressQuantity(product, draftLine)) {
+                draftLine.deliveryAllocations = []
+                draftLine.quantity = "0"
                 if (compareDecimal(residualQty, "0", 6) > 0) {
-                    const available = availableDeliveryRows(
+                    let cappedResidual = residualQty
+                    try {
+                        if (
+                            compareDecimal(
+                                residualQty,
+                                option.maxCreateQuantity,
+                                6,
+                            ) > 0
+                        ) {
+                            cappedResidual = option.maxCreateQuantity
+                        }
+                    } catch {
+                        cappedResidual = option.maxCreateQuantity
+                    }
+                    const probeLines = [...liveLines, draftLine]
+                    const filled = buildFillDirectShortfallPatches(
                         product,
-                        draftLine,
-                        liveLines,
-                    ).filter(
-                        (addr) =>
-                            compareDecimal(addr.quantity, "0", 6) > 0 &&
-                            addressDeliverable(option, addr.region_code),
+                        probeLines,
+                        newRowKey,
+                        cappedResidual,
                     )
-                    draftLine.deliveryAllocations = available
-                    draftLine.quantity = deliveryQuantity(available)
-                } else {
-                    draftLine.deliveryAllocations = []
-                    draftLine.quantity = "0"
+                    const patched = filled.patches.find(
+                        (patch) => patch.nextLine.rowKey === newRowKey,
+                    )?.nextLine
+                    if (patched) {
+                        draftLine.deliveryAllocations =
+                            patched.deliveryAllocations
+                        draftLine.quantity = patched.quantity
+                    }
                 }
             } else if (compareDecimal(residualQty, "0", 6) > 0) {
                 try {

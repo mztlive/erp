@@ -220,9 +220,6 @@ export function SourcingOptionField({
                                     ? `${option.warehouseName || option.supplierName} · 现有库存 · 可用 ${option.sourceAvailableQuantity ?? option.maxCreateQuantity}`
                                     : [
                                           option.supplierName,
-                                          option.inquirySource
-                                              ? "询价专项报价"
-                                              : "通用供给",
                                           sourcingRouteLabel(option),
                                           priceText,
                                           minimum.label,
@@ -232,7 +229,7 @@ export function SourcingOptionField({
                                       ]
                                           .filter(Boolean)
                                           .join(" · "),
-                            keywords: `${option.sourceType} ${option.supplierId} ${option.supplierName} ${option.warehouseName ?? ""} ${option.fulfillmentResponsibility} ${sourcingRouteLabel(option)}`,
+                            keywords: `${option.sourceType} ${option.supplierId} ${option.supplierName} ${option.inquirySource ? "询价专项报价" : "通用供给"} ${option.warehouseName ?? ""} ${option.fulfillmentResponsibility} ${sourcingRouteLabel(option)}`,
                         }
                     })}
                     onValueChange={(value: string) => {

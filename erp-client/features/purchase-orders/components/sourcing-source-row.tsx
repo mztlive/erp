@@ -2,10 +2,10 @@
 
 import { useMemo, useState } from "react"
 import {
+    CheckCircle2Icon,
     ChevronDownIcon,
     FilterIcon,
     PackageCheckIcon,
-    ScaleIcon,
     ScissorsIcon,
     Trash2Icon,
     TriangleAlertIcon,
@@ -14,18 +14,11 @@ import {
 import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
     Collapsible,
     CollapsibleContent,
     CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { Input } from "@/components/ui/input"
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from "@/components/ui/popover"
 import { RequiredMark } from "@/components/ui/required-mark"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -40,10 +33,8 @@ import type { PurchaseOrderCreateFormApi } from "../lib/purchase-order-create-fo
 import { findSourcingOption } from "../lib/purchase-order-create-model"
 import { sourcingQuantityStep } from "../lib/sourcing-quantity"
 import {
-    computeQuotaAutoAllocation,
     isPositiveQuantity,
     type GlobalAddressState,
-    type LineUpdatePatch,
 } from "../lib/sourcing/address-grouping"
 import { sourcingDeliveryAllocations } from "../lib/sourcing/delivery"
 import { usesAddressQuantity } from "../lib/sourcing/delivery-editor"
@@ -54,16 +45,16 @@ import {
     warehouseDeliveryTerm,
 } from "../lib/sourcing/delivery-terms"
 import type { SourcingEditorRow } from "../lib/sourcing/editor-rows"
-import { comparePurchaseCostToSalesPrice } from "../lib/sourcing/pricing"
+import {
+    comparePurchaseCostToSalesPrice,
+    priceDeltaFromLowest,
+} from "../lib/sourcing/pricing"
 import {
     formatQuantityUnits,
     minimumUnits,
     quantityUnits,
 } from "../lib/sourcing/quantity"
-import {
-    sourceAccentForIndex,
-    sourceRouteBadgeVariant,
-} from "../lib/sourcing/source-palette"
+import { sourceAccentForIndex } from "../lib/sourcing/source-palette"
 import type {
     SourcingLineInput,
     SourcingProductLine,
@@ -77,10 +68,10 @@ import {
 import { SourcingRecommendationHint } from "./sourcing-recommendation-hint"
 
 /**
- * 左栏清爽单源卡片：
- * - 单层纯白卡片，告别「卡片套灰盒」的视觉堆砌；
- * - 全部来源同屏并排可见、直接行内改供应商/目标仓/交期/数量或直发配额；
- * - 点击「比价」平滑联动右侧全高比价矩阵，不再在窄卡内撑开嵌套表格。
+ * 左侧供给池中的「已选用来源」精简卡片：
+ * - 头部点击「源N」或「N 处地址」胶囊即可在右侧一键筛选只看本源地址（点击卡内输入框/选择器不触发切换）；
+ * - 清晰标注「最低价」或「最低 ¥X」价差提示，不再放多余的复选框、「比价换源」按钮与重复配量弹窗；
+ * - 修复「目标仓地区：包邮」误用警告色的问题，仅运费另计/不配送才高亮提醒。
  */
 export function SourcingSourceRow({
     form,
@@ -91,19 +82,17 @@ export function SourcingSourceRow({
     index,
     sourceNumber,
     isActive,
-    isMultiSource,
     canRemove,
     errors,
+    lowestPurchaseCost,
     addressState,
     isAddressFiltered,
-    isCompareTarget,
     onActivate,
-    onOpenCompare,
     onRemove,
     onToggleAddressFilter,
+    onFocusCheapestCandidate,
     onTrimDirectExcessForSource,
     onFillDirectShortfallForSource,
-    onApplyPatches,
 }: {
     form: PurchaseOrderCreateFormApi
     order: SourcingSalesOrder
@@ -113,24 +102,19 @@ export function SourcingSourceRow({
     index: number
     sourceNumber: number
     isActive: boolean
-    isMultiSource: boolean
     canRemove: boolean
     errors: readonly string[]
+    lowestPurchaseCost?: string
     addressState?: GlobalAddressState | null
     isAddressFiltered?: boolean
-    isCompareTarget?: boolean
     onActivate: () => void
-    onOpenCompare: () => void
     onRemove: () => void
     onToggleAddressFilter?: () => void
+    onFocusCheapestCandidate?: () => void
     onTrimDirectExcessForSource?: (rowKey: string, excessQty: string) => void
     onFillDirectShortfallForSource?: (
         rowKey: string,
         shortfallQty: string,
-    ) => void
-    onApplyPatches?: (
-        patches: readonly LineUpdatePatch[],
-        feedback?: string,
     ) => void
 }) {
     const option = findSourcingOption(product, line.basisId)
@@ -144,20 +128,14 @@ export function SourcingSourceRow({
     const sourceId = `sourcing-source-${rowSeg}`
     const accent = sourceAccentForIndex(sourceNumber - 1)
     const route = option ? sourcingRouteLabel(option) : "待选方案"
-    const routeVariant = sourceRouteBadgeVariant(option)
     const name = isStock
         ? option.warehouseName || option.supplierName
         : option?.supplierName || "请选择供应商"
     const hasError = errors.length > 0
 
-    const [quotaOpen, setQuotaOpen] = useState(false)
-    const [quotaQty, setQuotaQty] = useState("")
-    const [quotaAllowReallocate, setQuotaAllowReallocate] = useState(true)
     const [syncWarehouseNotice, setSyncWarehouseNotice] = useState("")
-
     const allLines = form.state.values.lines
 
-    // 计算当前行相对商品总需求的差额，提供 1-click「补齐」/「调至」快捷配平
     const balanceHint = useMemo(() => {
         if (!line.selected || !option) return null
         try {
@@ -213,7 +191,6 @@ export function SourcingSourceRow({
         row.allocations,
     ])
 
-    // 同步目标仓到同销售单其余入仓明细
     const otherWarehouseLineIndexes = useMemo(() => {
         if (!needsWarehouse || !line.targetWarehouseId) return []
         return allLines.flatMap((candidate, candidateIndex) => {
@@ -245,6 +222,10 @@ export function SourcingSourceRow({
         option && !isStock
             ? comparePurchaseCostToSalesPrice(option.unitCostGross, salesPrice)
             : null
+    const priceDelta =
+        option && !isStock
+            ? priceDeltaFromLowest(option.unitCostGross, lowestPurchaseCost)
+            : null
     const taxRatePercent =
         option && !isStock
             ? multiplyFixed(option.inputTaxRate, "100", {
@@ -261,36 +242,17 @@ export function SourcingSourceRow({
         ? sourcingDeliveryAllocations(product, line).length
         : 0
     const totalAddressCount = product.deliveryAllocations.length
-    const hasMultipleDirectSources =
-        (addressState?.directSources.length ?? 0) > 1
-
-    const quotaPreview = useMemo(() => {
-        if (!quotaOpen || !addressDriven) return null
-        return computeQuotaAutoAllocation(
-            product,
-            allLines,
-            line.rowKey,
-            quotaQty,
-            {
-                preferFreightIncluded: true,
-                allowReallocateFromOtherDirect:
-                    hasMultipleDirectSources && quotaAllowReallocate,
-            },
-        )
-    }, [
-        addressDriven,
-        allLines,
-        hasMultipleDirectSources,
-        line.rowKey,
-        product,
-        quotaAllowReallocate,
-        quotaOpen,
-        quotaQty,
-    ])
+    const warehouseCoveredCount =
+        !addressDriven && addressState
+            ? addressState.counts.unassigned
+            : totalAddressCount
 
     const warehouseJudgement = needsWarehouse
         ? warehouseDeliveryTerm(option, line.targetWarehouseId ?? "")
         : undefined
+    const warehouseIsAlert =
+        warehouseJudgement?.term === "NOT_DELIVERABLE" ||
+        warehouseJudgement?.term === "FREIGHT_EXTRA"
 
     const availableCapStr = option
         ? isStock
@@ -309,36 +271,27 @@ export function SourcingSourceRow({
         }
     })()
 
+    const addressPillLabel = addressDriven
+        ? `${assignedAddressCount} 处地址`
+        : `${warehouseCoveredCount} 处统筹`
+
     const formContent = (
-        <div className="space-y-3">
-            {/* 卡顶行：源身份 + 履约类型 + 推荐 + 比价/移除 */}
+        <div className="space-y-2">
+            {/* 卡顶行：点击「源N · 履约方式」或右侧「地址数」胶囊均可一键筛选右侧只看本源地址 */}
             <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                    {isMultiSource ? (
-                        <form.AppField name={`lines[${index}].selected`}>
-                            {(field) => (
-                                <Checkbox
-                                    id={`${id}-select`}
-                                    checked={field.state.value === true}
-                                    onCheckedChange={(checked) =>
-                                        field.handleChange(checked === true)
-                                    }
-                                    aria-label={`本次使用 源${sourceNumber} ${name}`}
-                                    data-testid={`purchase-sourcing-selected-${line.rowKey}`}
-                                />
-                            )}
-                        </form.AppField>
-                    ) : null}
-
                     <button
                         id={`${sourceId}-edit`}
                         type="button"
-                        aria-pressed={isActive}
+                        aria-pressed={Boolean(isAddressFiltered ?? isActive)}
                         aria-label={`编辑 ${name} · ${route}，分配数量 ${line.quantity || "待填写"}${product.unit}${hasError ? "，待调整" : ""}`}
-                        onClick={onActivate}
+                        onClick={() => {
+                            onActivate()
+                            onToggleAddressFilter?.()
+                        }}
                         className={cn(
-                            "inline-flex h-5.5 shrink-0 cursor-pointer items-center gap-1.5 rounded-sm border px-1.5 text-tiny font-semibold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                            isActive
+                            "inline-flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-sm border px-2 text-tiny font-semibold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            isAddressFiltered || isActive
                                 ? accent.chipClass
                                 : "border-border/70 bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground",
                         )}
@@ -351,17 +304,48 @@ export function SourcingSourceRow({
                             )}
                         />
                         <span className="num">源{sourceNumber}</span>
+                        <span aria-hidden="true" className="opacity-45">
+                            ·
+                        </span>
+                        <span className="inline-flex items-center gap-1 font-medium">
+                            {isStock ? (
+                                <PackageCheckIcon
+                                    aria-hidden="true"
+                                    className="size-3"
+                                />
+                            ) : null}
+                            {route}
+                        </span>
                     </button>
 
-                    <Badge
-                        variant={routeVariant}
-                        className="h-5 shrink-0 px-1.5"
-                    >
-                        {isStock ? (
-                            <PackageCheckIcon aria-hidden="true" />
-                        ) : null}
-                        {route}
-                    </Badge>
+                    {priceDelta?.isLowest && product.options.length > 1 ? (
+                        <Badge
+                            variant="success"
+                            className="h-5 shrink-0 px-1.5 text-tiny"
+                        >
+                            最低价
+                        </Badge>
+                    ) : priceDelta &&
+                      !priceDelta.isLowest &&
+                      lowestPurchaseCost ? (
+                        <button
+                            type="button"
+                            onClick={() => onFocusCheapestCandidate?.()}
+                            className="num inline-flex h-5 shrink-0 cursor-pointer items-center rounded-sm bg-warning-soft/80 px-1.5 text-tiny font-medium text-warning-soft-foreground transition-colors hover:bg-warning-soft focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            title={`当前候选最低采购价为 ¥${lowestPurchaseCost}，点击查看下方候选比价`}
+                        >
+                            比最低贵 ¥{priceDelta.delta}
+                        </button>
+                    ) : null}
+
+                    {option?.inquirySource ? (
+                        <Badge
+                            variant="violet"
+                            className="h-5 shrink-0 px-1.5 text-tiny"
+                        >
+                            询价
+                        </Badge>
+                    ) : null}
 
                     <SourcingRecommendationHint
                         id={`${id}-recommendation`}
@@ -372,9 +356,18 @@ export function SourcingSourceRow({
                     />
 
                     {!line.selected ? (
-                        <Badge variant="outline" className="h-5 text-tiny">
-                            暂不用
-                        </Badge>
+                        <button
+                            type="button"
+                            onClick={() =>
+                                form.setFieldValue(
+                                    `lines[${index}].selected`,
+                                    true,
+                                )
+                            }
+                            className="inline-flex h-5 cursor-pointer items-center rounded-sm border border-dashed border-border px-1.5 text-tiny text-muted-foreground hover:border-primary/40 hover:text-primary"
+                        >
+                            已暂缓 · 恢复
+                        </button>
                     ) : null}
 
                     {hasError ? (
@@ -388,20 +381,35 @@ export function SourcingSourceRow({
                 </div>
 
                 <div className="flex shrink-0 items-center gap-1">
-                    {product.options.length > 1 ? (
-                        <Button
-                            id={`${id}-compare-toggle`}
+                    {onToggleAddressFilter ? (
+                        <button
+                            id={`${sourceId}-filter-addresses`}
                             type="button"
-                            size="xs"
-                            variant={isCompareTarget ? "secondary" : "ghost"}
+                            aria-pressed={Boolean(isAddressFiltered)}
                             onClick={() => {
                                 onActivate()
-                                onOpenCompare()
+                                onToggleAddressFilter()
                             }}
+                            title={
+                                isAddressFiltered
+                                    ? "当前右侧仅看本源地址，点击恢复全部地址"
+                                    : "点击在右侧仅查看本源承接的地址"
+                            }
+                            className={cn(
+                                "num inline-flex h-5.5 cursor-pointer items-center gap-1 rounded-sm border px-1.5 text-tiny font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                isAddressFiltered
+                                    ? accent.chipClass
+                                    : "border-transparent bg-muted/65 text-muted-foreground hover:bg-muted hover:text-foreground",
+                            )}
                         >
-                            <ScaleIcon aria-hidden="true" />
-                            比价换源
-                        </Button>
+                            <FilterIcon
+                                aria-hidden="true"
+                                className="size-2.5"
+                            />
+                            {isAddressFiltered
+                                ? `仅看 ${addressPillLabel}`
+                                : addressPillLabel}
+                        </button>
                     ) : null}
 
                     {canRemove ? (
@@ -411,7 +419,7 @@ export function SourcingSourceRow({
                             size="icon-xs"
                             variant="ghost"
                             className="text-muted-foreground hover:bg-destructive-soft/75 hover:text-destructive-soft-foreground"
-                            title="移除此来源"
+                            title="移回候选池"
                             aria-label={`移除 源${sourceNumber} ${name} · ${route}`}
                             onClick={onRemove}
                         >
@@ -421,7 +429,7 @@ export function SourcingSourceRow({
                 </div>
             </div>
 
-            {/* 供货方案选择器 + 一行静谧商业摘要 */}
+            {/* 供货方案选择器 + 一行核心商业摘要 */}
             <div className="space-y-1.5">
                 <SourcingOptionField
                     form={form}
@@ -443,7 +451,7 @@ export function SourcingSourceRow({
                                         value={availableCapStr}
                                         unit={product.unit}
                                     />{" "}
-                                    · 仓库出库时选址
+                                    · 仓库出库统筹
                                 </span>
                             ) : (
                                 <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -476,7 +484,7 @@ export function SourcingSourceRow({
                                         ) : null}
                                     </span>
                                     <span aria-hidden="true">·</span>
-                                    <span>
+                                    <span className="truncate">
                                         {taxRatePercent ? (
                                             <RateValue
                                                 value={taxRatePercent}
@@ -509,7 +517,7 @@ export function SourcingSourceRow({
 
                         {!isStock ? (
                             <CollapsibleContent>
-                                <div className="mt-2 space-y-1 border-t border-border/50 pt-2 text-xs text-muted-foreground">
+                                <div className="mt-1.5 space-y-1 border-t border-border/50 pt-1.5 text-xs text-muted-foreground">
                                     <p>
                                         {option.inquirySource
                                             ? `询价专项报价（第 ${option.inquirySource.feedback_round} 轮 · v${option.inquirySource.quote_revision_no}）`
@@ -518,7 +526,7 @@ export function SourcingSourceRow({
                                             ? ` · 模板 ${option.delivery.templateName}`
                                             : ""}
                                         {option.maxCreateQuantity
-                                            ? ` · 上限 ${option.maxCreateQuantity} ${product.unit}`
+                                            ? ` · 可供上限 ${option.maxCreateQuantity} ${product.unit}`
                                             : ""}
                                     </p>
                                     {deliveryText ? (
@@ -534,9 +542,9 @@ export function SourcingSourceRow({
                 ) : null}
             </div>
 
-            {/* 履约参数区：干净 2 列网格，无嵌套灰框 */}
+            {/* 履约参数区 */}
             {option ? (
-                <div className="space-y-2.5 border-t border-border/50 pt-2.5">
+                <div className="space-y-2 border-t border-border/50 pt-2">
                     {needsWarehouse ? (
                         <div className="space-y-1">
                             <div className="flex items-center justify-between gap-2">
@@ -583,7 +591,7 @@ export function SourcingSourceRow({
 
                     <div
                         className={cn(
-                            "grid gap-3",
+                            "grid gap-2.5",
                             isStock ? "grid-cols-1" : "grid-cols-2",
                         )}
                     >
@@ -607,33 +615,9 @@ export function SourcingSourceRow({
                         {/* 数量 / 直发承接 */}
                         {addressDriven ? (
                             <div className="min-w-0 space-y-1">
-                                <div className="flex items-center justify-between gap-1">
-                                    <p className="text-xs font-medium text-foreground/75">
-                                        直发承接
-                                    </p>
-                                    {onToggleAddressFilter &&
-                                    hasMultipleDirectSources ? (
-                                        <button
-                                            id={`${sourceId}-filter-addresses`}
-                                            type="button"
-                                            aria-pressed={Boolean(
-                                                isAddressFiltered,
-                                            )}
-                                            onClick={onToggleAddressFilter}
-                                            className={cn(
-                                                "inline-flex cursor-pointer items-center gap-0.5 text-tiny font-medium hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-                                                isAddressFiltered
-                                                    ? "text-primary"
-                                                    : "text-muted-foreground hover:text-foreground",
-                                            )}
-                                        >
-                                            <FilterIcon className="size-2.5" />
-                                            {isAddressFiltered
-                                                ? "已筛地址"
-                                                : "筛右侧地址"}
-                                        </button>
-                                    ) : null}
-                                </div>
+                                <p className="text-xs font-medium text-foreground/75">
+                                    直发承接
+                                </p>
                                 <div className="flex min-h-control flex-wrap items-center justify-between gap-1.5 rounded-md border border-border/70 bg-surface-sunken/70 px-2.5">
                                     <div className="flex items-baseline gap-1">
                                         <span className="text-body-compact font-semibold text-foreground">
@@ -648,216 +632,39 @@ export function SourcingSourceRow({
                                         </span>
                                     </div>
 
-                                    <div className="flex items-center gap-1">
-                                        {balanceHint?.kind === "trim" &&
-                                        onTrimDirectExcessForSource ? (
-                                            <button
-                                                id={`${sourceId}-quick-trim`}
-                                                type="button"
-                                                onClick={() =>
-                                                    onTrimDirectExcessForSource(
-                                                        line.rowKey,
-                                                        balanceHint.delta,
-                                                    )
-                                                }
-                                                className="inline-flex cursor-pointer items-center gap-0.5 rounded-sm bg-destructive-soft px-1.5 py-0.5 text-tiny font-medium text-destructive-soft-foreground hover:bg-destructive-soft/75 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                                            >
-                                                <ScissorsIcon className="size-2.5" />
-                                                缩至 {balanceHint.target}
-                                            </button>
-                                        ) : balanceHint?.kind === "fill" &&
-                                          onFillDirectShortfallForSource ? (
-                                            <button
-                                                id={`${sourceId}-quick-fill`}
-                                                type="button"
-                                                onClick={() =>
-                                                    onFillDirectShortfallForSource(
-                                                        line.rowKey,
-                                                        balanceHint.delta,
-                                                    )
-                                                }
-                                                className="inline-flex cursor-pointer items-center gap-0.5 rounded-sm bg-info-soft px-1.5 py-0.5 text-tiny font-medium text-info-soft-foreground hover:bg-info-soft/75 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                                            >
-                                                <ZapIcon className="size-2.5" />
-                                                +补 {balanceHint.delta}
-                                            </button>
-                                        ) : null}
-
-                                        {onApplyPatches ? (
-                                            <Popover
-                                                open={quotaOpen}
-                                                onOpenChange={(next) => {
-                                                    setQuotaOpen(next)
-                                                    if (next) {
-                                                        setQuotaQty(
-                                                            balanceHint?.target ??
-                                                                line.quantity ??
-                                                                "",
-                                                        )
-                                                    }
-                                                }}
-                                            >
-                                                <PopoverTrigger
-                                                    render={
-                                                        <button
-                                                            id={`${sourceId}-quota-trigger`}
-                                                            type="button"
-                                                            aria-label={`按目标量自动配置 源${sourceNumber} 直发地址`}
-                                                            className="cursor-pointer rounded-sm px-1 py-0.5 text-tiny font-medium text-primary hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                                                        />
-                                                    }
-                                                >
-                                                    配量
-                                                </PopoverTrigger>
-                                                <PopoverContent
-                                                    align="end"
-                                                    className="w-72 space-y-2.5 p-3.5"
-                                                >
-                                                    <div className="space-y-0.5">
-                                                        <p className="text-body-compact font-semibold text-foreground">
-                                                            设定 源
-                                                            {sourceNumber}{" "}
-                                                            直发目标量
-                                                        </p>
-                                                        <p className="text-xs text-muted-foreground">
-                                                            按量自动挑选可配送地址，优先包邮地区。
-                                                        </p>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <Input
-                                                            id={`${sourceId}-quota-input`}
-                                                            type="number"
-                                                            inputMode="decimal"
-                                                            min="0"
-                                                            step={
-                                                                sourcingQuantityStep(
-                                                                    product.quantityScale,
-                                                                ) ?? "1"
-                                                            }
-                                                            placeholder={`例如 ${addressState?.directTargetQty ?? product.remainingQuantity}`}
-                                                            className="num h-control-sm flex-1"
-                                                            value={quotaQty}
-                                                            onChange={(event) =>
-                                                                setQuotaQty(
-                                                                    event.target
-                                                                        .value,
-                                                                )
-                                                            }
-                                                        />
-                                                        <span className="text-xs text-muted-foreground">
-                                                            {product.unit}
-                                                        </span>
-                                                    </div>
-                                                    {hasMultipleDirectSources ? (
-                                                        <label
-                                                            htmlFor={`${sourceId}-quota-reallocate`}
-                                                            className="flex cursor-pointer items-center gap-2 text-xs text-foreground"
-                                                        >
-                                                            <Checkbox
-                                                                id={`${sourceId}-quota-reallocate`}
-                                                                checked={
-                                                                    quotaAllowReallocate
-                                                                }
-                                                                onCheckedChange={(
-                                                                    c,
-                                                                ) =>
-                                                                    setQuotaAllowReallocate(
-                                                                        c ===
-                                                                            true,
-                                                                    )
-                                                                }
-                                                            />
-                                                            余量不足时从其他直发源调拨
-                                                        </label>
-                                                    ) : null}
-                                                    {quotaPreview ? (
-                                                        <div
-                                                            className={cn(
-                                                                "rounded-md px-2.5 py-1.5 text-xs",
-                                                                quotaPreview.valid
-                                                                    ? "bg-surface-sunken text-foreground"
-                                                                    : "bg-destructive-soft text-destructive-soft-foreground",
-                                                            )}
-                                                        >
-                                                            {quotaPreview.valid ? (
-                                                                <>
-                                                                    将分配{" "}
-                                                                    <strong className="num font-semibold">
-                                                                        {
-                                                                            quotaPreview.allocatedAddressCount
-                                                                        }{" "}
-                                                                        处
-                                                                    </strong>
-                                                                    ，合计{" "}
-                                                                    <strong className="num font-semibold">
-                                                                        {
-                                                                            quotaPreview.allocatedQty
-                                                                        }{" "}
-                                                                        {
-                                                                            product.unit
-                                                                        }
-                                                                    </strong>
-                                                                    {isPositiveQuantity(
-                                                                        quotaPreview.shortfallQty,
-                                                                    ) ? (
-                                                                        <span className="block text-warning-soft-foreground">
-                                                                            可配地址不足，尚差{" "}
-                                                                            {
-                                                                                quotaPreview.shortfallQty
-                                                                            }{" "}
-                                                                            {
-                                                                                product.unit
-                                                                            }
-                                                                        </span>
-                                                                    ) : null}
-                                                                </>
-                                                            ) : (
-                                                                quotaPreview.error
-                                                            )}
-                                                        </div>
-                                                    ) : null}
-                                                    <div className="flex justify-end gap-1.5">
-                                                        <Button
-                                                            id={`${sourceId}-quota-cancel`}
-                                                            type="button"
-                                                            variant="ghost"
-                                                            size="xs"
-                                                            onClick={() =>
-                                                                setQuotaOpen(
-                                                                    false,
-                                                                )
-                                                            }
-                                                        >
-                                                            取消
-                                                        </Button>
-                                                        <Button
-                                                            id={`${sourceId}-quota-apply`}
-                                                            type="button"
-                                                            size="xs"
-                                                            disabled={
-                                                                !quotaPreview?.valid
-                                                            }
-                                                            onClick={() => {
-                                                                if (
-                                                                    !quotaPreview?.valid
-                                                                )
-                                                                    return
-                                                                onApplyPatches(
-                                                                    quotaPreview.patches,
-                                                                    `已将 源${sourceNumber} 直发配额设为 ${quotaPreview.allocatedQty} ${product.unit}（${quotaPreview.allocatedAddressCount} 处地址）。`,
-                                                                )
-                                                                setQuotaOpen(
-                                                                    false,
-                                                                )
-                                                            }}
-                                                        >
-                                                            应用
-                                                        </Button>
-                                                    </div>
-                                                </PopoverContent>
-                                            </Popover>
-                                        ) : null}
-                                    </div>
+                                    {balanceHint?.kind === "trim" &&
+                                    onTrimDirectExcessForSource ? (
+                                        <button
+                                            id={`${sourceId}-quick-trim`}
+                                            type="button"
+                                            onClick={() =>
+                                                onTrimDirectExcessForSource(
+                                                    line.rowKey,
+                                                    balanceHint.delta,
+                                                )
+                                            }
+                                            className="inline-flex cursor-pointer items-center gap-0.5 rounded-sm bg-destructive-soft px-1.5 py-0.5 text-tiny font-medium text-destructive-soft-foreground hover:bg-destructive-soft/75 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                        >
+                                            <ScissorsIcon className="size-2.5" />
+                                            缩至 {balanceHint.target}
+                                        </button>
+                                    ) : balanceHint?.kind === "fill" &&
+                                      onFillDirectShortfallForSource ? (
+                                        <button
+                                            id={`${sourceId}-quick-fill`}
+                                            type="button"
+                                            onClick={() =>
+                                                onFillDirectShortfallForSource(
+                                                    line.rowKey,
+                                                    balanceHint.delta,
+                                                )
+                                            }
+                                            className="inline-flex cursor-pointer items-center gap-0.5 rounded-sm bg-info-soft px-1.5 py-0.5 text-tiny font-medium text-info-soft-foreground hover:bg-info-soft/75 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                        >
+                                            <ZapIcon className="size-2.5" />
+                                            +补 {balanceHint.delta}
+                                        </button>
+                                    ) : null}
                                 </div>
                             </div>
                         ) : (
@@ -929,29 +736,40 @@ export function SourcingSourceRow({
                 </div>
             ) : null}
 
-            {/* 配送 / 起订量 / 目标仓地区提醒 */}
-            {warehouseJudgement ||
+            {/* 目标仓包邮正向提示（冷静绿色，不误用警告框） */}
+            {warehouseJudgement && !warehouseIsAlert && option ? (
+                <div className="flex items-center gap-1.5 text-xs text-success-soft-foreground">
+                    <CheckCircle2Icon
+                        aria-hidden="true"
+                        className="size-3.5 shrink-0"
+                    />
+                    <span>
+                        目标仓地区 {warehouseJudgement.regionName}：
+                        {deliveryTermLabel(option, warehouseJudgement.term)}
+                    </span>
+                </div>
+            ) : null}
+
+            {/* 真正的配送异常 / 起订量提醒 */}
+            {warehouseIsAlert ||
             option?.delivery?.bulkMinimumOrderQuantity ||
             deliveryHasException ? (
-                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-md bg-warning-soft/65 px-2.5 py-1.5 text-xs text-warning-soft-foreground">
+                <div
+                    className={cn(
+                        "flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-md px-2.5 py-1.5 text-xs",
+                        warehouseJudgement?.term === "NOT_DELIVERABLE"
+                            ? "bg-destructive-soft text-destructive-soft-foreground"
+                            : "bg-warning-soft/65 text-warning-soft-foreground",
+                    )}
+                >
                     <TriangleAlertIcon
                         aria-hidden="true"
                         className="size-3.5 shrink-0"
                     />
-                    {warehouseJudgement ? (
-                        <span
-                            className={cn(
-                                warehouseJudgement.term === "NOT_DELIVERABLE" &&
-                                    "font-medium text-destructive",
-                            )}
-                        >
+                    {warehouseIsAlert && warehouseJudgement && option ? (
+                        <span className="font-medium">
                             目标仓地区 {warehouseJudgement.regionName}：
-                            {option
-                                ? deliveryTermLabel(
-                                      option,
-                                      warehouseJudgement.term,
-                                  )
-                                : ""}
+                            {deliveryTermLabel(option, warehouseJudgement.term)}
                         </span>
                     ) : null}
                     {deliveryHasException ? <span>{deliveryText}</span> : null}
@@ -993,12 +811,14 @@ export function SourcingSourceRow({
             onPointerDownCapture={onActivate}
             onFocusCapture={onActivate}
             className={cn(
-                "rounded-lg border bg-card p-3.5 shadow-2xs transition-colors",
+                "rounded-lg border bg-card p-2.5 shadow-2xs transition-colors",
                 hasError
                     ? "border-destructive/55 ring-1 ring-destructive/15"
-                    : isActive
+                    : isAddressFiltered
                       ? accent.activeBorderClass
-                      : "border-border/75 hover:border-border",
+                      : isActive
+                        ? "border-primary/40"
+                        : "border-border/75 hover:border-border",
                 !line.selected && "border-dashed opacity-70",
             )}
         >

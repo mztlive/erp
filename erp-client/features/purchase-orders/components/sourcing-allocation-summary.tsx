@@ -1,7 +1,6 @@
 import {
     CheckCircle2Icon,
     ScissorsIcon,
-    SplitIcon,
     TriangleAlertIcon,
     ZapIcon,
 } from "lucide-react"
@@ -34,23 +33,20 @@ type BarSegment = {
 
 /**
  * 左侧栏顶部配平总览卡：
- * - 极简轻白卡呈现总分配进度、分色堆叠条与各来源图例；
- * - 混合履约时点明「仓库/库存统筹 + 供应商直发（额度）」，失衡时就地给出一键配平动作。
+ * - 单一数据源呈现「已分配 / 总需求」、分色堆叠进度条与各来源数量图例；
+ * - 混合履约直接表达「直发 X + 仓库/库存 Y」，去除晦涩的“直发额度”术语；
+ * - 仅在失衡时就地提供一键配平动作。
  */
 export function SourcingAllocationSummary({
     row,
     addressState,
     onTrimDirectExcess,
     onFillDirectShortfall,
-    onSplitResidual,
-    canSplitNewSource = false,
 }: {
     row: SourcingEditorRow
     addressState?: GlobalAddressState | null
     onTrimDirectExcess?: () => void
     onFillDirectShortfall?: () => void
-    onSplitResidual?: () => void
-    canSplitNewSource?: boolean
 }) {
     const included = row.selected || row.partiallySelected
     const idPrefix = `sourcing-balance-${toAutomationIdSegment(row.product.salesOrderLineId)}`
@@ -117,13 +113,6 @@ export function SourcingAllocationSummary({
         })
     }
 
-    const showMixedEquation = Boolean(
-        included &&
-        addressState &&
-        addressState.hasNonDirectSources &&
-        addressState.directSources.some((src) => src.selected),
-    )
-
     const hasDirectOverTarget = Boolean(
         addressState &&
         isPositiveQuantity(addressState.directOverTargetQty) &&
@@ -138,20 +127,17 @@ export function SourcingAllocationSummary({
         onFillDirectShortfall,
     )
 
-    const hasQuickAction =
-        hasDirectOverTarget ||
-        hasDirectShortfall ||
-        (partial && canSplitNewSource && Boolean(onSplitResidual))
+    const hasQuickAction = hasDirectOverTarget || hasDirectShortfall
 
     return (
         <div
             className={cn(
-                "shrink-0 rounded-lg border bg-card p-3.5 shadow-2xs",
+                "shrink-0 rounded-lg border bg-card px-3.5 py-2.5 shadow-2xs",
                 excess ? "border-destructive-border" : "border-border/75",
             )}
             aria-label="商品分配进度"
         >
-            <div className="flex items-baseline justify-between gap-2">
+            <div className="flex items-center justify-between gap-2">
                 <div className="flex items-baseline gap-1.5">
                     <span className="text-xs text-muted-foreground">
                         已分配
@@ -208,7 +194,7 @@ export function SourcingAllocationSummary({
 
             {/* 分色堆叠配平条 */}
             <div
-                className="mt-2.5 flex h-2 w-full overflow-hidden rounded-full bg-muted"
+                className="mt-2 flex h-1.5 w-full overflow-hidden rounded-full bg-muted"
                 aria-hidden="true"
             >
                 {segments.map((seg) => (
@@ -224,65 +210,33 @@ export function SourcingAllocationSummary({
                 ))}
             </div>
 
-            {/* 多源图例与混合履约守恒公式 */}
-            {segments.length > 1 || showMixedEquation ? (
-                <div className="mt-2 space-y-1">
-                    {segments.length > 1 ? (
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-tiny text-muted-foreground">
-                            {segments.map((seg) => (
-                                <span
-                                    key={seg.key}
-                                    className="inline-flex items-center gap-1"
-                                >
-                                    <span
-                                        aria-hidden="true"
-                                        className={cn(
-                                            "size-1.5 rounded-full",
-                                            seg.barClass,
-                                        )}
-                                    />
-                                    <span>{seg.label}</span>
-                                    <span className="num font-medium text-foreground">
-                                        {seg.qty}
-                                    </span>
-                                </span>
-                            ))}
-                        </div>
-                    ) : null}
-
-                    {showMixedEquation && addressState ? (
-                        <p className="text-xs text-muted-foreground">
-                            仓库/库存统筹{" "}
-                            <strong className="num font-medium text-foreground">
-                                {addressState.nonDirectTotalQty}{" "}
-                                {row.product.unit}
-                            </strong>
-                            {" + "}直发{" "}
-                            <strong
+            {/* 来源图例 */}
+            {segments.length > 1 ? (
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-tiny text-muted-foreground">
+                    {segments.map((seg) => (
+                        <span
+                            key={seg.key}
+                            className="inline-flex items-center gap-1"
+                        >
+                            <span
+                                aria-hidden="true"
                                 className={cn(
-                                    "num font-medium",
-                                    isPositiveQuantity(
-                                        addressState.directOverTargetQty,
-                                    )
-                                        ? "text-destructive"
-                                        : "text-foreground",
+                                    "size-1.5 rounded-full",
+                                    seg.barClass,
                                 )}
-                            >
-                                {addressState.directAssignedTotalQty}{" "}
-                                {row.product.unit}
-                            </strong>
-                            <span className="num">
-                                （直发额度 {addressState.directTargetQty}{" "}
-                                {row.product.unit}）
+                            />
+                            <span>{seg.label}</span>
+                            <span className="num font-medium text-foreground">
+                                {seg.qty} {row.product.unit}
                             </span>
-                        </p>
-                    ) : null}
+                        </span>
+                    ))}
                 </div>
             ) : null}
 
             {/* 失衡时就地提供一键配平动作 */}
             {hasQuickAction ? (
-                <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-border/50 pt-2.5">
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-border/50 pt-2">
                     {hasDirectOverTarget && addressState ? (
                         <Button
                             id={`${idPrefix}-trim-direct`}
@@ -292,7 +246,9 @@ export function SourcingAllocationSummary({
                             onClick={onTrimDirectExcess}
                         >
                             <ScissorsIcon aria-hidden="true" />
-                            直发自动缩减至 {addressState.directTargetQty}{" "}
+                            自动缩减多余直发 -{
+                                addressState.directOverTargetQty
+                            }{" "}
                             {row.product.unit}
                         </Button>
                     ) : null}
@@ -306,22 +262,8 @@ export function SourcingAllocationSummary({
                             onClick={onFillDirectShortfall}
                         >
                             <ZapIcon aria-hidden="true" />
-                            直发补配 +{addressState.directShortfallQty}{" "}
+                            直发自动补配 +{addressState.directShortfallQty}{" "}
                             {row.product.unit}
-                        </Button>
-                    ) : null}
-
-                    {partial && canSplitNewSource && onSplitResidual ? (
-                        <Button
-                            id={`sourcing-product-${toAutomationIdSegment(row.product.salesOrderLineId)}-split-residual`}
-                            type="button"
-                            size="xs"
-                            variant="outline"
-                            className="bg-card"
-                            onClick={onSplitResidual}
-                        >
-                            <SplitIcon aria-hidden="true" />
-                            余量 {diffText} {row.product.unit} 拆给新来源
                         </Button>
                     ) : null}
                 </div>

@@ -2,18 +2,16 @@
 
 import { useMemo, useState } from "react"
 import {
-    ArrowRightLeftIcon,
     CheckCircle2Icon,
     ChevronDownIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
     CircleAlertIcon,
-    EraserIcon,
     MapPinIcon,
     PackageCheckIcon,
-    PlusIcon,
     ScissorsIcon,
     SearchIcon,
+    SparklesIcon,
     SplitIcon,
     TriangleAlertIcon,
     WarehouseIcon,
@@ -44,21 +42,16 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import {
-    compactFixed,
-    compareDecimal,
-    subtractFixed,
-    sumFixed,
-} from "@/lib/fixed-decimal"
+import { compactFixed, compareDecimal, sumFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 import type { PurchaseOrderCreateFormApi } from "../lib/purchase-order-create-form-types"
 import { sourcingQuantityStep } from "../lib/sourcing-quantity"
 import {
-    buildAddSliceQuantityPatch,
-    buildBatchAssignPatches,
+    buildAssignDirectWithWarehouseBalancePatches,
+    buildAutoAllocateLowestPricePatches,
     buildClearAddressesPatches,
     buildSetSliceQuantityPatch,
-    buildTransferAddressesToNonDirectPatches,
+    buildTransferAddressesToWarehousePoolPatches,
     buildTrimDirectExcessPatches,
     computeGlobalAddressState,
     computeQuotaAutoAllocation,
@@ -76,22 +69,21 @@ import {
     deliveryTermLabel,
 } from "../lib/sourcing/delivery-terms"
 import type { SourcingEditorRow } from "../lib/sourcing/editor-rows"
-import {
-    formatQuantityUnits,
-    minimumUnits,
-    quantityUnits,
-} from "../lib/sourcing/quantity"
-import {
-    sourceAccentForIndex,
-    sourceRouteBadgeVariant,
-} from "../lib/sourcing/source-palette"
+import { quantityUnits } from "../lib/sourcing/quantity"
+import { sourceAccentForIndex } from "../lib/sourcing/source-palette"
 import type { PurchaseDeliveryAllocation } from "../types"
 
-type ViewMode = "follow" | "all"
-type StatusFilter = "all" | "assigned" | "unassigned" | "issues"
+export type AddressSourceFilter =
+    | null
+    | "__warehouse__"
+    | "__unassigned__"
+    | "__issues__"
+    | string
+
 type PageSizeOption = 25 | 50 | 100
 
-const TRANSFER_VALUE_PREFIX = "__transfer__:"
+const WAREHOUSE_SELECT_VALUE = "__warehouse__"
+const UNASSIGNED_SELECT_VALUE = "__unassigned__"
 
 function addressIdSegment(row: PurchaseDeliveryAllocation): string {
     return toAutomationIdSegment(encodeURIComponent(deliveryKey(row)))
@@ -107,49 +99,46 @@ function safeSumQuantities(values: readonly string[]): string {
 }
 
 /**
- * 右侧全高交付地址分配表（支持「跟随左侧当前源」与「全部地址总览」双视角）：
- * - 跟随模式：点击左侧任意来源（直发 / 集采入仓 / 现有库存），右侧立即切换至该来源视角；
- *   已配地址逐行提供直观「移出」按钮，移出后立刻进入「未覆盖地址池」；
- * - 切换到其他适合的来源（直发或仓发/库存）后，可将未覆盖地址逐条或一键全部直接填入，轻松完成多源配平；
- * - 全部模式：扁平分页表呈现所有地址（适配 100+ 地址），同样保留直达「移出」与「+ 填入」动作。
+ * 右侧常驻交付地址路由表（方案 B）：
+ * - 默认展示「全部地址」，一眼看清每处地址归哪个直发供应商还是仓库统筹，行内 1 次点击直接切换归属并自动守恒配平；
+ * - 顶部来源胶囊与左侧已选来源卡片双向同步：点击任意左侧来源（或顶部胶囊），右侧立即筛选只看该源承接的地址；
+ * - 常规单件/整址归单一来源时隐藏无意义数字框，仅多件可拆地址支持按需展开多源拆分；
+ * - 一键「按低价自动分」自动按价格最低 + 包邮优先分配直发，其余自动落仓库统筹。
  */
 export function SourcingAddressEditor({
     form,
     row,
-    activeRowKey,
-    canSplitNewSource,
-    onSplitResidual,
-    onSplitAddressesToNewSource,
-    sourceFilter: controlledSourceFilter,
+    sourceFilter,
     onSourceFilterChange,
+    previewDirectRowKey,
+    hasUnusedCandidates,
+    onRescueAddresses,
 }: {
     form: PurchaseOrderCreateFormApi
     row: SourcingEditorRow
-    activeRowKey?: string
-    canSplitNewSource: boolean
-    onSplitResidual?: () => void
-    onSplitAddressesToNewSource?: (addressKeys: readonly string[]) => void
-    sourceFilter?: string | null
-    onSourceFilterChange?: (next: string | null) => void
+    sourceFilter: AddressSourceFilter
+    onSourceFilterChange: (next: AddressSourceFilter) => void
+    /** 刚新选入但尚无地址的直发源，用于在全局视图下提示该源的配送状态。 */
+    previewDirectRowKey?: string | null
+    hasUnusedCandidates: boolean
+    onRescueAddresses?: (label: string, keys: ReadonlySet<string>) => void
 }) {
     const { product } = row
     const allLines = form.state.values.lines
     const idPrefix = `sourcing-addr-${toAutomationIdSegment(product.salesOrderLineId)}`
 
-    const [viewMode, setViewMode] = useState<ViewMode>("follow")
-    const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
-    const [internalSourceFilter, setInternalSourceFilter] = useState<
-        string | null
-    >(null)
     const [regionFilter, setRegionFilter] = useState<string | null>(null)
     const [query, setQuery] = useState("")
     const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(
         () => new Set(),
     )
+    const [expandedSplitKeys, setExpandedSplitKeys] = useState<
+        ReadonlySet<string>
+    >(() => new Set())
     const [pageIndex, setPageIndex] = useState(0)
     const [pageSize, setPageSize] = useState<PageSizeOption>(25)
 
-    // 「按数量自动分配」弹窗状态
+    // 按数量凑单弹窗状态（单一入口）
     const [quotaOpen, setQuotaOpen] = useState(false)
     const [quotaTargetRowKey, setQuotaTargetRowKey] = useState<string>("")
     const [quotaQty, setQuotaQty] = useState("")
@@ -158,51 +147,90 @@ export function SourcingAddressEditor({
     const [quotaScopeOnlyFiltered, setQuotaScopeOnlyFiltered] = useState(false)
     const [actionFeedback, setActionFeedback] = useState<string | null>(null)
 
-    const sourceFilter =
-        controlledSourceFilter !== undefined
-            ? controlledSourceFilter
-            : internalSourceFilter
-    const setSourceFilter = (next: string | null) => {
-        if (onSourceFilterChange) onSourceFilterChange(next)
-        else setInternalSourceFilter(next)
-    }
-
     const state = useMemo(
         () => computeGlobalAddressState(product, row.allocations),
         [product, row.allocations],
     )
 
-    // 当前在左侧选中的来源（可能是直发来源，也可能是集采入仓/现有库存）
-    const activeDirectSource = useMemo(
-        () =>
-            state.directSources.find((src) => src.rowKey === activeRowKey) ??
-            undefined,
-        [activeRowKey, state.directSources],
+    const activeDirectSources = useMemo(
+        () => state.directSources.filter((src) => src.selected),
+        [state.directSources],
     )
-    const activeNonDirectSource = useMemo(
-        () =>
-            state.nonDirectSources.find((src) => src.rowKey === activeRowKey) ??
-            undefined,
-        [activeRowKey, state.nonDirectSources],
+    const activeNonDirectSources = useMemo(
+        () => state.nonDirectSources.filter((src) => src.selected),
+        [state.nonDirectSources],
     )
-    const effectiveDirectSource =
-        activeDirectSource ?? state.primaryDirectSource
+    const primaryNonDirectSource = activeNonDirectSources[0]
+    const previewDirectSource = useMemo(
+        () =>
+            previewDirectRowKey
+                ? activeDirectSources.find(
+                      (src) => src.rowKey === previewDirectRowKey,
+                  )
+                : undefined,
+        [activeDirectSources, previewDirectRowKey],
+    )
 
-    const activeSourceFilter =
-        sourceFilter &&
-        state.directSources.some((src) => src.rowKey === sourceFilter)
+    // 规范化来源筛选：若筛选的直发源已被移除或状态不再适用，自动回落到全部
+    const resolvedSourceFilter: AddressSourceFilter = (() => {
+        if (!sourceFilter) return null
+        if (sourceFilter === "__warehouse__") {
+            return state.hasNonDirectSources ? "__warehouse__" : null
+        }
+        if (sourceFilter === "__unassigned__") {
+            return !state.hasNonDirectSources && state.counts.unassigned > 0
+                ? "__unassigned__"
+                : null
+        }
+        if (sourceFilter === "__issues__") {
+            return state.counts.issues > 0 ? "__issues__" : null
+        }
+        return state.directSources.some((src) => src.rowKey === sourceFilter)
             ? sourceFilter
             : null
+    })()
+
+    const filteredDirectSource = useMemo(
+        () =>
+            resolvedSourceFilter && !resolvedSourceFilter.startsWith("__")
+                ? state.directSources.find(
+                      (src) => src.rowKey === resolvedSourceFilter,
+                  )
+                : undefined,
+        [resolvedSourceFilter, state.directSources],
+    )
+
     const activeRegionFilter =
         regionFilter &&
         state.regionFacets.items.some((item) => item.key === regionFilter)
             ? regionFilter
             : null
 
-    // 基础搜索 + 地区筛选（跟随模式与全部模式共用）
-    const baseFilteredEntries = useMemo(() => {
+    const filteredEntries = useMemo(() => {
         const keyword = query.trim().toLocaleLowerCase()
         return state.entries.filter((entry) => {
+            if (resolvedSourceFilter === "__warehouse__") {
+                if (!isPositiveQuantity(entry.remainingUnassigned)) return false
+            } else if (resolvedSourceFilter === "__unassigned__") {
+                if (!isPositiveQuantity(entry.remainingUnassigned)) return false
+            } else if (resolvedSourceFilter === "__issues__") {
+                if (
+                    !entry.hasError &&
+                    !entry.hasNotDeliverable &&
+                    !entry.hasFreightExtra
+                ) {
+                    return false
+                }
+            } else if (resolvedSourceFilter) {
+                if (
+                    !entry.activeSlices.some(
+                        (slice) => slice.rowKey === resolvedSourceFilter,
+                    )
+                ) {
+                    return false
+                }
+            }
+
             if (
                 activeRegionFilter &&
                 entryRegionFacetKey(entry, state.regionFacets.level) !==
@@ -215,136 +243,13 @@ export function SourcingAddressEditor({
                 .toLocaleLowerCase()
                 .includes(keyword)
         })
-    }, [activeRegionFilter, query, state.entries, state.regionFacets.level])
-
-    // 全部模式下的进一步状态/来源筛选
-    const filteredEntries = useMemo(() => {
-        return baseFilteredEntries.filter((entry) => {
-            if (
-                statusFilter === "assigned" &&
-                !isPositiveQuantity(entry.assignedTotal)
-            ) {
-                return false
-            }
-            if (
-                statusFilter === "unassigned" &&
-                !isPositiveQuantity(entry.remainingUnassigned)
-            ) {
-                return false
-            }
-            if (
-                statusFilter === "issues" &&
-                !entry.hasError &&
-                !entry.hasNotDeliverable &&
-                !entry.hasFreightExtra
-            ) {
-                return false
-            }
-            if (
-                activeSourceFilter &&
-                !entry.activeSlices.some(
-                    (slice) => slice.rowKey === activeSourceFilter,
-                )
-            ) {
-                return false
-            }
-            return true
-        })
-    }, [activeSourceFilter, baseFilteredEntries, statusFilter])
-
-    // 跟随模式下的分组数据：
-    // 1) 当前选中直发源：本源已承接地址 + 全局未覆盖地址池
-    // 2) 当前选中仓库/库存源：未覆盖/仓库统筹地址 + 其他直发源已承接地址（可一键移出或转入本仓源）
-    const followAssignedEntries = useMemo(() => {
-        if (!activeDirectSource) return []
-        return baseFilteredEntries.filter((entry) =>
-            entry.slices.some(
-                (slice) =>
-                    slice.rowKey === activeDirectSource.rowKey &&
-                    (slice.positive || slice.quantity.trim() !== ""),
-            ),
-        )
-    }, [activeDirectSource, baseFilteredEntries])
-
-    const followUncoveredEntries = useMemo(
-        () =>
-            baseFilteredEntries.filter((entry) =>
-                isPositiveQuantity(entry.remainingUnassigned),
-            ),
-        [baseFilteredEntries],
-    )
-
-    const followDirectAssignedAll = useMemo(
-        () =>
-            baseFilteredEntries.filter((entry) =>
-                isPositiveQuantity(entry.assignedTotal),
-            ),
-        [baseFilteredEntries],
-    )
-
-    const allUncoveredEntries = useMemo(
-        () =>
-            state.entries.filter((entry) =>
-                isPositiveQuantity(entry.remainingUnassigned),
-            ),
-        [state.entries],
-    )
-    const allUncoveredQty = useMemo(
-        () =>
-            safeSumQuantities(
-                allUncoveredEntries.map((entry) => entry.remainingUnassigned),
-            ),
-        [allUncoveredEntries],
-    )
-
-    // 当前选中直发源可承接的未覆盖地址列表（自动排除该源不配送地区）
-    const deliverableUncoveredForActive = useMemo(() => {
-        if (!activeDirectSource) return []
-        return followUncoveredEntries.filter((entry) =>
-            addressDeliverable(
-                activeDirectSource.option,
-                entry.baseRow.region_code,
-            ),
-        )
-    }, [activeDirectSource, followUncoveredEntries])
-    const deliverableUncoveredQty = useMemo(
-        () =>
-            safeSumQuantities(
-                deliverableUncoveredForActive.map(
-                    (entry) => entry.remainingUnassigned,
-                ),
-            ),
-        [deliverableUncoveredForActive],
-    )
-
-    // 当前选中仓库/库存源可承接的未覆盖余量（受商品总缺口与该源可用上限约束）
-    const nonDirectFillableQty = useMemo(() => {
-        if (!activeNonDirectSource) return "0"
-        try {
-            const demandUnits = quantityUnits(product.remainingQuantity)
-            const allocatedStr = sumFixed(
-                row.allocations
-                    .filter(({ line }) => line.selected)
-                    .map(({ line }) => line.quantity || "0"),
-                { maxScale: 6, outputScale: 6 },
-            )
-            const allocatedUnits = quantityUnits(allocatedStr)
-            if (allocatedUnits >= demandUnits) return "0"
-            const productShortfall = demandUnits - allocatedUnits
-            const selfUnits = isPositiveQuantity(activeNonDirectSource.quantity)
-                ? quantityUnits(compactFixed(activeNonDirectSource.quantity))
-                : BigInt(0)
-            const capUnits = quantityUnits(
-                activeNonDirectSource.maxCreateQuantity,
-            )
-            const headroom =
-                capUnits > selfUnits ? capUnits - selfUnits : BigInt(0)
-            const addable = minimumUnits(productShortfall, headroom)
-            return addable > BigInt(0) ? formatQuantityUnits(addable) : "0"
-        } catch {
-            return "0"
-        }
-    }, [activeNonDirectSource, product.remainingQuantity, row.allocations])
+    }, [
+        activeRegionFilter,
+        query,
+        resolvedSourceFilter,
+        state.entries,
+        state.regionFacets.level,
+    ])
 
     const totalPages = Math.max(1, Math.ceil(filteredEntries.length / pageSize))
     const safePageIndex = Math.min(pageIndex, totalPages - 1)
@@ -383,9 +288,6 @@ export function SourcingAddressEditor({
         pageEntries.length > 0 && pageSelectedCount === pageEntries.length
     const somePageSelected =
         pageSelectedCount > 0 && pageSelectedCount < pageEntries.length
-    const allFilteredSelected =
-        filteredEntries.length > 0 &&
-        filteredEntries.every((entry) => effectiveSelectedKeys.has(entry.key))
 
     const filteredKeySet = useMemo(
         () => new Set(filteredEntries.map((entry) => entry.key)),
@@ -393,8 +295,7 @@ export function SourcingAddressEditor({
     )
 
     const hasActiveFilters =
-        statusFilter !== "all" ||
-        activeSourceFilter !== null ||
+        resolvedSourceFilter !== null ||
         activeRegionFilter !== null ||
         query.trim().length > 0
 
@@ -429,167 +330,112 @@ export function SourcingAddressEditor({
         })
     }
 
-    const selectAllFiltered = () => {
-        setSelectedKeys(new Set(filteredEntries.map((entry) => entry.key)))
+    const toggleSplitRow = (key: string) => {
+        setExpandedSplitKeys((current) => {
+            const next = new Set(current)
+            if (next.has(key)) next.delete(key)
+            else next.add(key)
+            return next
+        })
     }
 
-    const clearSelection = () => {
-        setSelectedKeys(new Set())
-    }
+    const clearSelection = () => setSelectedKeys(new Set())
 
-    const handleBatchAssign = (
+    const handleAssignDirect = (
         targetRowKey: string,
         keys: ReadonlySet<string>,
-        mode: "move_full" | "fill_remaining",
+        showFeedback = false,
     ) => {
-        const result = buildBatchAssignPatches(
+        const result = buildAssignDirectWithWarehouseBalancePatches(
             product,
             form.state.values.lines,
             targetRowKey,
             keys,
-            mode,
         )
         applyPatches(result.patches)
-        const target = state.directSources.find(
-            (src) => src.rowKey === targetRowKey,
-        )
-        const skippedNote =
-            result.skippedUndeliverableCount > 0
-                ? `，已跳过 ${result.skippedUndeliverableCount} 处不可配送地址`
-                : ""
-        setActionFeedback(
-            `已将 ${result.assignedCount} 处地址填入 ${target?.shortLabel ?? "所选来源"}${skippedNote}。`,
-        )
-        clearSelection()
+        if (showFeedback) {
+            const target = state.directSources.find(
+                (src) => src.rowKey === targetRowKey,
+            )
+            const parts: string[] = [
+                `已将 ${result.assignedCount} 处地址分配给 ${target?.shortLabel ?? "所选直发源"}`,
+            ]
+            if (isPositiveQuantity(result.autoReducedWarehouseQty)) {
+                parts.push(
+                    `仓库统筹已自动同步扣减 ${result.autoReducedWarehouseQty} ${product.unit}`,
+                )
+            }
+            if (result.skippedUndeliverableCount > 0) {
+                parts.push(
+                    `跳过 ${result.skippedUndeliverableCount} 处不配送地址`,
+                )
+            }
+            setActionFeedback(`${parts.join("，")}。`)
+            clearSelection()
+        }
     }
 
-    const handleBatchTransferToNonDirect = (
-        targetNonDirectRowKey: string,
+    const handleAssignWarehouse = (
         keys: ReadonlySet<string>,
+        preferredNonDirectRowKey?: string,
+        showFeedback = false,
     ) => {
-        const result = buildTransferAddressesToNonDirectPatches(
+        const result = buildTransferAddressesToWarehousePoolPatches(
             product,
             form.state.values.lines,
-            targetNonDirectRowKey,
             keys,
+            preferredNonDirectRowKey,
         )
         applyPatches(result.patches)
-        const target = state.nonDirectSources.find(
-            (src) => src.rowKey === targetNonDirectRowKey,
-        )
-        const capNote = result.cappedByMax
-            ? "（已按该来源上限/商品剩余需求自动封顶）"
-            : ""
-        setActionFeedback(
-            `已从直发移出 ${result.releasedCount} 处地址，并向 ${target?.shortLabel ?? "仓库来源"} 划入 ${result.transferredQty} ${product.unit}${capNote}。`,
-        )
-        clearSelection()
+        if (showFeedback) {
+            const targetLabel =
+                activeNonDirectSources.length === 1 && primaryNonDirectSource
+                    ? `源${primaryNonDirectSource.sourceNumber}·${primaryNonDirectSource.routeLabel}`
+                    : "仓库/库存统筹"
+            const capNote = result.cappedByMax ? "（已按仓库可用上限封顶）" : ""
+            setActionFeedback(
+                `已将 ${result.releasedCount} 处地址划入 ${targetLabel}${isPositiveQuantity(result.transferredQty) ? `（+${result.transferredQty} ${product.unit}）` : ""}${capNote}。`,
+            )
+            clearSelection()
+        }
     }
 
-    const handleBatchClear = (
+    const handleClearDirect = (
         keys: ReadonlySet<string>,
-        onlyRowKey?: string,
+        showFeedback = false,
     ) => {
         const patches = buildClearAddressesPatches(
             product,
             form.state.values.lines,
             keys,
-            onlyRowKey,
         )
         applyPatches(patches)
-        const srcLabel = onlyRowKey
-            ? state.directSources.find((s) => s.rowKey === onlyRowKey)
-                  ?.shortLabel
-            : undefined
-        setActionFeedback(
-            srcLabel
-                ? `已从 ${srcLabel} 移出 ${keys.size} 处地址至未覆盖地址池。`
-                : `已移出 ${keys.size} 处地址的直发分配至未覆盖地址池。`,
-        )
-        clearSelection()
+        if (showFeedback) {
+            setActionFeedback(`已将 ${keys.size} 处地址移出直发分配。`)
+            clearSelection()
+        }
     }
 
-    const handleRemoveAddressFromSource = (
-        targetRowKey: string,
-        entry: GlobalAddressEntry,
-    ) => {
-        const patch = buildSetSliceQuantityPatch(
+    const handleAutoAllocateLowestPrice = () => {
+        const result = buildAutoAllocateLowestPricePatches(
             product,
             form.state.values.lines,
-            targetRowKey,
-            entry.baseRow,
-            "0",
-            true,
         )
-        if (patch) applyPatches([patch])
-    }
-
-    const handleFillUncoveredToDirect = (
-        targetRowKey: string,
-        entry: GlobalAddressEntry,
-    ) => {
-        const patch = buildAddSliceQuantityPatch(
-            product,
-            form.state.values.lines,
-            targetRowKey,
-            entry.baseRow,
-            entry.remainingUnassigned,
-        )
-        if (patch) applyPatches([patch])
-    }
-
-    const handleFillAllUncoveredForActiveDirect = () => {
-        if (!activeDirectSource || deliverableUncoveredForActive.length === 0)
-            return
-        // 逐条累加填充未覆盖余量（保留该源已有分配，不覆盖原切片）
-        let workingLines = [...form.state.values.lines]
-        let filledCount = 0
-        for (const entry of deliverableUncoveredForActive) {
-            const patch = buildAddSliceQuantityPatch(
-                product,
-                workingLines,
-                activeDirectSource.rowKey,
-                entry.baseRow,
-                entry.remainingUnassigned,
-            )
-            if (!patch) continue
-            workingLines = workingLines.map((item, idx) =>
-                idx === patch.index ? patch.nextLine : item,
-            )
-            filledCount += 1
+        if (result.patches.length === 0) return
+        applyPatches(result.patches)
+        onSourceFilterChange(null)
+        const summaryParts: string[] = []
+        if (result.directAddressCount > 0) {
+            summaryParts.push(`直发 ${result.directAddressCount} 处`)
         }
-        const targetLine = workingLines[activeDirectSource.index]
-        if (targetLine) {
-            form.setFieldValue(`lines[${activeDirectSource.index}]`, targetLine)
+        if (result.warehouseAddressCount > 0) {
+            summaryParts.push(`仓库统筹 ${result.warehouseAddressCount} 处`)
         }
-        const skipped =
-            followUncoveredEntries.length - deliverableUncoveredForActive.length
+        if (result.unassignedCount > 0) {
+            summaryParts.push(`待配 ${result.unassignedCount} 处`)
+        }
         setActionFeedback(
-            `已向 ${activeDirectSource.shortLabel} 填入 ${filledCount} 处未覆盖地址（共 ${deliverableUncoveredQty} ${product.unit}）${skipped > 0 ? `，跳过 ${skipped} 处不配送地址` : ""}。`,
-        )
-    }
-
-    const handleFillUncoveredToActiveNonDirect = () => {
-        if (
-            !activeNonDirectSource ||
-            !isPositiveQuantity(nonDirectFillableQty)
-        ) {
-            return
-        }
-        const currentQty = isPositiveQuantity(activeNonDirectSource.quantity)
-            ? compactFixed(activeNonDirectSource.quantity)
-            : "0"
-        const nextQty = safeSumQuantities([currentQty, nonDirectFillableQty])
-        form.setFieldValue(
-            `lines[${activeNonDirectSource.index}].selected`,
-            true,
-        )
-        form.setFieldValue(
-            `lines[${activeNonDirectSource.index}].quantity`,
-            nextQty,
-        )
-        setActionFeedback(
-            `已将未覆盖余量 ${nonDirectFillableQty} ${product.unit} 填入 源${activeNonDirectSource.sourceNumber}·${activeNonDirectSource.routeLabel}（当前合计 ${nextQty} ${product.unit}）。`,
+            `已按低价包邮优先自动分配（${summaryParts.join("，")}）。`,
         )
     }
 
@@ -602,15 +448,16 @@ export function SourcingAddressEditor({
         )
         applyPatches(res.patches)
         setActionFeedback(
-            `已自动移出多余直发 ${res.trimmedQty} ${product.unit}（释放 ${res.releasedAddressCount} 处地址）。`,
+            `已自动缩减多余直发 ${res.trimmedQty} ${product.unit}（释放 ${res.releasedAddressCount} 处地址）。`,
         )
     }
 
     const resolvedQuotaTarget =
         (quotaTargetRowKey &&
-        state.directSources.some((src) => src.rowKey === quotaTargetRowKey)
+        activeDirectSources.some((src) => src.rowKey === quotaTargetRowKey)
             ? quotaTargetRowKey
-            : effectiveDirectSource?.rowKey) ?? ""
+            : (filteredDirectSource?.rowKey ??
+              state.primaryDirectSource?.rowKey)) ?? ""
 
     const quotaPreview = useMemo(() => {
         if (!quotaOpen || !resolvedQuotaTarget) return null
@@ -626,10 +473,11 @@ export function SourcingAddressEditor({
                         : undefined,
                 preferFreightIncluded: quotaPreferFree,
                 allowReallocateFromOtherDirect:
-                    state.directSources.length > 1 && quotaAllowReallocate,
+                    activeDirectSources.length > 1 && quotaAllowReallocate,
             },
         )
     }, [
+        activeDirectSources.length,
         allLines,
         filteredKeySet,
         hasActiveFilters,
@@ -640,508 +488,238 @@ export function SourcingAddressEditor({
         quotaQty,
         quotaScopeOnlyFiltered,
         resolvedQuotaTarget,
-        state.directSources.length,
     ])
 
     const notDeliverableEntries = useMemo(
         () => state.entries.filter((entry) => entry.hasNotDeliverable),
         [state.entries],
     )
-    const notDeliverableKeys = useMemo(
-        () => notDeliverableEntries.map((entry) => entry.key),
-        [notDeliverableEntries],
-    )
-    const allExceptionKeys = useMemo(
+    const unassignedEntries = useMemo(
         () =>
-            state.entries
-                .filter(
-                    (entry) => entry.hasNotDeliverable || entry.hasFreightExtra,
-                )
-                .map((entry) => entry.key),
+            state.entries.filter((entry) =>
+                isPositiveQuantity(entry.remainingUnassigned),
+            ),
         [state.entries],
     )
 
-    const rescueDirectSource = useMemo(() => {
-        if (
-            notDeliverableEntries.length === 0 ||
-            state.directSources.length < 2
-        )
-            return undefined
-        return state.directSources.find((src) =>
-            notDeliverableEntries.some((entry) =>
-                addressDeliverable(src.option, entry.baseRow.region_code),
-            ),
-        )
-    }, [notDeliverableEntries, state.directSources])
+    const warehousePillLabel =
+        activeNonDirectSources.length === 1 && primaryNonDirectSource
+            ? `源${primaryNonDirectSource.sourceNumber}·${primaryNonDirectSource.isStock ? "现货" : "入仓"}`
+            : "仓库统筹"
+    const warehouseAccent =
+        activeNonDirectSources.length === 1 && primaryNonDirectSource
+            ? sourceAccentForIndex(primaryNonDirectSource.sourceNumber - 1)
+            : sourceAccentForIndex(1)
 
-    const primaryNonDirectSource =
-        state.nonDirectSources.find((src) => src.selected) ??
-        state.nonDirectSources[0]
-    const defaultSource = state.primaryDirectSource
-
-    const unassignedLabel = state.hasNonDirectSources ? "未直发/仓发" : "未覆盖"
     const hasDirectOverTarget = isPositiveQuantity(state.directOverTargetQty)
-    const hasDirectShortfall = isPositiveQuantity(state.directShortfallQty)
+    const canAutoLowestPrice =
+        activeDirectSources.length > 1 ||
+        (activeDirectSources.length >= 1 && state.hasNonDirectSources)
 
-    const activeAccent = activeDirectSource
-        ? sourceAccentForIndex(activeDirectSource.sourceNumber - 1)
-        : activeNonDirectSource
-          ? sourceAccentForIndex(activeNonDirectSource.sourceNumber - 1)
-          : sourceAccentForIndex(0)
-
-    const activeFollowSelectedInAssigned = useMemo(
-        () =>
-            followAssignedEntries
-                .filter((e) => effectiveSelectedKeys.has(e.key))
-                .map((e) => e.key),
-        [effectiveSelectedKeys, followAssignedEntries],
-    )
-    const activeFollowSelectedInUncovered = useMemo(
-        () =>
-            followUncoveredEntries
-                .filter((e) => effectiveSelectedKeys.has(e.key))
-                .map((e) => e.key),
-        [effectiveSelectedKeys, followUncoveredEntries],
-    )
-
-    // 用于全部模式中：把当前选中地址直接从所有直发源移出
-    const selectedAssignedKeysInAll = useMemo(
-        () =>
-            selectedEntries
-                .filter((e) => isPositiveQuantity(e.assignedTotal))
-                .map((e) => e.key),
-        [selectedEntries],
-    )
-
-    const normalizeOnBlur = (
-        targetRowKey: string,
-        rawQty: string,
-        baseRow: PurchaseDeliveryAllocation,
-    ) => {
-        const trimmed = rawQty.trim()
-        if (trimmed === "") {
-            const patch = buildSetSliceQuantityPatch(
-                product,
-                form.state.values.lines,
-                targetRowKey,
-                baseRow,
-                "0",
-                true,
-            )
-            if (patch) applyPatches([patch])
-            return
+    const rescueTarget = useMemo(() => {
+        if (!onRescueAddresses || !hasUnusedCandidates) return null
+        if (notDeliverableEntries.length > 0) {
+            return {
+                label: `${notDeliverableEntries.length} 处不配送地址`,
+                keys: new Set(notDeliverableEntries.map((e) => e.key)),
+            }
         }
-        try {
-            const normalized = compactFixed(trimmed)
-            const patch = buildSetSliceQuantityPatch(
-                product,
-                form.state.values.lines,
-                targetRowKey,
-                baseRow,
-                normalized,
-                compareDecimal(normalized, "0", 6) === 0,
-            )
-            if (patch) applyPatches([patch])
-        } catch {
-            // 保留非法输入交由行内错误提示
+        if (!state.hasNonDirectSources && unassignedEntries.length > 0) {
+            return {
+                label: `${unassignedEntries.length} 处待分配地址`,
+                keys: new Set(unassignedEntries.map((e) => e.key)),
+            }
         }
-    }
+        return null
+    }, [
+        hasUnusedCandidates,
+        notDeliverableEntries,
+        onRescueAddresses,
+        state.hasNonDirectSources,
+        unassignedEntries,
+    ])
+
+    const minStepStr = sourcingQuantityStep(product.quantityScale) ?? "1"
+    const minStepUnits = quantityUnits(minStepStr)
+    const totalRouteTargets =
+        activeDirectSources.length + (state.hasNonDirectSources ? 1 : 0)
+    const rowGridClass =
+        totalRouteTargets === 3
+            ? "grid-cols-[1.75rem_minmax(0,1fr)_4.75rem_4.25rem_16.5rem]"
+            : "grid-cols-[1.75rem_minmax(0,1fr)_5rem_4.75rem_13.5rem]"
 
     return (
         <section
             className="flex min-h-0 flex-1 flex-col overflow-hidden bg-card"
-            aria-label="本来源交付地址"
+            aria-label="交付地址分配"
         >
-            {/* 顶部语境条：左侧跟随当前选中源身份 + 右侧视角切换（跟随当前源 / 全部地址） */}
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-surface-sunken/60 px-5 py-2">
-                <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs">
-                    {activeDirectSource ? (
-                        <>
-                            <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
-                                <span
-                                    aria-hidden="true"
-                                    className={cn(
-                                        "size-2 shrink-0 rounded-full",
-                                        activeAccent.barClass,
-                                    )}
-                                />
-                                <span>
-                                    当前源：源{activeDirectSource.sourceNumber}{" "}
-                                    · {activeDirectSource.supplierName}
-                                </span>
-                            </span>
-                            <Badge
-                                variant={sourceRouteBadgeVariant(
-                                    activeDirectSource.option,
-                                )}
-                                className="h-5 px-1.5"
-                            >
-                                {activeDirectSource.routeLabel}
-                            </Badge>
-                            <span className="num text-muted-foreground">
-                                已承接{" "}
-                                <strong className="font-semibold text-foreground">
-                                    {activeDirectSource.assignedAddressCount} 处
-                                </strong>
-                                （{activeDirectSource.assignedTotalQty}{" "}
-                                {product.unit}）
-                            </span>
-                            {allUncoveredEntries.length > 0 ? (
-                                <span className="num rounded-sm bg-warning-soft px-1.5 py-0.5 text-tiny font-medium text-warning-soft-foreground">
-                                    未覆盖 {allUncoveredEntries.length} 处（
-                                    {allUncoveredQty} {product.unit}）
-                                </span>
-                            ) : null}
-                        </>
-                    ) : activeNonDirectSource ? (
-                        <>
-                            <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
-                                <span
-                                    aria-hidden="true"
-                                    className={cn(
-                                        "size-2 shrink-0 rounded-full",
-                                        activeAccent.barClass,
-                                    )}
-                                />
-                                <span>
-                                    当前源：源
-                                    {activeNonDirectSource.sourceNumber} ·{" "}
-                                    {activeNonDirectSource.name}
-                                </span>
-                            </span>
-                            <Badge
-                                variant={sourceRouteBadgeVariant(
-                                    activeNonDirectSource.option,
-                                )}
-                                className="h-5 px-1.5"
-                            >
-                                {activeNonDirectSource.routeLabel}
-                            </Badge>
-                            <span className="text-muted-foreground">
-                                当前承担{" "}
-                                <strong className="num font-semibold text-foreground">
-                                    {activeNonDirectSource.quantity}{" "}
-                                    {product.unit}
-                                </strong>
-                                （出库时统一安排客户地址）
-                            </span>
-                        </>
-                    ) : null}
-                </div>
-
-                {/* 视角切换：跟随当前源（默认，按源移出与填充） ↔ 全部地址总览 */}
+            {/* 顶部来源筛选胶囊条（与左侧已选来源卡双向同步：默认全部地址，点源只看该源自己的） */}
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/70 bg-surface-sunken/50 px-5 py-2.5">
                 <div
                     role="group"
-                    aria-label="地址视图模式"
-                    className="inline-flex shrink-0 items-center rounded-md border border-border/70 bg-card p-0.5"
+                    aria-label="按承接来源筛选交付地址"
+                    className="flex flex-wrap items-center gap-1.5"
                 >
                     <button
-                        id={`${idPrefix}-mode-follow`}
+                        id={`${idPrefix}-filter-source-all`}
                         type="button"
-                        aria-pressed={viewMode === "follow"}
+                        aria-pressed={resolvedSourceFilter === null}
                         onClick={() => {
-                            setViewMode("follow")
-                            clearSelection()
+                            onSourceFilterChange(null)
+                            resetPage()
                         }}
                         className={cn(
-                            "cursor-pointer rounded-sm px-2.5 py-1 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                            viewMode === "follow"
-                                ? "bg-primary/10 text-primary"
-                                : "text-muted-foreground hover:text-foreground",
+                            "num inline-flex h-6.5 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            resolvedSourceFilter === null
+                                ? "border-primary/40 bg-card text-primary shadow-2xs"
+                                : "border-transparent bg-card/60 text-muted-foreground hover:bg-card hover:text-foreground",
                         )}
                     >
-                        跟随左侧当前源
+                        <span>全部地址</span>
+                        <span className="opacity-75">{state.counts.total}</span>
                     </button>
-                    <button
-                        id={`${idPrefix}-mode-all`}
-                        type="button"
-                        aria-pressed={viewMode === "all"}
-                        onClick={() => {
-                            setViewMode("all")
-                            clearSelection()
-                        }}
-                        className={cn(
-                            "num cursor-pointer rounded-sm px-2.5 py-1 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                            viewMode === "all"
-                                ? "bg-primary/10 text-primary"
-                                : "text-muted-foreground hover:text-foreground",
-                        )}
-                    >
-                        全部地址 ({state.counts.total})
-                    </button>
-                </div>
-            </div>
 
-            {/* 配送异常提醒条（仅存在异常时出现） */}
-            {state.counts.notDeliverable > 0 ||
-            state.counts.freightExtra > 0 ? (
-                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-warning-border/70 bg-warning-soft/55 px-5 py-2 text-xs text-warning-soft-foreground">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <TriangleAlertIcon
-                            aria-hidden="true"
-                            className="size-3.5 shrink-0"
-                        />
-                        <span>
-                            配送提醒：
-                            {state.counts.notDeliverable > 0 ? (
-                                <strong className="num font-semibold text-destructive">
-                                    {state.counts.notDeliverable} 处不配送
-                                </strong>
-                            ) : null}
-                            {state.counts.notDeliverable > 0 &&
-                            state.counts.freightExtra > 0
-                                ? "、"
-                                : null}
-                            {state.counts.freightExtra > 0 ? (
-                                <strong className="num font-semibold">
-                                    {state.counts.freightExtra} 处运费另计
-                                </strong>
-                            ) : null}
-                        </span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                        <Button
-                            id={`${idPrefix}-banner-filter-issues`}
-                            type="button"
-                            variant="outline"
-                            size="xs"
-                            className="bg-card text-foreground"
-                            onClick={() => {
-                                setViewMode("all")
-                                setStatusFilter("issues")
-                                setSourceFilter(null)
-                                setRegionFilter(null)
-                                resetPage()
-                            }}
-                        >
-                            只看异常（{state.counts.issues}）
-                        </Button>
-                        {rescueDirectSource && notDeliverableKeys.length > 0 ? (
-                            <Button
-                                id={`${idPrefix}-banner-reassign-undeliverable`}
+                    {activeDirectSources.map((src) => {
+                        const active = resolvedSourceFilter === src.rowKey
+                        const accent = sourceAccentForIndex(
+                            src.sourceNumber - 1,
+                        )
+                        return (
+                            <button
+                                key={src.rowKey}
+                                id={`${idPrefix}-rail-source-${toAutomationIdSegment(src.rowKey)}`}
                                 type="button"
-                                variant="secondary"
-                                size="xs"
-                                onClick={() =>
-                                    handleBatchAssign(
-                                        rescueDirectSource.rowKey,
-                                        new Set(notDeliverableKeys),
-                                        "move_full",
-                                    )
-                                }
-                            >
-                                改派给 {rescueDirectSource.shortLabel}
-                            </Button>
-                        ) : null}
-                        {primaryNonDirectSource &&
-                        notDeliverableKeys.length > 0 ? (
-                            <Button
-                                id={`${idPrefix}-banner-transfer-undeliverable`}
-                                type="button"
-                                variant="secondary"
-                                size="xs"
-                                onClick={() =>
-                                    handleBatchTransferToNonDirect(
-                                        primaryNonDirectSource.rowKey,
-                                        new Set(notDeliverableKeys),
-                                    )
-                                }
-                            >
-                                <ArrowRightLeftIcon aria-hidden="true" />
-                                转交 源{primaryNonDirectSource.sourceNumber}
-                            </Button>
-                        ) : null}
-                        {canSplitNewSource &&
-                        onSplitAddressesToNewSource &&
-                        notDeliverableKeys.length > 0 ? (
-                            <Button
-                                id={`${idPrefix}-banner-split-undeliverable`}
-                                type="button"
-                                variant="outline"
-                                size="xs"
-                                className="bg-card text-foreground"
+                                aria-pressed={active}
                                 onClick={() => {
-                                    onSplitAddressesToNewSource(
-                                        notDeliverableKeys,
+                                    onSourceFilterChange(
+                                        active ? null : src.rowKey,
                                     )
-                                    setActionFeedback(
-                                        `已将 ${notDeliverableKeys.length} 处不配送地址拆给新来源。`,
-                                    )
-                                }}
-                            >
-                                <SplitIcon aria-hidden="true" />
-                                拆给新来源
-                            </Button>
-                        ) : null}
-                        {canSplitNewSource &&
-                        onSplitAddressesToNewSource &&
-                        allExceptionKeys.length > notDeliverableKeys.length ? (
-                            <Button
-                                id={`${idPrefix}-banner-split-all-issues`}
-                                type="button"
-                                variant="outline"
-                                size="xs"
-                                className="bg-card text-foreground"
-                                onClick={() => {
-                                    onSplitAddressesToNewSource(
-                                        allExceptionKeys,
-                                    )
-                                    setActionFeedback(
-                                        `已将 ${allExceptionKeys.length} 处异常地址拆给新来源。`,
-                                    )
-                                }}
-                            >
-                                <SplitIcon aria-hidden="true" />
-                                异常 {allExceptionKeys.length} 处一并拆分
-                            </Button>
-                        ) : null}
-                    </div>
-                </div>
-            ) : null}
-
-            {/* 工具栏：搜索 +（全部模式状态/来源筛选）+ 快捷配量与清空调度 */}
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-card px-5 py-2">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <div className="relative w-52">
-                        <SearchIcon
-                            aria-hidden="true"
-                            className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
-                        />
-                        <Input
-                            id={`${idPrefix}-search`}
-                            aria-label="搜索收件人、电话或收货地址"
-                            placeholder="搜收件人、电话或地址"
-                            className="h-control-sm bg-card pr-7 pl-8 text-xs"
-                            value={query}
-                            onChange={(event) => {
-                                setQuery(event.target.value)
-                                resetPage()
-                            }}
-                        />
-                        {query ? (
-                            <Button
-                                id={`${idPrefix}-search-clear`}
-                                type="button"
-                                variant="ghost"
-                                size="icon-xs"
-                                aria-label="清除搜索关键词"
-                                className="absolute top-1/2 right-0.5 -translate-y-1/2 text-muted-foreground"
-                                onClick={() => {
-                                    setQuery("")
                                     resetPage()
                                 }}
+                                className={cn(
+                                    "num inline-flex h-6.5 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                    active
+                                        ? accent.chipClass
+                                        : "border-transparent bg-card/60 text-muted-foreground hover:bg-card hover:text-foreground",
+                                )}
                             >
-                                <XIcon />
-                            </Button>
-                        ) : null}
-                    </div>
+                                <span
+                                    aria-hidden="true"
+                                    className={cn(
+                                        "size-1.5 rounded-full",
+                                        accent.barClass,
+                                    )}
+                                />
+                                <span>
+                                    源{src.sourceNumber}·
+                                    {src.routeLabel === "集采直发"
+                                        ? "集采直发"
+                                        : "直发"}
+                                </span>
+                                <span className="opacity-75">
+                                    {src.assignedAddressCount}
+                                </span>
+                            </button>
+                        )
+                    })}
 
-                    {viewMode === "all" ? (
-                        <>
-                            <div
-                                role="group"
-                                aria-label="按状态筛选地址"
-                                className="flex flex-wrap items-center gap-1"
-                            >
-                                {(
-                                    [
-                                        ["all", `全部 ${state.counts.total}`],
-                                        [
-                                            "assigned",
-                                            `已分直发 ${state.counts.assigned}`,
-                                        ],
-                                        [
-                                            "unassigned",
-                                            `${unassignedLabel} ${state.counts.unassigned}`,
-                                        ],
-                                        ...(state.counts.issues > 0
-                                            ? ([
-                                                  [
-                                                      "issues",
-                                                      `异常 ${state.counts.issues}`,
-                                                  ],
-                                              ] as const)
-                                            : []),
-                                    ] as const
-                                ).map(([value, label]) => (
-                                    <Button
-                                        key={value}
-                                        id={`${idPrefix}-filter-${value}`}
-                                        type="button"
-                                        size="xs"
-                                        variant={
-                                            statusFilter === value
-                                                ? "secondary"
-                                                : "ghost"
-                                        }
-                                        aria-pressed={statusFilter === value}
-                                        className={
-                                            value === "issues"
-                                                ? "text-destructive hover:text-destructive"
-                                                : undefined
-                                        }
-                                        onClick={() => {
-                                            setStatusFilter(value)
-                                            resetPage()
-                                        }}
-                                    >
-                                        {label}
-                                    </Button>
-                                ))}
-                            </div>
-
-                            {state.directSources.length > 1 ? (
-                                <div className="flex flex-wrap items-center gap-1 border-l border-border/60 pl-2">
-                                    {state.directSources.map((src) => {
-                                        const active =
-                                            activeSourceFilter === src.rowKey
-                                        const accent = sourceAccentForIndex(
-                                            src.sourceNumber - 1,
-                                        )
-                                        return (
-                                            <button
-                                                key={src.rowKey}
-                                                id={`${idPrefix}-rail-source-${toAutomationIdSegment(src.rowKey)}`}
-                                                type="button"
-                                                aria-pressed={active}
-                                                onClick={() => {
-                                                    setSourceFilter(
-                                                        active
-                                                            ? null
-                                                            : src.rowKey,
-                                                    )
-                                                    resetPage()
-                                                }}
-                                                className={cn(
-                                                    "inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-xs transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                                    active
-                                                        ? accent.chipClass
-                                                        : "border-transparent bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
-                                                )}
-                                            >
-                                                <span
-                                                    aria-hidden="true"
-                                                    className={cn(
-                                                        "size-1.5 rounded-full",
-                                                        accent.barClass,
-                                                    )}
-                                                />
-                                                <span className="num font-medium">
-                                                    源{src.sourceNumber}
-                                                </span>
-                                                <span className="num opacity-75">
-                                                    {src.assignedAddressCount}处
-                                                </span>
-                                            </button>
-                                        )
-                                    })}
-                                </div>
+                    {state.hasNonDirectSources ? (
+                        <button
+                            id={`${idPrefix}-filter-source-warehouse`}
+                            type="button"
+                            aria-pressed={
+                                resolvedSourceFilter === "__warehouse__"
+                            }
+                            onClick={() => {
+                                onSourceFilterChange(
+                                    resolvedSourceFilter === "__warehouse__"
+                                        ? null
+                                        : "__warehouse__",
+                                )
+                                resetPage()
+                            }}
+                            className={cn(
+                                "num inline-flex h-6.5 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                resolvedSourceFilter === "__warehouse__"
+                                    ? warehouseAccent.chipClass
+                                    : "border-transparent bg-card/60 text-muted-foreground hover:bg-card hover:text-foreground",
+                            )}
+                        >
+                            <span
+                                aria-hidden="true"
+                                className={cn(
+                                    "size-1.5 rounded-full",
+                                    warehouseAccent.barClass,
+                                )}
+                            />
+                            <span>{warehousePillLabel}</span>
+                            <span className="opacity-75">
+                                {state.counts.unassigned}
+                            </span>
+                            {!state.directBalanced &&
+                            isPositiveQuantity(state.directShortfallQty) ? (
+                                <span className="rounded-sm bg-warning-soft px-1 text-tiny text-warning-soft-foreground">
+                                    缺{state.directShortfallQty}
+                                </span>
                             ) : null}
-                        </>
+                        </button>
+                    ) : state.counts.unassigned > 0 ? (
+                        <button
+                            id={`${idPrefix}-filter-source-unassigned`}
+                            type="button"
+                            aria-pressed={
+                                resolvedSourceFilter === "__unassigned__"
+                            }
+                            onClick={() => {
+                                onSourceFilterChange(
+                                    resolvedSourceFilter === "__unassigned__"
+                                        ? null
+                                        : "__unassigned__",
+                                )
+                                resetPage()
+                            }}
+                            className={cn(
+                                "num inline-flex h-6.5 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                resolvedSourceFilter === "__unassigned__"
+                                    ? "border-warning-border bg-warning-soft text-warning-soft-foreground"
+                                    : "border-transparent bg-warning-soft/55 text-warning-soft-foreground hover:bg-warning-soft",
+                            )}
+                        >
+                            <span>待分配</span>
+                            <span>{state.counts.unassigned}</span>
+                        </button>
+                    ) : null}
+
+                    {state.counts.issues > 0 ? (
+                        <button
+                            id={`${idPrefix}-filter-source-issues`}
+                            type="button"
+                            aria-pressed={resolvedSourceFilter === "__issues__"}
+                            onClick={() => {
+                                onSourceFilterChange(
+                                    resolvedSourceFilter === "__issues__"
+                                        ? null
+                                        : "__issues__",
+                                )
+                                resetPage()
+                            }}
+                            className={cn(
+                                "num inline-flex h-6.5 cursor-pointer items-center gap-1 rounded-md border px-2.5 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                resolvedSourceFilter === "__issues__"
+                                    ? "border-destructive-border bg-destructive-soft text-destructive-soft-foreground"
+                                    : "border-transparent bg-destructive-soft/60 text-destructive-soft-foreground hover:bg-destructive-soft",
+                            )}
+                        >
+                            <TriangleAlertIcon
+                                aria-hidden="true"
+                                className="size-3"
+                            />
+                            <span>异常 {state.counts.issues}</span>
+                        </button>
                     ) : null}
                 </div>
 
-                {/* 右侧提效动作 */}
+                {/* 右侧提效动作：按低价自动分 / 按数量凑单 */}
                 <div className="flex flex-wrap items-center gap-1.5">
                     {hasDirectOverTarget ? (
                         <Button
@@ -1156,32 +734,28 @@ export function SourcingAddressEditor({
                         </Button>
                     ) : null}
 
-                    {/* 当左侧选中仓库/库存源且存在未覆盖缺口时，直接一键把未覆盖余量填入该仓源 */}
-                    {viewMode === "follow" &&
-                    activeNonDirectSource &&
-                    isPositiveQuantity(nonDirectFillableQty) ? (
+                    {canAutoLowestPrice ? (
                         <Button
-                            id={`${idPrefix}-fill-non-direct-uncovered`}
+                            id={`${idPrefix}-auto-lowest-price`}
                             type="button"
                             size="xs"
-                            variant="default"
-                            onClick={handleFillUncoveredToActiveNonDirect}
+                            variant="secondary"
+                            title="按已选来源中价格最低且包邮优先自动路由全部地址，不可配送地址自动归仓库统筹"
+                            onClick={handleAutoAllocateLowestPrice}
                         >
-                            <ZapIcon aria-hidden="true" />
-                            未覆盖余量 +{nonDirectFillableQty} {product.unit}{" "}
-                            填入 源{activeNonDirectSource.sourceNumber}
+                            <SparklesIcon aria-hidden="true" />
+                            按低价自动分
                         </Button>
                     ) : null}
 
-                    {state.directSources.length > 0 ? (
+                    {activeDirectSources.length > 0 ? (
                         <Popover
                             open={quotaOpen}
                             onOpenChange={(next) => {
                                 setQuotaOpen(next)
                                 if (next) {
                                     setQuotaTargetRowKey(
-                                        activeDirectSource?.rowKey ??
-                                            activeSourceFilter ??
+                                        filteredDirectSource?.rowKey ??
                                             state.primaryDirectSource?.rowKey ??
                                             "",
                                     )
@@ -1196,11 +770,12 @@ export function SourcingAddressEditor({
                                         type="button"
                                         variant="outline"
                                         size="xs"
+                                        className="bg-card"
                                     />
                                 }
                             >
                                 <ZapIcon aria-hidden="true" />
-                                按数量自动分配
+                                按量凑单
                             </PopoverTrigger>
                             <PopoverContent
                                 align="end"
@@ -1215,14 +790,14 @@ export function SourcingAddressEditor({
                                     </p>
                                 </div>
 
-                                {state.directSources.length > 1 ? (
+                                {activeDirectSources.length > 1 ? (
                                     <div className="space-y-1">
                                         <p className="text-xs font-medium text-foreground/75">
                                             目标直发来源
                                         </p>
                                         <Select
                                             value={resolvedQuotaTarget}
-                                            items={state.directSources.map(
+                                            items={activeDirectSources.map(
                                                 (src) => ({
                                                     value: src.rowKey,
                                                     label: src.shortLabel,
@@ -1242,7 +817,7 @@ export function SourcingAddressEditor({
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {state.directSources.map(
+                                                {activeDirectSources.map(
                                                     (src) => (
                                                         <SelectItem
                                                             key={src.rowKey}
@@ -1270,11 +845,7 @@ export function SourcingAddressEditor({
                                         type="number"
                                         inputMode="decimal"
                                         min="0"
-                                        step={
-                                            sourcingQuantityStep(
-                                                product.quantityScale,
-                                            ) ?? "1"
-                                        }
+                                        step={minStepStr}
                                         placeholder={`例如 ${state.directTargetQty}`}
                                         className="num h-control-sm"
                                         value={quotaQty}
@@ -1298,7 +869,7 @@ export function SourcingAddressEditor({
                                         />
                                         优先分配包邮 / 免运费地址
                                     </label>
-                                    {state.directSources.length > 1 ? (
+                                    {activeDirectSources.length > 1 ? (
                                         <label
                                             htmlFor={`${idPrefix}-quota-allow-reallocate`}
                                             className="flex cursor-pointer items-center gap-2 text-xs text-foreground"
@@ -1315,7 +886,7 @@ export function SourcingAddressEditor({
                                             未分配不足时从其他直发源调拨
                                         </label>
                                     ) : null}
-                                    {hasActiveFilters && viewMode === "all" ? (
+                                    {hasActiveFilters ? (
                                         <label
                                             htmlFor={`${idPrefix}-quota-scope-filtered`}
                                             className="flex cursor-pointer items-center gap-2 text-xs text-foreground"
@@ -1406,258 +977,235 @@ export function SourcingAddressEditor({
                             </PopoverContent>
                         </Popover>
                     ) : null}
-
-                    {viewMode === "follow" && activeDirectSource ? (
-                        <Button
-                            id={`${idPrefix}-clear-active-source`}
-                            type="button"
-                            variant="ghost"
-                            size="xs"
-                            disabled={followAssignedEntries.length === 0}
-                            onClick={() =>
-                                handleBatchClear(
-                                    new Set(
-                                        followAssignedEntries.map((e) => e.key),
-                                    ),
-                                    activeDirectSource.rowKey,
-                                )
-                            }
-                        >
-                            <EraserIcon aria-hidden="true" />
-                            清空 源{activeDirectSource.sourceNumber}
-                        </Button>
-                    ) : viewMode === "all" &&
-                      state.directSources.length === 1 &&
-                      defaultSource ? (
-                        <>
-                            <Button
-                                id={`${idPrefix}-fill-all`}
-                                type="button"
-                                variant="outline"
-                                size="xs"
-                                disabled={
-                                    filteredEntries.filter(
-                                        (e) =>
-                                            e.deliverableByPrimary &&
-                                            isPositiveQuantity(
-                                                e.remainingUnassigned,
-                                            ),
-                                    ).length === 0
-                                }
-                                onClick={() =>
-                                    handleBatchAssign(
-                                        defaultSource.rowKey,
-                                        filteredKeySet,
-                                        "fill_remaining",
-                                    )
-                                }
-                            >
-                                {hasActiveFilters ? "填满筛选" : "一键全分"}
-                            </Button>
-                            <Button
-                                id={`${idPrefix}-clear-all`}
-                                type="button"
-                                variant="ghost"
-                                size="xs"
-                                disabled={
-                                    filteredEntries.filter((e) =>
-                                        isPositiveQuantity(e.assignedTotal),
-                                    ).length === 0
-                                }
-                                onClick={() => handleBatchClear(filteredKeySet)}
-                            >
-                                <EraserIcon aria-hidden="true" />
-                                全部移出
-                            </Button>
-                        </>
-                    ) : null}
-
-                    {canSplitNewSource &&
-                    onSplitResidual &&
-                    hasDirectShortfall &&
-                    state.counts.unassigned > 0 ? (
-                        <Button
-                            id={`${idPrefix}-split-residual`}
-                            type="button"
-                            variant="secondary"
-                            size="xs"
-                            onClick={() => {
-                                onSplitResidual()
-                                setActionFeedback("已将未覆盖余量拆给新来源。")
-                            }}
-                        >
-                            <SplitIcon aria-hidden="true" />
-                            余量拆新源
-                        </Button>
-                    ) : null}
                 </div>
             </div>
 
-            {/* 轻量横向省/市筛选条 */}
-            {state.regionFacets.level !== "none" ? (
-                <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-border/50 bg-surface-sunken/40 px-5 py-1.5">
-                    <span className="inline-flex shrink-0 items-center gap-1 text-tiny font-medium text-muted-foreground">
-                        <MapPinIcon aria-hidden="true" className="size-3" />
-                        {state.regionFacets.level === "province"
-                            ? "按地区"
-                            : "按区县"}
-                    </span>
-                    <button
-                        id={`${idPrefix}-region-all`}
-                        type="button"
-                        aria-pressed={!activeRegionFilter}
-                        onClick={() => {
-                            setRegionFilter(null)
-                            resetPage()
-                        }}
-                        className={cn(
-                            "shrink-0 cursor-pointer rounded-sm px-2 py-0.5 text-xs transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                            !activeRegionFilter
-                                ? "bg-card font-medium text-foreground shadow-2xs ring-1 ring-border/70"
-                                : "text-muted-foreground hover:bg-card/70 hover:text-foreground",
-                        )}
-                    >
-                        全部
-                    </button>
-                    {state.regionFacets.items.map((item) => {
-                        const active = activeRegionFilter === item.key
-                        const hasAlert =
-                            item.notDeliverableCount > 0 ||
-                            item.freightExtraCount > 0
-                        return (
-                            <button
-                                key={item.key}
-                                id={`${idPrefix}-rail-region-${toAutomationIdSegment(encodeURIComponent(item.key))}`}
+            {/* 配送异常 / 补缺引导条（仅存在不配送/运费另计或可向左侧找方案时出现） */}
+            {state.counts.notDeliverable > 0 ||
+            state.counts.freightExtra > 0 ? (
+                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-warning-border/70 bg-warning-soft/55 px-5 py-1.5 text-xs text-warning-soft-foreground">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                        <TriangleAlertIcon
+                            aria-hidden="true"
+                            className="size-3.5 shrink-0"
+                        />
+                        <span>
+                            配送提醒：
+                            {state.counts.notDeliverable > 0 ? (
+                                <strong className="num font-semibold text-destructive">
+                                    {state.counts.notDeliverable} 处不配送
+                                </strong>
+                            ) : null}
+                            {state.counts.notDeliverable > 0 &&
+                            state.counts.freightExtra > 0
+                                ? "、"
+                                : null}
+                            {state.counts.freightExtra > 0 ? (
+                                <strong className="num font-semibold">
+                                    {state.counts.freightExtra} 处运费另计
+                                </strong>
+                            ) : null}
+                        </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                        {state.hasNonDirectSources &&
+                        notDeliverableEntries.length > 0 ? (
+                            <Button
+                                id={`${idPrefix}-banner-transfer-undeliverable`}
                                 type="button"
-                                aria-pressed={active}
-                                onClick={() => {
-                                    setRegionFilter(active ? null : item.key)
-                                    resetPage()
-                                }}
-                                className={cn(
-                                    "inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-sm px-2 py-0.5 text-xs transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                    active
-                                        ? "bg-card font-medium text-primary shadow-2xs ring-1 ring-primary/35"
-                                        : hasAlert
-                                          ? "bg-warning-soft/70 text-warning-soft-foreground hover:bg-warning-soft"
-                                          : "text-muted-foreground hover:bg-card/70 hover:text-foreground",
-                                )}
+                                variant="secondary"
+                                size="xs"
+                                onClick={() =>
+                                    handleAssignWarehouse(
+                                        new Set(
+                                            notDeliverableEntries.map(
+                                                (e) => e.key,
+                                            ),
+                                        ),
+                                        undefined,
+                                        true,
+                                    )
+                                }
                             >
-                                <span>{item.label}</span>
-                                <span className="num text-tiny opacity-75">
-                                    {item.fullyAssignedCount}/{item.totalCount}
-                                </span>
-                            </button>
-                        )
-                    })}
+                                不配送转交{warehousePillLabel}
+                            </Button>
+                        ) : null}
+                        {rescueTarget && onRescueAddresses ? (
+                            <Button
+                                id={`${idPrefix}-banner-rescue`}
+                                type="button"
+                                variant="outline"
+                                size="xs"
+                                className="bg-card text-foreground"
+                                onClick={() =>
+                                    onRescueAddresses(
+                                        rescueTarget.label,
+                                        rescueTarget.keys,
+                                    )
+                                }
+                            >
+                                <MapPinIcon aria-hidden="true" />
+                                在左侧找可配低价方案
+                            </Button>
+                        ) : null}
+                    </div>
                 </div>
             ) : null}
 
-            {/* 勾选后的批量操作条 */}
-            {effectiveSelectedKeys.size > 0 ? (
-                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-primary/25 bg-primary/5 px-5 py-2 text-xs">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-foreground">
-                            已选{" "}
-                            <span className="num font-semibold text-primary">
-                                {effectiveSelectedKeys.size}
-                            </span>{" "}
-                            处地址（共{" "}
-                            <span className="num font-semibold">
-                                {selectedDemandTotal} {product.unit}
-                            </span>
-                            ）
+            {/* 多非直发源并存且筛选仓库统筹时，透明说明由哪些库存/入仓共同承接 */}
+            {resolvedSourceFilter === "__warehouse__" &&
+            activeNonDirectSources.length > 1 ? (
+                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-info-soft/45 px-5 py-1.5 text-xs text-info-soft-foreground">
+                    <span>
+                        以下 {filteredEntries.length} 处地址不走直发，由{" "}
+                        {activeNonDirectSources
+                            .map(
+                                (s) =>
+                                    `源${s.sourceNumber} ${s.routeLabel}（${s.quantity} ${product.unit}）`,
+                            )
+                            .join(" + ")}{" "}
+                        在出库时共同统筹安排。
+                    </span>
+                </div>
+            ) : null}
+
+            {/* 搜索栏 + 轻量地区筛选条 */}
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-card px-5 py-2">
+                <div className="relative w-56">
+                    <SearchIcon
+                        aria-hidden="true"
+                        className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <Input
+                        id={`${idPrefix}-search`}
+                        aria-label="搜索收件人、电话或收货地址"
+                        placeholder="搜收件人、电话或地址"
+                        className="h-control-sm bg-card pr-7 pl-8 text-xs"
+                        value={query}
+                        onChange={(event) => {
+                            setQuery(event.target.value)
+                            resetPage()
+                        }}
+                    />
+                    {query ? (
+                        <Button
+                            id={`${idPrefix}-search-clear`}
+                            type="button"
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label="清除搜索关键词"
+                            className="absolute top-1/2 right-0.5 -translate-y-1/2 text-muted-foreground"
+                            onClick={() => {
+                                setQuery("")
+                                resetPage()
+                            }}
+                        >
+                            <XIcon />
+                        </Button>
+                    ) : null}
+                </div>
+
+                {state.regionFacets.level !== "none" ? (
+                    <div className="flex min-w-0 flex-1 items-center justify-end gap-1 overflow-x-auto">
+                        <span className="inline-flex shrink-0 items-center gap-0.5 text-tiny text-muted-foreground">
+                            <MapPinIcon aria-hidden="true" className="size-3" />
+                            {state.regionFacets.level === "province"
+                                ? "地区"
+                                : "区县"}
                         </span>
-                        {viewMode === "all" &&
-                        allPageSelected &&
-                        !allFilteredSelected &&
-                        filteredEntries.length > pageEntries.length ? (
-                            <button
-                                id={`${idPrefix}-select-all-filtered`}
-                                type="button"
-                                onClick={selectAllFiltered}
-                                className="cursor-pointer font-medium text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                            >
-                                全选筛选全部 {filteredEntries.length} 处
-                            </button>
-                        ) : null}
                         <button
-                            id={`${idPrefix}-clear-selection`}
+                            id={`${idPrefix}-region-all`}
+                            type="button"
+                            aria-pressed={!activeRegionFilter}
+                            onClick={() => {
+                                setRegionFilter(null)
+                                resetPage()
+                            }}
+                            className={cn(
+                                "shrink-0 cursor-pointer rounded-sm px-2 py-0.5 text-xs transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                !activeRegionFilter
+                                    ? "bg-muted font-medium text-foreground"
+                                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                            )}
+                        >
+                            全部
+                        </button>
+                        {state.regionFacets.items.map((item) => {
+                            const active = activeRegionFilter === item.key
+                            const hasAlert =
+                                item.notDeliverableCount > 0 ||
+                                item.freightExtraCount > 0
+                            return (
+                                <button
+                                    key={item.key}
+                                    id={`${idPrefix}-rail-region-${toAutomationIdSegment(encodeURIComponent(item.key))}`}
+                                    type="button"
+                                    aria-pressed={active}
+                                    onClick={() => {
+                                        setRegionFilter(
+                                            active ? null : item.key,
+                                        )
+                                        resetPage()
+                                    }}
+                                    className={cn(
+                                        "inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-sm px-2 py-0.5 text-xs transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                        active
+                                            ? "bg-primary/10 font-medium text-primary"
+                                            : hasAlert
+                                              ? "bg-warning-soft/70 text-warning-soft-foreground hover:bg-warning-soft"
+                                              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                                    )}
+                                >
+                                    <span>{item.label}</span>
+                                    <span className="num text-tiny opacity-75">
+                                        {item.totalCount}
+                                    </span>
+                                </button>
+                            )
+                        })}
+                    </div>
+                ) : null}
+            </div>
+
+            {/* 勾选后的批量操作条 / 操作反馈条 */}
+            {effectiveSelectedKeys.size > 0 ? (
+                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-info-border/70 bg-info-soft/55 px-5 py-2 text-xs">
+                    <div className="flex items-center gap-2">
+                        <span className="num font-medium text-foreground">
+                            已选 {effectiveSelectedKeys.size} 处（共{" "}
+                            {selectedDemandTotal} {product.unit}）
+                        </span>
+                        <button
+                            id={`${idPrefix}-bulk-clear-selection`}
                             type="button"
                             onClick={clearSelection}
-                            className="cursor-pointer text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            className="cursor-pointer text-xs text-muted-foreground hover:text-foreground"
                         >
                             取消选择
                         </button>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-1.5">
-                        {/* 跟随模式下，针对当前选中源的一键批量填入 / 移出 */}
-                        {viewMode === "follow" &&
-                        activeDirectSource &&
-                        activeFollowSelectedInUncovered.length > 0 ? (
-                            <Button
-                                id={`${idPrefix}-bulk-fill-active`}
-                                type="button"
-                                size="xs"
-                                variant="default"
-                                onClick={() =>
-                                    handleBatchAssign(
-                                        activeDirectSource.rowKey,
-                                        new Set(
-                                            activeFollowSelectedInUncovered,
-                                        ),
-                                        "fill_remaining",
-                                    )
-                                }
-                            >
-                                <PlusIcon aria-hidden="true" />
-                                填入 源{activeDirectSource.sourceNumber}（
-                                {activeFollowSelectedInUncovered.length} 处）
-                            </Button>
-                        ) : null}
-
-                        {viewMode === "follow" &&
-                        activeDirectSource &&
-                        activeFollowSelectedInAssigned.length > 0 ? (
-                            <Button
-                                id={`${idPrefix}-bulk-remove-active`}
-                                type="button"
-                                size="xs"
-                                variant="outline"
-                                className="border-destructive-border bg-card text-destructive hover:bg-destructive-soft"
-                                onClick={() =>
-                                    handleBatchClear(
-                                        new Set(activeFollowSelectedInAssigned),
-                                        activeDirectSource.rowKey,
-                                    )
-                                }
-                            >
-                                <XIcon aria-hidden="true" />
-                                从 源{activeDirectSource.sourceNumber} 移出（
-                                {activeFollowSelectedInAssigned.length} 处）
-                            </Button>
-                        ) : null}
-
-                        {viewMode === "all" &&
-                        state.directSources.length === 1 &&
-                        defaultSource ? (
-                            <Button
-                                id={`${idPrefix}-bulk-assign-single`}
-                                type="button"
-                                size="xs"
-                                variant="secondary"
-                                onClick={() =>
-                                    handleBatchAssign(
-                                        defaultSource.rowKey,
-                                        effectiveSelectedKeys,
-                                        "move_full",
-                                    )
-                                }
-                            >
-                                填入 {defaultSource.shortLabel}
-                            </Button>
-                        ) : state.directSources.length > 1 ? (
+                        {activeDirectSources.length <= 2 ? (
+                            activeDirectSources.map((src) => (
+                                <Button
+                                    key={src.rowKey}
+                                    id={`${idPrefix}-bulk-assign-${toAutomationIdSegment(src.rowKey)}`}
+                                    type="button"
+                                    size="xs"
+                                    variant="secondary"
+                                    onClick={() =>
+                                        handleAssignDirect(
+                                            src.rowKey,
+                                            effectiveSelectedKeys,
+                                            true,
+                                        )
+                                    }
+                                >
+                                    分配给 源{src.sourceNumber}
+                                </Button>
+                            ))
+                        ) : (
                             <DropdownMenu>
                                 <DropdownMenuTrigger
                                     render={
@@ -1669,22 +1217,22 @@ export function SourcingAddressEditor({
                                         />
                                     }
                                 >
-                                    改派给直发来源
+                                    分配给直发源
                                     <ChevronDownIcon aria-hidden="true" />
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent
                                     align="end"
                                     className="w-60"
                                 >
-                                    {state.directSources.map((src) => (
+                                    {activeDirectSources.map((src) => (
                                         <DropdownMenuItem
                                             key={src.rowKey}
                                             id={`${idPrefix}-bulk-reassign-${toAutomationIdSegment(src.rowKey)}`}
                                             onClick={() =>
-                                                handleBatchAssign(
+                                                handleAssignDirect(
                                                     src.rowKey,
                                                     effectiveSelectedKeys,
-                                                    "move_full",
+                                                    true,
                                                 )
                                             }
                                         >
@@ -1695,10 +1243,9 @@ export function SourcingAddressEditor({
                                     ))}
                                 </DropdownMenuContent>
                             </DropdownMenu>
-                        ) : null}
+                        )}
 
-                        {state.nonDirectSources.length === 1 &&
-                        primaryNonDirectSource ? (
+                        {state.hasNonDirectSources ? (
                             <Button
                                 id={`${idPrefix}-bulk-transfer-warehouse`}
                                 type="button"
@@ -1706,93 +1253,22 @@ export function SourcingAddressEditor({
                                 variant="outline"
                                 className="bg-card"
                                 onClick={() =>
-                                    handleBatchTransferToNonDirect(
-                                        primaryNonDirectSource.rowKey,
+                                    handleAssignWarehouse(
                                         effectiveSelectedKeys,
+                                        undefined,
+                                        true,
                                     )
                                 }
                             >
-                                <ArrowRightLeftIcon aria-hidden="true" />
-                                转入 源{primaryNonDirectSource.sourceNumber}·
-                                {primaryNonDirectSource.routeLabel}
+                                {activeNonDirectSources.length === 1 &&
+                                primaryNonDirectSource?.isStock ? (
+                                    <PackageCheckIcon aria-hidden="true" />
+                                ) : (
+                                    <WarehouseIcon aria-hidden="true" />
+                                )}
+                                交给{warehousePillLabel}
                             </Button>
-                        ) : state.nonDirectSources.length > 1 ? (
-                            <DropdownMenu>
-                                <DropdownMenuTrigger
-                                    render={
-                                        <Button
-                                            id={`${idPrefix}-bulk-transfer-trigger`}
-                                            type="button"
-                                            size="xs"
-                                            variant="outline"
-                                            className="bg-card"
-                                        />
-                                    }
-                                >
-                                    <ArrowRightLeftIcon aria-hidden="true" />
-                                    转入仓库 / 库存
-                                    <ChevronDownIcon aria-hidden="true" />
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent
-                                    align="end"
-                                    className="w-64"
-                                >
-                                    {state.nonDirectSources.map((src) => (
-                                        <DropdownMenuItem
-                                            key={src.rowKey}
-                                            id={`${idPrefix}-bulk-transfer-${toAutomationIdSegment(src.rowKey)}`}
-                                            onClick={() =>
-                                                handleBatchTransferToNonDirect(
-                                                    src.rowKey,
-                                                    effectiveSelectedKeys,
-                                                )
-                                            }
-                                        >
-                                            <span className="flex min-w-0 items-center gap-1.5">
-                                                {src.isStock ? (
-                                                    <PackageCheckIcon
-                                                        aria-hidden="true"
-                                                        className="size-3.5 shrink-0 text-teal-soft-foreground"
-                                                    />
-                                                ) : (
-                                                    <WarehouseIcon
-                                                        aria-hidden="true"
-                                                        className="size-3.5 shrink-0 text-orange-soft-foreground"
-                                                    />
-                                                )}
-                                                <span className="truncate">
-                                                    {src.shortLabel}
-                                                </span>
-                                            </span>
-                                        </DropdownMenuItem>
-                                    ))}
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        ) : null}
-
-                        {canSplitNewSource && onSplitAddressesToNewSource ? (
-                            <Button
-                                id={`${idPrefix}-bulk-split-new`}
-                                type="button"
-                                size="xs"
-                                variant="outline"
-                                className="bg-card"
-                                onClick={() => {
-                                    const keys = [...effectiveSelectedKeys]
-                                    onSplitAddressesToNewSource(keys)
-                                    setActionFeedback(
-                                        `已将选中的 ${keys.length} 处地址拆给新来源。`,
-                                    )
-                                    clearSelection()
-                                }}
-                            >
-                                <SplitIcon aria-hidden="true" />
-                                拆给新来源
-                            </Button>
-                        ) : null}
-
-                        {viewMode === "all" &&
-                        selectedAssignedKeysInAll.length > 0 ? (
+                        ) : (
                             <Button
                                 id={`${idPrefix}-bulk-clear`}
                                 type="button"
@@ -1800,13 +1276,33 @@ export function SourcingAddressEditor({
                                 variant="ghost"
                                 className="text-destructive hover:bg-destructive-soft hover:text-destructive-soft-foreground"
                                 onClick={() =>
-                                    handleBatchClear(
-                                        new Set(selectedAssignedKeysInAll),
+                                    handleClearDirect(
+                                        effectiveSelectedKeys,
+                                        true,
                                     )
                                 }
                             >
                                 <XIcon aria-hidden="true" />
-                                移出直发（{selectedAssignedKeysInAll.length}）
+                                取消直发
+                            </Button>
+                        )}
+
+                        {hasUnusedCandidates && onRescueAddresses ? (
+                            <Button
+                                id={`${idPrefix}-bulk-find-candidates`}
+                                type="button"
+                                size="xs"
+                                variant="outline"
+                                className="bg-card"
+                                onClick={() =>
+                                    onRescueAddresses(
+                                        `所选 ${effectiveSelectedKeys.size} 处地址`,
+                                        new Set(effectiveSelectedKeys),
+                                    )
+                                }
+                            >
+                                <MapPinIcon aria-hidden="true" />
+                                为这 {effectiveSelectedKeys.size} 处找方案
                             </Button>
                         ) : null}
                     </div>
@@ -1816,7 +1312,13 @@ export function SourcingAddressEditor({
                     role="status"
                     className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 bg-surface-sunken px-5 py-1.5 text-xs text-muted-foreground"
                 >
-                    <span>{actionFeedback}</span>
+                    <span className="flex items-center gap-1.5">
+                        <CheckCircle2Icon
+                            aria-hidden="true"
+                            className="size-3.5 shrink-0 text-success-soft-foreground"
+                        />
+                        {actionFeedback}
+                    </span>
                     <button
                         id={`${idPrefix}-feedback-dismiss`}
                         type="button"
@@ -1829,956 +1331,132 @@ export function SourcingAddressEditor({
                 </div>
             ) : null}
 
-            {/* 主内容区：跟随模式（当前源已配 + 未覆盖地址池） vs 全部地址总览 */}
-            {viewMode === "follow" ? (
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-                    {activeDirectSource ? (
-                        <div className="divide-y divide-border/70">
-                            {/* 区块一：当前选中直发源已分配地址（每行直达「移出」按钮） */}
-                            <div>
-                                <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-border/60 bg-table-header px-5 py-2 text-xs">
-                                    <div className="flex items-center gap-2">
-                                        <NativeCheckbox
-                                            id={`${idPrefix}-follow-assigned-select-all`}
-                                            aria-label={`全选 源${activeDirectSource.sourceNumber} 已分配地址`}
-                                            disabled={
-                                                followAssignedEntries.length ===
-                                                0
-                                            }
-                                            checked={
-                                                followAssignedEntries.length >
-                                                    0 &&
-                                                followAssignedEntries.every(
-                                                    (e) =>
-                                                        effectiveSelectedKeys.has(
-                                                            e.key,
-                                                        ),
-                                                )
-                                            }
-                                            indeterminate={
-                                                followAssignedEntries.some(
-                                                    (e) =>
-                                                        effectiveSelectedKeys.has(
-                                                            e.key,
-                                                        ),
-                                                ) &&
-                                                !followAssignedEntries.every(
-                                                    (e) =>
-                                                        effectiveSelectedKeys.has(
-                                                            e.key,
-                                                        ),
-                                                )
-                                            }
-                                            onCheckedChange={(checked) =>
-                                                toggleKeyGroupSelection(
-                                                    followAssignedEntries.map(
-                                                        (e) => e.key,
-                                                    ),
-                                                    checked,
-                                                )
-                                            }
-                                        />
-                                        <span className="font-semibold text-foreground">
-                                            源{activeDirectSource.sourceNumber}{" "}
-                                            已承接地址
-                                        </span>
-                                        <span className="num text-muted-foreground">
-                                            {followAssignedEntries.length} 处 ·{" "}
-                                            {
-                                                activeDirectSource.assignedTotalQty
-                                            }{" "}
-                                            {product.unit}
-                                        </span>
-                                    </div>
-                                    <span className="text-tiny text-muted-foreground">
-                                        点右侧「移出」释放到未覆盖地址池，即可在其他源直接填入
-                                    </span>
-                                </div>
-
-                                {followAssignedEntries.length === 0 ? (
-                                    <div className="px-5 py-6 text-center text-xs text-muted-foreground">
-                                        源{activeDirectSource.sourceNumber}{" "}
-                                        暂未分配直发地址
-                                        {deliverableUncoveredForActive.length >
-                                        0
-                                            ? "，可在下方「未覆盖地址」直接点击填入。"
-                                            : "；如需从其他来源调出，可切换到其他来源移出或点右上角「全部地址」。"}
-                                    </div>
-                                ) : (
-                                    <div className="divide-y divide-grid">
-                                        {followAssignedEntries.map((entry) => {
-                                            const slice = entry.slices.find(
-                                                (s) =>
-                                                    s.rowKey ===
-                                                    activeDirectSource.rowKey,
-                                            )!
-                                            const rowId = `${idPrefix}-follow-${addressIdSegment(entry.baseRow)}`
-                                            const term = addressDeliveryTerm(
-                                                activeDirectSource.option,
-                                                entry.baseRow.region_code,
-                                            )
-                                            const otherDirectQty = (() => {
-                                                try {
-                                                    const selfQty =
-                                                        isPositiveQuantity(
-                                                            slice.quantity,
-                                                        )
-                                                            ? compactFixed(
-                                                                  slice.quantity.trim(),
-                                                              )
-                                                            : "0"
-                                                    const diff = subtractFixed(
-                                                        entry.assignedTotal,
-                                                        selfQty,
-                                                        {
-                                                            maxScale: 6,
-                                                            outputScale: 6,
-                                                        },
-                                                    )
-                                                    return compareDecimal(
-                                                        diff,
-                                                        "0",
-                                                        6,
-                                                    ) > 0
-                                                        ? compactFixed(diff)
-                                                        : "0"
-                                                } catch {
-                                                    return "0"
-                                                }
-                                            })()
-
-                                            return (
-                                                <div
-                                                    key={entry.key}
-                                                    className={cn(
-                                                        "grid grid-cols-[1.75rem_minmax(0,1fr)_5rem_8.5rem_4.5rem] items-center gap-3 px-5 py-2 transition-colors hover:bg-row-hover",
-                                                        Boolean(slice.error) &&
-                                                            "bg-destructive-soft/30",
-                                                    )}
-                                                >
-                                                    <div className="flex items-center justify-center">
-                                                        <NativeCheckbox
-                                                            id={`${rowId}-select`}
-                                                            checked={effectiveSelectedKeys.has(
-                                                                entry.key,
-                                                            )}
-                                                            aria-label={`选择 ${entry.baseRow.recipient}`}
-                                                            onCheckedChange={(
-                                                                checked,
-                                                            ) =>
-                                                                toggleRowSelection(
-                                                                    entry.key,
-                                                                    checked,
-                                                                )
-                                                            }
-                                                        />
-                                                    </div>
-
-                                                    <div className="min-w-0">
-                                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                                                            <span className="text-body-compact font-medium text-foreground">
-                                                                {
-                                                                    entry
-                                                                        .baseRow
-                                                                        .recipient
-                                                                }
-                                                            </span>
-                                                            <span className="num text-xs text-muted-foreground">
-                                                                {
-                                                                    entry
-                                                                        .baseRow
-                                                                        .phone
-                                                                }
-                                                            </span>
-                                                            {isPositiveQuantity(
-                                                                otherDirectQty,
-                                                            ) ? (
-                                                                <Badge
-                                                                    variant="secondary"
-                                                                    className="h-4.5 px-1.5 text-tiny"
-                                                                >
-                                                                    他源已分{" "}
-                                                                    {
-                                                                        otherDirectQty
-                                                                    }{" "}
-                                                                    {
-                                                                        product.unit
-                                                                    }
-                                                                </Badge>
-                                                            ) : null}
-                                                        </div>
-                                                        <p
-                                                            className="mt-0.5 truncate text-xs text-muted-foreground"
-                                                            title={
-                                                                entry.fullAddress
-                                                            }
-                                                        >
-                                                            {entry.fullAddress}
-                                                        </p>
-                                                        {slice.error ? (
-                                                            <p
-                                                                role="alert"
-                                                                className="mt-0.5 flex items-center gap-1 text-xs text-destructive"
-                                                            >
-                                                                <CircleAlertIcon className="size-3 shrink-0" />
-                                                                <span>
-                                                                    {
-                                                                        slice.error
-                                                                    }
-                                                                </span>
-                                                            </p>
-                                                        ) : null}
-                                                    </div>
-
-                                                    <div>
-                                                        {term ? (
-                                                            <Badge
-                                                                variant={
-                                                                    term ===
-                                                                    "NOT_DELIVERABLE"
-                                                                        ? "destructive"
-                                                                        : term ===
-                                                                            "FREIGHT_EXTRA"
-                                                                          ? "warning"
-                                                                          : "neutral"
-                                                                }
-                                                                className="h-5 px-1.5 text-tiny"
-                                                            >
-                                                                {deliveryTermLabel(
-                                                                    activeDirectSource.option,
-                                                                    term,
-                                                                )}
-                                                            </Badge>
-                                                        ) : (
-                                                            <span className="text-xs text-muted-foreground">
-                                                                —
-                                                            </span>
-                                                        )}
-                                                    </div>
-
-                                                    <div className="flex items-center justify-end gap-1">
-                                                        <Input
-                                                            id={`${rowId}-quantity`}
-                                                            type="number"
-                                                            inputMode="decimal"
-                                                            min="0"
-                                                            max={
-                                                                entry.demandQty
-                                                            }
-                                                            step={
-                                                                sourcingQuantityStep(
-                                                                    product.quantityScale,
-                                                                ) ?? "1"
-                                                            }
-                                                            aria-label={`${entry.baseRow.recipient} 在 源${activeDirectSource.sourceNumber} 的数量`}
-                                                            aria-invalid={
-                                                                Boolean(
-                                                                    slice.error,
-                                                                ) || undefined
-                                                            }
-                                                            className="num h-control-sm w-16 bg-card text-right"
-                                                            value={
-                                                                slice.quantity
-                                                            }
-                                                            onChange={(
-                                                                event,
-                                                            ) => {
-                                                                const patch =
-                                                                    buildSetSliceQuantityPatch(
-                                                                        product,
-                                                                        form
-                                                                            .state
-                                                                            .values
-                                                                            .lines,
-                                                                        activeDirectSource.rowKey,
-                                                                        entry.baseRow,
-                                                                        event
-                                                                            .target
-                                                                            .value,
-                                                                    )
-                                                                if (patch)
-                                                                    applyPatches(
-                                                                        [patch],
-                                                                    )
-                                                            }}
-                                                            onBlur={() =>
-                                                                normalizeOnBlur(
-                                                                    activeDirectSource.rowKey,
-                                                                    slice.quantity,
-                                                                    entry.baseRow,
-                                                                )
-                                                            }
-                                                        />
-                                                        <span className="num shrink-0 text-xs text-muted-foreground">
-                                                            / {entry.demandQty}{" "}
-                                                            {product.unit}
-                                                        </span>
-                                                    </div>
-
-                                                    <div className="flex justify-end">
-                                                        <Button
-                                                            id={`${rowId}-remove`}
-                                                            type="button"
-                                                            size="xs"
-                                                            variant="ghost"
-                                                            className="text-muted-foreground hover:bg-destructive-soft hover:text-destructive-soft-foreground"
-                                                            aria-label={`从 源${activeDirectSource.sourceNumber} 移出 ${entry.baseRow.recipient}`}
-                                                            onClick={() =>
-                                                                handleRemoveAddressFromSource(
-                                                                    activeDirectSource.rowKey,
-                                                                    entry,
-                                                                )
-                                                            }
-                                                        >
-                                                            <XIcon aria-hidden="true" />
-                                                            移出
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* 区块二：未覆盖地址池（可在当前适合的源逐条或一键全部填入） */}
-                            <div>
-                                <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-surface-sunken px-5 py-2 text-xs">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <NativeCheckbox
-                                            id={`${idPrefix}-follow-uncovered-select-all`}
-                                            aria-label="全选未覆盖地址"
-                                            disabled={
-                                                followUncoveredEntries.length ===
-                                                0
-                                            }
-                                            checked={
-                                                followUncoveredEntries.length >
-                                                    0 &&
-                                                followUncoveredEntries.every(
-                                                    (e) =>
-                                                        effectiveSelectedKeys.has(
-                                                            e.key,
-                                                        ),
-                                                )
-                                            }
-                                            indeterminate={
-                                                followUncoveredEntries.some(
-                                                    (e) =>
-                                                        effectiveSelectedKeys.has(
-                                                            e.key,
-                                                        ),
-                                                ) &&
-                                                !followUncoveredEntries.every(
-                                                    (e) =>
-                                                        effectiveSelectedKeys.has(
-                                                            e.key,
-                                                        ),
-                                                )
-                                            }
-                                            onCheckedChange={(checked) =>
-                                                toggleKeyGroupSelection(
-                                                    followUncoveredEntries.map(
-                                                        (e) => e.key,
-                                                    ),
-                                                    checked,
-                                                )
-                                            }
-                                        />
-                                        <span className="font-semibold text-foreground">
-                                            未覆盖地址池
-                                        </span>
-                                        <span className="num text-muted-foreground">
-                                            {followUncoveredEntries.length} 处 ·{" "}
-                                            {safeSumQuantities(
-                                                followUncoveredEntries.map(
-                                                    (e) =>
-                                                        e.remainingUnassigned,
-                                                ),
-                                            )}{" "}
-                                            {product.unit}
-                                        </span>
-                                        {state.hasNonDirectSources &&
-                                        state.directBalanced &&
-                                        followUncoveredEntries.length > 0 ? (
-                                            <span className="text-tiny text-success-soft-foreground">
-                                                （当前余量已由仓库/库存统筹覆盖）
-                                            </span>
-                                        ) : null}
-                                    </div>
-
-                                    {deliverableUncoveredForActive.length >
-                                    0 ? (
-                                        <Button
-                                            id={`${idPrefix}-fill-all-uncovered-active`}
-                                            type="button"
-                                            size="xs"
-                                            variant="secondary"
-                                            onClick={
-                                                handleFillAllUncoveredForActiveDirect
-                                            }
-                                        >
-                                            <PlusIcon aria-hidden="true" />
-                                            一键填入 源
-                                            {activeDirectSource.sourceNumber}（
-                                            {
-                                                deliverableUncoveredForActive.length
-                                            }{" "}
-                                            处 · {deliverableUncoveredQty}{" "}
-                                            {product.unit}）
-                                        </Button>
-                                    ) : null}
-                                </div>
-
-                                {followUncoveredEntries.length === 0 ? (
-                                    <div className="flex items-center justify-center gap-1.5 px-5 py-6 text-xs text-success-soft-foreground">
-                                        <CheckCircle2Icon className="size-3.5" />
-                                        <span>
-                                            全部地址已由直发来源完整覆盖，无剩余未覆盖地址。
-                                        </span>
-                                    </div>
-                                ) : (
-                                    <div className="divide-y divide-grid">
-                                        {followUncoveredEntries.map((entry) => {
-                                            const rowId = `${idPrefix}-uncovered-${addressIdSegment(entry.baseRow)}`
-                                            const term = addressDeliveryTerm(
-                                                activeDirectSource.option,
-                                                entry.baseRow.region_code,
-                                            )
-                                            const canDeliver =
-                                                addressDeliverable(
-                                                    activeDirectSource.option,
-                                                    entry.baseRow.region_code,
-                                                )
-
-                                            return (
-                                                <div
-                                                    key={entry.key}
-                                                    className="grid grid-cols-[1.75rem_minmax(0,1fr)_5rem_7rem_6.5rem] items-center gap-3 bg-surface-sunken/25 px-5 py-2 transition-colors hover:bg-row-hover"
-                                                >
-                                                    <div className="flex items-center justify-center">
-                                                        <NativeCheckbox
-                                                            id={`${rowId}-select`}
-                                                            checked={effectiveSelectedKeys.has(
-                                                                entry.key,
-                                                            )}
-                                                            aria-label={`选择未覆盖地址 ${entry.baseRow.recipient}`}
-                                                            onCheckedChange={(
-                                                                checked,
-                                                            ) =>
-                                                                toggleRowSelection(
-                                                                    entry.key,
-                                                                    checked,
-                                                                )
-                                                            }
-                                                        />
-                                                    </div>
-
-                                                    <div className="min-w-0">
-                                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                                                            <span className="text-body-compact font-medium text-foreground">
-                                                                {
-                                                                    entry
-                                                                        .baseRow
-                                                                        .recipient
-                                                                }
-                                                            </span>
-                                                            <span className="num text-xs text-muted-foreground">
-                                                                {
-                                                                    entry
-                                                                        .baseRow
-                                                                        .phone
-                                                                }
-                                                            </span>
-                                                        </div>
-                                                        <p
-                                                            className="mt-0.5 truncate text-xs text-muted-foreground"
-                                                            title={
-                                                                entry.fullAddress
-                                                            }
-                                                        >
-                                                            {entry.fullAddress}
-                                                        </p>
-                                                    </div>
-
-                                                    <div>
-                                                        {term ? (
-                                                            <Badge
-                                                                variant={
-                                                                    term ===
-                                                                    "NOT_DELIVERABLE"
-                                                                        ? "destructive"
-                                                                        : term ===
-                                                                            "FREIGHT_EXTRA"
-                                                                          ? "warning"
-                                                                          : "neutral"
-                                                                }
-                                                                className="h-5 px-1.5 text-tiny"
-                                                            >
-                                                                {deliveryTermLabel(
-                                                                    activeDirectSource.option,
-                                                                    term,
-                                                                )}
-                                                            </Badge>
-                                                        ) : (
-                                                            <span className="text-xs text-muted-foreground">
-                                                                —
-                                                            </span>
-                                                        )}
-                                                    </div>
-
-                                                    <div className="num text-right text-xs">
-                                                        <span className="font-semibold text-foreground">
-                                                            {
-                                                                entry.remainingUnassigned
-                                                            }{" "}
-                                                            {product.unit}
-                                                        </span>
-                                                        {entry.remainingUnassigned !==
-                                                        entry.demandQty ? (
-                                                            <span className="block text-tiny text-muted-foreground">
-                                                                总需{" "}
-                                                                {
-                                                                    entry.demandQty
-                                                                }
-                                                            </span>
-                                                        ) : null}
-                                                    </div>
-
-                                                    <div className="flex justify-end">
-                                                        {canDeliver ? (
-                                                            <Button
-                                                                id={`${rowId}-fill`}
-                                                                type="button"
-                                                                size="xs"
-                                                                variant="outline"
-                                                                className="bg-card"
-                                                                onClick={() =>
-                                                                    handleFillUncoveredToDirect(
-                                                                        activeDirectSource.rowKey,
-                                                                        entry,
-                                                                    )
-                                                                }
-                                                            >
-                                                                <PlusIcon aria-hidden="true" />
-                                                                填入源
-                                                                {
-                                                                    activeDirectSource.sourceNumber
-                                                                }
-                                                            </Button>
-                                                        ) : (
-                                                            <span className="text-tiny text-destructive">
-                                                                源
-                                                                {
-                                                                    activeDirectSource.sourceNumber
-                                                                }
-                                                                不配送
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    ) : activeNonDirectSource ? (
-                        /* 当前左侧选中了仓库/库存源：展示未覆盖（留给仓库）地址 + 可从直发拉取转入的地址 */
-                        <div className="divide-y divide-border/70">
-                            <div>
-                                <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-table-header px-5 py-2 text-xs">
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-semibold text-foreground">
-                                            未走直发 / 留待仓库统筹地址
-                                        </span>
-                                        <span className="num text-muted-foreground">
-                                            {followUncoveredEntries.length} 处 ·{" "}
-                                            {safeSumQuantities(
-                                                followUncoveredEntries.map(
-                                                    (e) =>
-                                                        e.remainingUnassigned,
-                                                ),
-                                            )}{" "}
-                                            {product.unit}
-                                        </span>
-                                    </div>
-                                    {isPositiveQuantity(
-                                        nonDirectFillableQty,
-                                    ) ? (
-                                        <Button
-                                            id={`${idPrefix}-warehouse-fill-uncovered`}
-                                            type="button"
-                                            size="xs"
-                                            variant="secondary"
-                                            onClick={
-                                                handleFillUncoveredToActiveNonDirect
-                                            }
-                                        >
-                                            <PlusIcon aria-hidden="true" />
-                                            未覆盖余量 +{
-                                                nonDirectFillableQty
-                                            }{" "}
-                                            {product.unit} 填入 源
-                                            {activeNonDirectSource.sourceNumber}
-                                        </Button>
-                                    ) : null}
-                                </div>
-
-                                {followUncoveredEntries.length === 0 ? (
-                                    <p className="px-5 py-5 text-center text-xs text-muted-foreground">
-                                        目前全部客户地址均已分配给直发来源；如需由{" "}
-                                        源{activeNonDirectSource.sourceNumber}·
-                                        {activeNonDirectSource.routeLabel}{" "}
-                                        发货，可在下方将指定地址移出直发或直接转入。
-                                    </p>
-                                ) : (
-                                    <div className="divide-y divide-grid">
-                                        {followUncoveredEntries.map((entry) => (
-                                            <div
-                                                key={entry.key}
-                                                className="grid grid-cols-[minmax(0,1fr)_7.5rem] items-center gap-3 px-5 py-2 hover:bg-row-hover"
-                                            >
-                                                <div className="min-w-0">
-                                                    <div className="flex flex-wrap items-center gap-x-2">
-                                                        <span className="text-body-compact font-medium text-foreground">
-                                                            {
-                                                                entry.baseRow
-                                                                    .recipient
-                                                            }
-                                                        </span>
-                                                        <span className="num text-xs text-muted-foreground">
-                                                            {
-                                                                entry.baseRow
-                                                                    .phone
-                                                            }
-                                                        </span>
-                                                    </div>
-                                                    <p
-                                                        className="mt-0.5 truncate text-xs text-muted-foreground"
-                                                        title={
-                                                            entry.fullAddress
-                                                        }
-                                                    >
-                                                        {entry.fullAddress}
-                                                    </p>
-                                                </div>
-                                                <span className="num text-right text-xs font-medium text-foreground">
-                                                    {entry.remainingUnassigned}{" "}
-                                                    {product.unit}
-                                                </span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
-                            {followDirectAssignedAll.length > 0 ? (
-                                <div>
-                                    <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-border/60 bg-surface-sunken px-5 py-2 text-xs">
-                                        <span className="font-semibold text-foreground">
-                                            当前由直发承接的地址（
-                                            {
-                                                followDirectAssignedAll.length
-                                            }{" "}
-                                            处）
-                                        </span>
-                                        <span className="text-tiny text-muted-foreground">
-                                            点「转入源
-                                            {activeNonDirectSource.sourceNumber}
-                                            」可释放直发并同步增加仓库数量
-                                        </span>
-                                    </div>
-                                    <div className="divide-y divide-grid">
-                                        {followDirectAssignedAll.map(
-                                            (entry) => {
-                                                const rowId = `${idPrefix}-from-direct-${addressIdSegment(entry.baseRow)}`
-                                                const owners =
-                                                    entry.activeSlices
-                                                        .map(
-                                                            (s) =>
-                                                                `源${s.sourceNumber}`,
-                                                        )
-                                                        .join(" + ")
-                                                return (
-                                                    <div
-                                                        key={entry.key}
-                                                        className="grid grid-cols-[minmax(0,1fr)_5.5rem_5rem_11.5rem] items-center gap-3 px-5 py-2 hover:bg-row-hover"
-                                                    >
-                                                        <div className="min-w-0">
-                                                            <div className="flex flex-wrap items-center gap-x-2">
-                                                                <span className="text-body-compact font-medium text-foreground">
-                                                                    {
-                                                                        entry
-                                                                            .baseRow
-                                                                            .recipient
-                                                                    }
-                                                                </span>
-                                                                <span className="num text-xs text-muted-foreground">
-                                                                    {
-                                                                        entry
-                                                                            .baseRow
-                                                                            .phone
-                                                                    }
-                                                                </span>
-                                                            </div>
-                                                            <p
-                                                                className="mt-0.5 truncate text-xs text-muted-foreground"
-                                                                title={
-                                                                    entry.fullAddress
-                                                                }
-                                                            >
-                                                                {
-                                                                    entry.fullAddress
-                                                                }
-                                                            </p>
-                                                        </div>
-                                                        <Badge
-                                                            variant="info"
-                                                            className="h-5 px-1.5 text-tiny"
-                                                        >
-                                                            {owners} 直发
-                                                        </Badge>
-                                                        <span className="num text-right text-xs font-semibold text-foreground">
-                                                            {
-                                                                entry.assignedTotal
-                                                            }{" "}
-                                                            {product.unit}
-                                                        </span>
-                                                        <div className="flex items-center justify-end gap-1">
-                                                            <Button
-                                                                id={`${rowId}-transfer`}
-                                                                type="button"
-                                                                size="xs"
-                                                                variant="outline"
-                                                                className="bg-card"
-                                                                onClick={() =>
-                                                                    handleBatchTransferToNonDirect(
-                                                                        activeNonDirectSource.rowKey,
-                                                                        new Set(
-                                                                            [
-                                                                                entry.key,
-                                                                            ],
-                                                                        ),
-                                                                    )
-                                                                }
-                                                            >
-                                                                <ArrowRightLeftIcon aria-hidden="true" />
-                                                                转入源
-                                                                {
-                                                                    activeNonDirectSource.sourceNumber
-                                                                }
-                                                            </Button>
-                                                            <Button
-                                                                id={`${rowId}-clear`}
-                                                                type="button"
-                                                                size="icon-xs"
-                                                                variant="ghost"
-                                                                title="仅移出直发"
-                                                                aria-label={`仅移出 ${entry.baseRow.recipient} 的直发分配`}
-                                                                className="text-muted-foreground hover:bg-destructive-soft hover:text-destructive-soft-foreground"
-                                                                onClick={() =>
-                                                                    handleBatchClear(
-                                                                        new Set(
-                                                                            [
-                                                                                entry.key,
-                                                                            ],
-                                                                        ),
-                                                                    )
-                                                                }
-                                                            >
-                                                                <XIcon />
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                )
-                                            },
-                                        )}
-                                    </div>
-                                </div>
-                            ) : null}
-                        </div>
-                    ) : null}
+            {/* 全局地址路由表头 */}
+            <div
+                className={cn(
+                    "grid shrink-0 items-center gap-3 border-b border-border/70 bg-table-header px-5 py-2 text-xs font-medium text-muted-foreground",
+                    rowGridClass,
+                )}
+            >
+                <div className="flex items-center justify-center">
+                    <NativeCheckbox
+                        id={`${idPrefix}-select-page`}
+                        aria-label="全选当前页地址"
+                        checked={allPageSelected}
+                        indeterminate={somePageSelected}
+                        disabled={pageEntries.length === 0}
+                        onCheckedChange={(checked) =>
+                            toggleKeyGroupSelection(
+                                pageEntries.map((e) => e.key),
+                                checked,
+                            )
+                        }
+                    />
                 </div>
-            ) : (
-                /* 全部地址总览模式（适合 100+ 地址全局筛选与分页） */
-                <>
-                    <div className="grid shrink-0 grid-cols-[1.75rem_minmax(0,1fr)_5rem_11.5rem_10rem] items-center gap-3 border-b border-border/70 bg-table-header px-5 py-2 text-xs font-medium text-muted-foreground">
-                        <div className="flex items-center justify-center">
-                            <NativeCheckbox
-                                id={`${idPrefix}-select-page`}
-                                aria-label="全选当前页地址用于批量操作"
-                                checked={allPageSelected}
-                                indeterminate={somePageSelected}
-                                disabled={pageEntries.length === 0}
-                                onCheckedChange={(checked) =>
-                                    toggleKeyGroupSelection(
-                                        pageEntries.map((e) => e.key),
-                                        checked,
+                <span>收件人 / 交付地址</span>
+                <span>配送判定</span>
+                <span className="text-right">数量</span>
+                <span className="text-right">分配去向</span>
+            </div>
+
+            {/* 地址表体 */}
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                {pageEntries.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center gap-2.5 px-6 py-16 text-center text-xs text-muted-foreground">
+                        <p>
+                            {filteredDirectSource
+                                ? `源${filteredDirectSource.sourceNumber}（${filteredDirectSource.supplierName}）当前暂未承接地址`
+                                : resolvedSourceFilter === "__warehouse__"
+                                  ? "当前全部地址均已走供应商直发，暂无留待仓库统筹的地址"
+                                  : "当前筛选条件下没有交付地址"}
+                        </p>
+                        {hasActiveFilters ? (
+                            <Button
+                                id={`${idPrefix}-reset-filters`}
+                                type="button"
+                                variant="outline"
+                                size="xs"
+                                onClick={() => {
+                                    onSourceFilterChange(null)
+                                    setRegionFilter(null)
+                                    setQuery("")
+                                    resetPage()
+                                }}
+                            >
+                                返回全部 {state.counts.total} 处地址
+                            </Button>
+                        ) : null}
+                    </div>
+                ) : (
+                    <div className="divide-y divide-grid">
+                        {pageEntries.map((entry) => (
+                            <AddressRouteRow
+                                key={entry.key}
+                                idPrefix={idPrefix}
+                                rowGridClass={rowGridClass}
+                                entry={entry}
+                                unit={product.unit}
+                                minStepStr={minStepStr}
+                                minStepUnits={minStepUnits}
+                                directSources={activeDirectSources}
+                                nonDirectSources={activeNonDirectSources}
+                                warehousePillLabel={warehousePillLabel}
+                                warehouseAccent={warehouseAccent}
+                                previewDirectSource={previewDirectSource}
+                                hasNonDirectSources={state.hasNonDirectSources}
+                                directBalanced={state.directBalanced}
+                                checked={effectiveSelectedKeys.has(entry.key)}
+                                splitExpanded={expandedSplitKeys.has(entry.key)}
+                                onToggleChecked={(checked) =>
+                                    toggleRowSelection(entry.key, checked)
+                                }
+                                onToggleSplit={() => toggleSplitRow(entry.key)}
+                                onAssignDirect={(targetRowKey) =>
+                                    handleAssignDirect(
+                                        targetRowKey,
+                                        new Set([entry.key]),
                                     )
                                 }
+                                onAssignWarehouse={() =>
+                                    handleAssignWarehouse(new Set([entry.key]))
+                                }
+                                onClearDirect={() =>
+                                    handleClearDirect(new Set([entry.key]))
+                                }
+                                onSetSliceQty={(
+                                    targetRowKey,
+                                    nextQty,
+                                    removeIfZero,
+                                ) => {
+                                    const patch = buildSetSliceQuantityPatch(
+                                        product,
+                                        form.state.values.lines,
+                                        targetRowKey,
+                                        entry.baseRow,
+                                        nextQty,
+                                        removeIfZero,
+                                    )
+                                    if (patch) applyPatches([patch])
+                                }}
                             />
-                        </div>
-                        <span>收件人 / 交付地址</span>
-                        <span>配送状态</span>
-                        <span>承接去向</span>
-                        <span className="text-right">直发量 / 操作</span>
+                        ))}
                     </div>
+                )}
+            </div>
 
-                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-                        {pageEntries.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center text-xs text-muted-foreground">
-                                <p>当前筛选条件下没有交付地址</p>
-                                {hasActiveFilters ? (
-                                    <Button
-                                        id={`${idPrefix}-reset-filters`}
-                                        type="button"
-                                        variant="outline"
-                                        size="xs"
-                                        onClick={() => {
-                                            setStatusFilter("all")
-                                            setSourceFilter(null)
-                                            setRegionFilter(null)
-                                            setQuery("")
-                                            resetPage()
-                                        }}
-                                    >
-                                        查看全部 {state.counts.total} 处地址
-                                    </Button>
-                                ) : null}
-                            </div>
-                        ) : (
-                            <div className="divide-y divide-grid">
-                                {pageEntries.map((entry) => (
-                                    <GlobalAddressRow
-                                        key={entry.key}
-                                        idPrefix={idPrefix}
-                                        entry={entry}
-                                        unit={product.unit}
-                                        quantityScale={product.quantityScale}
-                                        directSources={state.directSources}
-                                        nonDirectSources={
-                                            state.nonDirectSources
-                                        }
-                                        activeDirectSource={activeDirectSource}
-                                        hasNonDirectSources={
-                                            state.hasNonDirectSources
-                                        }
-                                        hasDirectShortfall={hasDirectShortfall}
-                                        directBalanced={state.directBalanced}
-                                        primarySource={defaultSource}
-                                        checked={effectiveSelectedKeys.has(
-                                            entry.key,
-                                        )}
-                                        onToggleChecked={(checked) =>
-                                            toggleRowSelection(
-                                                entry.key,
-                                                checked,
-                                            )
-                                        }
-                                        onAssignExclusive={(targetRowKey) => {
-                                            const keySet = new Set([entry.key])
-                                            if (!targetRowKey) {
-                                                applyPatches(
-                                                    buildClearAddressesPatches(
-                                                        product,
-                                                        form.state.values.lines,
-                                                        keySet,
-                                                    ),
-                                                )
-                                                return
-                                            }
-                                            if (
-                                                targetRowKey.startsWith(
-                                                    TRANSFER_VALUE_PREFIX,
-                                                )
-                                            ) {
-                                                const nonDirectKey =
-                                                    targetRowKey.slice(
-                                                        TRANSFER_VALUE_PREFIX.length,
-                                                    )
-                                                handleBatchTransferToNonDirect(
-                                                    nonDirectKey,
-                                                    keySet,
-                                                )
-                                                return
-                                            }
-                                            const res = buildBatchAssignPatches(
-                                                product,
-                                                form.state.values.lines,
-                                                targetRowKey,
-                                                keySet,
-                                                "move_full",
-                                            )
-                                            applyPatches(res.patches)
-                                        }}
-                                        onSetSliceQty={(
-                                            targetRowKey,
-                                            nextQty,
-                                            removeIfZero,
-                                        ) => {
-                                            const patch =
-                                                buildSetSliceQuantityPatch(
-                                                    product,
-                                                    form.state.values.lines,
-                                                    targetRowKey,
-                                                    entry.baseRow,
-                                                    nextQty,
-                                                    removeIfZero,
-                                                )
-                                            if (patch) applyPatches([patch])
-                                        }}
-                                        onClearAllDirect={() =>
-                                            handleBatchClear(
-                                                new Set([entry.key]),
-                                            )
-                                        }
-                                        onFillUncoveredTo={(targetRowKey) =>
-                                            handleFillUncoveredToDirect(
-                                                targetRowKey,
-                                                entry,
-                                            )
-                                        }
-                                    />
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </>
-            )}
-
-            {/* 固定分页与汇总底栏 */}
+            {/* 精简底栏（仅保留计数与大数量分页，移除重复的直发额度术语） */}
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border/60 bg-surface-sunken/70 px-5 py-2 text-xs text-muted-foreground">
-                <div className="flex flex-wrap items-center gap-3">
-                    <span className="num">
-                        {viewMode === "follow"
-                            ? `共 ${baseFilteredEntries.length} 处地址`
-                            : filteredEntries.length === 0
-                              ? "共 0 处"
-                              : filteredEntries.length > pageSize
-                                ? `第 ${pageStart + 1}–${Math.min(pageStart + pageSize, filteredEntries.length)} 处，共 ${filteredEntries.length} 处`
-                                : `共 ${filteredEntries.length} 处地址`}
-                    </span>
-                    <span aria-hidden="true" className="opacity-40">
-                        ·
-                    </span>
-                    <span>
-                        直发合计{" "}
-                        <QuantityValue
-                            value={state.directAssignedTotalQty}
-                            unit={product.unit}
-                            className="font-semibold text-foreground"
-                        />
-                        {state.hasNonDirectSources ? (
-                            <span className="num text-muted-foreground">
-                                {" "}
-                                / 额度 {state.directTargetQty} {product.unit}
-                            </span>
-                        ) : null}
-                    </span>
-                </div>
+                <span className="num">
+                    {filteredEntries.length === 0
+                        ? "共 0 处地址"
+                        : filteredEntries.length > pageSize
+                          ? `第 ${pageStart + 1}–${Math.min(pageStart + pageSize, filteredEntries.length)} 处，共 ${filteredEntries.length} 处`
+                          : hasActiveFilters
+                            ? `筛选显示 ${filteredEntries.length} / 共 ${state.counts.total} 处地址`
+                            : `共 ${state.counts.total} 处地址`}
+                </span>
 
-                {viewMode === "all" && filteredEntries.length > 25 ? (
+                {filteredEntries.length > 25 ? (
                     <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1.5">
                             <span>每页</span>
@@ -2871,87 +1549,87 @@ export function SourcingAddressEditor({
     )
 }
 
-function GlobalAddressRow({
+function AddressRouteRow({
     idPrefix,
+    rowGridClass,
     entry,
     unit,
-    quantityScale,
+    minStepStr,
+    minStepUnits,
     directSources,
     nonDirectSources,
-    activeDirectSource,
+    warehousePillLabel,
+    warehouseAccent,
+    previewDirectSource,
     hasNonDirectSources,
-    hasDirectShortfall,
     directBalanced,
-    primarySource,
     checked,
+    splitExpanded,
     onToggleChecked,
-    onAssignExclusive,
+    onToggleSplit,
+    onAssignDirect,
+    onAssignWarehouse,
+    onClearDirect,
     onSetSliceQty,
-    onClearAllDirect,
-    onFillUncoveredTo,
 }: {
     idPrefix: string
+    rowGridClass: string
     entry: GlobalAddressEntry
     unit: string
-    quantityScale?: number | null
+    minStepStr: string
+    minStepUnits: bigint
     directSources: readonly DirectSourceInfo[]
     nonDirectSources: readonly NonDirectSourceInfo[]
-    activeDirectSource?: DirectSourceInfo
+    warehousePillLabel: string
+    warehouseAccent: ReturnType<typeof sourceAccentForIndex>
+    previewDirectSource?: DirectSourceInfo
     hasNonDirectSources: boolean
-    hasDirectShortfall: boolean
     directBalanced: boolean
-    primarySource?: DirectSourceInfo
     checked: boolean
+    splitExpanded: boolean
     onToggleChecked: (checked: boolean) => void
-    onAssignExclusive: (targetRowKey: string | null) => void
+    onToggleSplit: () => void
+    onAssignDirect: (targetRowKey: string) => void
+    onAssignWarehouse: () => void
+    onClearDirect: () => void
     onSetSliceQty: (
         targetRowKey: string,
         nextQty: string,
         removeIfZero?: boolean,
     ) => void
-    onClearAllDirect: () => void
-    onFillUncoveredTo: (targetRowKey: string) => void
 }) {
     const rowId = `${idPrefix}-${addressIdSegment(entry.baseRow)}`
-    const isSplitMulti = entry.slices.length > 1
-    const singleSlice = entry.slices.length === 1 ? entry.slices[0] : undefined
-    const editableSource = singleSlice
-        ? directSources.find((src) => src.rowKey === singleSlice.rowKey)
-        : (activeDirectSource ?? primarySource)
-    const hasUncovered = isPositiveQuantity(entry.remainingUnassigned)
-    const quickFillTarget = hasUncovered
-        ? activeDirectSource &&
-          addressDeliverable(
-              activeDirectSource.option,
-              entry.baseRow.region_code,
-          )
-            ? activeDirectSource
-            : directSources.find(
-                  (src) =>
-                      src.selected &&
-                      src.rowKey !== singleSlice?.rowKey &&
-                      addressDeliverable(src.option, entry.baseRow.region_code),
-              )
-        : undefined
+    const activeSlices = entry.activeSlices
+    const hasAssignedDirect = activeSlices.length > 0
+    const isPartialOrSplit =
+        activeSlices.length > 1 ||
+        (activeSlices.length === 1 &&
+            isPositiveQuantity(entry.remainingUnassigned))
+    const singleDirectSlice =
+        activeSlices.length === 1 && !isPartialOrSplit
+            ? activeSlices[0]
+            : undefined
+    const isWarehouseOwned = !hasAssignedDirect && hasNonDirectSources
 
-    const termOption = singleSlice?.option ?? primarySource?.option
-    const termBadge =
-        termOption && entry.effectiveTerm ? (
-            <Badge
-                variant={
-                    entry.effectiveTerm === "NOT_DELIVERABLE"
-                        ? "destructive"
-                        : entry.effectiveTerm === "FREIGHT_EXTRA"
-                          ? "warning"
-                          : "neutral"
-                }
-                className="h-5 px-1.5 text-tiny"
-            >
-                {deliveryTermLabel(termOption, entry.effectiveTerm)}
-            </Badge>
-        ) : (
-            <span className="text-xs text-muted-foreground">—</span>
-        )
+    const demandUnits = (() => {
+        try {
+            return quantityUnits(entry.demandQty)
+        } catch {
+            return BigInt(0)
+        }
+    })()
+    const canSplitAddress =
+        demandUnits > minStepUnits &&
+        (directSources.length >= 2 || hasNonDirectSources)
+    const showSplitDrawer = isPartialOrSplit || splitExpanded
+
+    // 配送判定展示：已分直发时看实际直发源；未分直发时若有刚选的新直发源则预览它，否则看主直发源
+    const termSource = singleDirectSlice
+        ? directSources.find((s) => s.rowKey === singleDirectSlice.rowKey)
+        : (previewDirectSource ?? directSources[0])
+    const displayTerm = termSource
+        ? addressDeliveryTerm(termSource.option, entry.baseRow.region_code)
+        : entry.effectiveTerm
 
     const errorMessages = [
         ...new Set(
@@ -2960,6 +1638,9 @@ function GlobalAddressRow({
                 .filter((msg): msg is string => Boolean(msg)),
         ),
     ]
+
+    const totalRouteTargets =
+        directSources.length + (hasNonDirectSources ? 1 : 0)
 
     const normalizeOnBlur = (targetRowKey: string, rawQty: string) => {
         const trimmed = rawQty.trim()
@@ -2975,20 +1656,15 @@ function GlobalAddressRow({
                 compareDecimal(normalized, "0", 6) === 0,
             )
         } catch {
-            // 保留非法输入交由行内错误提示
+            // 保留非法输入交由校验提示
         }
     }
 
-    const useRichSelect =
-        directSources.length > 1 || nonDirectSources.length > 0
-    const canTransferRowToNonDirect =
-        nonDirectSources.length > 0 &&
-        (Boolean(singleSlice?.positive) || hasDirectShortfall)
-    const unassignedDisplayLabel = hasNonDirectSources
-        ? directBalanced
-            ? "仓库 / 库存统筹"
-            : "未覆盖（留给仓库）"
-        : "未覆盖"
+    const selectCurrentValue = singleDirectSlice
+        ? singleDirectSlice.rowKey
+        : isWarehouseOwned
+          ? WAREHOUSE_SELECT_VALUE
+          : UNASSIGNED_SELECT_VALUE
 
     return (
         <div
@@ -2996,17 +1672,19 @@ function GlobalAddressRow({
                 "transition-colors hover:bg-row-hover",
                 entry.hasError &&
                     "bg-destructive-soft/30 hover:bg-destructive-soft/45",
-                !entry.hasError &&
-                    !isPositiveQuantity(entry.assignedTotal) &&
-                    "bg-surface-sunken/35",
             )}
         >
-            <div className="grid grid-cols-[1.75rem_minmax(0,1fr)_5rem_11.5rem_10rem] items-center gap-3 px-5 py-2">
+            <div
+                className={cn(
+                    "grid items-center gap-3 px-5 py-2",
+                    rowGridClass,
+                )}
+            >
                 <div className="flex items-center justify-center">
                     <NativeCheckbox
                         id={`${rowId}-select`}
                         checked={checked}
-                        aria-label={`选择 ${entry.baseRow.recipient} 用于批量操作`}
+                        aria-label={`选择 ${entry.baseRow.recipient}`}
                         onCheckedChange={onToggleChecked}
                     />
                 </div>
@@ -3029,105 +1707,251 @@ function GlobalAddressRow({
                     </p>
                 </div>
 
-                {/* 配送状态 */}
-                <div>{termBadge}</div>
-
-                {/* 承接去向 */}
-                <div className="min-w-0">
-                    {isSplitMulti ? (
-                        <Badge variant="secondary" className="h-5 px-2 text-xs">
-                            已拆 {entry.slices.length} 源
+                {/* 配送判定 */}
+                <div>
+                    {termSource && displayTerm ? (
+                        <Badge
+                            variant={
+                                displayTerm === "NOT_DELIVERABLE"
+                                    ? "destructive"
+                                    : displayTerm === "FREIGHT_EXTRA"
+                                      ? "warning"
+                                      : "neutral"
+                            }
+                            className="h-5 px-1.5 text-tiny"
+                        >
+                            {deliveryTermLabel(termSource.option, displayTerm)}
                         </Badge>
-                    ) : !useRichSelect && primarySource ? (
-                        !entry.deliverableByPrimary &&
-                        !singleSlice?.positive ? (
-                            <span className="text-xs text-muted-foreground">
-                                不可配送
-                            </span>
-                        ) : (
-                            <button
-                                id={`${rowId}-toggle-assign`}
-                                type="button"
-                                aria-pressed={Boolean(singleSlice?.positive)}
-                                onClick={() =>
-                                    onAssignExclusive(
-                                        singleSlice?.positive
-                                            ? null
-                                            : primarySource.rowKey,
-                                    )
-                                }
-                                className={cn(
-                                    "inline-flex max-w-full cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                    singleSlice?.positive
-                                        ? "border-primary/35 bg-primary/8 text-foreground hover:bg-primary/14"
-                                        : "border-dashed border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
-                                )}
-                            >
-                                <span
-                                    aria-hidden="true"
+                    ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                </div>
+
+                {/* 需求量（单件直接静态显示，多件可拆地址才展示极简「拆」按钮） */}
+                <div className="flex items-center justify-end gap-1">
+                    <span className="num text-xs font-medium text-foreground">
+                        <QuantityValue value={entry.demandQty} unit={unit} />
+                    </span>
+                    {canSplitAddress ? (
+                        <button
+                            id={`${rowId}-split-toggle`}
+                            type="button"
+                            aria-expanded={showSplitDrawer}
+                            title="将此地址的数量拆给多个来源"
+                            onClick={onToggleSplit}
+                            className={cn(
+                                "inline-flex size-5 cursor-pointer items-center justify-center rounded-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                showSplitDrawer
+                                    ? "bg-primary/12 text-primary"
+                                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                            )}
+                        >
+                            <SplitIcon className="size-3" />
+                        </button>
+                    ) : null}
+                </div>
+
+                {/* 1-click 分配去向：2–3 个来源用分段按钮一步切换，4+ 来源用下拉 */}
+                <div className="flex justify-end">
+                    {isPartialOrSplit ? (
+                        <Badge
+                            variant="secondary"
+                            className="num h-6 px-2 text-tiny"
+                        >
+                            已拆分（直发 {entry.assignedTotal}/{entry.demandQty}
+                            ）
+                        </Badge>
+                    ) : totalRouteTargets >= 2 && totalRouteTargets <= 3 ? (
+                        <div
+                            role="group"
+                            aria-label={`${entry.baseRow.recipient} 分配去向`}
+                            className="inline-flex items-center gap-0.5 rounded-md border border-border/75 bg-surface-sunken/70 p-0.5"
+                        >
+                            {directSources.map((src) => {
+                                const active =
+                                    singleDirectSlice?.rowKey === src.rowKey
+                                const accent = sourceAccentForIndex(
+                                    src.sourceNumber - 1,
+                                )
+                                const deliverable = addressDeliverable(
+                                    src.option,
+                                    entry.baseRow.region_code,
+                                )
+                                return (
+                                    <button
+                                        key={src.rowKey}
+                                        id={`${rowId}-pill-${toAutomationIdSegment(src.rowKey)}`}
+                                        type="button"
+                                        aria-pressed={active}
+                                        disabled={!deliverable && !active}
+                                        title={
+                                            !deliverable
+                                                ? `${src.supplierName} 不配送此地区`
+                                                : `分配给 源${src.sourceNumber} · ${src.supplierName}（${src.routeLabel}）`
+                                        }
+                                        onClick={() => {
+                                            if (!active) {
+                                                onAssignDirect(src.rowKey)
+                                            }
+                                        }}
+                                        className={cn(
+                                            "num inline-flex h-6 items-center gap-1 rounded-sm border px-2 text-tiny font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                            active
+                                                ? accent.chipClass
+                                                : !deliverable
+                                                  ? "cursor-not-allowed border-transparent text-muted-foreground/45 line-through"
+                                                  : "cursor-pointer border-transparent text-muted-foreground hover:bg-card hover:text-foreground",
+                                        )}
+                                    >
+                                        {active ? (
+                                            <span
+                                                aria-hidden="true"
+                                                className={cn(
+                                                    "size-1.5 rounded-full",
+                                                    accent.barClass,
+                                                )}
+                                            />
+                                        ) : null}
+                                        <span>源{src.sourceNumber}·直发</span>
+                                    </button>
+                                )
+                            })}
+
+                            {hasNonDirectSources ? (
+                                <button
+                                    id={`${rowId}-pill-warehouse`}
+                                    type="button"
+                                    aria-pressed={isWarehouseOwned}
+                                    title={`交给 ${warehousePillLabel}（同步自动配平仓库数量）`}
+                                    onClick={() => {
+                                        if (
+                                            !isWarehouseOwned ||
+                                            !directBalanced
+                                        ) {
+                                            onAssignWarehouse()
+                                        }
+                                    }}
                                     className={cn(
-                                        "size-1.5 shrink-0 rounded-full",
-                                        singleSlice?.positive
-                                            ? "bg-primary"
-                                            : "bg-muted-foreground/40",
+                                        "num inline-flex h-6 cursor-pointer items-center gap-1 rounded-sm border px-2 text-tiny font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                        isWarehouseOwned
+                                            ? warehouseAccent.chipClass
+                                            : "border-transparent text-muted-foreground hover:bg-card hover:text-foreground",
                                     )}
-                                />
-                                <span className="truncate">
-                                    {singleSlice?.positive
-                                        ? primarySource.supplierName
-                                        : "未覆盖（点击填入）"}
-                                </span>
-                            </button>
-                        )
+                                >
+                                    {isWarehouseOwned ? (
+                                        <span
+                                            aria-hidden="true"
+                                            className={cn(
+                                                "size-1.5 rounded-full",
+                                                warehouseAccent.barClass,
+                                            )}
+                                        />
+                                    ) : null}
+                                    <span>{warehousePillLabel}</span>
+                                </button>
+                            ) : null}
+                        </div>
+                    ) : totalRouteTargets === 1 && directSources[0] ? (
+                        (() => {
+                            const only = directSources[0]
+                            const active =
+                                singleDirectSlice?.rowKey === only.rowKey
+                            const accent = sourceAccentForIndex(
+                                only.sourceNumber - 1,
+                            )
+                            const deliverable = addressDeliverable(
+                                only.option,
+                                entry.baseRow.region_code,
+                            )
+                            if (!deliverable && !active) {
+                                return (
+                                    <span className="text-xs text-destructive">
+                                        源{only.sourceNumber} 不配送
+                                    </span>
+                                )
+                            }
+                            return (
+                                <button
+                                    id={`${rowId}-toggle-assign`}
+                                    type="button"
+                                    aria-pressed={active}
+                                    onClick={() =>
+                                        active
+                                            ? onClearDirect()
+                                            : onAssignDirect(only.rowKey)
+                                    }
+                                    className={cn(
+                                        "num inline-flex h-6.5 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                        active
+                                            ? accent.chipClass
+                                            : "border-dashed border-border bg-card text-muted-foreground hover:border-primary/45 hover:text-primary",
+                                    )}
+                                >
+                                    <span
+                                        aria-hidden="true"
+                                        className={cn(
+                                            "size-1.5 rounded-full",
+                                            active
+                                                ? accent.barClass
+                                                : "bg-muted-foreground/40",
+                                        )}
+                                    />
+                                    <span>
+                                        {active
+                                            ? `源${only.sourceNumber}·直发`
+                                            : `分配给 源${only.sourceNumber}`}
+                                    </span>
+                                </button>
+                            )
+                        })()
                     ) : (
                         <Select
-                            value={singleSlice?.rowKey ?? "__unassigned__"}
+                            value={selectCurrentValue}
                             items={[
-                                {
-                                    value: "__unassigned__",
-                                    label: unassignedDisplayLabel,
-                                },
                                 ...directSources.map((src) => ({
                                     value: src.rowKey,
                                     label: src.shortLabel,
                                 })),
-                                ...(canTransferRowToNonDirect
-                                    ? nonDirectSources.map((src) => ({
-                                          value: `${TRANSFER_VALUE_PREFIX}${src.rowKey}`,
-                                          label: `转入 源${src.sourceNumber}·${src.routeLabel}（+${entry.demandQty}）`,
-                                      }))
-                                    : []),
+                                ...(hasNonDirectSources
+                                    ? [
+                                          {
+                                              value: WAREHOUSE_SELECT_VALUE,
+                                              label: warehousePillLabel,
+                                          },
+                                      ]
+                                    : [
+                                          {
+                                              value: UNASSIGNED_SELECT_VALUE,
+                                              label: "待分配",
+                                          },
+                                      ]),
                             ]}
-                            onValueChange={(next) =>
-                                onAssignExclusive(
-                                    !next || next === "__unassigned__"
-                                        ? null
-                                        : next,
-                                )
-                            }
+                            onValueChange={(next) => {
+                                if (!next || next === UNASSIGNED_SELECT_VALUE) {
+                                    onClearDirect()
+                                    return
+                                }
+                                if (next === WAREHOUSE_SELECT_VALUE) {
+                                    onAssignWarehouse()
+                                    return
+                                }
+                                onAssignDirect(next)
+                            }}
                         >
                             <SelectTrigger
                                 id={`${rowId}-source`}
                                 size="sm"
-                                aria-label={`${entry.baseRow.recipient} 的承接去向`}
-                                className="w-full bg-card text-xs"
+                                aria-label={`${entry.baseRow.recipient} 分配去向`}
+                                className="w-48 bg-card text-xs"
                             >
                                 <SelectValue />
                             </SelectTrigger>
-                            <SelectContent align="start" className="min-w-56">
-                                <SelectItem
-                                    idPrefix={`${rowId}-source`}
-                                    value="__unassigned__"
-                                >
-                                    {hasNonDirectSources
-                                        ? "移出直发（留给仓库统筹）"
-                                        : "未覆盖"}
-                                </SelectItem>
+                            <SelectContent align="end" className="min-w-56">
                                 {directSources.map((src) => {
-                                    const term =
-                                        src.option.delivery?.regionTerms[
-                                            entry.baseRow.region_code
-                                        ]
+                                    const term = addressDeliveryTerm(
+                                        src.option,
+                                        entry.baseRow.region_code,
+                                    )
                                     const undeliverable =
                                         term === "NOT_DELIVERABLE"
                                     const suffix = undeliverable
@@ -3142,7 +1966,7 @@ function GlobalAddressRow({
                                             value={src.rowKey}
                                             disabled={
                                                 undeliverable &&
-                                                singleSlice?.rowKey !==
+                                                singleDirectSlice?.rowKey !==
                                                     src.rowKey
                                             }
                                         >
@@ -3151,207 +1975,113 @@ function GlobalAddressRow({
                                         </SelectItem>
                                     )
                                 })}
-                                {canTransferRowToNonDirect
-                                    ? nonDirectSources.map((src) => (
-                                          <SelectItem
-                                              key={`${TRANSFER_VALUE_PREFIX}${src.rowKey}`}
-                                              idPrefix={`${rowId}-source`}
-                                              value={`${TRANSFER_VALUE_PREFIX}${src.rowKey}`}
-                                          >
-                                              转入 源{src.sourceNumber}·
-                                              {src.routeLabel}（仓量 +
-                                              {entry.demandQty} {unit}）
-                                          </SelectItem>
-                                      ))
-                                    : null}
+                                {hasNonDirectSources ? (
+                                    <SelectItem
+                                        idPrefix={`${rowId}-source`}
+                                        value={WAREHOUSE_SELECT_VALUE}
+                                    >
+                                        {warehousePillLabel}
+                                        {nonDirectSources.length > 1
+                                            ? "（自动配平）"
+                                            : ""}
+                                    </SelectItem>
+                                ) : (
+                                    <SelectItem
+                                        idPrefix={`${rowId}-source`}
+                                        value={UNASSIGNED_SELECT_VALUE}
+                                    >
+                                        暂不直发（待分配）
+                                    </SelectItem>
+                                )}
                             </SelectContent>
                         </Select>
                     )}
                 </div>
-
-                {/* 数量 + 直达「移出 / 填入」动作 */}
-                <div className="flex flex-col items-end gap-0.5">
-                    <div className="flex items-center justify-end gap-1">
-                        {isSplitMulti ? (
-                            <div className="flex items-baseline gap-1 text-xs">
-                                <span
-                                    className={cn(
-                                        "num text-body-compact font-semibold",
-                                        entry.overAllocated
-                                            ? "text-destructive"
-                                            : hasUncovered
-                                              ? "text-warning-soft-foreground"
-                                              : "text-foreground",
-                                    )}
-                                >
-                                    {entry.assignedTotal}
-                                </span>
-                                <span className="num text-muted-foreground">
-                                    / {entry.demandQty} {unit}
-                                </span>
-                            </div>
-                        ) : editableSource &&
-                          (entry.anySourceDeliverable ||
-                              singleSlice?.positive) ? (
-                            <>
-                                <Input
-                                    id={`${rowId}-quantity`}
-                                    type="number"
-                                    inputMode="decimal"
-                                    min="0"
-                                    max={entry.demandQty}
-                                    step={
-                                        sourcingQuantityStep(quantityScale) ??
-                                        "1"
-                                    }
-                                    placeholder="0"
-                                    aria-label={`${entry.baseRow.recipient}，${entry.fullAddress}，本次交付数量（${unit}）`}
-                                    aria-invalid={entry.hasError || undefined}
-                                    className="num h-control-sm w-14 bg-card text-right"
-                                    value={singleSlice?.quantity ?? ""}
-                                    onChange={(event) =>
-                                        onSetSliceQty(
-                                            editableSource.rowKey,
-                                            event.target.value,
-                                        )
-                                    }
-                                    onBlur={() =>
-                                        normalizeOnBlur(
-                                            editableSource.rowKey,
-                                            singleSlice?.quantity ?? "",
-                                        )
-                                    }
-                                />
-                                <span className="num shrink-0 text-xs text-muted-foreground">
-                                    /{entry.demandQty}
-                                </span>
-                            </>
-                        ) : (
-                            <span className="num text-xs text-muted-foreground">
-                                0 / {entry.demandQty} {unit}
-                            </span>
-                        )}
-
-                        {isPositiveQuantity(entry.assignedTotal) ? (
-                            <Button
-                                id={`${rowId}-remove-direct`}
-                                type="button"
-                                size="icon-xs"
-                                variant="ghost"
-                                title="移出直发分配"
-                                aria-label={`移出 ${entry.baseRow.recipient} 的直发分配`}
-                                className="text-muted-foreground hover:bg-destructive-soft hover:text-destructive-soft-foreground"
-                                onClick={onClearAllDirect}
-                            >
-                                <XIcon />
-                            </Button>
-                        ) : quickFillTarget ? (
-                            <Button
-                                id={`${rowId}-quick-fill`}
-                                type="button"
-                                size="icon-xs"
-                                variant="ghost"
-                                title={`填入 源${quickFillTarget.sourceNumber}`}
-                                aria-label={`将 ${entry.baseRow.recipient} 填入 源${quickFillTarget.sourceNumber}`}
-                                className="text-primary hover:bg-primary/10"
-                                onClick={() =>
-                                    onFillUncoveredTo(quickFillTarget.rowKey)
-                                }
-                            >
-                                <PlusIcon />
-                            </Button>
-                        ) : null}
-                    </div>
-
-                    {hasUncovered &&
-                    isPositiveQuantity(entry.assignedTotal) &&
-                    quickFillTarget ? (
-                        <button
-                            id={`${rowId}-split-remainder`}
-                            type="button"
-                            onClick={() =>
-                                onFillUncoveredTo(quickFillTarget.rowKey)
-                            }
-                            className="inline-flex cursor-pointer items-center gap-0.5 text-tiny font-medium text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                        >
-                            <PlusIcon className="size-2.5" />余{" "}
-                            {entry.remainingUnassigned} 填源
-                            {quickFillTarget.sourceNumber}
-                        </button>
-                    ) : null}
-                </div>
             </div>
 
-            {/* 单地址拆给多来源时的清晰子行 */}
-            {isSplitMulti ? (
-                <div className="space-y-1 border-t border-border/40 bg-surface-sunken/50 py-1.5 pr-5 pl-12">
-                    {entry.slices.map((slice) => (
-                        <div
-                            key={slice.rowKey}
-                            className="flex flex-wrap items-center justify-between gap-2 text-xs"
-                        >
-                            <span className="text-muted-foreground">
-                                {slice.shortLabel}
-                            </span>
-                            <div className="flex items-center gap-1.5">
+            {/* 多件地址按需展开的多来源拆分行 */}
+            {showSplitDrawer ? (
+                <div className="flex flex-wrap items-center gap-3 border-t border-border/50 bg-surface-sunken/45 px-12 py-2 text-xs">
+                    <span className="text-muted-foreground">
+                        按源拆分数量：
+                    </span>
+                    {directSources.map((src) => {
+                        const existing = entry.slices.find(
+                            (s) => s.rowKey === src.rowKey,
+                        )
+                        const deliverable = addressDeliverable(
+                            src.option,
+                            entry.baseRow.region_code,
+                        )
+                        const accent = sourceAccentForIndex(
+                            src.sourceNumber - 1,
+                        )
+                        return (
+                            <label
+                                key={src.rowKey}
+                                htmlFor={`${rowId}-split-${toAutomationIdSegment(src.rowKey)}`}
+                                className="inline-flex items-center gap-1.5"
+                            >
+                                <span
+                                    aria-hidden="true"
+                                    className={cn(
+                                        "size-1.5 rounded-full",
+                                        accent.barClass,
+                                    )}
+                                />
+                                <span className="num text-foreground">
+                                    源{src.sourceNumber}
+                                </span>
                                 <Input
-                                    id={`${rowId}-slice-${toAutomationIdSegment(slice.rowKey)}-qty`}
+                                    id={`${rowId}-split-${toAutomationIdSegment(src.rowKey)}`}
                                     type="number"
                                     inputMode="decimal"
                                     min="0"
                                     max={entry.demandQty}
-                                    step={
-                                        sourcingQuantityStep(quantityScale) ??
-                                        "1"
-                                    }
-                                    aria-label={`${entry.baseRow.recipient} 分配给 ${slice.shortLabel} 的数量（${unit}）`}
-                                    className="num h-6 w-16 bg-card text-right text-xs"
-                                    value={slice.quantity}
+                                    step={minStepStr}
+                                    disabled={!deliverable && !existing}
+                                    className="num h-control-sm w-16 bg-card text-right"
+                                    value={existing?.quantity ?? ""}
+                                    placeholder="0"
                                     onChange={(event) =>
                                         onSetSliceQty(
-                                            slice.rowKey,
+                                            src.rowKey,
                                             event.target.value,
                                         )
                                     }
-                                    onBlur={() =>
+                                    onBlur={(event) =>
                                         normalizeOnBlur(
-                                            slice.rowKey,
-                                            slice.quantity,
+                                            src.rowKey,
+                                            event.target.value,
                                         )
                                     }
                                 />
-                                <span className="text-muted-foreground">
-                                    {unit}
-                                </span>
-                                <Button
-                                    id={`${rowId}-slice-${toAutomationIdSegment(slice.rowKey)}-remove`}
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-xs"
-                                    aria-label={`移除 ${slice.shortLabel} 对 ${entry.baseRow.recipient} 的分配`}
-                                    onClick={() =>
-                                        onSetSliceQty(slice.rowKey, "0", true)
-                                    }
-                                >
-                                    <XIcon />
-                                </Button>
-                            </div>
-                        </div>
-                    ))}
+                            </label>
+                        )
+                    })}
+                    {isPositiveQuantity(entry.remainingUnassigned) ? (
+                        <span className="num text-muted-foreground">
+                            {hasNonDirectSources
+                                ? `余 ${entry.remainingUnassigned} ${unit} 归${warehousePillLabel}`
+                                : `未配 ${entry.remainingUnassigned} ${unit}`}
+                        </span>
+                    ) : null}
                 </div>
             ) : null}
 
             {/* 行内错误提示 */}
             {errorMessages.length > 0 ? (
-                <div
-                    role="alert"
-                    className="flex items-center gap-1.5 px-5 pb-2 pl-12 text-xs text-destructive"
-                >
-                    <CircleAlertIcon
-                        aria-hidden="true"
-                        className="size-3.5 shrink-0"
-                    />
-                    <span>{errorMessages.join("；")}</span>
+                <div className="px-12 pb-2">
+                    {errorMessages.map((msg) => (
+                        <p
+                            key={msg}
+                            role="alert"
+                            className="flex items-center gap-1 text-xs text-destructive"
+                        >
+                            <CircleAlertIcon className="size-3 shrink-0" />
+                            <span>{msg}</span>
+                        </p>
+                    ))}
                 </div>
             ) : null}
         </div>

@@ -189,6 +189,165 @@ export function summarizeRowPricing(row: SourcingEditorRow): RowPricingSummary {
     }
 }
 
+/** 找出候选采购方案中的最低含税单价（现有库存按库存核算不计采购单价）。 */
+export function findLowestPurchaseCost(
+    options: readonly SourcingSupplierOption[],
+): string | undefined {
+    let lowest: string | undefined
+    for (const option of options) {
+        if (option.sourceType !== "PURCHASE") continue
+        const cost = option.unitCostGross?.trim()
+        if (!cost) continue
+        try {
+            if (!lowest || compareDecimal(cost, lowest, 4) < 0) {
+                lowest = compactFixed(cost)
+            }
+        } catch {
+            // 跳过非法金额
+        }
+    }
+    return lowest
+}
+
+/** 计算某个采购单价相对全场最低采购价的价差。 */
+export function priceDeltaFromLowest(
+    unitCostGross: string | undefined,
+    lowestCost: string | undefined,
+): { isLowest: boolean; delta: string } | null {
+    const cost = unitCostGross?.trim()
+    if (!cost || !lowestCost) return null
+    try {
+        const cmp = compareDecimal(cost, lowestCost, 4)
+        if (cmp <= 0) return { isLowest: true, delta: "0" }
+        const diff = subtractFixed(cost, lowestCost, {
+            maxScale: 4,
+            outputScale: 4,
+        })
+        return { isLowest: false, delta: compactFixed(diff) }
+    } catch {
+        return null
+    }
+}
+
+export type WeightedProcurementSummary = Readonly<{
+    /** 参与采购来源的加权含税均价（按分配数量加权）；无有效采购量时为空。 */
+    weightedUnitCostGross?: string
+    /** 参与采购来源的预估含税总采购额。 */
+    totalProcurementCost?: string
+    /** 相对销售含税单价的综合毛利测算。 */
+    margin: MarginComparison | null
+    /** 参与本次分配的采购来源数量。 */
+    purchaseSourceCount: number
+    /** 参与本次分配的现有库存来源数量。 */
+    stockSourceCount: number
+    /** 是否存在任一价格倒挂来源。 */
+    hasInvertedSource: boolean
+    /** 参与采购来源是否存在多个不同单价。 */
+    hasMixedPrices: boolean
+}>
+
+/** 计算商品多源组合下的真实加权平均采购价、预估采购总额与综合毛利。 */
+export function summarizeWeightedProcurementCost(
+    row: SourcingEditorRow,
+): WeightedProcurementSummary {
+    const selected = row.allocations.filter(({ line }) => line.selected)
+    const relevant = selected.length > 0 ? selected : row.allocations
+    const salesUnitPriceGross =
+        row.product.salesPrices?.unit_price_gross?.trim() || undefined
+
+    let purchaseSourceCount = 0
+    let stockSourceCount = 0
+    let hasInvertedSource = false
+    const distinctPrices = new Set<string>()
+    const purchaseAmounts: string[] = []
+    const purchaseQuantities: string[] = []
+
+    for (const { line } of relevant) {
+        const option = findSourcingOption(row.product, line.basisId)
+        if (!option) continue
+        if (option.sourceType === "EXISTING_STOCK") {
+            stockSourceCount += 1
+            continue
+        }
+        purchaseSourceCount += 1
+        const cost = option.unitCostGross?.trim()
+        if (!cost) continue
+        try {
+            distinctPrices.add(compactFixed(cost))
+        } catch {
+            distinctPrices.add(cost)
+        }
+        const singleMargin = comparePurchaseCostToSalesPrice(
+            cost,
+            salesUnitPriceGross,
+        )
+        if (singleMargin?.inverted) hasInvertedSource = true
+
+        const qty = line.quantity?.trim()
+        if (qty && isPositiveQuantity(qty)) {
+            try {
+                const amount = multiplyFixed(cost, compactFixed(qty), {
+                    leftMaxScale: 4,
+                    rightMaxScale: 6,
+                    outputScale: 4,
+                })
+                purchaseAmounts.push(amount)
+                purchaseQuantities.push(compactFixed(qty))
+            } catch {
+                // 跳过未填完的非法数量
+            }
+        }
+    }
+
+    let weightedUnitCostGross: string | undefined
+    let totalProcurementCost: string | undefined
+    if (purchaseAmounts.length > 0 && purchaseQuantities.length > 0) {
+        try {
+            const totalCost = sumFixed(purchaseAmounts, {
+                maxScale: 4,
+                outputScale: 2,
+            })
+            const totalQty = sumFixed(purchaseQuantities, {
+                maxScale: 6,
+                outputScale: 6,
+            })
+            totalProcurementCost = compactFixed(totalCost)
+            if (compareDecimal(totalQty, "0", 6) > 0) {
+                const rawTotalCost = sumFixed(purchaseAmounts, {
+                    maxScale: 4,
+                    outputScale: 4,
+                })
+                weightedUnitCostGross = compactFixed(
+                    divideFixed(rawTotalCost, totalQty, {
+                        numeratorMaxScale: 4,
+                        denominatorMaxScale: 6,
+                        outputScale: 2,
+                    }),
+                )
+            }
+        } catch {
+            // 保留空值交由回退逻辑展示
+        }
+    } else if (distinctPrices.size === 1) {
+        weightedUnitCostGross = [...distinctPrices][0]
+    }
+
+    const margin = comparePurchaseCostToSalesPrice(
+        weightedUnitCostGross,
+        salesUnitPriceGross,
+    )
+
+    return {
+        weightedUnitCostGross,
+        totalProcurementCost,
+        margin,
+        purchaseSourceCount,
+        stockSourceCount,
+        hasInvertedSource,
+        hasMixedPrices: distinctPrices.size > 1,
+    }
+}
+
 /** 计算整张销售单最早的承诺最晚交付日，用于页头紧凑展示。 */
 export function earliestOrderDeliveryDeadline(
     order: SourcingSalesOrder | undefined,
