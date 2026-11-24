@@ -182,65 +182,103 @@ export function PurchaseOrderCreateSourcingWorkspace({
         setEditingState({ id, section })
     }
 
+    const showParticipationFilters =
+        counts.excluded > 0 || status === "included" || status === "excluded"
+
+    const filterItems: readonly {
+        value: StatusFilter
+        label: string
+        count: number
+        tone?: "warning" | "destructive"
+    }[] = [
+        { value: "all", label: "全部", count: counts.all },
+        ...(counts.pending > 0 || status === "pending"
+            ? [
+                  {
+                      value: "pending" as const,
+                      label: "待调整",
+                      count: counts.pending,
+                      tone: "warning" as const,
+                  },
+              ]
+            : []),
+        ...(counts.inverted > 0 || status === "inverted"
+            ? [
+                  {
+                      value: "inverted" as const,
+                      label: "价格倒挂",
+                      count: counts.inverted,
+                      tone: "destructive" as const,
+                  },
+              ]
+            : []),
+        ...(showParticipationFilters
+            ? [
+                  {
+                      value: "included" as const,
+                      label: "本次下单",
+                      count: counts.included,
+                  },
+                  {
+                      value: "excluded" as const,
+                      label: "暂缓下单",
+                      count: counts.excluded,
+                  },
+              ]
+            : []),
+    ]
+
     const toolbarLeft = (
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
             <div
                 role="group"
                 aria-label="商品方案状态"
                 className="flex flex-wrap items-center gap-1"
             >
-                {(
-                    [
-                        ["all", "全部"],
-                        ["pending", "待调整"],
-                        ["included", "本次分配"],
-                        ["excluded", "暂不分配"],
-                    ] as const
-                ).map(([value, label]) => (
-                    <Button
-                        key={value}
-                        id={`sourcing-products-filter-${value}`}
-                        type="button"
-                        size="xs"
-                        variant={status === value ? "secondary" : "ghost"}
-                        aria-pressed={status === value}
-                        onClick={() => {
-                            setStatus(value)
-                            setPagination((current) => ({
-                                ...current,
-                                pageIndex: 0,
-                            }))
-                        }}
-                    >
-                        {label}{" "}
-                        <span className="num text-muted-foreground">
-                            {counts[value]}
-                        </span>
-                    </Button>
-                ))}
-                {counts.inverted > 0 ? (
-                    <Button
-                        id="sourcing-products-filter-inverted"
-                        type="button"
-                        size="xs"
-                        variant={status === "inverted" ? "secondary" : "ghost"}
-                        aria-pressed={status === "inverted"}
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => {
-                            setStatus("inverted")
-                            setPagination((current) => ({
-                                ...current,
-                                pageIndex: 0,
-                            }))
-                        }}
-                    >
-                        <TriangleAlertIcon aria-hidden="true" />
-                        价格倒挂 <span className="num">{counts.inverted}</span>
-                    </Button>
-                ) : null}
+                {filterItems.map((item) => {
+                    const active = status === item.value
+                    return (
+                        <Button
+                            key={item.value}
+                            id={`sourcing-products-filter-${item.value}`}
+                            type="button"
+                            size="xs"
+                            variant={active ? "secondary" : "ghost"}
+                            aria-pressed={active}
+                            className={
+                                item.tone === "destructive"
+                                    ? "text-destructive hover:text-destructive"
+                                    : item.tone === "warning"
+                                      ? "text-warning-soft-foreground hover:text-warning-soft-foreground"
+                                      : undefined
+                            }
+                            onClick={() => {
+                                setStatus(item.value)
+                                setPagination((current) => ({
+                                    ...current,
+                                    pageIndex: 0,
+                                }))
+                            }}
+                        >
+                            {item.tone === "destructive" ? (
+                                <TriangleAlertIcon aria-hidden="true" />
+                            ) : null}
+                            {item.label}{" "}
+                            <span
+                                className={
+                                    item.tone
+                                        ? "num font-medium"
+                                        : "num text-muted-foreground"
+                                }
+                            >
+                                {item.count}
+                            </span>
+                        </Button>
+                    )
+                })}
             </div>
 
-            <div className="relative w-52 sm:w-64">
+            <div className="relative w-48 sm:w-56">
                 <SearchIcon
                     aria-hidden="true"
                     className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"

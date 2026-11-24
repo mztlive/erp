@@ -9,6 +9,7 @@ import {
     TableToolbar,
     TableToolbarScope,
 } from "@/components/business/table-toolbar"
+import { cn } from "@/lib/utils"
 import type { PurchaseOrderCreateFormApi } from "../lib/purchase-order-create-form-types"
 import type { SourcingEditorRow } from "../lib/sourcing/editor-rows"
 import type { SourcingSalesOrder } from "../lib/sourcing/types"
@@ -116,21 +117,23 @@ export function SourcingProductList({
 
     const needsPagination = rows.length > pagination.pageSize || pageIndex > 0
 
+    const hasSelection = Boolean(selectionBar)
+
     return (
         <TableToolbarScope>
+            {/* 单行上下文工具栏：未勾选展示筛选与快捷匹配；勾选后原地切换为批量操作条，避免两排按钮堆叠打架 */}
             <TableToolbar
-                className="shrink-0 border-b border-border/60 px-4 py-2.5"
-                actions={toolbarActions}
+                className={cn(
+                    "min-h-12 shrink-0 border-b px-4 py-2 transition-colors",
+                    hasSelection
+                        ? "border-info-border/70 bg-info-soft/50 [&_[data-slot=table-toolbar-summary]]:flex-1 [&>div:has(>[data-slot=table-toolbar-column-settings])]:hidden"
+                        : "border-border/60 bg-card",
+                )}
+                actions={hasSelection ? undefined : toolbarActions}
                 isFrameToolbar
             >
-                {toolbarLeft}
+                {hasSelection ? selectionBar : toolbarLeft}
             </TableToolbar>
-
-            {selectionBar ? (
-                <div className="shrink-0 border-b border-info-border/70 bg-info-soft/45 px-4 py-2">
-                    {selectionBar}
-                </div>
-            ) : null}
 
             <div
                 ref={surface}

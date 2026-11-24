@@ -55,7 +55,7 @@ export type PurchaseOrderCreateUtilityActionsProps = {
     onUndo?: () => void
 }
 
-/** 常态顶部快捷动作：全部明文展示，告别难以辨认的纯图标按钮。 */
+/** 常态顶部快捷动作：保持克制，仅展示当前单据真正可用的辅助动作，避免按钮堆砌。 */
 export function PurchaseOrderCreateUtilityActions({
     disabled,
     matchDisabled,
@@ -65,45 +65,50 @@ export function PurchaseOrderCreateUtilityActions({
     canUndo,
     onUndo,
 }: PurchaseOrderCreateUtilityActionsProps) {
+    const canReuseInquiry = !disabled && !inquiryUnavailableReason
     return (
         <div className="flex flex-wrap items-center gap-1.5">
             {canUndo && onUndo ? (
-                <Button
-                    id="procurement-orders-create-batch-undo"
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={onUndo}
-                >
-                    <RotateCcwIcon aria-hidden="true" />
-                    撤销上次批量更改
-                </Button>
+                <Tooltip>
+                    <TooltipTrigger
+                        render={
+                            <Button
+                                id="procurement-orders-create-batch-undo"
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-muted-foreground hover:text-foreground"
+                                onClick={onUndo}
+                            />
+                        }
+                    >
+                        <RotateCcwIcon aria-hidden="true" />
+                        撤销
+                    </TooltipTrigger>
+                    <TooltipContent>撤销上次批量更改</TooltipContent>
+                </Tooltip>
             ) : null}
 
-            <Tooltip>
-                <TooltipTrigger
-                    render={
-                        <Button
-                            id="procurement-orders-create-reuse-inquiry"
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="data-disabled:cursor-not-allowed data-disabled:opacity-50"
-                            disabled={
-                                disabled || Boolean(inquiryUnavailableReason)
-                            }
-                            focusableWhenDisabled
-                            onClick={onReuseInquiry}
-                        />
-                    }
-                >
-                    沿用询价结果
-                </TooltipTrigger>
-                <TooltipContent>
-                    {inquiryUnavailableReason ||
-                        "将询价报价应用到本次参与分配的商品（保留现有库存分配）。"}
-                </TooltipContent>
-            </Tooltip>
+            {canReuseInquiry ? (
+                <Tooltip>
+                    <TooltipTrigger
+                        render={
+                            <Button
+                                id="procurement-orders-create-reuse-inquiry"
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={onReuseInquiry}
+                            />
+                        }
+                    >
+                        沿用询价
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        将本单询价报价应用到参与分配的商品（保留现有库存分配）。
+                    </TooltipContent>
+                </Tooltip>
+            ) : null}
 
             <Tooltip>
                 <TooltipTrigger
@@ -123,7 +128,7 @@ export function PurchaseOrderCreateUtilityActions({
                     重新自动分配
                 </TooltipTrigger>
                 <TooltipContent>
-                    将本次参与分配的商品重置为系统推荐方案（优先现有库存与供应商直发）。
+                    将本次下单商品重置为系统推荐方案（优先现有库存与供应商直发）。
                 </TooltipContent>
             </Tooltip>
         </div>
@@ -346,7 +351,7 @@ export function PurchaseOrderCreateSelectionBar({
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5">
-                {/* 1. 批量指定来源（带覆盖预览与连带目标仓） */}
+                {/* 1. 更换供应商（带覆盖预览与连带目标仓） */}
                 <Dialog
                     open={sourceDialogOpen}
                     onOpenChange={(open) => {
@@ -364,12 +369,13 @@ export function PurchaseOrderCreateSelectionBar({
                                 type="button"
                                 size="xs"
                                 variant="outline"
+                                className="bg-card"
                                 disabled={disabled || checkedRows.length === 0}
                             />
                         }
                     >
                         <ReplaceIcon aria-hidden="true" />
-                        批量指定来源
+                        更换供应商
                     </DialogTrigger>
                     <DialogContent
                         size="lg"
@@ -639,198 +645,201 @@ export function PurchaseOrderCreateSelectionBar({
                     </DialogContent>
                 </Dialog>
 
-                {/* 2. 批量设目标仓 */}
-                <Dialog
-                    open={warehouseDialogOpen}
-                    onOpenChange={(open) => {
-                        setWarehouseDialogOpen(open)
-                        if (!open) {
-                            setTargetWarehouseId("")
-                            setTargetWarehouseName("")
-                        }
-                    }}
-                >
-                    <DialogTrigger
-                        id="procurement-orders-create-batch-warehouse-toggle"
-                        render={
-                            <Button
-                                type="button"
-                                size="xs"
-                                variant="outline"
-                                disabled={
-                                    disabled || warehouseApplicableCount === 0
-                                }
-                            />
-                        }
-                    >
-                        <WarehouseIcon aria-hidden="true" />
-                        批量设目标仓
-                        {warehouseApplicableCount > 0
-                            ? `（${warehouseApplicableCount}）`
-                            : ""}
-                    </DialogTrigger>
-                    <DialogContent
-                        size="sm"
-                        closeButtonId="procurement-orders-create-batch-warehouse-close"
-                    >
-                        <DialogHeader>
-                            <DialogTitle>批量设置入库目标仓</DialogTitle>
-                            <DialogDescription>
-                                将为已选商品中的 {warehouseApplicableCount}{" "}
-                                个「集采入仓」商品统一设置目标仓。
-                            </DialogDescription>
-                        </DialogHeader>
-                        <WarehouseSearchCombobox
-                            id="procurement-orders-create-batch-warehouse-input"
-                            value={targetWarehouseId || undefined}
-                            onValueChange={(id) =>
-                                setTargetWarehouseId(id ?? "")
+                {/* 2. 设目标仓（仅当已选商品含「集采入仓」项时展示，避免无用灰按钮） */}
+                {warehouseApplicableCount > 0 ? (
+                    <Dialog
+                        open={warehouseDialogOpen}
+                        onOpenChange={(open) => {
+                            setWarehouseDialogOpen(open)
+                            if (!open) {
+                                setTargetWarehouseId("")
+                                setTargetWarehouseName("")
                             }
-                            onItemChange={(warehouse) =>
-                                setTargetWarehouseName(
-                                    warehouse
-                                        ? `${warehouse.warehouseCode} · ${warehouse.warehouseName}`
-                                        : "",
-                                )
-                            }
-                            purpose="purchase-receipt"
-                            placeholder="搜索并选择入库目标仓"
-                            emptyLabel="没有可用仓库"
-                            aria-label="批量设置入库目标仓"
-                        />
-                        <DialogFooter>
-                            <Button
-                                id="procurement-orders-create-batch-warehouse-cancel"
-                                type="button"
-                                variant="outline"
-                                onClick={() => setWarehouseDialogOpen(false)}
-                            >
-                                取消
-                            </Button>
-                            <Button
-                                id="procurement-orders-create-batch-warehouse-apply"
-                                type="button"
-                                disabled={!targetWarehouseId}
-                                onClick={() => {
-                                    if (!targetWarehouseId) return
-                                    onBatchApplyWarehouse({
-                                        id: targetWarehouseId,
-                                        name: targetWarehouseName,
-                                    })
-                                    setWarehouseDialogOpen(false)
-                                }}
-                            >
-                                应用到 {warehouseApplicableCount} 项
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
-
-                {/* 3. 批量改交期 */}
-                <Dialog
-                    open={dateDialogOpen}
-                    onOpenChange={(open) => {
-                        setDateDialogOpen(open)
-                        if (!open) setBatchDate("")
-                    }}
-                >
-                    <DialogTrigger
-                        id="procurement-orders-create-batch-date-toggle"
-                        render={
-                            <Button
-                                type="button"
-                                size="xs"
-                                variant="outline"
-                                disabled={
-                                    disabled || purchaseApplicableCount === 0
-                                }
-                            />
-                        }
+                        }}
                     >
-                        <CalendarDaysIcon aria-hidden="true" />
-                        批量改交期
-                    </DialogTrigger>
-                    <DialogContent
-                        size="sm"
-                        closeButtonId="procurement-orders-create-batch-date-close"
-                    >
-                        <DialogHeader>
-                            <DialogTitle>批量修改预计交付日</DialogTitle>
-                            <DialogDescription>
-                                将为已选中的 {purchaseApplicableCount}{" "}
-                                个采购商品设置统一预计交付日（现有库存行不受影响）。
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-3">
-                            <DatePicker
-                                id="procurement-orders-create-batch-date-input"
-                                value={batchDate || undefined}
-                                onValueChange={(next) =>
-                                    setBatchDate(next ?? "")
-                                }
-                                placeholder="选择预计交付日"
-                                clearable={false}
-                            />
-                            {lateDateCount > 0 ? (
-                                <p className="text-xs text-warning-soft-foreground">
-                                    其中 {lateDateCount}{" "}
-                                    个商品的销售承诺最晚交期早于 {batchDate}。
-                                </p>
-                            ) : null}
-                            <label
-                                htmlFor="procurement-orders-create-batch-date-clamp"
-                                className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none"
-                            >
-                                <Checkbox
-                                    id="procurement-orders-create-batch-date-clamp"
-                                    checked={clampToDeadline}
-                                    onCheckedChange={(checked) =>
-                                        setClampToDeadline(checked === true)
-                                    }
+                        <DialogTrigger
+                            id="procurement-orders-create-batch-warehouse-toggle"
+                            render={
+                                <Button
+                                    type="button"
+                                    size="xs"
+                                    variant="outline"
+                                    className="bg-card"
+                                    disabled={disabled}
                                 />
-                                超过单品最晚承诺交期时，自动按该商品最晚交期截断
-                            </label>
-                        </div>
-                        <DialogFooter>
-                            <Button
-                                id="procurement-orders-create-batch-date-cancel"
-                                type="button"
-                                variant="outline"
-                                onClick={() => setDateDialogOpen(false)}
-                            >
-                                取消
-                            </Button>
-                            <Button
-                                id="procurement-orders-create-batch-date-apply"
-                                type="button"
-                                disabled={!batchDate}
-                                onClick={() => {
-                                    if (!batchDate) return
-                                    onBatchApplyDeliveryDate(
-                                        batchDate,
-                                        clampToDeadline,
+                            }
+                        >
+                            <WarehouseIcon aria-hidden="true" />
+                            设目标仓（{warehouseApplicableCount}）
+                        </DialogTrigger>
+                        <DialogContent
+                            size="sm"
+                            closeButtonId="procurement-orders-create-batch-warehouse-close"
+                        >
+                            <DialogHeader>
+                                <DialogTitle>批量设置入库目标仓</DialogTitle>
+                                <DialogDescription>
+                                    将为已选商品中的 {warehouseApplicableCount}{" "}
+                                    个「集采入仓」商品统一设置目标仓。
+                                </DialogDescription>
+                            </DialogHeader>
+                            <WarehouseSearchCombobox
+                                id="procurement-orders-create-batch-warehouse-input"
+                                value={targetWarehouseId || undefined}
+                                onValueChange={(id) =>
+                                    setTargetWarehouseId(id ?? "")
+                                }
+                                onItemChange={(warehouse) =>
+                                    setTargetWarehouseName(
+                                        warehouse
+                                            ? `${warehouse.warehouseCode} · ${warehouse.warehouseName}`
+                                            : "",
                                     )
-                                    setDateDialogOpen(false)
-                                }}
-                            >
-                                应用到 {purchaseApplicableCount} 项
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                                }
+                                purpose="purchase-receipt"
+                                placeholder="搜索并选择入库目标仓"
+                                emptyLabel="没有可用仓库"
+                                aria-label="批量设置入库目标仓"
+                            />
+                            <DialogFooter>
+                                <Button
+                                    id="procurement-orders-create-batch-warehouse-cancel"
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() =>
+                                        setWarehouseDialogOpen(false)
+                                    }
+                                >
+                                    取消
+                                </Button>
+                                <Button
+                                    id="procurement-orders-create-batch-warehouse-apply"
+                                    type="button"
+                                    disabled={!targetWarehouseId}
+                                    onClick={() => {
+                                        if (!targetWarehouseId) return
+                                        onBatchApplyWarehouse({
+                                            id: targetWarehouseId,
+                                            name: targetWarehouseName,
+                                        })
+                                        setWarehouseDialogOpen(false)
+                                    }}
+                                >
+                                    应用到 {warehouseApplicableCount} 项
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+                ) : null}
 
-                {/* 4. 批量纳入 / 暂不分配 */}
+                {/* 3. 改交期（仅当已选商品含采购项时展示） */}
+                {purchaseApplicableCount > 0 ? (
+                    <Dialog
+                        open={dateDialogOpen}
+                        onOpenChange={(open) => {
+                            setDateDialogOpen(open)
+                            if (!open) setBatchDate("")
+                        }}
+                    >
+                        <DialogTrigger
+                            id="procurement-orders-create-batch-date-toggle"
+                            render={
+                                <Button
+                                    type="button"
+                                    size="xs"
+                                    variant="outline"
+                                    className="bg-card"
+                                    disabled={disabled}
+                                />
+                            }
+                        >
+                            <CalendarDaysIcon aria-hidden="true" />
+                            改交期
+                        </DialogTrigger>
+                        <DialogContent
+                            size="sm"
+                            closeButtonId="procurement-orders-create-batch-date-close"
+                        >
+                            <DialogHeader>
+                                <DialogTitle>批量修改预计交付日</DialogTitle>
+                                <DialogDescription>
+                                    将为已选中的 {purchaseApplicableCount}{" "}
+                                    个采购商品设置统一预计交付日（现有库存行不受影响）。
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-3">
+                                <DatePicker
+                                    id="procurement-orders-create-batch-date-input"
+                                    value={batchDate || undefined}
+                                    onValueChange={(next) =>
+                                        setBatchDate(next ?? "")
+                                    }
+                                    placeholder="选择预计交付日"
+                                    clearable={false}
+                                />
+                                {lateDateCount > 0 ? (
+                                    <p className="text-xs text-warning-soft-foreground">
+                                        其中 {lateDateCount}{" "}
+                                        个商品的销售承诺最晚交期早于 {batchDate}
+                                        。
+                                    </p>
+                                ) : null}
+                                <label
+                                    htmlFor="procurement-orders-create-batch-date-clamp"
+                                    className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none"
+                                >
+                                    <Checkbox
+                                        id="procurement-orders-create-batch-date-clamp"
+                                        checked={clampToDeadline}
+                                        onCheckedChange={(checked) =>
+                                            setClampToDeadline(checked === true)
+                                        }
+                                    />
+                                    超过单品最晚承诺交期时，自动按该商品最晚交期截断
+                                </label>
+                            </div>
+                            <DialogFooter>
+                                <Button
+                                    id="procurement-orders-create-batch-date-cancel"
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setDateDialogOpen(false)}
+                                >
+                                    取消
+                                </Button>
+                                <Button
+                                    id="procurement-orders-create-batch-date-apply"
+                                    type="button"
+                                    disabled={!batchDate}
+                                    onClick={() => {
+                                        if (!batchDate) return
+                                        onBatchApplyDeliveryDate(
+                                            batchDate,
+                                            clampToDeadline,
+                                        )
+                                        setDateDialogOpen(false)
+                                    }}
+                                >
+                                    应用到 {purchaseApplicableCount} 项
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+                ) : null}
+
+                {/* 4. 恢复下单 / 暂缓下单 */}
                 {excludedCheckedCount > 0 ? (
                     <Button
                         id="procurement-orders-create-batch-include"
                         type="button"
                         size="xs"
                         variant="outline"
+                        className="bg-card"
                         disabled={disabled}
                         onClick={() => onBatchSetParticipation(true)}
                     >
                         <CheckSquareIcon aria-hidden="true" />
-                        纳入本次分配
+                        恢复本次下单
                     </Button>
                 ) : null}
                 {includedCheckedCount > 0 ? (
@@ -839,11 +848,12 @@ export function PurchaseOrderCreateSelectionBar({
                         type="button"
                         size="xs"
                         variant="outline"
+                        className="bg-card"
                         disabled={disabled}
                         onClick={() => onBatchSetParticipation(false)}
                     >
                         <PauseCircleIcon aria-hidden="true" />
-                        设为暂不分配
+                        暂缓下单
                     </Button>
                 ) : null}
             </div>
