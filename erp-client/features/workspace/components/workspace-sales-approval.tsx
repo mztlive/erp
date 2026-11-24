@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
-    FileTextIcon,
     MapPinIcon,
     MessageSquareTextIcon,
     PaperclipIcon,
@@ -67,17 +66,15 @@ import {
     ApprovalLineFilterBar,
     ApprovalLinePagination,
 } from "./workspace-approval-table-controls"
-import type { WorkspacePaperTarget } from "./workspace-document-paper-dialog"
 
 export { assessSalesApprovalRisk }
 
 const dateLabel = (value: number | null) => displayUnixDate(value)
 
-/** 全部明细与纸质预览读取同一审批提交，不回退到当前销售单。 */
+/** 销售明细读取本次审批提交。 */
 export function WorkspaceSalesApproval({
     instanceId,
     item,
-    onPreview,
     onSelectFile,
     onOpenMaterials,
     activeFileId,
@@ -85,7 +82,6 @@ export function WorkspaceSalesApproval({
 }: {
     instanceId: string
     item: WorkspaceWorkItem
-    onPreview: (target: WorkspacePaperTarget) => void
     onSelectFile?: (fileId: string) => void
     onOpenMaterials?: () => void
     activeFileId?: string
@@ -355,6 +351,7 @@ export function WorkspaceSalesApproval({
                 title="销售明细"
                 ariaLabel="销售明细"
                 actions={
+                    /*
                     <Button
                         id={`${prefix}-preview`}
                         type="button"
@@ -372,11 +369,13 @@ export function WorkspaceSalesApproval({
                         <FileTextIcon aria-hidden="true" />
                         预览完整销售单
                     </Button>
+                    */
+                    undefined
                 }
             >
                 <Alert variant="warning">
                     <AlertDescription>
-                        本次提交未保留完整销售明细，请查看提交资料及附件核对。
+                        本次提交未保留完整销售明细。
                     </AlertDescription>
                 </Alert>
             </DetailWorkspaceSection>
@@ -734,6 +733,7 @@ export function WorkspaceSalesApproval({
                 ariaLabel="销售明细"
                 className="py-5 first:pt-4"
                 actions={
+                    /*
                     <Button
                         id={`${prefix}-preview`}
                         type="button"
@@ -751,6 +751,8 @@ export function WorkspaceSalesApproval({
                         <FileTextIcon aria-hidden="true" />
                         预览完整销售单
                     </Button>
+                    */
+                    undefined
                 }
             >
                 <ApprovalLineFilterBar

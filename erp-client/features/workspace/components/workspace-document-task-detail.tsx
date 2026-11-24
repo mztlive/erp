@@ -229,9 +229,7 @@ export function WorkspaceDocumentTaskDetail({
         receiptApproval ||
         item.businessObjectType === "sales_invoice_request"
     const readActionLabel = approvalDocument
-        ? salesApproval
-            ? "预览完整销售单"
-            : "查看提交资料"
+        ? "查看提交资料"
         : item.workItemType === "FULFILLMENT_OPERATION"
           ? `查看来源${item.businessObjectType === "delivery" ? "销售" : "采购"}单`
           : workspaceReadActionLabel(item.businessObjectType)
@@ -1387,7 +1385,6 @@ export function WorkspaceDocumentTaskDetail({
                         item={item}
                         key={instanceId}
                         instanceId={instanceId}
-                        onPreview={setPaper}
                         onSelectFile={
                             showDecisionRail
                                 ? handleSelectMaterialFile
@@ -1468,7 +1465,8 @@ export function WorkspaceDocumentTaskDetail({
                                 </li>
                             ))}
                         </ul>
-                        {approvalDocument && instanceId ? (
+                        {/* 销售审批摘要停用「预览完整销售单」入口。 */}
+                        {approvalDocument && !salesApproval && instanceId ? (
                             <Button
                                 id={`workspace-task-detail-preview-submission-${toAutomationIdSegment(item.workItemId)}`}
                                 type="button"
@@ -1491,7 +1489,7 @@ export function WorkspaceDocumentTaskDetail({
                             <p className="text-xs text-muted-foreground">
                                 {approvalDocument
                                     ? salesApproval
-                                        ? `此处展示前 ${briefLines.length} 行，共 ${lineCount} 行。预览完整销售单可查看本次提交的全部明细。`
+                                        ? `此处展示前 ${briefLines.length} 行，共 ${lineCount} 行。`
                                         : `本摘要未包含另外 ${briefMoreCount} 行，请查看提交资料及附件。`
                                     : canReadPaper
                                       ? `另有 ${briefMoreCount} 行，${readActionLabel}可看全部明细`
