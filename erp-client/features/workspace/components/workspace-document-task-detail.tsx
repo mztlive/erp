@@ -451,9 +451,12 @@ export function WorkspaceDocumentTaskDetail({
         }
     }
 
+    const routeStepperEnabled = Boolean(
+        approvalDocument && instanceId && !(salesApproval && showDecisionRail),
+    )
     const compactStepperHistoryQuery = useApprovalHistoryInfiniteQuery(
         { instanceId: instanceId ?? "", order: "desc" },
-        approvalDocument && Boolean(instanceId),
+        routeStepperEnabled,
     )
     const compactStepperRoute = compactStepperHistoryQuery.data?.pages[0]?.route
 
@@ -806,7 +809,7 @@ export function WorkspaceDocumentTaskDetail({
         ? canReadSubmission && Boolean(instanceId)
         : item.approval?.status === "REJECTED"
     const showRouteStepper = Boolean(
-        approvalDocument && compactStepperRoute?.nodes.length,
+        routeStepperEnabled && compactStepperRoute?.nodes.length,
     )
     const headerActions = (
         <WorkspaceTaskHeaderActions item={headerItem}>

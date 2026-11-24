@@ -830,25 +830,6 @@ export function WorkspacePurchaseApproval({
                         : undefined
                 }
                 className="py-5 first:pt-4"
-                actions={
-                    <Button
-                        id={`${prefix}-submission`}
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className={detailWorkspaceStyles.subtleButton}
-                        onClick={() =>
-                            onPreview({
-                                kind: "approval_snapshot",
-                                objectId: instanceId,
-                                title: submission?.document_no,
-                            })
-                        }
-                    >
-                        <FileTextIcon aria-hidden="true" />
-                        预览采购单
-                    </Button>
-                }
             >
                 {lines?.length ? (
                     <WorkspacePurchaseComparisonTable
@@ -880,7 +861,7 @@ export function WorkspacePurchaseApproval({
                 ) : (
                     <Alert variant="warning">
                         <AlertDescription>
-                            完整采购明细暂不可用，请通过采购单预览核对提交摘要及附件。
+                            本次提交的采购明细暂不可用，请联系申请人核对。
                         </AlertDescription>
                     </Alert>
                 )}
@@ -892,6 +873,7 @@ export function WorkspacePurchaseApproval({
                     sectionId={deliverySectionId}
                     lines={deliveryLines}
                     summary={deliverySummary}
+                    density="compact"
                     compactSimpleStates
                     fulfillment={
                         fulfillment

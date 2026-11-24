@@ -116,6 +116,7 @@ export function DeliveryAllocationOverview({
     focusedLineId,
     onClearFocus,
     onReturnToLine,
+    density = "default",
     compactSimpleStates = false,
     emptyMessage = "本次提交暂未指定收货地址，将在履约环节补充。",
     title = "交付与收货地址",
@@ -129,6 +130,8 @@ export function DeliveryAllocationOverview({
     onClearFocus?: () => void
     /** 多址定位后点击返回明细行锚点。 */
     onReturnToLine?: (lineId: string) => void
+    /** 地址分组列表的展示密度。 */
+    density?: "default" | "compact"
     /** 将入仓、未指定地址与整单统一 1 处地址收敛为单行轻量提示条，避免审批页过度拉长。 */
     compactSimpleStates?: boolean
     emptyMessage?: string
@@ -386,6 +389,7 @@ export function DeliveryAllocationOverview({
     // 形态 2（2–5 处）& 形态 3（>5 处）
     const isLargeSet = summary.uniqueAddressCount > INITIAL_VISIBLE_COUNT
     const showSearch = isLargeSet || Boolean(search)
+    const compact = density === "compact"
     const activeCount =
         viewBy === "address" ? filteredAddresses.length : filteredItems.length
     const isCollapsed =
@@ -412,6 +416,8 @@ export function DeliveryAllocationOverview({
             title={title}
             ariaLabel={title}
             subtitle={subtitleText}
+            className={compact ? "py-4 last:pb-5" : undefined}
+            contentClassName={compact ? "space-y-2" : undefined}
             actions={
                 <div
                     role="group"
@@ -441,33 +447,12 @@ export function DeliveryAllocationOverview({
                 </div>
             }
         >
-            <div className="space-y-3">
+            <div className={compact ? "space-y-2" : "space-y-3"}>
                 {summary.unassignedLineCount > 0 && !focusedLine ? (
                     <p className="text-xs text-warning-soft-foreground">
                         另有 {summary.unassignedLineCount}{" "}
                         项商品尚未指定收货地址，将在履约前补齐。
                     </p>
-                ) : null}
-
-                {isLargeSet &&
-                !focusedLine &&
-                summary.regionDistribution.length > 0 ? (
-                    <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                        <span>地区分布：</span>
-                        {summary.regionDistribution.slice(0, 5).map((stat) => (
-                            <span
-                                key={stat.label}
-                                className="num rounded-sm bg-muted/65 px-2 py-0.5 text-foreground/85"
-                            >
-                                {stat.label} {stat.count} 处
-                            </span>
-                        ))}
-                        {summary.regionDistribution.length > 5 ? (
-                            <span className="num">
-                                等 {summary.regionDistribution.length} 个地区
-                            </span>
-                        ) : null}
-                    </div>
                 ) : null}
 
                 {focusedLine ? (
@@ -519,51 +504,95 @@ export function DeliveryAllocationOverview({
                 ) : null}
 
                 {showSearch ? (
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="relative min-w-52 flex-1 sm:max-w-sm">
-                            <SearchIcon
-                                aria-hidden="true"
-                                className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
-                            />
-                            <Input
-                                id={`${idPrefix}-search`}
-                                value={search}
-                                onChange={(event) =>
-                                    setSearch(event.target.value)
-                                }
-                                placeholder="搜索收货人、电话、地址或商品"
-                                aria-label="搜索收货人、电话、地址或商品"
-                                className="h-control-sm pr-8 pl-8 text-xs"
-                            />
-                            {search ? (
-                                <Button
-                                    id={`${idPrefix}-search-clear`}
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-xs"
-                                    aria-label="清除收货地址搜索"
-                                    className="absolute top-1/2 right-0.5 -translate-y-1/2"
-                                    onClick={() => setSearch("")}
-                                >
-                                    <XIcon aria-hidden="true" />
-                                </Button>
-                            ) : null}
-                        </div>
-                        <span
-                            role="status"
-                            aria-live="polite"
-                            className="num text-xs text-muted-foreground"
+                    <div
+                        className={
+                            compact
+                                ? "flex flex-wrap items-center gap-x-4 gap-y-2"
+                                : "space-y-3"
+                        }
+                    >
+                        {isLargeSet &&
+                        !focusedLine &&
+                        summary.regionDistribution.length > 0 ? (
+                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                                <span>地区分布：</span>
+                                {summary.regionDistribution
+                                    .slice(0, 5)
+                                    .map((stat) => (
+                                        <span
+                                            key={stat.label}
+                                            className="num rounded-sm bg-muted/65 px-2 py-0.5 text-foreground/85"
+                                        >
+                                            {stat.label} {stat.count} 处
+                                        </span>
+                                    ))}
+                                {summary.regionDistribution.length > 5 ? (
+                                    <span className="num">
+                                        等 {summary.regionDistribution.length}{" "}
+                                        个地区
+                                    </span>
+                                ) : null}
+                            </div>
+                        ) : null}
+
+                        <div
+                            className={cn(
+                                "flex flex-wrap items-center justify-between gap-2",
+                                compact && "min-w-0 flex-1 basis-80",
+                            )}
                         >
-                            {viewBy === "address"
-                                ? `匹配 ${filteredAddresses.length} / ${summary.uniqueAddressCount} 处地址`
-                                : `匹配 ${filteredItems.length} / ${summary.itemGroups.length} 项商品`}
-                        </span>
+                            <div
+                                className={cn(
+                                    "relative flex-1 sm:max-w-sm",
+                                    compact ? "min-w-0 basis-52" : "min-w-52",
+                                )}
+                            >
+                                <SearchIcon
+                                    aria-hidden="true"
+                                    className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+                                />
+                                <Input
+                                    id={`${idPrefix}-search`}
+                                    value={search}
+                                    onChange={(event) =>
+                                        setSearch(event.target.value)
+                                    }
+                                    placeholder="搜索收货人、电话、地址或商品"
+                                    aria-label="搜索收货人、电话、地址或商品"
+                                    className="h-control-sm pr-8 pl-8 text-xs"
+                                />
+                                {search ? (
+                                    <Button
+                                        id={`${idPrefix}-search-clear`}
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon-xs"
+                                        aria-label="清除收货地址搜索"
+                                        className="absolute top-1/2 right-0.5 -translate-y-1/2"
+                                        onClick={() => setSearch("")}
+                                    >
+                                        <XIcon aria-hidden="true" />
+                                    </Button>
+                                ) : null}
+                            </div>
+                            <span
+                                role="status"
+                                aria-live="polite"
+                                className="num text-xs text-muted-foreground"
+                            >
+                                {viewBy === "address"
+                                    ? `匹配 ${filteredAddresses.length} / ${summary.uniqueAddressCount} 处地址`
+                                    : `匹配 ${filteredItems.length} / ${summary.itemGroups.length} 项商品`}
+                            </span>
+                        </div>
                     </div>
                 ) : null}
 
                 <div
                     className={cn(
-                        "rounded-md border border-border/65 bg-card",
+                        compact
+                            ? detailWorkspaceStyles.inlineTableWrapper
+                            : "rounded-md border border-border/65 bg-card",
                         expandedAll &&
                             isLargeSet &&
                             "max-h-96 overflow-y-auto overscroll-contain",
@@ -577,6 +606,7 @@ export function DeliveryAllocationOverview({
                                         key={group.key}
                                         index={index}
                                         group={group}
+                                        compact={compact}
                                         idPrefix={`${idPrefix}-addr-${toAutomationIdSegment(String(index + 1))}`}
                                     />
                                 ))}
@@ -592,6 +622,7 @@ export function DeliveryAllocationOverview({
                                 <ItemAddressGroupRow
                                     key={group.lineId}
                                     group={group}
+                                    compact={compact}
                                 />
                             ))}
                         </div>
@@ -649,15 +680,24 @@ function AddressGroupRow({
     index,
     group,
     idPrefix,
+    compact,
 }: {
     index: number
     group: DeliveryAddressGroup
     idPrefix: string
+    compact: boolean
 }) {
     return (
-        <li className="space-y-2 px-3.5 py-3">
+        <li className={compact ? "space-y-1 py-2" : "space-y-2 px-3.5 py-3"}>
             <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0 flex-1 space-y-0.5">
+                <div
+                    className={cn(
+                        "min-w-0 flex-1",
+                        compact
+                            ? "flex flex-wrap items-baseline gap-x-3 gap-y-0.5"
+                            : "space-y-0.5",
+                    )}
+                >
                     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-body-compact">
                         <span className="num text-xs text-muted-foreground">
                             #{index + 1}
@@ -669,7 +709,12 @@ function AddressGroupRow({
                             {group.phone}
                         </span>
                     </div>
-                    <p className="text-xs leading-5 wrap-anywhere text-foreground/80">
+                    <p
+                        className={cn(
+                            "text-xs wrap-anywhere text-foreground/80",
+                            compact ? "min-w-0" : "leading-5",
+                        )}
+                    >
                         <AddressText
                             regionCode={group.regionCode}
                             regionName={group.regionName}
@@ -716,9 +761,15 @@ function AddressGroupRow({
     )
 }
 
-function ItemAddressGroupRow({ group }: { group: DeliveryItemGroup }) {
+function ItemAddressGroupRow({
+    group,
+    compact,
+}: {
+    group: DeliveryItemGroup
+    compact: boolean
+}) {
     return (
-        <div className="space-y-2 px-3.5 py-3">
+        <div className={compact ? "space-y-1 py-2" : "space-y-2 px-3.5 py-3"}>
             <div className="flex flex-wrap items-baseline justify-between gap-2 text-body-compact">
                 <div className="min-w-0 font-medium text-foreground">
                     <span className="num mr-1.5 text-xs font-normal text-muted-foreground">
@@ -750,9 +801,19 @@ function ItemAddressGroupRow({ group }: { group: DeliveryItemGroup }) {
                     {group.allocations.map((row, idx) => (
                         <li
                             key={`${group.lineId}-${idx}`}
-                            className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2 text-xs"
+                            className={cn(
+                                "flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-xs",
+                                compact ? "py-1" : "py-2",
+                            )}
                         >
-                            <div className="min-w-0 flex-1 space-y-0.5 wrap-anywhere">
+                            <div
+                                className={cn(
+                                    "min-w-0 flex-1 wrap-anywhere",
+                                    compact
+                                        ? "flex flex-wrap items-baseline gap-x-3 gap-y-0.5"
+                                        : "space-y-0.5",
+                                )}
+                            >
                                 <p className="text-foreground">
                                     <span className="font-medium">
                                         {row.recipient}
@@ -761,7 +822,7 @@ function ItemAddressGroupRow({ group }: { group: DeliveryItemGroup }) {
                                         {row.phone}
                                     </span>
                                 </p>
-                                <p className="text-muted-foreground">
+                                <p className="min-w-0 text-muted-foreground">
                                     <AddressText
                                         regionCode={row.region_code}
                                         regionName={row.region_name}
