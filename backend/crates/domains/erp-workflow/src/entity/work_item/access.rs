@@ -62,10 +62,50 @@ impl TaskAccess {
         if policy.work_item_type == WorkItemType::ApprovalRework
             && policy.status == WorkItemStatus::Open
             && policy.owner_user_id == Some(actor_id)
-            && can_control
+            && (self.executable_task_ids.contains(id) || can_control)
         {
             actions.push(WorkItemAllowedAction::AbandonRework);
         }
         actions
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rework_policy(status: WorkItemStatus) -> WorkItemActionPolicy<'static> {
+        WorkItemActionPolicy {
+            work_item_type: WorkItemType::ApprovalRework,
+            status,
+            business_object_type: "purchase_payment_request",
+            owner_user_id: Some("submitter"),
+            has_approval_execution: false,
+        }
+    }
+
+    #[test]
+    fn original_submitter_can_abandon_open_rework_without_manage_permission() {
+        let mut access = TaskAccess::new("submitter".into());
+        access.executable_task_ids.insert("rework-1".into());
+        let actions = access.actions(rework_policy(WorkItemStatus::Open), "rework-1", "submitter", false);
+        assert!(actions.contains(&WorkItemAllowedAction::Process));
+        assert!(actions.contains(&WorkItemAllowedAction::AbandonRework));
+    }
+
+    #[test]
+    fn non_owner_manager_or_closed_rework_cannot_abandon() {
+        let mut manager = TaskAccess::new("manager".into());
+        manager.managed_task_ids.insert("rework-1".into());
+        manager.executable_task_ids.insert("rework-1".into());
+        assert!(!manager.actions(rework_policy(WorkItemStatus::Open), "rework-1", "manager", true).contains(
+            &WorkItemAllowedAction::AbandonRework
+        ));
+
+        let mut owner = TaskAccess::new("submitter".into());
+        owner.executable_task_ids.insert("rework-1".into());
+        assert!(!owner.actions(rework_policy(WorkItemStatus::Closed), "rework-1", "submitter", false).contains(
+            &WorkItemAllowedAction::AbandonRework
+        ));
     }
 }

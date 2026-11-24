@@ -58,6 +58,12 @@ pub struct PurchasePaymentRequestView {
     /// 仅详情与当前任务返回采购范围内的记录，列表不额外展开。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub review_lines: Option<Vec<PaymentRequestReviewLine>>,
+    /// 仅详情返回该供应商当前生效的脱敏收款银行账户（含最新联行号与版本），不依赖来源采购单是否仍有可申请余额。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supplier_bank_accounts: Option<Vec<PartyBankAccountView>>,
+    /// 仅详情返回同付款主体、同供应商当前生效的预存款账户候选（脱敏标签，不含余额）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supplier_deposit_accounts: Option<Vec<PaymentRequestDepositAccountCandidate>>,
 }
 
 /// 本申请形成的实际付款与有效冲正金额，回单沿本申请资格读取。

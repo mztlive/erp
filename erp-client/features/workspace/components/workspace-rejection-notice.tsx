@@ -12,16 +12,22 @@ import { useApprovalHistoryInfiniteQuery } from "@/features/approval-workflow/qu
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { WorkspaceWorkItem } from "../types"
 
-/** 在单据正文顶部紧凑展示驳回原因，直接服务左侧修改与核对。 */
-export function WorkspaceRejectionNotice({
-    item,
-    actionable,
-    actionHint,
-}: {
-    item: WorkspaceWorkItem
-    actionable: boolean
-    actionHint?: string
-}) {
+export type WorkspaceRejectionInfo = {
+    isRejected: boolean
+    rejector?: string
+    node?: string
+    rejectedAt?: { dateTime: string; label: string }
+    reason?: string
+    loading: boolean
+    isError: boolean
+    isFetching: boolean
+    onRetry: () => void
+}
+
+/** 统一解析驳回意见事实，供通用横幅与专用驳回行动指挥卡共享。 */
+export function useWorkspaceRejectionInfo(
+    item: WorkspaceWorkItem,
+): WorkspaceRejectionInfo {
     const isRejected =
         item.approval?.status === "REJECTED" ||
         item.workItemType === "APPROVAL_REWORK"
@@ -31,7 +37,6 @@ export function WorkspaceRejectionNotice({
         { instanceId, order: "desc" },
         isRejected && Boolean(instanceId),
     )
-    if (!isRejected) return null
 
     const records = history.data?.pages.flatMap((page) => page.items) ?? []
     const rejection =
@@ -47,6 +52,43 @@ export function WorkspaceRejectionNotice({
     const reason =
         rejection?.decisionReason?.trim() ||
         item.approval?.lastRejectReason?.trim()
+
+    return {
+        isRejected,
+        rejector,
+        node,
+        rejectedAt,
+        reason,
+        loading: Boolean(instanceId && history.isPending),
+        isError: history.isError,
+        isFetching: history.isFetching,
+        onRetry: () => void history.refetch(),
+    }
+}
+
+/** 在单据正文顶部紧凑展示驳回原因，直接服务左侧修改与核对。 */
+export function WorkspaceRejectionNotice({
+    item,
+    actionable,
+    actionHint,
+}: {
+    item: WorkspaceWorkItem
+    actionable: boolean
+    actionHint?: string
+}) {
+    const info = useWorkspaceRejectionInfo(item)
+    if (!info.isRejected) return null
+
+    const {
+        rejector,
+        node,
+        rejectedAt,
+        reason,
+        loading,
+        isError,
+        isFetching,
+        onRetry,
+    } = info
 
     return (
         <section
@@ -86,7 +128,7 @@ export function WorkspaceRejectionNotice({
                     </p>
                 ) : (
                     <p className="text-muted-foreground">
-                        {instanceId && history.isPending
+                        {loading
                             ? "正在读取驳回意见…"
                             : "驳回意见暂不可用，请核对审批记录。"}
                     </p>
@@ -97,7 +139,7 @@ export function WorkspaceRejectionNotice({
                             "请按意见修改或补充说明。重提后从第一个节点审批，仅保存修改会保留当前待办。"}
                     </p>
                 )}
-                {history.isError && (
+                {isError && (
                     <div className="flex flex-wrap items-center gap-x-2 text-muted-foreground">
                         <span role="status">驳回意见读取失败。</span>
                         <Button
@@ -105,8 +147,8 @@ export function WorkspaceRejectionNotice({
                             type="button"
                             variant="ghost"
                             size="xs"
-                            disabled={history.isFetching}
-                            onClick={() => void history.refetch()}
+                            disabled={isFetching}
+                            onClick={onRetry}
                         >
                             重试读取
                         </Button>

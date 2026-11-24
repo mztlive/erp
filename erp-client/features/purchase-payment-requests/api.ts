@@ -156,6 +156,8 @@ type RequestDto = {
     credit_uses?: PaymentRequest["credit_uses"]
     payments?: RequestPaymentRecord[]
     review_lines?: PaymentRequest["review_lines"]
+    supplier_bank_accounts?: BankAccount[]
+    supplier_deposit_accounts?: DepositAccountOption[]
     current_lines?: {
         purchase_order_id: string
         current_open_total: string
@@ -268,6 +270,8 @@ function mapRequest(dto: RequestDto): PaymentRequest {
         allowed_actions: dto.allowed_actions ?? [],
         payments: dto.payments ?? [],
         review_lines: dto.review_lines,
+        supplier_bank_accounts: dto.supplier_bank_accounts?.map(recipient),
+        supplier_deposit_accounts: dto.supplier_deposit_accounts,
         credit_uses: dto.credit_uses ?? [],
         lines: dto.lines.map((line) => {
             const preview =

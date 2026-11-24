@@ -61,6 +61,11 @@ type ReworkActionsProps = {
     onTaskCompleted?: (workItemId: string) => void
     /** 原地返工工作面已承载主修改/重提动作时，仅保留「放弃本次办理」及其确认/恢复流。 */
     abandonOnly?: boolean
+    /** 前提已失效时可将「放弃本次办理」升格为主按钮出口。 */
+    abandonVariant?: "outline" | "default"
+    /** 允许外部行动指挥卡复用同一放弃确认弹窗，避免重复挂载状态机。 */
+    abandonOpen?: boolean
+    onAbandonOpenChange?: (open: boolean) => void
 }
 
 function resolveFinancialDraftKind(
@@ -89,6 +94,9 @@ function ReworkActions({
     item,
     onTaskCompleted,
     abandonOnly = false,
+    abandonVariant = "outline",
+    abandonOpen: controlledAbandonOpen,
+    onAbandonOpenChange,
 }: ReworkActionsProps) {
     const router = useRouter()
     const profile = useAccountProfileQuery()
@@ -96,7 +104,13 @@ function ReworkActions({
     const queryClient = useQueryClient()
     const [ledger] = useState(() => new FormalCommandKeyLedger())
     const submitting = useRef(false)
-    const [abandonOpen, setAbandonOpen] = useState(false)
+    const [uncontrolledAbandonOpen, setUncontrolledAbandonOpen] =
+        useState(false)
+    const abandonOpen = controlledAbandonOpen ?? uncontrolledAbandonOpen
+    const setAbandonOpen = (next: boolean) => {
+        setUncontrolledAbandonOpen(next)
+        onAbandonOpenChange?.(next)
+    }
     const [inlineEditOpen, setInlineEditOpen] = useState(false)
     const [issue, setIssue] = useState<AbandonIssue | null>(null)
     const [refreshing, setRefreshing] = useState(false)
@@ -348,7 +362,7 @@ function ReworkActions({
                         <Button
                             id={`${id}-abandon`}
                             type="button"
-                            variant="outline"
+                            variant={abandonVariant}
                             size="sm"
                             disabled={pending}
                             onClick={() => setAbandonOpen(true)}

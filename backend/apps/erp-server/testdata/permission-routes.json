@@ -471,12 +471,12 @@
     "method": "POST",
     "path": "/work-items/{id}/abandon-rework",
     "handler": "work_item::abandon_rework",
-    "code": "work_item:manage",
+    "code": "work_item:detail",
     "group": "统一待办",
     "group_desc": "待办队列与责任处理",
     "description": "原提交人放弃本人驳回处理任务",
     "guards": [
-      "work_item:manage"
+      "work_item:detail"
     ]
   },
   {

@@ -95,6 +95,7 @@ import { fetchMaterialPreview, revealPaymentRecipient } from "../api"
 import { requestStatusLabel, requestStatusTone } from "../lib/display"
 import { fulfillmentLabel, paymentReviewBasis } from "../lib/review"
 import type {
+    PaymentRejectionNoticeInfo,
     PaymentRequest,
     PaymentTaskContext,
     RequestCommand,
@@ -133,7 +134,9 @@ export function RequestDetail({
     renderResubmission,
     inlineRework = false,
     reworkCanAbandon = false,
-    reworkAbandonAction,
+    reworkRejection,
+    onRequestReworkAbandon,
+    renderReworkAbandonAction,
 }: {
     request: PaymentRequest
     task?: PaymentTaskContext
@@ -148,7 +151,9 @@ export function RequestDetail({
     renderResubmission?: (request: PaymentRequest) => ReactNode
     inlineRework?: boolean
     reworkCanAbandon?: boolean
-    reworkAbandonAction?: ReactNode
+    reworkRejection?: PaymentRejectionNoticeInfo
+    onRequestReworkAbandon?: () => void
+    renderReworkAbandonAction?: (variant?: "outline" | "default") => ReactNode
 }) {
     const [editOpen, setEditOpen] = useState(false)
     const [submitOpen, setSubmitOpen] = useState(false)
@@ -225,7 +230,9 @@ export function RequestDetail({
                 onSelectFile={onSelectFile}
                 onTaskCompleted={onTaskCompleted}
                 canAbandon={reworkCanAbandon}
-                abandonAction={reworkAbandonAction}
+                rejection={reworkRejection}
+                onRequestAbandon={onRequestReworkAbandon}
+                renderAbandonAction={renderReworkAbandonAction}
             />
         )
     }

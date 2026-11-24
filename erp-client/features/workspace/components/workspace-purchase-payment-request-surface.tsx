@@ -55,7 +55,10 @@ import {
 import { WorkspaceDocumentBadge } from "./workspace-document-badge"
 import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import { parsePurchaseExtraSections } from "./workspace-purchase-comparison-model"
-import { WorkspaceRejectionNotice } from "./workspace-rejection-notice"
+import {
+    WorkspaceRejectionNotice,
+    useWorkspaceRejectionInfo,
+} from "./workspace-rejection-notice"
 import { WorkspaceTaskHeaderActions } from "./workspace-task-context"
 import {
     WorkspaceCompactTaskHeader,
@@ -121,6 +124,8 @@ function PaymentRequestSurface({
     const [railCollapsed, setRailCollapsedState] = useState(false)
     const [referenceOpen, setReferenceOpen] = useState(false)
     const [activeFileId, setActiveFileId] = useState<string>()
+    const [abandonOpen, setAbandonOpen] = useState(false)
+    const rejectionInfo = useWorkspaceRejectionInfo(item)
     const bodyHostRef = useRef<HTMLDivElement | null>(null)
     const [bodyHost, setBodyHost] = useState<HTMLDivElement | null>(null)
 
@@ -427,14 +432,19 @@ function PaymentRequestSurface({
         reworkTask.status === "OPEN" &&
         reworkTask.allowedActions.includes("ABANDON_REWORK"),
     )
-    const reworkAbandonAction =
-        canInlineRework && reworkTask ? (
-            <WorkspaceApprovalReworkActions
-                item={reworkTask}
-                abandonOnly
-                onTaskCompleted={onTaskCompleted}
-            />
-        ) : undefined
+    const renderReworkAbandonAction =
+        canInlineRework && reworkTask
+            ? (variant: "outline" | "default" = "outline") => (
+                  <WorkspaceApprovalReworkActions
+                      item={reworkTask}
+                      abandonOnly
+                      abandonVariant={variant}
+                      abandonOpen={abandonOpen}
+                      onAbandonOpenChange={setAbandonOpen}
+                      onTaskCompleted={onTaskCompleted}
+                  />
+              )
+            : undefined
     const body = canReadSensitive ? (
         <PurchasePaymentRequestTask
             item={
@@ -451,7 +461,13 @@ function PaymentRequestSurface({
             approvalRoundNo={approvalRoundNo}
             inlineRework={canInlineRework}
             reworkCanAbandon={canAbandonRework}
-            reworkAbandonAction={reworkAbandonAction}
+            reworkRejection={canInlineRework ? rejectionInfo : undefined}
+            onRequestReworkAbandon={
+                canInlineRework && canAbandonRework
+                    ? () => setAbandonOpen(true)
+                    : undefined
+            }
+            renderReworkAbandonAction={renderReworkAbandonAction}
             renderResubmission={
                 isPaymentExecution
                     ? undefined
@@ -665,17 +681,13 @@ function PaymentRequestSurface({
                 }
                 alertBanner={
                     canReadSensitive &&
+                    !canInlineRework &&
                     (isRework || item.approval?.status === "REJECTED") ? (
                         <WorkspaceRejectionNotice
                             item={item}
                             actionable={Boolean(
                                 reworkTask?.allowedActions.includes("PROCESS"),
                             )}
-                            actionHint={
-                                canInlineRework
-                                    ? "请直接在下方按意见修改并填写重提说明。重提后从第一个节点重新审批，暂存修改将保留当前待办。"
-                                    : undefined
-                            }
                         />
                     ) : null
                 }

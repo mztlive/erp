@@ -3,21 +3,29 @@
 use std::sync::Arc;
 
 use application_core::{AuditActor, PageView};
+use erp_core::common::time::BusinessDate;
 use erp_finance::dto::payable::payment_request::PurchasePaymentRequestQuery;
 use erp_finance::entity::payable::{PurchasePaymentRequest, PurchasePaymentRequestStatus};
 use erp_finance::repository::prelude::*;
+use erp_finance::repository::supplier_deposit_query::eligible_accounts;
 use erp_finance::repository::{PayableExt, PurchasePaymentRequestExt};
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
+use erp_party::repository::prelude::*;
+use erp_party::{PartyBankAccountView, PartyExt};
 use erp_permissions::purchase_payment_request as payment_permissions;
 use erp_procurement::repository::PurchaseOrderExt;
+use erp_supplier::SupplierExt;
 use erp_workflow::dto::work_item::WorkItemAllowedAction;
 use erp_workflow::{DocumentType, WorkItemExt, WorkItemStatus, WorkItemType};
 use persistence_core::{Executor, Transactional};
 
 use super::list::PaymentRequestList;
 use super::previews::frozen_previews;
-use super::{PaymentRequestCurrentLine, PurchasePaymentRequestReadService, PurchasePaymentRequestView};
+use super::{
+    PaymentRequestCurrentLine, PaymentRequestDepositAccountCandidate, PurchasePaymentRequestReadService,
+    PurchasePaymentRequestView,
+};
 use crate::approval_runtime::load_document_runtime_for_instance;
 use crate::finance::dto::{DocumentApprovalHistoryPageView, DocumentApprovalView};
 use crate::ports::work_item_authorization::{AuthorizedTaskFact, WorkItemAuthorizationReadPort};
@@ -95,6 +103,10 @@ impl PurchasePaymentRequestReadService {
 
         let mut view = self.view(request, allowed_actions, executor).await?;
         view.review_lines = Some(self.review_lines(&view.request, executor).await?);
+        let (bank_accounts, deposit_accounts) =
+            self.supplier_funding_accounts(&view.request, executor).await?;
+        view.supplier_bank_accounts = Some(bank_accounts);
+        view.supplier_deposit_accounts = Some(deposit_accounts);
 
         scope.deliver(executor).await?;
         Ok(view)
@@ -270,7 +282,36 @@ impl PurchasePaymentRequestReadService {
             payments,
             credit_uses,
             review_lines: None,
+            supplier_bank_accounts: None,
+            supplier_deposit_accounts: None,
         })
+    }
+
+    // 独立读取供应商实时脱敏账户与预存款候选，不依赖来源采购单是否仍存在可申请余额。
+    async fn supplier_funding_accounts(
+        &self,
+        request: &PurchasePaymentRequest,
+        executor: &mut dyn Executor,
+    ) -> Result<(Vec<PartyBankAccountView>, Vec<PaymentRequestDepositAccountCandidate>)> {
+        let bank_accounts = match self.db.supplier_accounts().find_by_id(&request.supplier_id, executor).await?
+        {
+            Some(supplier) => self
+                .db
+                .party_bank_accounts()
+                .list_current_on(&supplier.party_id, BusinessDate::today(), executor)
+                .await?
+                .into_iter()
+                .map(PartyBankAccountView::from)
+                .collect(),
+            None => Vec::new(),
+        };
+        let deposit_accounts =
+            eligible_accounts(&self.db, &request.payer_party_id, &request.supplier_id, executor)
+                .await?
+                .iter()
+                .map(PaymentRequestDepositAccountCandidate::from)
+                .collect();
+        Ok((bank_accounts, deposit_accounts))
     }
 
     async fn current_lines(

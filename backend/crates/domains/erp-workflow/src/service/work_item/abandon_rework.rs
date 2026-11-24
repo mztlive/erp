@@ -85,7 +85,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<WorkItemMutationOutcome> {
-        self.authorization.require(actor, &work_item::MANAGE, id, executor).await?;
+        self.authorization.require(actor, &work_item::ABANDON_REWORK, id, executor).await?;
         let mut item = self
             .db
             .work_items()

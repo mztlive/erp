@@ -44,8 +44,8 @@ pub const CLOSE: Permission = MANAGE;
 /// 查询本人有权查看的待办详情。
 pub const TIMELINE_TASK_TIMELINE: Permission = DETAIL;
 
-/// 原提交人放弃本人驳回处理任务；服务层再次校验责任身份与版本。
-pub const ABANDON_REWORK: Permission = MANAGE;
+/// 原提交人放弃本人驳回处理任务；入口校验待办详情权限，服务层再次校验原提交人身份与版本。
+pub const ABANDON_REWORK: Permission = DETAIL;
 
 /// 本模块独立权限及可复用展示说明；接口专属说明由应用提供。
 pub const ENTRIES: &[(&str, PermissionDef)] = &[

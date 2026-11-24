@@ -116,6 +116,10 @@ export type PaymentRequest = {
     }[]
     payments: RequestPaymentRecord[]
     review_lines?: PaymentReviewLine[]
+    /** 详情接口实时返回的该供应商生效脱敏收款账户（含最新联行号与版本），不依赖来源采购单余额。 */
+    supplier_bank_accounts?: PaymentRecipient[]
+    /** 详情接口实时返回的同主体同供应商生效预存款账户候选。 */
+    supplier_deposit_accounts?: DepositAccountOption[]
     materials?: RequestMaterials
 }
 
@@ -236,6 +240,17 @@ export type PaymentTaskContext = {
     workItemType: string
     businessObjectId: string
     allowedActions: readonly string[]
+}
+
+export type PaymentRejectionNoticeInfo = {
+    rejector?: string
+    node?: string
+    rejectedAt?: { dateTime: string; label: string }
+    reason?: string
+    loading?: boolean
+    isError?: boolean
+    isFetching?: boolean
+    onRetry?: () => void
 }
 
 /** 当前任务经敏感权限及账户版本验证后的收款资料，仅在读取期间使用。 */

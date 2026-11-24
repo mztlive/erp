@@ -8,7 +8,11 @@ import {
     usePaymentRequestQuery,
     usePaymentSubmissionQuery,
 } from "../hooks/queries"
-import type { PaymentRequest, PaymentTaskContext } from "../types"
+import type {
+    PaymentRequest,
+    PaymentTaskContext,
+    PaymentRejectionNoticeInfo,
+} from "../types"
 import { PaymentRequestTaskReview, RequestDetail } from "./request-detail"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
@@ -24,7 +28,9 @@ type PaymentRequestTaskProps = {
     renderResubmission?: (request: PaymentRequest) => ReactNode
     inlineRework?: boolean
     reworkCanAbandon?: boolean
-    reworkAbandonAction?: ReactNode
+    reworkRejection?: PaymentRejectionNoticeInfo
+    onRequestReworkAbandon?: () => void
+    renderReworkAbandonAction?: (variant?: "outline" | "default") => ReactNode
 }
 
 /** 使用当前任务读取申请及限定来源，发起人历史跟踪使用普通申请资格。 */
@@ -53,7 +59,9 @@ function CurrentPaymentTask({
     renderResubmission,
     inlineRework,
     reworkCanAbandon,
-    reworkAbandonAction,
+    reworkRejection,
+    onRequestReworkAbandon,
+    renderReworkAbandonAction,
 }: PaymentRequestTaskProps) {
     const [completed, setCompleted] = useState(false)
     const scoped =
@@ -115,7 +123,9 @@ function CurrentPaymentTask({
             renderResubmission={renderResubmission}
             inlineRework={inlineRework}
             reworkCanAbandon={reworkCanAbandon}
-            reworkAbandonAction={reworkAbandonAction}
+            reworkRejection={reworkRejection}
+            onRequestReworkAbandon={onRequestReworkAbandon}
+            renderReworkAbandonAction={renderReworkAbandonAction}
             onDecisionApplied={(view) => {
                 setCompleted(true)
                 onDecisionApplied?.(view)

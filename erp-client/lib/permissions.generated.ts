@@ -454,7 +454,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 description: "原提交人放弃本人驳回处理任务",
                 permission: {
                     resource: "work_item",
-                    action: "manage",
+                    action: "detail",
                 },
             },
             {

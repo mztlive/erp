@@ -45,7 +45,7 @@ pub fn routes() -> Router<HttpState> {
         )
         .route(
             "/work-items/{id}/abandon-rework",
-            permission_route(post(work_item::abandon_rework), &permissions::work_item::MANAGE),
+            permission_route(post(work_item::abandon_rework), &permissions::work_item::DETAIL),
         )
         .merge(finance_responsibility_routes())
 }
