@@ -1,5 +1,7 @@
 "use client"
 
+import { CircleAlertIcon } from "lucide-react"
+
 import { BusinessFailureState } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
@@ -10,7 +12,7 @@ import {
 import { useApprovalHistoryInfiniteQuery } from "@/features/approval-workflow/queries"
 import type { WorkspaceWorkItem } from "../types"
 
-/** 在原审批详情内展示本次驳回原因；完整记录沿用审批详情的历史入口。 */
+/** 在单据正文顶部紧凑展示驳回原因，直接服务左侧修改与核对。 */
 export function WorkspaceRejectionNotice({
     item,
     actionable,
@@ -31,47 +33,48 @@ export function WorkspaceRejectionNotice({
         )?.execution
     const rejectedAt = displayUnixSeconds(rejection?.decidedAt)
     const rejector = displayActorName(
-        rejection?.assigneeName,
+        rejection?.assigneeName ?? item.approval?.lastRejectorLabel,
         rejection?.decidedBy,
     )
     const node = displayReadableName(rejection?.nodeName, rejection?.nodeKey)
     const reason =
         rejection?.decisionReason?.trim() ||
         item.approval?.lastRejectReason?.trim()
+    const metaParts = [rejector, node, rejectedAt?.label].filter(Boolean)
+
     return (
-        <div className="space-y-3 py-5">
-            <Alert variant="destructive">
-                <AlertTitle>本次审批已驳回</AlertTitle>
-                <AlertDescription className="space-y-2">
-                    {(rejector || node || rejectedAt) && (
-                        <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                            {rejector && <span>驳回人：{rejector}</span>}
-                            {node && <span>审批节点：{node}</span>}
-                            {rejectedAt && (
-                                <time dateTime={rejectedAt.dateTime}>
-                                    {rejectedAt.label}
-                                </time>
-                            )}
-                        </p>
-                    )}
+        <div className="space-y-2">
+            <Alert variant="destructive" className="py-2.5">
+                <CircleAlertIcon aria-hidden="true" />
+                <AlertTitle className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-xs font-semibold">
+                    <span>
+                        {actionable ? "上轮驳回意见" : "本次审批已驳回"}
+                    </span>
+                    {metaParts.length > 0 ? (
+                        <span className="num text-xs font-normal opacity-80">
+                            {metaParts.join(" · ")}
+                        </span>
+                    ) : null}
+                </AlertTitle>
+                <AlertDescription className="space-y-1 text-xs">
                     {reason ? (
-                        <p className="whitespace-pre-wrap break-words">
+                        <p className="whitespace-pre-wrap break-words text-body-compact font-medium text-destructive-soft-foreground">
                             {reason}
                         </p>
                     ) : (
                         <p>
                             {instanceId && history.isPending
                                 ? "正在读取驳回意见…"
-                                : "未读取到驳回意见，请核对本次审批记录。"}
+                                : "未读取到驳回意见，请核对右侧审批记录。"}
                         </p>
                     )}
+                    {actionable ? (
+                        <p className="text-xs opacity-80">
+                            请按驳回意见修改或补充说明后重新提交；保存修改不结束待办，重新提交将从第一个节点审批。
+                        </p>
+                    ) : null}
                 </AlertDescription>
             </Alert>
-            {actionable && (
-                <p className="text-xs text-muted-foreground">
-                    请按驳回意见修改或补充说明后重新提交。保存修改不结束待办；重新提交将从第一个节点审批。
-                </p>
-            )}
             {history.isError && (
                 <BusinessFailureState
                     id="workspace-rejection-history-retry"

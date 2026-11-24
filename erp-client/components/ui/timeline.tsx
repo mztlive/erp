@@ -4,11 +4,7 @@ import { cn } from "@/lib/utils"
 
 function Timeline({ className, ...props }: React.ComponentProps<"ol">) {
     return (
-        <ol
-            data-slot="timeline"
-            className={cn("ml-3 border-l border-border", className)}
-            {...props}
-        />
+        <ol data-slot="timeline" className={cn("ml-3", className)} {...props} />
     )
 }
 
@@ -16,7 +12,10 @@ function TimelineItem({ className, ...props }: React.ComponentProps<"li">) {
     return (
         <li
             data-slot="timeline-item"
-            className={cn("relative pb-5 pl-6 last:pb-0", className)}
+            className={cn(
+                "relative pb-5 pl-6 last:pb-0 before:pointer-events-none before:absolute before:top-3 before:-bottom-1 before:left-0 before:w-px before:bg-border last:before:hidden",
+                className,
+            )}
             {...props}
         />
     )
@@ -27,7 +26,7 @@ function TimelineMarker({ className, ...props }: React.ComponentProps<"span">) {
         <span
             data-slot="timeline-marker"
             className={cn(
-                "absolute -left-3 top-0 flex size-6 items-center justify-center rounded-full border bg-card text-muted-foreground [&_svg:not([class*='size-'])]:size-3",
+                "absolute -left-3 top-0 z-10 flex size-6 items-center justify-center rounded-full border bg-card text-muted-foreground [&_svg:not([class*='size-'])]:size-3",
                 className,
             )}
             {...props}

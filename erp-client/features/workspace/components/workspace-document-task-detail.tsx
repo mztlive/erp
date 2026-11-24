@@ -754,7 +754,7 @@ export function WorkspaceDocumentTaskDetail({
                           defaultTab: "trail",
                           collapsible: true,
                           resizable: true,
-                          defaultWidthPercent: 34,
+                          defaultWidthPercent: 24,
                           minWidthPercent: 24,
                           maxWidthPercent: 50,
                           collapsed: railCollapsed,
@@ -902,19 +902,23 @@ export function WorkspaceDocumentTaskDetail({
                     />
                 ) : null
             }
+            alertBanner={
+                (
+                    rework
+                        ? canReadSubmission && Boolean(instanceId)
+                        : item.approval?.status === "REJECTED"
+                ) ? (
+                    <WorkspaceRejectionNotice
+                        item={item}
+                        actionable={Boolean(
+                            reworkTask?.allowedActions.includes("PROCESS"),
+                        )}
+                    />
+                ) : null
+            }
             footer={actions}
             aria-label="当前任务"
         >
-            {(rework
-                ? !showDecisionRail && canReadSubmission && Boolean(instanceId)
-                : item.approval?.status === "REJECTED") && (
-                <WorkspaceRejectionNotice
-                    item={item}
-                    actionable={Boolean(
-                        reworkTask?.allowedActions.includes("PROCESS"),
-                    )}
-                />
-            )}
             {blockers.length > 0 ? (
                 <div className="pt-4">
                     <Alert variant="warning">

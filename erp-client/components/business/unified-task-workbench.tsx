@@ -255,15 +255,11 @@ export function UnifiedTaskWorkbench({
         ],
     )
 
+    const minRailPct = clampPercent(contextRail?.minWidthPercent ?? 24, 20, 50)
     const defaultRailPct = clampPercent(
-        contextRail?.defaultWidthPercent ?? 34,
-        24,
+        contextRail?.defaultWidthPercent ?? minRailPct,
+        minRailPct,
         50,
-    )
-    const minRailPct = clampPercent(
-        contextRail?.minWidthPercent ?? 24,
-        20,
-        defaultRailPct,
     )
     const maxRailPct = clampPercent(
         contextRail?.maxWidthPercent ?? 50,
@@ -331,6 +327,7 @@ export function UnifiedTaskWorkbench({
     const showSplitResizable =
         railAllowed && !railCollapsed && resizable && isWideContainer
     const showSplitStatic = railAllowed && !railCollapsed && !showSplitResizable
+    const isSplitLayout = showSplitResizable || showSplitStatic
 
     return (
         <UnifiedTaskWorkbenchRailContext.Provider value={railControl}>
@@ -367,7 +364,10 @@ export function UnifiedTaskWorkbench({
                     data-slot="workbench-viewport"
                     className={cn(
                         "flex min-h-0 flex-1 flex-col bg-card",
-                        framed && "-mx-(--scaffold-px) px-(--scaffold-px)",
+                        framed &&
+                            (isSplitLayout
+                                ? "-mx-(--scaffold-px)"
+                                : "-mx-(--scaffold-px) px-(--scaffold-px)"),
                         showSplitResizable || fullWidth
                             ? "overflow-hidden"
                             : "overflow-y-auto overscroll-contain",
@@ -389,6 +389,7 @@ export function UnifiedTaskWorkbench({
                                 <div
                                     className={cn(
                                         "min-h-0 flex-1 pr-4 @[1120px]/workspace:pr-6",
+                                        framed && "pl-(--scaffold-px)",
                                         fullWidth
                                             ? "flex flex-col overflow-hidden pr-0 @[1120px]/workspace:pr-0"
                                             : "overflow-y-auto overscroll-contain",
@@ -408,9 +409,9 @@ export function UnifiedTaskWorkbench({
                                 defaultSize={`${defaultRailPct}%`}
                                 minSize={`${minRailPct}%`}
                                 maxSize={`${maxRailPct}%`}
-                                className="flex min-h-0 min-w-0 flex-col"
+                                className="flex min-h-0 min-w-0 flex-col bg-card"
                             >
-                                <div className="flex min-h-0 flex-1 flex-col overflow-hidden pl-4 @[1120px]/workspace:pl-5">
+                                <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-card px-4 @[1120px]/workspace:px-5">
                                     {railContent}
                                 </div>
                             </ResizablePanel>
@@ -418,14 +419,16 @@ export function UnifiedTaskWorkbench({
                     ) : showSplitStatic ? (
                         <div
                             className={cn(
-                                "grid min-h-0 flex-1 items-start gap-x-6 gap-y-0",
+                                "grid min-h-0 flex-1 items-start gap-x-0 gap-y-0",
                                 !resizable &&
-                                    "@[960px]/workspace:grid-cols-[minmax(0,1fr)_minmax(20rem,34%)] @[1120px]/workspace:grid-cols-[minmax(0,1fr)_minmax(22rem,34%)]",
+                                    "@[960px]/workspace:grid-cols-[minmax(0,1fr)_minmax(18rem,24%)] @[1120px]/workspace:grid-cols-[minmax(0,1fr)_minmax(19rem,24%)]",
                             )}
                         >
                             <div
                                 className={cn(
                                     "min-w-0",
+                                    framed && "px-(--scaffold-px)",
+                                    !resizable && "@[960px]/workspace:pr-6",
                                     !framed && workspaceTaskSurfacePadClassName,
                                 )}
                             >
@@ -433,9 +436,10 @@ export function UnifiedTaskWorkbench({
                             </div>
                             <div
                                 className={cn(
-                                    "min-w-0 border-t border-border/60 py-4",
+                                    "min-w-0 border-t border-border/60 bg-card py-4",
+                                    framed && "px-(--scaffold-px)",
                                     !resizable &&
-                                        "@[960px]/workspace:self-stretch @[960px]/workspace:border-t-0 @[960px]/workspace:border-l @[960px]/workspace:py-0 @[960px]/workspace:pl-5",
+                                        "@[960px]/workspace:self-stretch @[960px]/workspace:border-t-0 @[960px]/workspace:border-l @[960px]/workspace:px-5 @[960px]/workspace:py-0",
                                     !framed && workspaceTaskSurfacePadClassName,
                                 )}
                             >

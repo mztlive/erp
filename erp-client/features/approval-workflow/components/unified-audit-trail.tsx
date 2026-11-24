@@ -2,28 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useInfiniteQuery } from "@tanstack/react-query"
-import {
-    BanIcon,
-    CircleAlertIcon,
-    CircleCheckIcon,
-    CircleDashedIcon,
-    CircleDotIcon,
-    MailIcon,
-    RefreshCwIcon,
-    TriangleAlertIcon,
-    UserRoundIcon,
-    type LucideIcon,
-} from "lucide-react"
+import { MailIcon, RefreshCwIcon } from "lucide-react"
 
 import { OptionCombobox } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
 import { LoadingButton } from "@/components/ui/loading-button"
-import {
-    StatusBadge,
-    statusToneMarkerClass,
-    type StatusTone,
-} from "@/components/ui/status-badge"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
     Timeline,
@@ -96,6 +81,8 @@ export type UnifiedAuditTrailProps = Readonly<{
     /** 受控分段页签。 */
     activeTab?: AuditTrailTab
     onActiveTabChange?: (tab: AuditTrailTab) => void
+    /** 由外层容器承载页签切换时隐藏内部分段栏，避免双层页签叠罗汉。 */
+    hideTabs?: boolean
     /** 需要滚动定位并高亮的执行记录 ID（配合 ApprovalRouteStepper onJumpToHistory）。 */
     highlightedExecutionId?: string | null
     idPrefix?: string
@@ -122,13 +109,13 @@ type RoundBucket = Readonly<{
     copies: readonly UnifiedAuditTrailCopyItem[]
 }>
 
-const TONE_ICON: Record<StatusTone, LucideIcon> = {
-    neutral: CircleDashedIcon,
-    info: CircleDotIcon,
-    success: CircleCheckIcon,
-    warning: CircleAlertIcon,
-    destructive: TriangleAlertIcon,
-    void: BanIcon,
+const STATUS_DOT_RING_CLASS: Record<StatusTone, string> = {
+    neutral: "border-muted-foreground/45 bg-card",
+    info: "border-info bg-card",
+    success: "border-success bg-card",
+    warning: "border-warning bg-card",
+    destructive: "border-destructive bg-card",
+    void: "border-muted-foreground/40 bg-card",
 }
 
 const fetchCopyHistoryPage = (instanceId: string, after?: string) =>
@@ -197,7 +184,6 @@ function AuditExecutionEntry({
     registerRef: (id: string, element: HTMLLIElement | null) => void
 }) {
     const meta = getApprovalNodeStatusMeta(item.result)
-    const Icon = TONE_ICON[meta.tone]
     const actor = displayActorName(item.assigneeName, item.decidedBy)
     const decidedAt = displayUnixSeconds(item.decidedAt)
     const rejected = item.result === "REJECTED" || item.result === "BLOCKED"
@@ -207,19 +193,20 @@ function AuditExecutionEntry({
         <TimelineItem
             ref={(element) => registerRef(item.executionId, element)}
             className={cn(
+                "pl-5",
                 highlighted &&
-                    "-mx-2 rounded-md bg-destructive-soft/45 px-2 py-2 pl-8 ring-1 ring-destructive-border",
+                    "-mx-2 rounded-md bg-destructive-soft/45 px-2 py-2 pl-7 ring-1 ring-destructive-border before:left-2",
             )}
         >
             <TimelineMarker
+                aria-hidden="true"
                 className={cn(
-                    statusToneMarkerClass[meta.tone],
-                    highlighted && "left-0 top-2",
+                    "top-1 -left-1.5 size-3 border-2 shadow-none",
+                    STATUS_DOT_RING_CLASS[meta.tone],
+                    highlighted && "top-3 left-0.5",
                 )}
-            >
-                <Icon aria-hidden="true" />
-            </TimelineMarker>
-            <TimelineHeader>
+            />
+            <TimelineHeader className="items-center justify-between gap-x-2 gap-y-1">
                 <TimelineTitle className="flex min-w-0 flex-wrap items-center gap-1.5">
                     <span className="wrap-anywhere">
                         {displayReadableName(item.nodeName, item.nodeKey) ||
@@ -228,30 +215,35 @@ function AuditExecutionEntry({
                     <StatusBadge tone={meta.tone} label={meta.label} />
                 </TimelineTitle>
                 {decidedAt ? (
-                    <TimelineTime dateTime={decidedAt.dateTime}>
+                    <TimelineTime
+                        dateTime={decidedAt.dateTime}
+                        className="ml-auto shrink-0"
+                    >
                         {decidedAt.label}
                     </TimelineTime>
                 ) : null}
             </TimelineHeader>
-            <TimelineDescription>
+            <TimelineDescription className="mt-1.5">
                 {actor ? (
-                    <p className="inline-flex items-center gap-1.5 text-xs">
-                        <UserRoundIcon
+                    <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span
                             aria-hidden="true"
-                            className="size-3.5 shrink-0"
-                        />
+                            className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-secondary text-tiny font-medium text-secondary-foreground"
+                        >
+                            {actor.slice(0, 1)}
+                        </span>
                         <span>{actor}</span>
                     </p>
                 ) : current ? (
-                    <p className="text-xs">等待办理</p>
+                    <p className="text-xs text-muted-foreground">等待办理</p>
                 ) : null}
                 {item.decisionReason ? (
                     <p
                         className={cn(
-                            "mt-1.5 rounded-md px-2.5 py-1.5 text-xs whitespace-pre-wrap break-words",
+                            "mt-2 rounded-r-md border-l-2 bg-muted/40 px-2.5 py-1.5 text-xs whitespace-pre-wrap break-words text-foreground",
                             rejected
-                                ? "border border-destructive-border bg-destructive-soft text-destructive-soft-foreground"
-                                : "bg-muted text-foreground",
+                                ? "border-l-destructive"
+                                : "border-l-border",
                         )}
                     >
                         {item.decisionReason}
@@ -269,7 +261,7 @@ function RoundCopyList({
 }) {
     if (copies.length === 0) return null
     return (
-        <div className="space-y-1.5 rounded-md border border-border/70 bg-muted/25 px-3 py-2">
+        <div className="space-y-1.5 rounded-md border border-border/60 bg-muted/25 px-3 py-2">
             <p className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                 <MailIcon aria-hidden="true" className="size-3.5 shrink-0" />
                 <span>本轮抄送</span>
@@ -349,6 +341,7 @@ export function UnifiedAuditTrail({
     defaultTab = "approval",
     activeTab,
     onActiveTabChange,
+    hideTabs = false,
     highlightedExecutionId,
     idPrefix = "unified-audit-trail",
     className,
@@ -554,8 +547,14 @@ export function UnifiedAuditTrail({
                             aria-label={displayRound(round.roundNo)}
                             className="space-y-3"
                         >
-                            <header className="flex items-center justify-between gap-2 border-b border-border/60 pb-1.5">
-                                <h3 className="num text-xs font-semibold text-muted-foreground">
+                            <header
+                                className={cn(
+                                    "flex items-center justify-between gap-2",
+                                    rounds.length > 1 &&
+                                        "border-b border-border/60 pb-1.5",
+                                )}
+                            >
+                                <h3 className="num text-xs font-medium text-muted-foreground">
                                     {displayRound(round.roundNo)}
                                 </h3>
                                 <span className="num text-tiny text-muted-foreground">
@@ -566,7 +565,7 @@ export function UnifiedAuditTrail({
                                 </span>
                             </header>
                             {round.executions.length > 0 ? (
-                                <Timeline>
+                                <Timeline className="ml-2.5">
                                     {round.executions.map((item) => (
                                         <AuditExecutionEntry
                                             key={item.executionId}
@@ -942,7 +941,7 @@ export function UnifiedAuditTrail({
         </div>
     )
 
-    if (hasApprovalTab && hasTimelineTab) {
+    if (!hideTabs && hasApprovalTab && hasTimelineTab) {
         return (
             <Tabs
                 value={currentTab}
@@ -953,14 +952,24 @@ export function UnifiedAuditTrail({
                 }}
                 className={cn("min-w-0 gap-3", className)}
             >
-                <TabsList className="w-full">
-                    <TabsTrigger value="approval" idPrefix={idPrefix}>
-                        审批与抄送
-                    </TabsTrigger>
-                    <TabsTrigger value="timeline" idPrefix={idPrefix}>
-                        单据全动态
-                    </TabsTrigger>
-                </TabsList>
+                <div className="border-b border-border/60">
+                    <TabsList variant="line" className="w-full gap-5">
+                        <TabsTrigger
+                            value="approval"
+                            idPrefix={idPrefix}
+                            className="text-xs"
+                        >
+                            审批与抄送
+                        </TabsTrigger>
+                        <TabsTrigger
+                            value="timeline"
+                            idPrefix={idPrefix}
+                            className="text-xs"
+                        >
+                            单据全动态
+                        </TabsTrigger>
+                    </TabsList>
+                </div>
                 <TabsContent value="approval">{approvalPanel}</TabsContent>
                 <TabsContent value="timeline">{timelinePanel}</TabsContent>
             </Tabs>
@@ -972,7 +981,11 @@ export function UnifiedAuditTrail({
             data-slot="unified-audit-trail"
             className={cn("min-w-0", className)}
         >
-            {hasApprovalTab ? approvalPanel : timelinePanel}
+            {currentTab === "timeline" && hasTimelineTab
+                ? timelinePanel
+                : hasApprovalTab
+                  ? approvalPanel
+                  : timelinePanel}
         </div>
     )
 }

@@ -1,44 +1,30 @@
 "use client"
 
 import { useState } from "react"
-import { HistoryIcon, PaperclipIcon } from "lucide-react"
 
 import {
     UnifiedMaterialViewer,
     type MaterialFileItem,
 } from "@/components/business/unified-material-viewer"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ApprovalRouteStepper } from "@/features/approval-workflow/components/approval-route-stepper"
-import {
-    UnifiedAuditTrail,
-    type AuditTrailTab,
-} from "@/features/approval-workflow/components/unified-audit-trail"
-import {
-    displayActorName,
-    displayReadableName,
-    displayRound,
-    displayUnixSeconds,
-} from "@/features/approval-workflow/display"
-import { useApprovalHistoryInfiniteQuery } from "@/features/approval-workflow/queries"
+import { UnifiedAuditTrail } from "@/features/approval-workflow/components/unified-audit-trail"
 import type { ApprovalRuntimeInstance } from "@/features/approval-workflow/types"
 import type { TimelineTarget } from "@/features/document-timeline/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
-export type ApprovalContextRailTab = "trail" | "materials"
+export type ApprovalContextRailTab = "trail" | "materials" | "timeline"
 
 export type WorkspaceApprovalContextRailProps = Readonly<{
     instanceId: string
     instance?: ApprovalRuntimeInstance
-    /** 单据动态查询目标（传入后可在「单据全动态」中直接查看当前任务与销售全链路）。 */
+    /** 单据动态查询目标（传入后启用平级「单据全动态」页签）。 */
     timelineTarget?: TimelineTarget
     currentDocument?: { type: string; id: string }
     /** 右栏「附件对照」可预览的认证附件列表。 */
     materialFiles?: readonly MaterialFileItem[]
     materialsLoading?: boolean
-    /** 是否处于退回重办上下文（置顶高亮上轮驳回意见）。 */
+    /** 兼容保留字段；退回重办提示现由左侧单据顶部横幅承载。 */
     isRework?: boolean
     activeTab?: ApprovalContextRailTab
     onActiveTabChange?: (tab: ApprovalContextRailTab) => void
@@ -49,21 +35,17 @@ export type WorkspaceApprovalContextRailProps = Readonly<{
 }>
 
 /**
- * 2 栏决策审批工作台右侧上下文轨：
- * - 顶部：44px 紧凑 `ApprovalRouteStepper`（释放正文首屏纵向高度，消灭模态历史弹窗）；
- * - 退回重办态：置顶呈现上轮驳回摘要并支持定位至对应历史记录；
- * - 主体分段：
- *   1.「审批与轨迹」：倒序 `UnifiedAuditTrail`（合并审批与抄送 + 单据全动态）；
- *   2.「附件对照 (N)」：侧边对接 `UnifiedMaterialViewer (mode="docked")`，支持拖拽中轴拉宽至 50% 左右对照合同/回单。
+ * 2 栏决策审批工作台右侧上下文轨（飞书细线单层页签）：
+ * - 单层底线页签：「审批记录」|「附件对照 (N)」|「单据全动态」；
+ * - 「审批记录」展示倒序 `UnifiedAuditTrail`；
+ * - 「附件对照」侧边对接 `UnifiedMaterialViewer (mode="docked")`，支持拖拽中轴拉宽至 50% 左右对照合同/回单。
  */
 export function WorkspaceApprovalContextRail({
     instanceId,
-    instance,
     timelineTarget,
     currentDocument,
     materialFiles = [],
     materialsLoading = false,
-    isRework = false,
     activeTab,
     onActiveTabChange,
     activeFileId,
@@ -76,49 +58,15 @@ export function WorkspaceApprovalContextRail({
         `workspace-approval-rail-${toAutomationIdSegment(instanceId)}`
     const [internalTab, setInternalTab] =
         useState<ApprovalContextRailTab>("trail")
-    const [auditTab, setAuditTab] = useState<AuditTrailTab>("approval")
-    const [highlightedExecutionId, setHighlightedExecutionId] = useState<
-        string | null
-    >(null)
 
-    const currentTab = activeTab ?? internalTab
+    const hasTimelineTab = Boolean(timelineTarget)
+    const rawTab = activeTab ?? internalTab
+    const currentTab: ApprovalContextRailTab =
+        rawTab === "timeline" && !hasTimelineTab ? "trail" : rawTab
+
     const setTab = (next: ApprovalContextRailTab) => {
         if (activeTab === undefined) setInternalTab(next)
         onActiveTabChange?.(next)
-    }
-
-    const historyQuery = useApprovalHistoryInfiniteQuery(
-        { instanceId, order: "desc" },
-        Boolean(instanceId),
-    )
-    const route = historyQuery.data?.pages[0]?.route
-    const historyItems =
-        historyQuery.data?.pages.flatMap((page) => page.items) ?? []
-    const latestRejectedRecord = historyItems.find(
-        (record) => record.result === "REJECTED",
-    )
-    const rejectedAt = displayUnixSeconds(latestRejectedRecord?.decidedAt)
-    const rejector = displayActorName(
-        latestRejectedRecord?.assigneeName ?? instance?.latestRejectionByName,
-        latestRejectedRecord?.decidedBy,
-    )
-    const rejectedNode = displayReadableName(
-        latestRejectedRecord?.nodeName,
-        latestRejectedRecord?.nodeKey,
-    )
-    const rejectionReason =
-        latestRejectedRecord?.decisionReason?.trim() ||
-        instance?.latestRejection?.trim()
-
-    const processLabel = displayReadableName(instance?.processName)
-    const roundLabel = displayRound(
-        route?.roundNo ?? instance?.currentRoundNo ?? 1,
-    )
-
-    const handleJumpToHistory = (executionId?: string) => {
-        setTab("trail")
-        setAuditTab("approval")
-        setHighlightedExecutionId(executionId ?? null)
     }
 
     return (
@@ -129,119 +77,66 @@ export function WorkspaceApprovalContextRail({
                 className,
             )}
         >
-            <div className="shrink-0 space-y-2 border-b border-border/60 pt-2.5 pb-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-xs font-semibold text-foreground">
-                        {processLabel && processLabel !== "审批流程"
-                            ? processLabel
-                            : "审批流程"}
-                    </span>
-                    <span className="num text-tiny text-muted-foreground">
-                        {roundLabel}
-                    </span>
-                </div>
-                {route?.nodes.length ? (
-                    <ApprovalRouteStepper
-                        route={route}
-                        instanceStatus={instance?.status}
-                        latestRejection={
-                            isRework ? null : instance?.latestRejection
-                        }
-                        latestRejectionByName={
-                            isRework ? null : instance?.latestRejectionByName
-                        }
-                        onJumpToHistory={handleJumpToHistory}
-                        idPrefix={`${resolvedPrefix}-stepper`}
-                    />
-                ) : historyQuery.isPending ? (
-                    <p
-                        role="status"
-                        className="py-2 text-xs text-muted-foreground"
-                    >
-                        正在加载审批路线…
-                    </p>
-                ) : null}
-                {isRework && rejectionReason ? (
-                    <Alert variant="destructive" className="py-2.5">
-                        <AlertTitle className="text-xs">
-                            上轮驳回意见
-                            {rejector ? ` · ${rejector}` : ""}
-                        </AlertTitle>
-                        <AlertDescription className="space-y-1 text-xs">
-                            <p className="whitespace-pre-wrap break-words">
-                                {rejectionReason}
-                            </p>
-                            {rejectedNode || rejectedAt ? (
-                                <p className="num text-tiny opacity-85">
-                                    {[rejectedNode, rejectedAt?.label]
-                                        .filter(Boolean)
-                                        .join(" · ")}
-                                </p>
-                            ) : null}
-                        </AlertDescription>
-                    </Alert>
-                ) : null}
-            </div>
-
             <Tabs
                 value={currentTab}
                 onValueChange={(next) => {
-                    if (next === "trail" || next === "materials") {
+                    if (
+                        next === "trail" ||
+                        next === "materials" ||
+                        next === "timeline"
+                    ) {
                         setTab(next)
                     }
                 }}
                 className="flex min-h-0 flex-1 flex-col gap-0"
             >
-                <div className="shrink-0 border-b border-border/60 pt-2 pb-1.5">
+                <div className="-mx-4 shrink-0 border-b border-border/60 px-4 @[1120px]/workspace:-mx-5 @[1120px]/workspace:px-5">
                     <TabsList
+                        variant="line"
                         aria-label="审批右侧对照面板"
-                        className="grid w-full grid-cols-2"
+                        className="w-full gap-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                     >
                         <TabsTrigger
                             id={`${resolvedPrefix}-tab-trail`}
                             value="trail"
-                            className="gap-1.5 text-xs"
+                            className="text-xs"
                         >
-                            <HistoryIcon
-                                aria-hidden="true"
-                                className="size-3.5 shrink-0"
-                            />
-                            <span>审批与轨迹</span>
+                            审批记录
                         </TabsTrigger>
                         <TabsTrigger
                             id={`${resolvedPrefix}-tab-materials`}
                             value="materials"
-                            className="gap-1.5 text-xs"
+                            className="gap-1 text-xs"
                         >
-                            <PaperclipIcon
-                                aria-hidden="true"
-                                className="size-3.5 shrink-0"
-                            />
                             <span>附件对照</span>
                             {materialFiles.length > 0 ? (
-                                <Badge
-                                    variant="secondary"
-                                    className="num h-4 rounded-full px-1.5 text-tiny"
-                                >
-                                    {materialFiles.length}
-                                </Badge>
+                                <span className="num text-tiny text-muted-foreground">
+                                    ({materialFiles.length})
+                                </span>
                             ) : null}
                         </TabsTrigger>
+                        {hasTimelineTab ? (
+                            <TabsTrigger
+                                id={`${resolvedPrefix}-tab-timeline`}
+                                value="timeline"
+                                className="text-xs"
+                            >
+                                单据全动态
+                            </TabsTrigger>
+                        ) : null}
                     </TabsList>
                 </div>
 
                 <TabsContent
                     value="trail"
-                    className="mt-0 min-h-0 flex-1 overflow-y-auto overscroll-contain py-3"
+                    className="mt-0 min-h-0 flex-1 overflow-y-auto overscroll-contain py-3.5"
                 >
                     <UnifiedAuditTrail
                         instanceId={instanceId}
-                        timelineTarget={timelineTarget}
                         currentDocument={currentDocument}
                         isApprovalContext
-                        activeTab={auditTab}
-                        onActiveTabChange={setAuditTab}
-                        highlightedExecutionId={highlightedExecutionId}
+                        hideTabs
+                        activeTab="approval"
                         idPrefix={`${resolvedPrefix}-audit`}
                     />
                 </TabsContent>
@@ -269,6 +164,22 @@ export function WorkspaceApprovalContextRail({
                         />
                     )}
                 </TabsContent>
+
+                {hasTimelineTab ? (
+                    <TabsContent
+                        value="timeline"
+                        className="mt-0 min-h-0 flex-1 overflow-y-auto overscroll-contain py-3.5"
+                    >
+                        <UnifiedAuditTrail
+                            timelineTarget={timelineTarget}
+                            currentDocument={currentDocument}
+                            isApprovalContext
+                            hideTabs
+                            activeTab="timeline"
+                            idPrefix={`${resolvedPrefix}-timeline`}
+                        />
+                    </TabsContent>
+                ) : null}
             </Tabs>
         </div>
     )

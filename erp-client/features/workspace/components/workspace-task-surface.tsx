@@ -608,7 +608,7 @@ function PurchasePaymentRequestSurface({
                           defaultTab: "trail",
                           collapsible: true,
                           resizable: true,
-                          defaultWidthPercent: 34,
+                          defaultWidthPercent: 24,
                           minWidthPercent: 24,
                           maxWidthPercent: 50,
                           collapsed: railCollapsed,
@@ -683,6 +683,16 @@ function PurchasePaymentRequestSurface({
                     />
                 ) : null
             }
+            alertBanner={
+                item.approval?.status === "REJECTED" ? (
+                    <WorkspaceRejectionNotice
+                        item={item}
+                        actionable={Boolean(
+                            reworkTask?.allowedActions.includes("PROCESS"),
+                        )}
+                    />
+                ) : null
+            }
             footer={
                 reworkTask &&
                 canReadSensitive && (
@@ -694,14 +704,6 @@ function PurchasePaymentRequestSurface({
             }
             aria-label="采购付款申请任务"
         >
-            {item.approval?.status === "REJECTED" && (
-                <WorkspaceRejectionNotice
-                    item={item}
-                    actionable={Boolean(
-                        reworkTask?.allowedActions.includes("PROCESS"),
-                    )}
-                />
-            )}
             <PurchasePaymentRequestTask
                 item={item}
                 onSelectFile={showDecisionRail ? handleSelectFile : undefined}
