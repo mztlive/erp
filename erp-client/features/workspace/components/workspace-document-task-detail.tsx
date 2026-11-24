@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { useMutation } from "@tanstack/react-query"
 import { usePathname, useSearchParams } from "next/navigation"
-import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
+import { ArrowUpRightIcon, FileTextIcon, PaperclipIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
     DetailWorkspaceMeta,
     DetailWorkspaceSection,
     IconActionButton,
+    detailWorkspaceStyles,
     taxAmountToneClass,
 } from "@/components/business"
 import type { MaterialFileItem } from "@/components/business/unified-material-viewer"
@@ -99,9 +100,9 @@ import { WorkspaceMoney } from "./workspace-money"
 import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import {
     WorkspacePurchaseApproval,
-    WorkspacePurchaseApprovalSources,
     purchaseApprovalRiskReasons,
 } from "./workspace-purchase-approval"
+import { buildPurchaseDynamicRejectPhrases } from "./workspace-purchase-comparison-model"
 import { WorkspacePurchasePayment } from "./workspace-purchase-payment"
 import { WorkspaceReceiptApproval } from "./workspace-receipt-approval"
 import { WorkspaceRejectionNotice } from "./workspace-rejection-notice"
@@ -109,10 +110,14 @@ import {
     WorkspaceSalesApproval,
     assessSalesApprovalRisk,
 } from "./workspace-sales-approval"
-import { WorkspaceSupplierRating } from "./workspace-supplier-rating"
+import { buildSalesDynamicRejectPhrases } from "../lib/sales-approval-model"
 import { WorkspaceTaskHeaderActions } from "./workspace-task-context"
 import { WorkspaceCompactTaskHeader } from "./workspace-task-identity-header"
 import { WorkspaceTaskResponsibilityActions } from "./workspace-task-responsibility-actions"
+
+const APPROVAL_RAIL_WIDTH_STORAGE_KEY = "erp.workspace.approvalRailWidth"
+const APPROVAL_RAIL_COLLAPSED_STORAGE_KEY =
+    "erp.workspace.approvalRailCollapsed"
 
 const exactInvoiceFields = new Set([
     "开票抬头",
@@ -237,17 +242,60 @@ export function WorkspaceDocumentTaskDetail({
     const returnTo = `${pathname}${searchParams.toString() ? `?${searchParams}` : ""}`
     const [paper, setPaper] = useState<WorkspacePaperTarget | null>(null)
     const [railTab, setRailTab] = useState<ApprovalContextRailTab>("trail")
-    const [railCollapsed, setRailCollapsed] = useState(false)
+    const [railCollapsed, setRailCollapsedState] = useState(false)
     const [activeMaterialFileId, setActiveMaterialFileId] = useState<
         string | undefined
     >(undefined)
+    const [activeSourceRevisionId, setActiveSourceRevisionId] = useState<
+        string | undefined
+    >(undefined)
+    const [highlightedExecutionId, setHighlightedExecutionId] = useState<
+        string | null
+    >(null)
+
+    const setRailCollapsed = (
+        next: boolean | ((previous: boolean) => boolean),
+    ) => {
+        setRailCollapsedState((previous) => {
+            const resolved = typeof next === "function" ? next(previous) : next
+            try {
+                window.localStorage.setItem(
+                    APPROVAL_RAIL_COLLAPSED_STORAGE_KEY,
+                    resolved ? "1" : "0",
+                )
+            } catch {
+                // 隐私模式下忽略本地存储写入失败
+            }
+            return resolved
+        })
+    }
+
+    useEffect(() => {
+        try {
+            if (
+                window.localStorage.getItem(
+                    APPROVAL_RAIL_COLLAPSED_STORAGE_KEY,
+                ) === "1"
+            ) {
+                setRailCollapsedState(true)
+            }
+        } catch {
+            // 忽略本地存储读取异常
+        }
+    }, [])
 
     useEffect(() => {
         setPaper(null)
-        setRailTab("trail")
-        setRailCollapsed(false)
         setActiveMaterialFileId(undefined)
-    }, [item.workItemId])
+        setActiveSourceRevisionId(undefined)
+        setHighlightedExecutionId(null)
+        setRailTab((current) =>
+            current === "source-sales" &&
+            item.businessObjectType !== "purchase_order"
+                ? "trail"
+                : current,
+        )
+    }, [item.businessObjectType, item.workItemId])
 
     const documentFacts = useWorkspaceDocumentFacts(item)
     const sourceSales = useWorkspaceSourceSalesOrder(item)
@@ -384,9 +432,28 @@ export function WorkspaceDocumentTaskDetail({
         setRailCollapsed(false)
     }
 
+    const handleOpenMaterials = () => {
+        setRailTab("materials")
+        setRailCollapsed(false)
+    }
+
+    const handleCompareSourceSales = (revisionId: string) => {
+        setActiveSourceRevisionId(revisionId)
+        setRailTab("source-sales")
+        setRailCollapsed(false)
+    }
+
+    const handleJumpToHistory = (executionId?: string) => {
+        setHighlightedExecutionId(executionId ?? null)
+        if (showDecisionRail) {
+            setRailTab("trail")
+            setRailCollapsed(false)
+        }
+    }
+
     const compactStepperHistoryQuery = useApprovalHistoryInfiniteQuery(
         { instanceId: instanceId ?? "", order: "desc" },
-        !showDecisionRail && approvalDocument && Boolean(instanceId),
+        approvalDocument && Boolean(instanceId),
     )
     const compactStepperRoute = compactStepperHistoryQuery.data?.pages[0]?.route
 
@@ -549,43 +616,8 @@ export function WorkspaceDocumentTaskDetail({
                 ) &&
                 !(purchaseApproval && submission && label === "来源销售单"),
         )
-    const purchaseSupplier = submission?.display.source.extra_sections.find(
-        (field) => field.label === "供应商",
-    )
-    const supplierName =
-        displayName(purchaseSupplier?.value, purchaseSupplier?.object_id) ??
-        displayName(submission?.display.counterparty_label) ??
-        "未记录供应商名称"
     const informationFields: readonly WorkspaceDetailField[] =
-        purchaseApproval && instanceId && submission
-            ? [
-                  { label: "供应商", value: supplierName },
-                  ...visibleDocumentFields,
-                  {
-                      label: "最新供应商评估",
-                      value: "",
-                      fullWidth: true,
-                      content: (
-                          <WorkspaceSupplierRating
-                              rating={submission.latest_supplier_rating}
-                              compact
-                          />
-                      ),
-                  },
-                  {
-                      label: "来源销售单",
-                      value: "",
-                      fullWidth: true,
-                      content: (
-                          <WorkspacePurchaseApprovalSources
-                              instanceId={instanceId}
-                              sources={submission.display.source_sales ?? []}
-                              onPreview={setPaper}
-                          />
-                      ),
-                  },
-              ]
-            : visibleDocumentFields
+        visibleDocumentFields
     const lineCount = (briefLines?.length ?? 0) + (briefMoreCount ?? 0)
     const instance = item.approval
         ? {
@@ -675,6 +707,28 @@ export function WorkspaceDocumentTaskDetail({
         submission?.display.source.amount_label,
     ])
 
+    const dynamicRejectPhrases = useMemo(() => {
+        if (salesApproval && salesSubmission) {
+            return buildSalesDynamicRejectPhrases(
+                salesSubmission,
+                submission?.attachments.length,
+            )
+        }
+        if (purchaseApproval && submission?.purchase_lines) {
+            return buildPurchaseDynamicRejectPhrases(
+                submission.purchase_lines,
+                submission.attachments.length,
+            )
+        }
+        return []
+    }, [
+        purchaseApproval,
+        salesApproval,
+        salesSubmission,
+        submission?.attachments.length,
+        submission?.purchase_lines,
+    ])
+
     const actions = reworkTask ? (
         <WorkspaceApprovalReworkActions
             item={reworkTask}
@@ -694,6 +748,7 @@ export function WorkspaceDocumentTaskDetail({
             canReadSensitive={canReadSensitive}
             hiddenActions={["OPEN_DOCUMENT", "VIEW"]}
             highRiskReasons={highRiskReasons}
+            dynamicRejectPhrases={dynamicRejectPhrases}
             decisionContext={{
                 documentLabel: item.objectTitle,
                 amountLabel: primaryAmount?.value,
@@ -730,12 +785,119 @@ export function WorkspaceDocumentTaskDetail({
           }
         : undefined
 
+    const usesSalesWorkbench = Boolean(
+        salesApproval &&
+        instanceId &&
+        canReadSubmission &&
+        (materials.isPending || salesSubmission),
+    )
+    const usesPurchaseWorkbench = Boolean(purchaseApproval && instanceId)
+
     const hideCustomSummaryHeader =
         receiptApproval ||
         deliveryBrief ||
         useInlineGenericSummary ||
         useStructuredDiffRenderer ||
-        useFinancialRenderer
+        useFinancialRenderer ||
+        usesSalesWorkbench ||
+        usesPurchaseWorkbench
+
+    const showRejectionAlertBanner = rework
+        ? canReadSubmission && Boolean(instanceId)
+        : item.approval?.status === "REJECTED"
+    const showRouteStepper = Boolean(
+        approvalDocument && compactStepperRoute?.nodes.length,
+    )
+    const headerActions = (
+        <WorkspaceTaskHeaderActions item={headerItem}>
+            {showDecisionRail &&
+            (usesSalesWorkbench || usesPurchaseWorkbench) &&
+            submission ? (
+                <Button
+                    id={`workspace-task-detail-materials-shortcut-${toAutomationIdSegment(item.workItemId)}`}
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    className={cn(
+                        detailWorkspaceStyles.quietButton,
+                        dockedMaterialFiles.length === 0 &&
+                            "text-warning-soft-foreground hover:text-warning-soft-foreground",
+                        !railCollapsed &&
+                            railTab === "materials" &&
+                            "bg-muted/80 text-foreground",
+                    )}
+                    onClick={() => {
+                        if (!railCollapsed && railTab === "materials") {
+                            setRailCollapsed(true)
+                        } else {
+                            handleOpenMaterials()
+                        }
+                    }}
+                >
+                    <PaperclipIcon aria-hidden="true" />
+                    <span className="num">
+                        {dockedMaterialFiles.length > 0
+                            ? `附件 (${dockedMaterialFiles.length})`
+                            : "无附件"}
+                    </span>
+                </Button>
+            ) : null}
+            <WorkspaceTaskResponsibilityActions
+                item={item}
+                onCompleted={onTaskCompleted}
+            />
+            {canReadPaper &&
+            !(
+                approvalDocument &&
+                item.businessObjectType === "customer_receipt"
+            ) &&
+            !purchaseApproval &&
+            !salesApproval &&
+            (approvalDocument || currentPaperKind) ? (
+                <IconActionButton
+                    id={`workspace-task-detail-read-${toAutomationIdSegment(item.workItemId)}`}
+                    label={readActionLabel}
+                    testId={`work-item-read-document-${item.workItemId}`}
+                    onClick={() =>
+                        setPaper(
+                            approvalDocument && instanceId
+                                ? {
+                                      kind: "approval_snapshot",
+                                      objectId: instanceId,
+                                      title: documentNumber,
+                                  }
+                                : currentPaperKind
+                                  ? {
+                                        kind: currentPaperKind,
+                                        objectId: item.businessObjectId,
+                                        title: item.stableNumber,
+                                    }
+                                  : null,
+                        )
+                    }
+                >
+                    <FileTextIcon aria-hidden="true" />
+                </IconActionButton>
+            ) : null}
+            {canOpenDocument && documentHref ? (
+                <IconActionButton
+                    id={`workspace-task-detail-open-${toAutomationIdSegment(item.workItemId)}`}
+                    label={canReadPaper ? openActionLabel : readActionLabel}
+                    testId={`work-item-open-document-${item.workItemId}`}
+                    href={documentHref}
+                >
+                    {canReadPaper ? (
+                        <ArrowUpRightIcon aria-hidden="true" />
+                    ) : (
+                        <FileTextIcon aria-hidden="true" />
+                    )}
+                </IconActionButton>
+            ) : null}
+        </WorkspaceTaskHeaderActions>
+    )
+
+    const isComparisonRailTab =
+        railTab === "materials" || railTab === "source-sales"
 
     return (
         <WorkspaceProcessingPane
@@ -754,9 +916,13 @@ export function WorkspaceDocumentTaskDetail({
                           defaultTab: "trail",
                           collapsible: true,
                           resizable: true,
-                          defaultWidthPercent: 24,
+                          defaultWidthPercent: 28,
                           minWidthPercent: 24,
-                          maxWidthPercent: 50,
+                          maxWidthPercent: 52,
+                          storageKey: APPROVAL_RAIL_WIDTH_STORAGE_KEY,
+                          preferredMinWidthPercent: isComparisonRailTab
+                              ? 42
+                              : undefined,
                           collapsed: railCollapsed,
                           onCollapsedChange: setRailCollapsed,
                           label: "审批进度、轨迹与附件对照",
@@ -771,6 +937,25 @@ export function WorkspaceDocumentTaskDetail({
                                   }}
                                   materialFiles={dockedMaterialFiles}
                                   materialsLoading={materials.isPending}
+                                  sourceSalesOrders={
+                                      purchaseApproval
+                                          ? submission?.source_sales_orders
+                                          : undefined
+                                  }
+                                  sourceSalesSnapshots={
+                                      purchaseApproval
+                                          ? submission?.display.source_sales
+                                          : undefined
+                                  }
+                                  activeSourceRevisionId={
+                                      activeSourceRevisionId
+                                  }
+                                  onActiveSourceRevisionIdChange={
+                                      setActiveSourceRevisionId
+                                  }
+                                  highlightedExecutionId={
+                                      highlightedExecutionId
+                                  }
                                   isRework={rework}
                                   activeTab={railTab}
                                   onActiveTabChange={setRailTab}
@@ -783,131 +968,79 @@ export function WorkspaceDocumentTaskDetail({
                     : undefined
             }
             header={
-                <WorkspaceCompactTaskHeader
-                    title={canReadSensitive ? headerTitle : "业务详情"}
-                    primaryStatus={{
-                        label:
-                            rework && item.status === "OPEN"
-                                ? item.workItemTypeLabel
-                                : item.statusLabel,
-                        tone: item.statusTone,
-                    }}
-                    badges={<WorkspaceDocumentBadge item={item} />}
-                    documentNumber={documentNumber}
-                    meta={
-                        <DetailWorkspaceMeta
-                            items={[
-                                rework && submission ? (
-                                    <span
-                                        key="number"
-                                        className="num select-all"
-                                        data-workspace-document-number={
-                                            documentNumber || undefined
-                                        }
-                                    >
-                                        单号：{documentNumber || "未提供"}
-                                    </span>
-                                ) : !rework && documentNumber ? (
-                                    <span
-                                        key="number"
-                                        className="num select-all"
-                                        data-workspace-document-number={
-                                            documentNumber
-                                        }
-                                    >
-                                        {documentNumber}
-                                    </span>
-                                ) : null,
-                                submission
-                                    ? `提交版本 ${submission.subject_version}`
-                                    : null,
-                                fullPage && item.dueAt
-                                    ? `截止：${item.dueAtLabel}`
-                                    : null,
-                            ]}
-                        />
-                    }
-                    actions={
-                        <WorkspaceTaskHeaderActions item={headerItem}>
-                            <WorkspaceTaskResponsibilityActions
-                                item={item}
-                                onCompleted={onTaskCompleted}
+                inspectorMode && showRouteStepper ? null : (
+                    <WorkspaceCompactTaskHeader
+                        title={canReadSensitive ? headerTitle : "业务详情"}
+                        primaryStatus={{
+                            label:
+                                rework && item.status === "OPEN"
+                                    ? item.workItemTypeLabel
+                                    : item.statusLabel,
+                            tone: item.statusTone,
+                        }}
+                        badges={<WorkspaceDocumentBadge item={item} />}
+                        documentNumber={documentNumber}
+                        meta={
+                            <DetailWorkspaceMeta
+                                items={[
+                                    rework && submission ? (
+                                        <span
+                                            key="number"
+                                            className="num select-all"
+                                            data-workspace-document-number={
+                                                documentNumber || undefined
+                                            }
+                                        >
+                                            单号：{documentNumber || "未提供"}
+                                        </span>
+                                    ) : !rework && documentNumber ? (
+                                        <span
+                                            key="number"
+                                            className="num select-all"
+                                            data-workspace-document-number={
+                                                documentNumber
+                                            }
+                                        >
+                                            {documentNumber}
+                                        </span>
+                                    ) : null,
+                                    submission
+                                        ? `提交版本 ${submission.subject_version}`
+                                        : null,
+                                    fullPage && item.dueAt
+                                        ? `截止：${item.dueAtLabel}`
+                                        : null,
+                                ]}
                             />
-                            {canReadPaper &&
-                            !(
-                                approvalDocument &&
-                                item.businessObjectType === "customer_receipt"
-                            ) &&
-                            !purchaseApproval &&
-                            !salesApproval &&
-                            (approvalDocument || currentPaperKind) ? (
-                                <IconActionButton
-                                    id={`workspace-task-detail-read-${toAutomationIdSegment(item.workItemId)}`}
-                                    label={readActionLabel}
-                                    testId={`work-item-read-document-${item.workItemId}`}
-                                    onClick={() =>
-                                        setPaper(
-                                            approvalDocument && instanceId
-                                                ? {
-                                                      kind: "approval_snapshot",
-                                                      objectId: instanceId,
-                                                      title: documentNumber,
-                                                  }
-                                                : currentPaperKind
-                                                  ? {
-                                                        kind: currentPaperKind,
-                                                        objectId:
-                                                            item.businessObjectId,
-                                                        title: item.stableNumber,
-                                                    }
-                                                  : null,
-                                        )
-                                    }
-                                >
-                                    <FileTextIcon aria-hidden="true" />
-                                </IconActionButton>
-                            ) : null}
-                            {canOpenDocument && documentHref ? (
-                                <IconActionButton
-                                    id={`workspace-task-detail-open-${toAutomationIdSegment(item.workItemId)}`}
-                                    label={
-                                        canReadPaper
-                                            ? openActionLabel
-                                            : readActionLabel
-                                    }
-                                    testId={`work-item-open-document-${item.workItemId}`}
-                                    href={documentHref}
-                                >
-                                    {canReadPaper ? (
-                                        <ArrowUpRightIcon aria-hidden="true" />
-                                    ) : (
-                                        <FileTextIcon aria-hidden="true" />
-                                    )}
-                                </IconActionButton>
-                            ) : null}
-                        </WorkspaceTaskHeaderActions>
-                    }
-                />
+                        }
+                        actions={headerActions}
+                    />
+                )
             }
             headerSupplement={
-                !showDecisionRail &&
-                approvalDocument &&
-                compactStepperRoute?.nodes.length ? (
+                showRouteStepper && compactStepperRoute ? (
                     <ApprovalRouteStepper
                         route={compactStepperRoute}
                         instanceStatus={instance?.status}
                         latestRejection={instance?.latestRejection}
                         latestRejectionByName={instance?.latestRejectionByName}
+                        hideRejectionBanner={
+                            showRejectionAlertBanner ||
+                            usesSalesWorkbench ||
+                            usesPurchaseWorkbench
+                        }
+                        onJumpToHistory={
+                            showDecisionRail ? handleJumpToHistory : undefined
+                        }
+                        trailingActions={
+                            inspectorMode ? headerActions : undefined
+                        }
                         idPrefix={`workspace-compact-stepper-${toAutomationIdSegment(item.workItemId)}`}
                     />
                 ) : null
             }
             alertBanner={
-                (
-                    rework
-                        ? canReadSubmission && Boolean(instanceId)
-                        : item.approval?.status === "REJECTED"
-                ) ? (
+                showRejectionAlertBanner ? (
                     <WorkspaceRejectionNotice
                         item={item}
                         actionable={Boolean(
@@ -1158,6 +1291,8 @@ export function WorkspaceDocumentTaskDetail({
                     <>
                         {!receiptApproval &&
                         !deliveryBrief &&
+                        !usesSalesWorkbench &&
+                        !usesPurchaseWorkbench &&
                         informationFields.length > 0 ? (
                             <DetailBlock
                                 title={
@@ -1220,6 +1355,9 @@ export function WorkspaceDocumentTaskDetail({
                                 ? handleSelectMaterialFile
                                 : undefined
                         }
+                        onOpenMaterials={
+                            showDecisionRail ? handleOpenMaterials : undefined
+                        }
                         activeFileId={activeMaterialFileId}
                         hideEmbeddedMaterials={showDecisionRail}
                     />
@@ -1229,12 +1367,22 @@ export function WorkspaceDocumentTaskDetail({
                     <WorkspacePurchaseApproval
                         key={instanceId}
                         instanceId={instanceId}
+                        item={item}
                         materials={materials}
                         riskReasons={purchaseRiskReasons}
                         onPreview={setPaper}
                         onSelectFile={
                             showDecisionRail
                                 ? handleSelectMaterialFile
+                                : undefined
+                        }
+                        onOpenMaterials={
+                            showDecisionRail ? handleOpenMaterials : undefined
+                        }
+                        onCompareSource={
+                            showDecisionRail &&
+                            Boolean(submission?.source_sales_orders?.length)
+                                ? handleCompareSourceSales
                                 : undefined
                         }
                         activeFileId={activeMaterialFileId}

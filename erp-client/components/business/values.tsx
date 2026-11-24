@@ -389,6 +389,8 @@ interface MoneyValueProps extends Omit<
     display?: MoneyValueDisplay
     /** 隐藏辅助金额行；compact 模式仍向辅助技术提供完整金额。 */
     showHint?: boolean
+    /** 继承父级语义色（如负毛利、超预估警示等）；默认保持沉稳墨色 text-foreground。 */
+    inheritColor?: boolean
 }
 
 /** 精确展示 CNY 十进制字符串；仅格式化，不执行金额计算。 */
@@ -399,6 +401,7 @@ function MoneyValue({
     size = "inherit",
     display = "full",
     showHint = true,
+    inheritColor = false,
     className,
     onCopy,
     ...props
@@ -448,7 +451,7 @@ function MoneyValue({
                         compactPrimary && "print:hidden",
                         compactPrimary &&
                             moneyMagnitudeClasses[amount.magnitude],
-                        !compactPrimary && "text-foreground",
+                        !compactPrimary && !inheritColor && "text-foreground",
                         isUnavailable && "text-muted-foreground",
                     )}
                 >

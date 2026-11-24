@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import {
     BanIcon,
     CheckIcon,
@@ -31,6 +31,10 @@ export type ApprovalRouteStepperProps = Readonly<{
     latestRejectionByName?: string | null
     /** 点击驳回条跳转/锚定到右侧审计轨迹中的对应记录。 */
     onJumpToHistory?: (executionId?: string) => void
+    /** 外层正文已展示驳回横幅时隐藏步进条下方重复驳回条。 */
+    hideRejectionBanner?: boolean
+    /** 步进条右侧内联轻动作（供分栏检查器与抽屉复用，避免多叠一层工具栏）。 */
+    trailingActions?: ReactNode
     idPrefix?: string
     className?: string
 }>
@@ -117,6 +121,8 @@ export function ApprovalRouteStepper({
     latestRejection,
     latestRejectionByName,
     onJumpToHistory,
+    hideRejectionBanner = false,
+    trailingActions,
     idPrefix = "approval-route-stepper",
     className,
 }: ApprovalRouteStepperProps) {
@@ -327,9 +333,20 @@ export function ApprovalRouteStepper({
                         <ChevronRightIcon aria-hidden="true" />
                     </Button>
                 ) : null}
+                {trailingActions ? (
+                    <>
+                        <span
+                            aria-hidden="true"
+                            className="mx-1 h-4 w-px shrink-0 bg-border/70"
+                        />
+                        <div className="flex shrink-0 items-center gap-1">
+                            {trailingActions}
+                        </div>
+                    </>
+                ) : null}
             </div>
 
-            {rejection ? (
+            {!hideRejectionBanner && rejection ? (
                 <div
                     role="status"
                     className={cn(

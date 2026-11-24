@@ -12,6 +12,7 @@ import {
     type ReactNode,
     type Ref,
 } from "react"
+import type { GroupImperativeHandle, Layout } from "react-resizable-panels"
 import { PanelRightCloseIcon, PanelRightOpenIcon } from "lucide-react"
 
 import { IconActionButton } from "@/components/business/icon-action-button"
@@ -31,13 +32,17 @@ export type TaskWorkbenchArchetype =
     | "informational" // Archetype 4: 精简速览面（常运行在 SplitQueue / TaskActionSheet 内）
 
 export type UnifiedTaskWorkbenchContextRail = Readonly<{
-    defaultTab?: "trail" | "materials" | "timeline"
+    defaultTab?: "trail" | "materials" | "source-sales" | "timeline"
     collapsible?: boolean
     resizable?: boolean
     /** 右栏默认宽度百分比（默认 34，可拖拽扩展至 maxWidthPercent 做左右对照）。 */
     defaultWidthPercent?: number
     minWidthPercent?: number
     maxWidthPercent?: number
+    /** 跨任务持久化用户拖拽后的右栏宽度（写入 localStorage）。 */
+    storageKey?: string
+    /** 进入附件或来源单据对照时自动扩宽的最小目标宽度百分比；切回常规页签且未手动拖拽时恢复。 */
+    preferredMinWidthPercent?: number
     label?: string
     collapsed?: boolean
     onCollapsedChange?: (collapsed: boolean) => void
@@ -128,6 +133,36 @@ function clampPercent(value: number, min: number, max: number): number {
     return Math.min(max, Math.max(min, Math.round(value)))
 }
 
+function readStoredRailPercent(
+    storageKey: string | undefined,
+    min: number,
+    max: number,
+    fallback: number,
+): number {
+    if (!storageKey || typeof window === "undefined") return fallback
+    try {
+        const raw = window.localStorage.getItem(storageKey)
+        if (!raw) return fallback
+        const parsed = Number.parseInt(raw, 10)
+        if (!Number.isFinite(parsed)) return fallback
+        return clampPercent(parsed, min, max)
+    } catch {
+        return fallback
+    }
+}
+
+function writeStoredRailPercent(
+    storageKey: string | undefined,
+    value: number,
+): void {
+    if (!storageKey || typeof window === "undefined") return
+    try {
+        window.localStorage.setItem(storageKey, String(Math.round(value)))
+    } catch {
+        // 隐私模式下忽略本地存储写入失败
+    }
+}
+
 /**
  * 统一任务与审批工作台骨架（4 原型容器查询引擎）：
  * - 顶部 56px 紧凑吸顶页头，底部 48px 紧凑吸底操作栏；
@@ -157,6 +192,9 @@ export function UnifiedTaskWorkbench({
     children,
 }: UnifiedTaskWorkbenchProps) {
     const rootRef = useRef<HTMLElement>(null)
+    const groupRef = useRef<GroupImperativeHandle | null>(null)
+    const preAutoExpandPctRef = useRef<number | null>(null)
+    const autoExpandedRef = useRef(false)
     const [uncontrolledCollapsed, setUncontrolledCollapsed] = useState(false)
     const [isWideContainer, setIsWideContainer] = useState<boolean>(false)
 
@@ -266,6 +304,105 @@ export function UnifiedTaskWorkbench({
         defaultRailPct,
         55,
     )
+    const railStorageKey = contextRail?.storageKey
+    const preferredMinRailPct = contextRail?.preferredMinWidthPercent
+    const mainPanelId = `${idPrefix}-main-panel`
+    const railPanelId = `${idPrefix}-rail-panel`
+    const showSplitResizable =
+        railAllowed && !railCollapsed && resizable && isWideContainer
+    const showSplitStatic = railAllowed && !railCollapsed && !showSplitResizable
+    const isSplitLayout = showSplitResizable || showSplitStatic
+
+    const initialRailPct = (() => {
+        const stored = readStoredRailPercent(
+            railStorageKey,
+            minRailPct,
+            maxRailPct,
+            defaultRailPct,
+        )
+        if (preferredMinRailPct != null) {
+            return Math.max(
+                stored,
+                clampPercent(preferredMinRailPct, minRailPct, maxRailPct),
+            )
+        }
+        return stored
+    })()
+
+    useEffect(() => {
+        if (!showSplitResizable) return
+        const group = groupRef.current
+        if (!group) return
+        const layout = group.getLayout()
+        const currentRail = layout[railPanelId]
+        if (typeof currentRail !== "number" || !Number.isFinite(currentRail)) {
+            return
+        }
+        if (preferredMinRailPct != null) {
+            const target = clampPercent(
+                preferredMinRailPct,
+                minRailPct,
+                maxRailPct,
+            )
+            if (currentRail < target - 1) {
+                if (preAutoExpandPctRef.current == null) {
+                    preAutoExpandPctRef.current = currentRail
+                }
+                autoExpandedRef.current = true
+                group.setLayout({
+                    [mainPanelId]: 100 - target,
+                    [railPanelId]: target,
+                })
+            }
+            return
+        }
+        if (autoExpandedRef.current && preAutoExpandPctRef.current != null) {
+            const restore = clampPercent(
+                preAutoExpandPctRef.current,
+                minRailPct,
+                maxRailPct,
+            )
+            autoExpandedRef.current = false
+            preAutoExpandPctRef.current = null
+            group.setLayout({
+                [mainPanelId]: 100 - restore,
+                [railPanelId]: restore,
+            })
+        }
+    }, [
+        mainPanelId,
+        maxRailPct,
+        minRailPct,
+        preferredMinRailPct,
+        railPanelId,
+        showSplitResizable,
+    ])
+
+    const handleSplitLayoutChanged = useCallback(
+        (layout: Layout, meta: { isUserInteraction: boolean }) => {
+            if (!meta.isUserInteraction) return
+            autoExpandedRef.current = false
+            preAutoExpandPctRef.current = null
+            const railSize = layout[railPanelId]
+            if (
+                typeof railSize === "number" &&
+                Number.isFinite(railSize) &&
+                preferredMinRailPct == null
+            ) {
+                writeStoredRailPercent(
+                    railStorageKey,
+                    clampPercent(railSize, minRailPct, maxRailPct),
+                )
+            }
+        },
+        [
+            maxRailPct,
+            minRailPct,
+            preferredMinRailPct,
+            railPanelId,
+            railStorageKey,
+        ],
+    )
 
     const mainCanvas = (
         <div
@@ -324,11 +461,6 @@ export function UnifiedTaskWorkbench({
             </aside>
         ) : null
 
-    const showSplitResizable =
-        railAllowed && !railCollapsed && resizable && isWideContainer
-    const showSplitStatic = railAllowed && !railCollapsed && !showSplitResizable
-    const isSplitLayout = showSplitResizable || showSplitStatic
-
     return (
         <UnifiedTaskWorkbenchRailContext.Provider value={railControl}>
             <section
@@ -349,10 +481,12 @@ export function UnifiedTaskWorkbench({
                             "shrink-0 bg-card empty:hidden",
                             framed
                                 ? "-mx-(--scaffold-px) px-(--scaffold-px)"
-                                : cn(
-                                      workspaceTaskSurfacePadClassName,
-                                      "border-b border-border/60 py-1.5",
-                                  ),
+                                : header
+                                  ? cn(
+                                        workspaceTaskSurfacePadClassName,
+                                        "border-b border-border/60 py-1.5",
+                                    )
+                                  : undefined,
                         )}
                     >
                         {header}
@@ -377,12 +511,14 @@ export function UnifiedTaskWorkbench({
                     {showSplitResizable ? (
                         <ResizablePanelGroup
                             id={`${idPrefix}-panel-group`}
+                            groupRef={groupRef}
                             orientation="horizontal"
+                            onLayoutChanged={handleSplitLayoutChanged}
                             className="min-h-0 flex-1"
                         >
                             <ResizablePanel
-                                id={`${idPrefix}-main-panel`}
-                                defaultSize={`${100 - defaultRailPct}%`}
+                                id={mainPanelId}
+                                defaultSize={`${100 - initialRailPct}%`}
                                 minSize={`${100 - maxRailPct}%`}
                                 className="flex min-h-0 min-w-0 flex-col"
                             >
@@ -405,8 +541,8 @@ export function UnifiedTaskWorkbench({
                                 className="bg-border/60 transition-colors hover:bg-primary/40"
                             />
                             <ResizablePanel
-                                id={`${idPrefix}-rail-panel`}
-                                defaultSize={`${defaultRailPct}%`}
+                                id={railPanelId}
+                                defaultSize={`${initialRailPct}%`}
                                 minSize={`${minRailPct}%`}
                                 maxSize={`${maxRailPct}%`}
                                 className="flex min-h-0 min-w-0 flex-col bg-card"

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import {
+    ArrowUpIcon,
     ChevronDownIcon,
     ChevronUpIcon,
     CopyIcon,
@@ -114,6 +115,8 @@ export function DeliveryAllocationOverview({
     fulfillment,
     focusedLineId,
     onClearFocus,
+    onReturnToLine,
+    compactSimpleStates = false,
     emptyMessage = "本次提交暂未指定收货地址，将在履约环节补充。",
     title = "交付与收货地址",
 }: {
@@ -124,6 +127,10 @@ export function DeliveryAllocationOverview({
     fulfillment?: DeliveryFulfillmentDescriptor | null
     focusedLineId?: string | null
     onClearFocus?: () => void
+    /** 多址定位后点击返回明细行锚点。 */
+    onReturnToLine?: (lineId: string) => void
+    /** 将入仓、未指定地址与整单统一 1 处地址收敛为单行轻量提示条，避免审批页过度拉长。 */
+    compactSimpleStates?: boolean
     emptyMessage?: string
     title?: string
 }) {
@@ -180,6 +187,34 @@ export function DeliveryAllocationOverview({
         fulfillment?.responsibility === "WAREHOUSE" &&
         summary.totalRows === 0
     ) {
+        if (compactSimpleStates) {
+            return (
+                <section
+                    id={sectionId}
+                    aria-label={title}
+                    className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-border/60 py-3.5 text-xs text-muted-foreground"
+                >
+                    <WarehouseIcon
+                        aria-hidden="true"
+                        className="size-3.5 shrink-0 text-muted-foreground"
+                    />
+                    <span className="font-medium text-foreground">
+                        入库目标仓：
+                        {fulfillment.targetWarehouseName ||
+                            "以采购入库安排为准"}
+                    </span>
+                    <span
+                        aria-hidden="true"
+                        className="text-muted-foreground/45"
+                    >
+                        ·
+                    </span>
+                    <span>
+                        供应商发货至公司仓库入库，客户配送由仓库另行安排
+                    </span>
+                </section>
+            )
+        }
         return (
             <DetailWorkspaceSection
                 id={sectionId}
@@ -215,6 +250,21 @@ export function DeliveryAllocationOverview({
                 : fulfillment?.responsibility === "SERVICE"
                   ? "线下服务单据，未指定具体收货地址，按约定服务地点履约。"
                   : emptyMessage
+        if (compactSimpleStates) {
+            return (
+                <section
+                    id={sectionId}
+                    aria-label={title}
+                    className="flex items-center gap-2 border-t border-border/60 py-3.5 text-xs text-muted-foreground"
+                >
+                    <MapPinIcon
+                        aria-hidden="true"
+                        className="size-3.5 shrink-0"
+                    />
+                    <span>交付地址：{modeHint}</span>
+                </section>
+            )
+        }
         return (
             <DetailWorkspaceSection
                 id={sectionId}
@@ -236,6 +286,53 @@ export function DeliveryAllocationOverview({
     // 形态 1：整单统一收货（1 处独立地址覆盖所有需配送商品）
     if (summary.isUniformSingleAddress && !focusedLine) {
         const only = summary.addressGroups[0]!
+        if (compactSimpleStates) {
+            return (
+                <section
+                    id={sectionId}
+                    aria-label={title}
+                    className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-t border-border/60 py-3.5 text-xs"
+                >
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+                        <MapPinIcon
+                            aria-hidden="true"
+                            className="size-3.5 shrink-0 text-primary"
+                        />
+                        <Badge variant="neutral">整单统一收货</Badge>
+                        <span className="font-medium text-foreground">
+                            {only.recipient}
+                        </span>
+                        <span className="num text-muted-foreground">
+                            {only.phone}
+                        </span>
+                        <span
+                            aria-hidden="true"
+                            className="text-muted-foreground/45"
+                        >
+                            ·
+                        </span>
+                        <span className="min-w-0 wrap-anywhere text-foreground/85">
+                            <AddressText
+                                regionCode={only.regionCode}
+                                regionName={only.regionName}
+                                address={only.address}
+                            />
+                        </span>
+                    </div>
+                    <Button
+                        id={`${idPrefix}-copy-single`}
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        className={detailWorkspaceStyles.quietButton}
+                        onClick={() => copyAddressText(only)}
+                    >
+                        <CopyIcon data-icon="inline-start" aria-hidden="true" />
+                        复制地址
+                    </Button>
+                </section>
+            )
+        }
         return (
             <DetailWorkspaceSection
                 id={sectionId}
@@ -382,22 +479,42 @@ export function DeliveryAllocationOverview({
                             </span>
                             」的 {focusedLine.uniqueAddressCount} 处收货地址
                         </span>
-                        {onClearFocus ? (
-                            <Button
-                                id={`${idPrefix}-clear-focus`}
-                                type="button"
-                                variant="ghost"
-                                size="xs"
-                                className="h-control-xs px-2 text-xs text-info-soft-foreground hover:bg-info-soft"
-                                onClick={onClearFocus}
-                            >
-                                <XIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                />
-                                查看整单全部地址
-                            </Button>
-                        ) : null}
+                        <div className="flex flex-wrap items-center gap-1">
+                            {onReturnToLine ? (
+                                <Button
+                                    id={`${idPrefix}-return-line`}
+                                    type="button"
+                                    variant="ghost"
+                                    size="xs"
+                                    className="h-control-xs px-2 text-xs text-info-soft-foreground hover:bg-info-soft"
+                                    onClick={() =>
+                                        onReturnToLine(focusedLine.lineId)
+                                    }
+                                >
+                                    <ArrowUpIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
+                                    返回第 {focusedLine.lineNo} 行
+                                </Button>
+                            ) : null}
+                            {onClearFocus ? (
+                                <Button
+                                    id={`${idPrefix}-clear-focus`}
+                                    type="button"
+                                    variant="ghost"
+                                    size="xs"
+                                    className="h-control-xs px-2 text-xs text-info-soft-foreground hover:bg-info-soft"
+                                    onClick={onClearFocus}
+                                >
+                                    <XIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
+                                    查看整单全部地址
+                                </Button>
+                            ) : null}
+                        </div>
                     </div>
                 ) : null}
 

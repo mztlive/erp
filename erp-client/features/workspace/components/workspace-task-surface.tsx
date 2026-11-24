@@ -573,7 +573,7 @@ function PurchasePaymentRequestSurface({
 
     const compactStepperHistoryQuery = useApprovalHistoryInfiniteQuery(
         { instanceId: instanceId ?? "", order: "desc" },
-        !showDecisionRail && !isPaymentExecution && Boolean(instanceId),
+        !isPaymentExecution && Boolean(instanceId),
     )
     const compactStepperRoute = compactStepperHistoryQuery.data?.pages[0]?.route
 
@@ -608,9 +608,12 @@ function PurchasePaymentRequestSurface({
                           defaultTab: "trail",
                           collapsible: true,
                           resizable: true,
-                          defaultWidthPercent: 24,
+                          defaultWidthPercent: 28,
                           minWidthPercent: 24,
-                          maxWidthPercent: 50,
+                          maxWidthPercent: 52,
+                          storageKey: "erp.workspace.approvalRailWidth",
+                          preferredMinWidthPercent:
+                              railTab === "materials" ? 42 : undefined,
                           collapsed: railCollapsed,
                           onCollapsedChange: setRailCollapsed,
                           label: "审批进度、轨迹与附件对照",
@@ -667,9 +670,7 @@ function PurchasePaymentRequestSurface({
                 />
             }
             headerSupplement={
-                !showDecisionRail &&
-                !isPaymentExecution &&
-                compactStepperRoute?.nodes.length ? (
+                !isPaymentExecution && compactStepperRoute?.nodes.length ? (
                     <ApprovalRouteStepper
                         route={compactStepperRoute}
                         instanceStatus={paymentApprovalInstance?.status}
@@ -678,6 +679,9 @@ function PurchasePaymentRequestSurface({
                         }
                         latestRejectionByName={
                             paymentApprovalInstance?.latestRejectionByName
+                        }
+                        hideRejectionBanner={
+                            item.approval?.status === "REJECTED"
                         }
                         idPrefix={`workspace-ppr-compact-stepper-${toAutomationIdSegment(item.workItemId)}`}
                     />

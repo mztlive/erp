@@ -527,9 +527,7 @@ export function WorkspaceTaskInspector({
                         <span>{AUTO_NEXT_LABEL}</span>
                     </label>
                 ) : (
-                    <span className="text-muted-foreground">
-                        原位核对模式（共享当前会话缓存）
-                    </span>
+                    <span className="text-muted-foreground">只读核对</span>
                 )}
                 <Button
                     id={`workspace-inspector-refresh-${segment}`}

@@ -172,6 +172,8 @@ export type ApprovalActionBarProps = Readonly<{
     highRiskReasons?: readonly string[]
     /** 自定义高危核对摘要区块，展示在单层 FormalActionConfirmDialog 顶部。 */
     highRiskSummary?: React.ReactNode
+    /** 结合当前单据检测出的具体异常，前置展示的驳回快捷短语。 */
+    dynamicRejectPhrases?: readonly string[]
     onDecisionApplied?: (view: ApprovalCommandView) => void
     onRefreshTask?: () => void
     /** 展示承载形态：`"sheet"` 用于 768px 轻作业抽屉底栏，约束内联输入框与展开意见区宽度避免溢出。 */
@@ -213,6 +215,7 @@ export function ApprovalActionBar({
     highRisk = false,
     highRiskReasons,
     highRiskSummary,
+    dynamicRejectPhrases,
     onDecisionApplied,
     onRefreshTask,
     presentation = "default",
@@ -330,10 +333,20 @@ export function ApprovalActionBar({
     const trimmedComment = comment.trim()
     const commentBytes = utf8ByteLength(trimmedComment)
     const overByteLimit = commentBytes > BPM_REASON_MAX_UTF8_BYTES
-    const quickRejectPhrases = React.useMemo(
-        () => quickRejectPhrasesForDocumentType(documentType),
-        [documentType],
-    )
+    const quickRejectPhrases = React.useMemo(() => {
+        const base = quickRejectPhrasesForDocumentType(documentType)
+        if (!dynamicRejectPhrases?.length) return base
+        const seen = new Set<string>()
+        const merged: string[] = []
+        for (const phrase of [...dynamicRejectPhrases, ...base]) {
+            const trimmed = phrase.trim()
+            if (!trimmed || seen.has(trimmed)) continue
+            seen.add(trimmed)
+            merged.push(trimmed)
+            if (merged.length >= 6) break
+        }
+        return merged
+    }, [documentType, dynamicRejectPhrases])
 
     const validateComment = React.useCallback(
         (decision: ApprovalDecision): string | null => {

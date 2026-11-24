@@ -1,4 +1,4 @@
-import { FileTextIcon, TriangleAlertIcon } from "lucide-react"
+import { Columns2Icon, FileTextIcon, TriangleAlertIcon } from "lucide-react"
 
 import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -13,26 +13,28 @@ import {
 
 const warningDetails: Record<string, string> = {
     来源销售缺失: "未保留可核对的来源销售明细，请联系申请人补充依据",
-    销售预估采购价未填写: "来源销售未填写预估采购供给价",
     数值格式需核对: "价格或数量格式异常，请核对原始资料",
-    交期资料不完整: "销售承诺交期或采购预计交期缺失",
     采购单价缺失: "未记录采购单价，请核对计价依据",
     采购数量缺失: "未记录采购数量，请核对采购范围",
 }
 
-/** 仅在存在审批异常、品规差异或多来源销售单链接时展示紧贴主行的异常核对副条。 */
+/**
+ * 仅在存在可操作审批风险（负毛利、超预估、超量、延期、品规/单位差异）或多来源销售单链接时
+ * 展示紧贴主行的核对副条；纯参考缺省（未填预估价、交期资料不完整）收进单元格弱化提示，避免满屏黄条。
+ */
 export function hasPurchaseRiskStrip(
     comparison: PurchaseComparison,
     negativeMargin: boolean,
     source?: PurchaseSource,
 ): boolean {
-    return Boolean(negativeMargin || comparison.warnings.length > 0 || source)
+    return Boolean(
+        negativeMargin || comparison.actionableWarnings.length > 0 || source,
+    )
 }
 
 /**
  * 紧跟数据行的紧凑核对副条：
  * 审批人无需逐行点击「展开」，零点击即可直读负毛利、超预估差额、超量、延期及品规差异证据。
- * 收货地址已统一上提至独立「交付与收货地址」分区，此处不再重复堆砌地址列表。
  */
 export function PurchaseLineRiskStrip({
     line,
@@ -41,6 +43,7 @@ export function PurchaseLineRiskStrip({
     source,
     prefix,
     onPreview,
+    onCompareSource,
 }: {
     line: ApprovalPurchaseLine
     comparison: PurchaseComparison
@@ -48,12 +51,14 @@ export function PurchaseLineRiskStrip({
     source?: PurchaseSource
     prefix: string
     onPreview: (revisionId: string) => void
+    onCompareSource?: (revisionId: string) => void
 }) {
-    const mismatchedProduct = comparison.warnings.includes("商品 / 规格不一致")
-    const otherWarnings = comparison.warnings.filter(
+    const mismatchedProduct = comparison.mismatchedProduct
+    const otherWarnings = comparison.actionableWarnings.filter(
         (warning) => warning !== "商品 / 规格不一致",
     )
-    const hasRisk = negativeMargin || comparison.warnings.length > 0
+    const isHighRisk = negativeMargin || comparison.highWarnings.length > 0
+    const hasRisk = negativeMargin || comparison.actionableWarnings.length > 0
 
     return (
         <div
@@ -62,7 +67,7 @@ export function PurchaseLineRiskStrip({
             aria-label={`第 ${line.line_no} 项核对提示`}
             className={cn(
                 "flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-l-2 py-2 pr-3 pl-3 text-xs",
-                negativeMargin
+                isHighRisk
                     ? "border-destructive bg-destructive-soft/25 text-destructive-soft-foreground"
                     : hasRisk
                       ? "border-warning bg-warning-soft/35 text-warning-soft-foreground"
@@ -93,7 +98,7 @@ export function PurchaseLineRiskStrip({
                                                     comparison.priceDifference
                                                 }
                                                 display="exact"
-                                                className="[&_[data-slot=money-value-number]]:text-inherit"
+                                                inheritColor
                                             />
                                             {comparison.pricePercent ? (
                                                 <>
@@ -114,14 +119,15 @@ export function PurchaseLineRiskStrip({
                                                         value={
                                                             comparison.priceDifferenceTotal
                                                         }
-                                                        className="[&_[data-slot=money-value-number]]:text-inherit"
+                                                        display="exact"
+                                                        inheritColor
                                                     />
                                                 </>
                                             ) : null}
                                         </>
                                     ) : warning === "本次数量超过销售需求" &&
                                       comparison.quantityExcess ? (
-                                        <>
+                                        <span className="font-medium">
                                             超来源销售需求{" "}
                                             <QuantityValue
                                                 value={
@@ -130,15 +136,15 @@ export function PurchaseLineRiskStrip({
                                                 unit={line.unitName}
                                             />
                                             ，请核对超量依据
-                                        </>
+                                        </span>
                                     ) : warning === "单位需核对" ? (
-                                        <>
+                                        <span className="font-medium">
                                             单位不一致：销售「
                                             {line.source?.unitName || "未记录"}
                                             」vs 采购「
                                             {line.unitName || "未记录"}
                                             」（暂不比对单价与数量）
-                                        </>
+                                        </span>
                                     ) : warning.startsWith("交期晚 ") ? (
                                         <>
                                             预计交期晚于客户承诺{" "}
@@ -159,7 +165,7 @@ export function PurchaseLineRiskStrip({
 
                 {mismatchedProduct && line.source ? (
                     <p className="pl-5 wrap-anywhere text-foreground/85">
-                        <span className="font-medium text-warning-soft-foreground">
+                        <span className="font-medium text-destructive-soft-foreground">
                             品规差异：
                         </span>
                         销售要求「
@@ -187,6 +193,19 @@ export function PurchaseLineRiskStrip({
                         ) || "未记录销售单号"}{" "}
                         · V{source.revision_no}
                     </span>
+                    {onCompareSource ? (
+                        <Button
+                            id={`${prefix}-source-compare`}
+                            type="button"
+                            variant="link"
+                            size="xs"
+                            className="h-auto px-0 text-xs text-primary"
+                            onClick={() => onCompareSource(source.revision_id)}
+                        >
+                            <Columns2Icon aria-hidden="true" />
+                            右侧对照
+                        </Button>
+                    ) : null}
                     <Button
                         id={`${prefix}-source`}
                         type="button"

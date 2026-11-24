@@ -1,19 +1,19 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
-    ChevronLeftIcon,
-    ChevronRightIcon,
     FileTextIcon,
     MapPinIcon,
-    SearchIcon,
+    MessageSquareTextIcon,
+    PaperclipIcon,
     TriangleAlertIcon,
-    XIcon,
 } from "lucide-react"
 
 import {
     BusinessFailureState,
     DeliveryAllocationOverview,
+    DetailWorkspaceMetricItem,
+    DetailWorkspaceMetrics,
     DetailWorkspaceSection,
     MoneyValue,
     QuantityValue,
@@ -23,7 +23,6 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import {
     Table,
@@ -34,134 +33,45 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import type { ApprovalSalesSubmission } from "@/features/approval-workflow/api/materials"
 import { ApprovalMaterialFiles } from "@/features/approval-workflow/components/approval-material-files"
 import {
+    approvalSalesTaxPoint,
     approvalSalesUnit,
     displayReadableName,
     displayUnixDate,
+    displayUnixSeconds,
 } from "@/features/approval-workflow/display"
 import { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-approval-materials"
 import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { welfareScenarioLabel } from "@/lib/business-options"
 import { fullDeliveryAddress } from "@/lib/delivery-address"
 import {
     buildDeliveryAllocationSummary,
     formatLineDeliveryHint,
     type DeliveryAllocationLineInput,
 } from "@/lib/delivery-allocation-summary"
-import { displayBusinessText } from "@/lib/display-name"
-import {
-    compactFixed,
-    compareDecimal,
-    divideFixed,
-    multiplyFixed,
-    subtractFixed,
-    sumFixed,
-} from "@/lib/fixed-decimal"
-import { salesLinePriceComparison } from "@/lib/sales-line-prices"
+import { displayBusinessText, displayName } from "@/lib/display-name"
+import { multiplyFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
+import {
+    assessSalesApprovalRisk,
+    buildSalesApprovalMetrics,
+    evaluateSalesApprovalLines,
+    parseSalesResubmission,
+    type EvaluatedSalesLine,
+} from "../lib/sales-approval-model"
 import type { WorkspaceWorkItem } from "../types"
+import { WorkspaceApprovalResubmissionBanner } from "./workspace-approval-resubmission-banner"
+import {
+    APPROVAL_TABLE_DEFAULT_PAGE_SIZE,
+    ApprovalLineFilterBar,
+    ApprovalLinePagination,
+} from "./workspace-approval-table-controls"
 import type { WorkspacePaperTarget } from "./workspace-document-paper-dialog"
 
+export { assessSalesApprovalRisk }
+
 const dateLabel = (value: number | null) => displayUnixDate(value)
-const PAGE_SIZE = 20
-
-type SalesApprovalLine = ApprovalSalesSubmission["lines"][number]
-
-function isNegativeMarginLine(
-    line: SalesApprovalLine,
-    isCard: boolean,
-): boolean {
-    if (isCard || line.pricing_mode === "GIFT") return false
-    const unitPrice = line.unit_price_gross
-    const supplyPrice = line.procurement_supply_price_gross
-    if (
-        unitPrice == null ||
-        unitPrice === "" ||
-        supplyPrice == null ||
-        supplyPrice === ""
-    ) {
-        return false
-    }
-    try {
-        return compareDecimal(unitPrice, supplyPrice, 6) < 0
-    } catch {
-        return false
-    }
-}
-
-function calculateMarginRate(
-    sellingPrice: string | null | undefined,
-    costPrice: string | null | undefined,
-): { percent: string; negative: boolean } | null {
-    if (!sellingPrice || !costPrice) return null
-    try {
-        if (compareDecimal(sellingPrice, "0", 6) <= 0) return null
-        const diff = subtractFixed(sellingPrice, costPrice, {
-            maxScale: 6,
-            outputScale: 6,
-        })
-        const negative = compareDecimal(diff, "0", 6) < 0
-        const absDiff = negative ? diff.slice(1) : diff
-        const rate = divideFixed(
-            multiplyFixed(absDiff, "100", {
-                leftMaxScale: 6,
-                rightMaxScale: 0,
-                outputScale: 6,
-            }),
-            sellingPrice,
-            {
-                numeratorMaxScale: 6,
-                denominatorMaxScale: 6,
-                outputScale: 1,
-            },
-        )
-        return {
-            percent: negative ? `-${rate}` : rate,
-            negative,
-        }
-    } catch {
-        return null
-    }
-}
-
-/** 判定销售审批提交是否存在负毛利等高危复核信号（严格使用定点十进制比较）。 */
-export function assessSalesApprovalRisk(
-    submission?: ApprovalSalesSubmission | null,
-): { highRisk: boolean; reasons: string[] } {
-    if (!submission || submission.business_type === "VOUCHER") {
-        return { highRisk: false, reasons: [] }
-    }
-    const negativeLines = submission.lines.filter((line) =>
-        isNegativeMarginLine(line, false),
-    )
-    if (negativeLines.length === 0) {
-        return { highRisk: false, reasons: [] }
-    }
-    const reasons: string[] = []
-    if (negativeLines.length === 1) {
-        const line = negativeLines[0]!
-        const name =
-            displayReadableName(line.item_name_snapshot, line.sku_id) ||
-            "未命名商品"
-        reasons.push(
-            `第 ${line.line_no} 行「${name}」含税售价低于采购供给价（负毛利风险）`,
-        )
-    } else {
-        const lineNos = negativeLines
-            .slice(0, 3)
-            .map((line) => `第 ${line.line_no} 行`)
-            .join("、")
-        const suffix =
-            negativeLines.length > 3 ? `等 ${negativeLines.length} 行` : ""
-        reasons.push(
-            `共 ${negativeLines.length} 行商品含税售价低于采购供给价（负毛利风险：${lineNos}${suffix}）`,
-        )
-    }
-    return { highRisk: true, reasons }
-}
 
 /** 全部明细与纸质预览读取同一审批提交，不回退到当前销售单。 */
 export function WorkspaceSalesApproval({
@@ -169,6 +79,7 @@ export function WorkspaceSalesApproval({
     item,
     onPreview,
     onSelectFile,
+    onOpenMaterials,
     activeFileId,
     hideEmbeddedMaterials = false,
 }: {
@@ -176,6 +87,7 @@ export function WorkspaceSalesApproval({
     item: WorkspaceWorkItem
     onPreview: (target: WorkspacePaperTarget) => void
     onSelectFile?: (fileId: string) => void
+    onOpenMaterials?: () => void
     activeFileId?: string
     hideEmbeddedMaterials?: boolean
 }) {
@@ -193,9 +105,22 @@ export function WorkspaceSalesApproval({
     const [search, setSearch] = useState("")
     const [riskOnly, setRiskOnly] = useState(false)
     const [page, setPage] = useState(1)
+    const [pageSize, setPageSize] = useState(APPROVAL_TABLE_DEFAULT_PAGE_SIZE)
     const [focusedDeliveryLineId, setFocusedDeliveryLineId] = useState<
         string | null
     >(null)
+    const [highlightedLineId, setHighlightedLineId] = useState<string | null>(
+        null,
+    )
+    const highlightTimerRef = useRef<number | null>(null)
+
+    useEffect(() => {
+        return () => {
+            if (highlightTimerRef.current != null) {
+                window.clearTimeout(highlightTimerRef.current)
+            }
+        }
+    }, [])
 
     const deliveryLines = useMemo<
         readonly DeliveryAllocationLineInput[]
@@ -231,48 +156,30 @@ export function WorkspaceSalesApproval({
         [deliverySummary.itemGroups],
     )
 
-    const evaluatedLines = useMemo(() => {
-        if (!submission?.lines.length) return []
-        return submission.lines.map((line) => {
-            const unit = approvalSalesUnit(line, isCard, names)
-            const name =
-                displayReadableName(line.item_name_snapshot, line.sku_id) ||
-                "未记录商品名称"
-            const spec = displayBusinessText(line.spec_snapshot, line.sku_id)
-            const welfare = welfareScenarioLabel(line.welfare_scenario ?? "")
-            const negativeMargin = isNegativeMarginLine(line, isCard)
-            const priceCheck = isCard ? null : salesLinePriceComparison(line)
-            const isGift = line.pricing_mode === "GIFT"
-            const margin =
-                !isCard && !isGift
-                    ? calculateMarginRate(
-                          line.unit_price_gross,
-                          line.procurement_supply_price_gross,
-                      )
-                    : null
-            const hasRisk =
-                negativeMargin ||
-                Boolean(
-                    priceCheck &&
-                    (priceCheck.change != null ||
-                        priceCheck.warnings.length > 0),
-                )
-            return {
-                line,
-                unit,
-                name,
-                spec: spec && spec !== "无规格" ? spec : undefined,
-                welfare: welfare || undefined,
-                negativeMargin,
-                priceCheck,
-                isGift,
-                margin,
-                hasRisk,
-            }
-        })
-    }, [isCard, names, submission?.lines])
+    const evaluatedLines = useMemo(
+        () =>
+            evaluateSalesApprovalLines(submission, (line) =>
+                approvalSalesUnit(line, isCard, names),
+            ),
+        [isCard, names, submission],
+    )
 
-    const riskCount = evaluatedLines.filter((entry) => entry.hasRisk).length
+    const metrics = useMemo(
+        () => buildSalesApprovalMetrics(submission, evaluatedLines),
+        [evaluatedLines, submission],
+    )
+
+    const resubmission = useMemo(
+        () =>
+            query.data
+                ? parseSalesResubmission(
+                      query.data.display.source.extra_sections,
+                      item,
+                  )
+                : null,
+        [item, query.data],
+    )
+
     const needle = search.trim().toLocaleLowerCase()
     const filteredLines = useMemo(() => {
         return evaluatedLines.filter((entry) => {
@@ -296,84 +203,17 @@ export function WorkspaceSalesApproval({
         })
     }, [evaluatedLines, needle, riskOnly])
 
-    const showToolbar =
-        Boolean(submission) &&
-        (evaluatedLines.length > 10 ||
-            riskCount > 0 ||
-            Boolean(search) ||
-            riskOnly)
-    const pageCount = Math.max(1, Math.ceil(filteredLines.length / PAGE_SIZE))
+    const pageCount = Math.max(1, Math.ceil(filteredLines.length / pageSize))
     const currentPage = Math.min(page, pageCount)
     const visibleLines = filteredLines.slice(
-        (currentPage - 1) * PAGE_SIZE,
-        currentPage * PAGE_SIZE,
+        (currentPage - 1) * pageSize,
+        currentPage * pageSize,
     )
 
-    const footerTotals = useMemo(() => {
-        if (!submission?.lines.length) return null
-        const units = new Set<string>()
-        const quantities: string[] = []
-        let allPricedGoodsHaveSupply = !isCard
-        let totalRevenue = "0"
-        let totalSupplyCost = "0"
-        let pricedGoodsCount = 0
-
-        for (const entry of evaluatedLines) {
-            const qty =
-                entry.line.quantity ??
-                (entry.line.card_count == null
-                    ? null
-                    : String(entry.line.card_count))
-            if (qty != null) {
-                quantities.push(qty)
-                units.add(entry.unit ?? "")
-            }
-            if (!isCard && !entry.isGift) {
-                pricedGoodsCount += 1
-                const supply = entry.line.procurement_supply_price_gross
-                if (supply != null && supply !== "" && qty != null) {
-                    try {
-                        const lineCost = multiplyFixed(supply, qty, {
-                            leftMaxScale: 6,
-                            rightMaxScale: 6,
-                            outputScale: 2,
-                        })
-                        totalRevenue = sumFixed(
-                            [totalRevenue, entry.line.gross_amount],
-                            { maxScale: 2, outputScale: 2 },
-                        )
-                        totalSupplyCost = sumFixed(
-                            [totalSupplyCost, lineCost],
-                            { maxScale: 2, outputScale: 2 },
-                        )
-                    } catch {
-                        allPricedGoodsHaveSupply = false
-                    }
-                } else {
-                    allPricedGoodsHaveSupply = false
-                }
-            }
-        }
-
-        const totalQuantity =
-            units.size === 1 && quantities.length === evaluatedLines.length
-                ? {
-                      value: compactFixed(
-                          sumFixed(quantities, { maxScale: 6, outputScale: 6 }),
-                      ),
-                      unit: [...units][0] || undefined,
-                  }
-                : null
-
-        const overallMargin =
-            allPricedGoodsHaveSupply && pricedGoodsCount > 0
-                ? calculateMarginRate(totalRevenue, totalSupplyCost)
-                : null
-
-        return { totalQuantity, overallMargin }
-    }, [evaluatedLines, isCard, submission?.lines.length])
-
     const deliverySectionId = `${prefix}-delivery-section`
+    const materialsSectionId = `${prefix}-materials-section`
+    const linesSectionId = `${prefix}-lines-section`
+
     const handleFocusDelivery = (lineId: string) => {
         setFocusedDeliveryLineId(lineId)
         window.requestAnimationFrame(() => {
@@ -383,19 +223,137 @@ export function WorkspaceSalesApproval({
         })
     }
 
+    const handleReturnToLine = (lineId: string) => {
+        const index = filteredLines.findIndex(
+            (entry) => entry.line.id === lineId,
+        )
+        if (index >= 0) {
+            const targetPage = Math.floor(index / pageSize) + 1
+            if (targetPage !== currentPage) setPage(targetPage)
+        } else {
+            setRiskOnly(false)
+            setSearch("")
+            const rawIndex = evaluatedLines.findIndex(
+                (entry) => entry.line.id === lineId,
+            )
+            if (rawIndex >= 0) {
+                setPage(Math.floor(rawIndex / pageSize) + 1)
+            }
+        }
+        setHighlightedLineId(lineId)
+        if (highlightTimerRef.current != null) {
+            window.clearTimeout(highlightTimerRef.current)
+        }
+        highlightTimerRef.current = window.setTimeout(() => {
+            setHighlightedLineId(null)
+        }, 2200)
+        window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(() => {
+                document
+                    .getElementById(
+                        `${prefix}-row-${toAutomationIdSegment(lineId)}`,
+                    )
+                    ?.scrollIntoView({ behavior: "smooth", block: "center" })
+            })
+        })
+    }
+
+    const handleFilterToRisks = () => {
+        setRiskOnly(true)
+        setSearch("")
+        setPage(1)
+        window.requestAnimationFrame(() => {
+            document
+                .getElementById(linesSectionId)
+                ?.scrollIntoView({ behavior: "smooth", block: "nearest" })
+        })
+    }
+
+    const handleOpenAttachmentShortcut = () => {
+        if (onOpenMaterials) {
+            onOpenMaterials()
+            return
+        }
+        document
+            .getElementById(materialsSectionId)
+            ?.scrollIntoView({ behavior: "smooth", block: "nearest" })
+    }
+
+    const commercialFacts = useMemo(() => {
+        if (!submission) return []
+        const submitter = displayName(
+            query.data?.display.source.submitter_name,
+            submission.submitted_by,
+        )
+        const submittedAt = displayUnixSeconds(submission.submitted_at)?.label
+        const items: Array<{
+            label: string
+            value: string
+            numeric?: boolean
+        }> = [
+            {
+                label: "业务性质",
+                value: isCard ? "卡券" : "实物与服务",
+            },
+        ]
+        const push = (
+            label: string,
+            value: string | null | undefined,
+            numeric = false,
+        ) => {
+            const trimmed = value?.trim()
+            if (!trimmed || trimmed === "—") return
+            items.push({ label, value: trimmed, numeric })
+        }
+        push("结算主体", displayName(submission.settlement_party_name))
+        push("项目", displayName(submission.project_name))
+        push("开票要求", submission.invoice_type)
+        push("约定税点", approvalSalesTaxPoint(submission.tax_point), true)
+        push("收款到期日", submission.receivable_due_date, true)
+        if (isCard && submission.voucher_expiry_at != null) {
+            push("卡券履约期限", dateLabel(submission.voucher_expiry_at), true)
+        }
+        push("申请人", submitter)
+        push("提交时间", submittedAt, true)
+        return items
+    }, [isCard, query.data?.display.source.submitter_name, submission])
+
     const showDeliverySection = Boolean(
         submission && (!isCard || deliverySummary.totalRows > 0),
     )
 
-    return (
-        <>
+    if (query.isPending) {
+        return (
+            <DetailWorkspaceSection divider={false} ariaLabel="销售审批资料">
+                <p
+                    role="status"
+                    className="flex items-center gap-2 text-xs text-muted-foreground"
+                >
+                    <Spinner />
+                    正在读取销售审批资料…
+                </p>
+            </DetailWorkspaceSection>
+        )
+    }
+
+    if (query.isError) {
+        return (
+            <DetailWorkspaceSection divider={false} ariaLabel="销售审批资料">
+                <BusinessFailureState
+                    id={`${prefix}-retry`}
+                    title="销售审批资料读取失败"
+                    error={query.error}
+                    onRetry={() => void query.refetch()}
+                />
+            </DetailWorkspaceSection>
+        )
+    }
+
+    if (!submission || !metrics) {
+        return (
             <DetailWorkspaceSection
                 title="销售明细"
-                subtitle={
-                    submission ? `共 ${submission.lines.length} 行` : undefined
-                }
                 ariaLabel="销售明细"
-                className="@container/sales-lines"
                 actions={
                     <Button
                         id={`${prefix}-preview`}
@@ -416,383 +374,622 @@ export function WorkspaceSalesApproval({
                     </Button>
                 }
             >
-                {query.isPending ? (
-                    <p
-                        role="status"
-                        className="flex items-center gap-2 text-xs text-muted-foreground"
-                    >
-                        <Spinner />
-                        正在读取销售明细…
-                    </p>
-                ) : query.isError ? (
-                    <BusinessFailureState
-                        id={`${prefix}-retry`}
-                        title="销售明细读取失败"
-                        error={query.error}
-                        onRetry={() => void query.refetch()}
-                    />
-                ) : !submission ? (
-                    <Alert variant="warning">
-                        <AlertDescription>
-                            本次提交未保留完整销售明细，请查看提交资料及附件核对。
-                        </AlertDescription>
-                    </Alert>
-                ) : (
-                    <>
-                        {risk.highRisk ? (
-                            <Alert variant="destructive" role="alert">
-                                <TriangleAlertIcon aria-hidden="true" />
-                                <AlertTitle>存在负毛利风险</AlertTitle>
-                                <AlertDescription>
-                                    {risk.reasons.join("；")}
-                                </AlertDescription>
-                            </Alert>
-                        ) : null}
+                <Alert variant="warning">
+                    <AlertDescription>
+                        本次提交未保留完整销售明细，请查看提交资料及附件核对。
+                    </AlertDescription>
+                </Alert>
+            </DetailWorkspaceSection>
+        )
+    }
 
-                        {showToolbar ? (
-                            <div
-                                className="flex flex-wrap items-center justify-between gap-2.5"
-                                aria-label="销售明细筛选"
-                            >
-                                <div
-                                    role="group"
-                                    aria-label="风险筛选"
-                                    className={detailWorkspaceStyles.subTabs}
-                                >
-                                    <button
-                                        id={`${prefix}-filter-all`}
+    const contractNo = displayName(submission.contract_no)
+
+    return (
+        <div
+            data-slot="workspace-sales-approval"
+            className="@container/sales-lines flex min-w-0 flex-col"
+        >
+            {resubmission || risk.highRisk ? (
+                <div className="space-y-2.5 pt-3.5">
+                    {resubmission ? (
+                        <WorkspaceApprovalResubmissionBanner
+                            roundNo={resubmission.roundNo}
+                            resubmissionReason={resubmission.resubmissionReason}
+                            previousRejection={resubmission.previousRejection}
+                        />
+                    ) : null}
+
+                    {risk.highRisk ? (
+                        <Alert variant="destructive" role="alert">
+                            <TriangleAlertIcon aria-hidden="true" />
+                            <AlertTitle className="flex flex-wrap items-center justify-between gap-2">
+                                <span>销售价格需重点复核</span>
+                                {metrics.riskLineCount > 0 && !riskOnly ? (
+                                    <Button
+                                        id={`${prefix}-alert-filter-risk`}
                                         type="button"
-                                        aria-pressed={!riskOnly}
-                                        data-active={
-                                            !riskOnly ? "true" : undefined
-                                        }
-                                        className={detailWorkspaceStyles.subTab}
-                                        onClick={() => {
-                                            setRiskOnly(false)
-                                            setPage(1)
-                                        }}
+                                        variant="outline"
+                                        size="xs"
+                                        className="h-control-xs border-destructive-border bg-card/80 px-2 text-xs text-destructive-soft-foreground hover:bg-card"
+                                        onClick={handleFilterToRisks}
                                     >
-                                        <span>全部</span>
-                                        <span className="num text-xs text-muted-foreground">
-                                            {evaluatedLines.length}
+                                        仅看风险项（{metrics.riskLineCount}）
+                                    </Button>
+                                ) : null}
+                            </AlertTitle>
+                            <AlertDescription>
+                                {risk.reasons.join("；")}
+                            </AlertDescription>
+                        </Alert>
+                    ) : null}
+                </div>
+            ) : null}
+
+            <div className="border-b border-border/60">
+                <DetailWorkspaceMetrics
+                    columns={4}
+                    variant="bar"
+                    ariaLabel="销售审批关键决策指标"
+                >
+                    <DetailWorkspaceMetricItem
+                        label="含税总额"
+                        emphasis="primary"
+                        value={
+                            <MoneyValue
+                                display="exact"
+                                value={submission.gross_amount}
+                            />
+                        }
+                        detail={
+                            <>
+                                <span>
+                                    不含税{" "}
+                                    <MoneyValue
+                                        display="exact"
+                                        value={submission.net_amount}
+                                    />
+                                </span>
+                                <span aria-hidden="true">·</span>
+                                <span>
+                                    税{" "}
+                                    <MoneyValue
+                                        display="exact"
+                                        value={submission.tax_amount}
+                                    />
+                                </span>
+                            </>
+                        }
+                    />
+
+                    {isCard ? (
+                        <DetailWorkspaceMetricItem
+                            label="面额折率"
+                            value={metrics.overallVoucherDiscount?.label ?? "—"}
+                            detail={
+                                metrics.totalFaceValue ? (
+                                    <>
+                                        <span>
+                                            总面额{" "}
+                                            <MoneyValue
+                                                display="exact"
+                                                value={metrics.totalFaceValue}
+                                            />
+                                        </span>
+                                        {metrics.totalCards ? (
+                                            <>
+                                                <span aria-hidden="true">
+                                                    ·
+                                                </span>
+                                                <span className="num">
+                                                    共 {metrics.totalCards} 张
+                                                </span>
+                                            </>
+                                        ) : null}
+                                    </>
+                                ) : (
+                                    "未记录卡券面额"
+                                )
+                            }
+                        />
+                    ) : (
+                        <DetailWorkspaceMetricItem
+                            label="预估毛利"
+                            value={
+                                metrics.estimatedMargin ? (
+                                    <span
+                                        className={cn(
+                                            "inline-flex flex-wrap items-baseline gap-x-2",
+                                            metrics.estimatedMargin.negative &&
+                                                "text-destructive-soft-foreground",
+                                        )}
+                                    >
+                                        <span>
+                                            {metrics.estimatedMargin.negative
+                                                ? "亏 "
+                                                : ""}
+                                            <MoneyValue
+                                                display="exact"
+                                                value={
+                                                    metrics.estimatedMargin
+                                                        .absAmount
+                                                }
+                                                inheritColor={
+                                                    metrics.estimatedMargin
+                                                        .negative
+                                                }
+                                            />
+                                        </span>
+                                        <span className="num text-body-compact font-medium">
+                                            {metrics.estimatedMargin.negative
+                                                ? `-${metrics.estimatedMargin.absPercent}%`
+                                                : `${metrics.estimatedMargin.percent}%`}
+                                        </span>
+                                    </span>
+                                ) : (
+                                    <span className="text-body-compact font-medium text-muted-foreground">
+                                        未填供给价
+                                    </span>
+                                )
+                            }
+                            detail={
+                                metrics.estimatedCostTotal ? (
+                                    <>
+                                        <span>
+                                            成本{" "}
+                                            <MoneyValue
+                                                display="exact"
+                                                value={
+                                                    metrics.estimatedCostTotal
+                                                }
+                                            />
+                                        </span>
+                                        {metrics.giftCostTotal ? (
+                                            <>
+                                                <span aria-hidden="true">
+                                                    ·
+                                                </span>
+                                                <span>
+                                                    含赠品{" "}
+                                                    <MoneyValue
+                                                        display="exact"
+                                                        value={
+                                                            metrics.giftCostTotal
+                                                        }
+                                                    />
+                                                </span>
+                                            </>
+                                        ) : null}
+                                        {metrics.partialCostCoverage ? (
+                                            <>
+                                                <span aria-hidden="true">
+                                                    ·
+                                                </span>
+                                                <span className="num text-warning-soft-foreground">
+                                                    已计{" "}
+                                                    {metrics.costCoveredCount}/
+                                                    {metrics.costExpectedCount}{" "}
+                                                    行
+                                                </span>
+                                            </>
+                                        ) : null}
+                                    </>
+                                ) : (
+                                    "无法测算整单毛利"
+                                )
+                            }
+                        />
+                    )}
+
+                    <DetailWorkspaceMetricItem
+                        label="核对风险"
+                        value={
+                            metrics.highRiskLineCount > 0 ? (
+                                <span className="text-destructive-soft-foreground">
+                                    {metrics.highRiskLineCount} 项高危
+                                </span>
+                            ) : metrics.priceAdjustedCount > 0 ? (
+                                <span className="text-warning-soft-foreground">
+                                    {metrics.priceAdjustedCount} 项调价
+                                </span>
+                            ) : (
+                                <span className="text-body-compact font-medium text-success-soft-foreground">
+                                    无价格异常
+                                </span>
+                            )
+                        }
+                        detail={
+                            metrics.riskLineCount > 0 ? (
+                                <button
+                                    id={`${prefix}-kpi-filter-risk`}
+                                    type="button"
+                                    onClick={handleFilterToRisks}
+                                    className="cursor-pointer text-left text-primary hover:underline"
+                                >
+                                    {[
+                                        metrics.negativeMarginCount > 0
+                                            ? `负毛利 ${metrics.negativeMarginCount}`
+                                            : null,
+                                        metrics.belowFloorCount > 0
+                                            ? `低原底价 ${metrics.belowFloorCount}`
+                                            : null,
+                                        metrics.priceAdjustedCount > 0
+                                            ? `底价调整 ${metrics.priceAdjustedCount}`
+                                            : null,
+                                    ]
+                                        .filter(Boolean)
+                                        .join(" · ")}{" "}
+                                    · 点击筛选
+                                </button>
+                            ) : metrics.missingSupplyCount > 0 ? (
+                                <span className="num">
+                                    {metrics.missingSupplyCount} 项未填供给价
+                                </span>
+                            ) : (
+                                "全部明细价格正常"
+                            )
+                        }
+                    />
+
+                    <DetailWorkspaceMetricItem
+                        label="付款与合同依据"
+                        value={
+                            <span className="text-body-compact font-semibold text-foreground">
+                                {displayName(submission.payment_term_name) ??
+                                    "—"}
+                            </span>
+                        }
+                        detail={
+                            <>
+                                {contractNo ? (
+                                    <span className="num text-foreground/85">
+                                        合同 {contractNo}
+                                    </span>
+                                ) : (
+                                    <span className="text-warning-soft-foreground">
+                                        无合同
+                                    </span>
+                                )}
+                                <span aria-hidden="true">·</span>
+                                {attachments.length > 0 ? (
+                                    <button
+                                        id={`${prefix}-kpi-open-materials`}
+                                        type="button"
+                                        onClick={handleOpenAttachmentShortcut}
+                                        className="inline-flex cursor-pointer items-center gap-1 text-primary hover:underline"
+                                    >
+                                        <PaperclipIcon
+                                            aria-hidden="true"
+                                            className="size-3 shrink-0"
+                                        />
+                                        <span className="num">
+                                            附件 {attachments.length} 份
                                         </span>
                                     </button>
-                                    {riskCount > 0 ? (
-                                        <button
-                                            id={`${prefix}-filter-risk`}
-                                            type="button"
-                                            aria-pressed={riskOnly}
-                                            data-active={
-                                                riskOnly ? "true" : undefined
-                                            }
-                                            className={
-                                                detailWorkspaceStyles.subTab
-                                            }
-                                            onClick={() => {
-                                                setRiskOnly(true)
-                                                setPage(1)
-                                            }}
-                                        >
-                                            <span>仅看风险项</span>
-                                            <Badge
-                                                variant={
-                                                    risk.highRisk
-                                                        ? "destructive"
-                                                        : "warning"
-                                                }
-                                                className="rounded-full px-1.5 py-0 text-tiny tabular-nums"
-                                            >
-                                                {riskCount}
-                                            </Badge>
-                                        </button>
-                                    ) : null}
-                                </div>
-                                <div className="relative w-full sm:w-60">
-                                    <SearchIcon
-                                        aria-hidden="true"
-                                        className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
-                                    />
-                                    <Input
-                                        id={`${prefix}-search`}
-                                        value={search}
-                                        onChange={(event) => {
-                                            setSearch(event.target.value)
-                                            setPage(1)
-                                        }}
-                                        placeholder="搜索商品、规格或收货人"
-                                        aria-label="搜索商品、规格或收货人"
-                                        className="h-control-sm pr-8 pl-8 text-xs"
-                                    />
-                                    {search ? (
-                                        <Button
-                                            id={`${prefix}-search-clear`}
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon-xs"
-                                            aria-label="清除搜索"
-                                            className="absolute top-1/2 right-0.5 -translate-y-1/2"
-                                            onClick={() => {
-                                                setSearch("")
-                                                setPage(1)
-                                            }}
-                                        >
-                                            <XIcon aria-hidden="true" />
-                                        </Button>
-                                    ) : null}
-                                </div>
-                            </div>
-                        ) : null}
+                                ) : (
+                                    <span className="text-warning-soft-foreground">
+                                        未附凭证附件
+                                    </span>
+                                )}
+                            </>
+                        }
+                    />
+                </DetailWorkspaceMetrics>
+            </div>
 
-                        {submission.lines.length ? (
-                            <div
-                                data-slot="detail-inline-table"
-                                className={
-                                    detailWorkspaceStyles.inlineTableWrapper
-                                }
-                            >
-                                <Table
-                                    data-density="comfortable"
-                                    aria-label="销售明细"
-                                    className="w-full [&_:is(th,td):first-child]:ps-0"
+            {commercialFacts.length > 0 || submission.business_remark ? (
+                <section
+                    aria-label="销售单商业信息"
+                    className="space-y-2.5 border-b border-border/60 py-3"
+                >
+                    {commercialFacts.length > 0 ? (
+                        <dl className="flex flex-wrap items-baseline gap-x-5 gap-y-1.5 text-xs">
+                            {commercialFacts.map((fact) => (
+                                <div
+                                    key={fact.label}
+                                    className="inline-flex max-w-full items-baseline gap-1.5"
                                 >
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead className="w-8">
-                                                #
-                                            </TableHead>
-                                            <TableHead className="min-w-44">
-                                                商品 / 规格
-                                            </TableHead>
-                                            <TableHead
-                                                data-align="end"
-                                                className="w-20"
-                                            >
-                                                数量
-                                            </TableHead>
-                                            <TableHead
-                                                data-align="end"
-                                                className="w-28"
-                                            >
-                                                {isCard
-                                                    ? "含税单价 / 面额"
-                                                    : "含税售价"}
-                                            </TableHead>
-                                            {!isCard ? (
-                                                <TableHead
-                                                    data-align="end"
-                                                    className="w-36"
-                                                >
-                                                    供给价 / 毛利
-                                                </TableHead>
-                                            ) : null}
-                                            <TableHead
-                                                data-align="end"
-                                                className="w-32"
-                                            >
-                                                含税小计
-                                            </TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {visibleLines.length > 0 ? (
-                                            visibleLines.map((entry) => {
-                                                const deliveryHint =
-                                                    formatLineDeliveryHint(
-                                                        deliveryItemById.get(
-                                                            entry.line.id,
-                                                        ),
-                                                        deliverySummary,
-                                                    )
-                                                return (
-                                                    <SalesLineRow
-                                                        key={entry.line.id}
-                                                        line={entry.line}
-                                                        name={entry.name}
-                                                        spec={entry.spec}
-                                                        welfare={entry.welfare}
-                                                        unit={entry.unit}
-                                                        isCard={isCard}
-                                                        isGift={entry.isGift}
-                                                        negativeMargin={
-                                                            entry.negativeMargin
-                                                        }
-                                                        margin={entry.margin}
-                                                        priceCheck={
-                                                            entry.priceCheck
-                                                        }
-                                                        deliveryHint={
-                                                            deliveryHint
-                                                        }
-                                                        idPrefix={`${prefix}-line-${toAutomationIdSegment(entry.line.id)}`}
-                                                        onFocusDelivery={() =>
-                                                            handleFocusDelivery(
-                                                                entry.line.id,
-                                                            )
-                                                        }
-                                                    />
-                                                )
-                                            })
-                                        ) : (
-                                            <TableRow>
-                                                <TableCell
-                                                    colSpan={isCard ? 5 : 6}
-                                                    className="py-10 text-center text-xs text-muted-foreground"
-                                                >
-                                                    没有匹配的销售明细，请调整搜索条件。
-                                                </TableCell>
-                                            </TableRow>
+                                    <dt className="shrink-0 text-muted-foreground">
+                                        {fact.label}
+                                    </dt>
+                                    <dd
+                                        className={cn(
+                                            "wrap-anywhere font-medium text-foreground",
+                                            fact.numeric && "num",
                                         )}
-                                    </TableBody>
-                                    <TableFooter>
-                                        <TableRow className="hover:bg-transparent">
-                                            <TableCell
-                                                colSpan={2}
-                                                className="py-2.5 align-middle text-xs font-medium text-muted-foreground"
-                                            >
-                                                合计 · 共{" "}
-                                                <span className="num text-foreground">
-                                                    {submission.lines.length}
-                                                </span>{" "}
-                                                项
-                                                {filteredLines.length !==
-                                                evaluatedLines.length ? (
-                                                    <span className="num ml-1.5 font-normal">
-                                                        （当前显示{" "}
-                                                        {filteredLines.length}{" "}
-                                                        项，合计按整单）
-                                                    </span>
-                                                ) : null}
-                                            </TableCell>
-                                            <TableCell
-                                                data-align="end"
-                                                className="py-2.5 align-middle text-xs font-medium text-foreground"
-                                            >
-                                                {footerTotals?.totalQuantity ? (
-                                                    <QuantityValue
-                                                        value={
-                                                            footerTotals
-                                                                .totalQuantity
-                                                                .value
-                                                        }
-                                                        unit={
-                                                            footerTotals
-                                                                .totalQuantity
-                                                                .unit
-                                                        }
-                                                    />
-                                                ) : (
-                                                    "—"
-                                                )}
-                                            </TableCell>
-                                            <TableCell className="py-2.5" />
-                                            {!isCard ? (
-                                                <TableCell
-                                                    data-align="end"
-                                                    className="py-2.5 align-middle text-xs"
-                                                >
-                                                    {footerTotals?.overallMargin ? (
-                                                        <span
-                                                            className={cn(
-                                                                "num font-medium",
-                                                                footerTotals
-                                                                    .overallMargin
-                                                                    .negative
-                                                                    ? "text-destructive-soft-foreground"
-                                                                    : "text-foreground/85",
-                                                            )}
-                                                        >
-                                                            整单毛利{" "}
-                                                            {
-                                                                footerTotals
-                                                                    .overallMargin
-                                                                    .percent
-                                                            }
-                                                            %
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-muted-foreground">
-                                                            —
-                                                        </span>
-                                                    )}
-                                                </TableCell>
-                                            ) : null}
-                                            <TableCell
-                                                data-align="end"
-                                                className="py-2.5 align-middle"
-                                            >
-                                                <div className="font-semibold text-foreground">
-                                                    <MoneyValue
-                                                        display="exact"
-                                                        value={
-                                                            submission.gross_amount
-                                                        }
-                                                    />
-                                                </div>
-                                                <div className="mt-0.5 text-xs font-normal text-muted-foreground">
-                                                    不含税{" "}
-                                                    <MoneyValue
-                                                        display="exact"
-                                                        value={
-                                                            submission.net_amount
-                                                        }
-                                                    />
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    </TableFooter>
-                                </Table>
-                            </div>
-                        ) : (
-                            <p className="text-xs text-muted-foreground">
-                                本次提交没有销售明细。
-                            </p>
-                        )}
-
-                        {pageCount > 1 ? (
-                            <div className="flex items-center justify-between gap-2 pt-1 text-xs text-muted-foreground">
-                                <span className="num">
-                                    第 {currentPage} / {pageCount} 页 · 共{" "}
-                                    {filteredLines.length} 项
-                                </span>
-                                <div className="flex items-center gap-1">
-                                    <Button
-                                        id={`${prefix}-page-prev`}
-                                        type="button"
-                                        variant="outline"
-                                        size="icon-sm"
-                                        aria-label="上一页销售明细"
-                                        disabled={currentPage === 1}
-                                        onClick={() => setPage(currentPage - 1)}
                                     >
-                                        <ChevronLeftIcon aria-hidden="true" />
-                                    </Button>
-                                    <Button
-                                        id={`${prefix}-page-next`}
-                                        type="button"
-                                        variant="outline"
-                                        size="icon-sm"
-                                        aria-label="下一页销售明细"
-                                        disabled={currentPage === pageCount}
-                                        onClick={() => setPage(currentPage + 1)}
-                                    >
-                                        <ChevronRightIcon aria-hidden="true" />
-                                    </Button>
+                                        {fact.value}
+                                    </dd>
                                 </div>
-                            </div>
-                        ) : null}
+                            ))}
+                        </dl>
+                    ) : null}
 
-                        {submission.business_remark ? (
-                            <div className="border-t border-border/60 pt-3.5 text-body-compact">
-                                <p className="text-xs font-medium text-muted-foreground">
-                                    业务备注
-                                </p>
-                                <p className="mt-1 whitespace-pre-wrap wrap-anywhere text-foreground">
-                                    {submission.business_remark}
-                                </p>
-                            </div>
-                        ) : null}
-                    </>
+                    {submission.business_remark ? (
+                        <div className="flex items-start gap-2 rounded-md border border-border/70 bg-surface-sunken/70 px-3 py-2 text-xs">
+                            <MessageSquareTextIcon
+                                aria-hidden="true"
+                                className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
+                            />
+                            <p className="min-w-0 flex-1 whitespace-pre-wrap wrap-anywhere text-foreground">
+                                <span className="mr-1.5 font-medium text-muted-foreground">
+                                    业务备注：
+                                </span>
+                                {submission.business_remark}
+                            </p>
+                        </div>
+                    ) : null}
+                </section>
+            ) : null}
+
+            <DetailWorkspaceSection
+                id={linesSectionId}
+                divider={false}
+                title="销售明细"
+                subtitle={
+                    metrics.giftCount > 0
+                        ? `共 ${submission.lines.length} 行 · 含 ${metrics.giftCount} 项赠品`
+                        : `共 ${submission.lines.length} 行`
+                }
+                ariaLabel="销售明细"
+                className="py-5 first:pt-4"
+                actions={
+                    <Button
+                        id={`${prefix}-preview`}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={detailWorkspaceStyles.subtleButton}
+                        onClick={() =>
+                            onPreview({
+                                kind: "approval_snapshot",
+                                objectId: instanceId,
+                                title: query.data?.document_no,
+                            })
+                        }
+                    >
+                        <FileTextIcon aria-hidden="true" />
+                        预览完整销售单
+                    </Button>
+                }
+            >
+                <ApprovalLineFilterBar
+                    idPrefix={prefix}
+                    totalCount={evaluatedLines.length}
+                    filteredCount={filteredLines.length}
+                    riskCount={metrics.riskLineCount}
+                    hasHighRisk={metrics.highRiskLineCount > 0}
+                    riskOnly={riskOnly}
+                    onRiskOnlyChange={(next) => {
+                        setRiskOnly(next)
+                        setPage(1)
+                    }}
+                    search={search}
+                    onSearchChange={(next) => {
+                        setSearch(next)
+                        setPage(1)
+                    }}
+                    onClearFilters={() => {
+                        setSearch("")
+                        setRiskOnly(false)
+                        setPage(1)
+                    }}
+                    ariaLabel="销售明细筛选"
+                />
+
+                {submission.lines.length ? (
+                    <div
+                        data-slot="detail-inline-table"
+                        className={detailWorkspaceStyles.inlineTableWrapper}
+                    >
+                        <Table
+                            data-density="comfortable"
+                            aria-label="销售明细"
+                            className="w-full [&_:is(th,td):first-child]:ps-0"
+                        >
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="w-8">#</TableHead>
+                                    <TableHead className="min-w-40">
+                                        商品 / 规格
+                                    </TableHead>
+                                    <TableHead
+                                        data-align="end"
+                                        className="w-20"
+                                    >
+                                        数量
+                                    </TableHead>
+                                    <TableHead
+                                        data-align="end"
+                                        className="w-28"
+                                    >
+                                        {isCard
+                                            ? "含税单价 / 面额"
+                                            : "含税售价"}
+                                    </TableHead>
+                                    {!isCard ? (
+                                        <TableHead
+                                            data-align="end"
+                                            className="w-36"
+                                        >
+                                            供给价 / 毛利
+                                        </TableHead>
+                                    ) : null}
+                                    <TableHead
+                                        data-align="end"
+                                        className="w-28"
+                                    >
+                                        含税小计
+                                    </TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {visibleLines.length > 0 ? (
+                                    visibleLines.map((entry) => {
+                                        const deliveryHint =
+                                            formatLineDeliveryHint(
+                                                deliveryItemById.get(
+                                                    entry.line.id,
+                                                ),
+                                                deliverySummary,
+                                            )
+                                        const lineSegment =
+                                            toAutomationIdSegment(entry.line.id)
+                                        return (
+                                            <SalesLineRow
+                                                key={entry.line.id}
+                                                rowId={`${prefix}-row-${lineSegment}`}
+                                                highlighted={
+                                                    highlightedLineId ===
+                                                    entry.line.id
+                                                }
+                                                entry={entry}
+                                                isCard={isCard}
+                                                deliveryHint={deliveryHint}
+                                                idPrefix={`${prefix}-line-${lineSegment}`}
+                                                onFocusDelivery={() =>
+                                                    handleFocusDelivery(
+                                                        entry.line.id,
+                                                    )
+                                                }
+                                            />
+                                        )
+                                    })
+                                ) : (
+                                    <TableRow>
+                                        <TableCell
+                                            colSpan={isCard ? 5 : 6}
+                                            className="py-10 text-center text-xs text-muted-foreground"
+                                        >
+                                            没有匹配的销售明细，请调整筛选条件。
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                            <TableFooter>
+                                <TableRow className="hover:bg-transparent">
+                                    <TableCell
+                                        colSpan={2}
+                                        className="py-2.5 align-middle text-xs font-medium text-muted-foreground"
+                                    >
+                                        合计 · 共{" "}
+                                        <span className="num text-foreground">
+                                            {submission.lines.length}
+                                        </span>{" "}
+                                        项
+                                        {filteredLines.length !==
+                                        evaluatedLines.length ? (
+                                            <span className="num ml-1.5 font-normal">
+                                                （当前显示{" "}
+                                                {filteredLines.length}{" "}
+                                                项，合计按整单）
+                                            </span>
+                                        ) : null}
+                                    </TableCell>
+                                    <TableCell
+                                        data-align="end"
+                                        className="py-2.5 align-middle text-xs font-medium text-foreground"
+                                    >
+                                        {metrics.totalQuantity ? (
+                                            <QuantityValue
+                                                value={
+                                                    metrics.totalQuantity.value
+                                                }
+                                                unit={
+                                                    metrics.totalQuantity.unit
+                                                }
+                                            />
+                                        ) : (
+                                            "—"
+                                        )}
+                                    </TableCell>
+                                    <TableCell className="py-2.5" />
+                                    {!isCard ? (
+                                        <TableCell
+                                            data-align="end"
+                                            className="py-2.5 align-middle text-xs"
+                                        >
+                                            {metrics.estimatedMargin ? (
+                                                <div
+                                                    className={cn(
+                                                        "num font-medium",
+                                                        metrics.estimatedMargin
+                                                            .negative
+                                                            ? "text-destructive-soft-foreground"
+                                                            : "text-foreground/85",
+                                                    )}
+                                                >
+                                                    {metrics.estimatedMargin
+                                                        .negative
+                                                        ? `整单亏 ${metrics.estimatedMargin.absPercent}%`
+                                                        : `整单毛利 ${metrics.estimatedMargin.percent}%`}
+                                                </div>
+                                            ) : (
+                                                <span className="text-muted-foreground">
+                                                    —
+                                                </span>
+                                            )}
+                                            {metrics.estimatedMargin ? (
+                                                <div className="mt-0.5 text-tiny font-normal text-muted-foreground">
+                                                    {metrics.estimatedMargin
+                                                        .negative
+                                                        ? "亏 "
+                                                        : "毛利额 "}
+                                                    <MoneyValue
+                                                        display="exact"
+                                                        value={
+                                                            metrics
+                                                                .estimatedMargin
+                                                                .absAmount
+                                                        }
+                                                    />
+                                                    {metrics.partialCostCoverage
+                                                        ? ` · ${metrics.costCoveredCount}/${metrics.costExpectedCount} 行`
+                                                        : ""}
+                                                </div>
+                                            ) : null}
+                                        </TableCell>
+                                    ) : null}
+                                    <TableCell
+                                        data-align="end"
+                                        className="py-2.5 align-middle"
+                                    >
+                                        <div className="font-semibold text-foreground">
+                                            <MoneyValue
+                                                display="exact"
+                                                value={submission.gross_amount}
+                                            />
+                                        </div>
+                                        <div className="mt-0.5 text-xs font-normal text-muted-foreground">
+                                            不含税{" "}
+                                            <MoneyValue
+                                                display="exact"
+                                                value={submission.net_amount}
+                                            />
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                            </TableFooter>
+                        </Table>
+                    </div>
+                ) : (
+                    <p className="text-xs text-muted-foreground">
+                        本次提交没有销售明细。
+                    </p>
                 )}
+
+                <ApprovalLinePagination
+                    idPrefix={prefix}
+                    filteredCount={filteredLines.length}
+                    page={currentPage}
+                    pageSize={pageSize}
+                    onPageChange={setPage}
+                    onPageSizeChange={(next) => {
+                        setPageSize(next)
+                        setPage(1)
+                    }}
+                    ariaLabel="销售明细分页"
+                />
             </DetailWorkspaceSection>
 
             {showDeliverySection ? (
@@ -801,13 +998,16 @@ export function WorkspaceSalesApproval({
                     sectionId={deliverySectionId}
                     lines={deliveryLines}
                     summary={deliverySummary}
+                    compactSimpleStates
                     focusedLineId={focusedDeliveryLineId}
                     onClearFocus={() => setFocusedDeliveryLineId(null)}
+                    onReturnToLine={handleReturnToLine}
                 />
             ) : null}
 
             {query.data && !hideEmbeddedMaterials ? (
                 <DetailWorkspaceSection
+                    id={materialsSectionId}
                     title="合同、凭证及附件"
                     subtitle={
                         attachments.length
@@ -826,39 +1026,42 @@ export function WorkspaceSalesApproval({
                     />
                 </DetailWorkspaceSection>
             ) : null}
-        </>
+        </div>
     )
 }
 
 function SalesLineRow({
-    line,
-    name,
-    spec,
-    welfare,
-    unit,
+    rowId,
+    highlighted,
+    entry,
     isCard,
-    isGift,
-    negativeMargin,
-    margin,
-    priceCheck,
     deliveryHint,
     idPrefix,
     onFocusDelivery,
 }: {
-    line: SalesApprovalLine
-    name: string
-    spec?: string
-    welfare?: string
-    unit?: string
+    rowId: string
+    highlighted: boolean
+    entry: EvaluatedSalesLine
     isCard: boolean
-    isGift: boolean
-    negativeMargin: boolean
-    margin: { percent: string; negative: boolean } | null
-    priceCheck: ReturnType<typeof salesLinePriceComparison> | null
     deliveryHint: string | null
     idPrefix: string
     onFocusDelivery: () => void
 }) {
+    const {
+        line,
+        name,
+        spec,
+        welfare,
+        unit,
+        isGift,
+        negativeMargin,
+        belowOriginalFloor,
+        priceAdjusted,
+        priceCheck,
+        margin,
+        voucherDiscount,
+    } = entry
+
     const quantity =
         line.quantity ??
         (line.card_count == null ? null : String(line.card_count))
@@ -881,7 +1084,7 @@ function SalesLineRow({
             : line.procurement_price_basis === "DROPSHIP"
               ? "一件代发"
               : null
-    const priceAdjusted = Boolean(priceCheck && priceCheck.change != null)
+    const isHighRisk = negativeMargin || belowOriginalFloor
 
     const taxRatePercent = multiplyFixed(line.sales_tax_rate, "100", {
         leftMaxScale: 6,
@@ -891,16 +1094,19 @@ function SalesLineRow({
 
     return (
         <TableRow
+            id={rowId}
             className={cn(
-                negativeMargin &&
+                isHighRisk &&
                     "bg-destructive-soft/35 hover:bg-destructive-soft/50",
+                highlighted &&
+                    "bg-info-soft/50 ring-1 ring-inset ring-info-border",
             )}
         >
             <TableCell className="num py-3 align-top text-muted-foreground">
                 {line.line_no}
             </TableCell>
 
-            <TableCell className="min-w-44 py-3 align-top whitespace-normal">
+            <TableCell className="min-w-40 py-3 align-top whitespace-normal">
                 <div className="flex flex-wrap items-center gap-1.5">
                     <span className="font-medium wrap-anywhere text-foreground">
                         {name}
@@ -908,6 +1114,8 @@ function SalesLineRow({
                     {isGift ? <Badge variant="neutral">赠品</Badge> : null}
                     {negativeMargin ? (
                         <Badge variant="destructive">负毛利</Badge>
+                    ) : belowOriginalFloor ? (
+                        <Badge variant="destructive">低于原底价</Badge>
                     ) : null}
                 </div>
                 {metaParts.length > 0 ? (
@@ -949,15 +1157,17 @@ function SalesLineRow({
                 <MoneyValue
                     display="exact"
                     value={line.unit_price_gross}
+                    inheritColor={isHighRisk}
                     className={cn(
                         "font-medium",
-                        negativeMargin && "text-destructive-soft-foreground",
+                        isHighRisk && "text-destructive-soft-foreground",
                     )}
                 />
                 {isCard ? (
                     <p className="mt-1 text-xs text-muted-foreground">
                         面额{" "}
                         <MoneyValue display="exact" value={line.face_value} />
+                        {voucherDiscount ? ` · ${voucherDiscount.label}` : ""}
                         {" · "}
                         {line.card_form === "PHYSICAL"
                             ? "实体卡"
@@ -1006,17 +1216,30 @@ function SalesLineRow({
                                     : "text-muted-foreground",
                             )}
                         >
-                            {margin.negative ? "亏 " : "毛利 "}
-                            {margin.percent}%
+                            {margin.negative
+                                ? `亏 ${margin.absPercent}%`
+                                : `毛利 ${margin.percent}%`}
                         </p>
                     ) : null}
-                    {priceAdjusted && hasOriginal ? (
+                    {belowOriginalFloor && hasOriginal ? (
+                        <p className="mt-0.5 text-tiny font-medium text-destructive-soft-foreground">
+                            低于原底价{" "}
+                            <MoneyValue
+                                display="exact"
+                                value={originalPrice}
+                                inheritColor
+                                className="font-medium"
+                            />
+                            {basisLabel ? ` · ${basisLabel}` : ""}
+                        </p>
+                    ) : priceAdjusted && hasOriginal ? (
                         <p className="mt-0.5 text-tiny text-warning-soft-foreground">
                             原底价{" "}
                             <MoneyValue
                                 display="exact"
                                 value={originalPrice}
-                                className="font-normal [&_[data-slot=money-value-number]]:text-inherit"
+                                inheritColor
+                                className="font-normal"
                             />
                             {basisLabel ? ` · ${basisLabel}` : ""}
                         </p>
