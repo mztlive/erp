@@ -34,6 +34,10 @@ import type { StatusTone } from "@/components/ui/status-badge"
 import { ApprovalReadonly } from "@/features/approval-workflow/components/approval-readonly"
 import { ApprovalWithdrawDialog } from "@/features/approval-workflow/components/approval-withdraw-dialog"
 import {
+    ReworkRejectionEcho,
+    rejectionContextFromApprovalView,
+} from "@/features/approval-workflow/components/rework-rejection-echo"
+import {
     mapDocumentApprovalViewDto,
     type DocumentApprovalView,
 } from "@/features/approval-workflow/types"
@@ -365,6 +369,10 @@ function InvoiceRequestDetailBody({
     const isRejectedInApproval = Boolean(
         facts.approval?.instance?.latestRejection,
     )
+    const rejectionEcho =
+        request.status === "rejected"
+            ? rejectionContextFromApprovalView(facts.approval)
+            : undefined
 
     const secondaryActionButtons = (
         <>
@@ -538,6 +546,7 @@ function InvoiceRequestDetailBody({
                         />
                     </div>
                     <div className="border-y border-border/60">{metrics}</div>
+                    <ReworkRejectionEcho rejection={rejectionEcho} />
                     <div className="space-y-5">
                         <InvoiceRequestInfoFacts data={request.data} />
                         <InvoiceRequestLinesTable
@@ -615,6 +624,7 @@ function InvoiceRequestDetailBody({
                         </div>
                     </div>
                     <div className="border-b border-border/60">{metrics}</div>
+                    <ReworkRejectionEcho rejection={rejectionEcho} />
                     <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
                         <div className="min-w-0 space-y-6">
                             <div className="max-w-4xl space-y-3">
@@ -674,6 +684,7 @@ function InvoiceRequestDetailBody({
                     primaryAction={primaryActionButton}
                 />
                 <DetailWorkspaceBody
+                    alerts={<ReworkRejectionEcho rejection={rejectionEcho} />}
                     summary={metrics}
                     sidebarLabel="审批进度"
                     sidebar={

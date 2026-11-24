@@ -1,6 +1,14 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import {
+    useEffect,
+    useImperativeHandle,
+    useMemo,
+    useRef,
+    useState,
+    type ReactNode,
+    type RefObject,
+} from "react"
 import {
     ArrowDownIcon,
     ArrowRightIcon,
@@ -98,6 +106,10 @@ type BriefSource = ApprovalMaterials["display"]["source"]
 type BriefSection = BriefSource["extra_sections"][number]
 type BriefLine = BriefSource["lines"][number]
 
+export interface StructuredDiffRendererHandle {
+    locateChanges: () => void
+}
+
 export type StructuredDiffApprovalProps = Readonly<{
     documentType: StructuredDiffDocumentType
     source: BriefSource
@@ -105,6 +117,8 @@ export type StructuredDiffApprovalProps = Readonly<{
     impactSummary?: string | null
     documentNo?: string | null
     counterpartyLabel?: string | null
+    hideRiskStrip?: boolean
+    rendererHandleRef?: RefObject<StructuredDiffRendererHandle | null>
 }>
 
 const COMPARISON_SUFFIX = "（前→后）"
@@ -503,6 +517,61 @@ export function buildStructuredDiffDynamicRejectPhrases(
     return phrases.slice(0, 6)
 }
 
+export type StructuredDiffRiskSummary = Readonly<{
+    showRisk: boolean
+    severe: boolean
+    changedHeaderCount: number
+    changedLineCount: number
+    visibleChanged: number
+    deltaSigned: string | null
+    missingBaseline: boolean
+    missingWarehouse: boolean
+    impactSummary?: string
+}>
+
+/** 提取变更单与库存调整单的结构化风险与变更摘要，供指挥卡共享消费。 */
+export function inspectStructuredDiffRisks(
+    documentType: StructuredDiffDocumentType,
+    source: BriefSource,
+    impactSummary?: string | null,
+): StructuredDiffRiskSummary {
+    const { facts, comparisons, changed, lineDiff } = partitionSections(
+        source.extra_sections,
+    )
+    const { visibleChanged, changedCount } = readLines(
+        documentType,
+        source,
+        lineDiff,
+    )
+    const { delta } = amountComparison(source, comparisons)
+    const missingWarehouse =
+        documentType === "stock_adjustment" &&
+        !facts.some(
+            (field) =>
+                field.label === "仓库" &&
+                displayReadableName(sectionValue(field)),
+        )
+    const trimmedImpact = impactSummary?.trim() || undefined
+    return {
+        showRisk: Boolean(
+            changed.length ||
+            changedCount ||
+            delta?.direction ||
+            trimmedImpact ||
+            missingWarehouse ||
+            lineDiff === MISSING_BASELINE,
+        ),
+        severe: delta?.significant === true || missingWarehouse,
+        changedHeaderCount: changed.length,
+        changedLineCount: changedCount,
+        visibleChanged,
+        deltaSigned: delta?.signed ?? null,
+        missingBaseline: lineDiff === MISSING_BASELINE,
+        missingWarehouse,
+        impactSummary: trimmedImpact,
+    }
+}
+
 export function StructuredDiffApprovalRenderer({
     documentType,
     source,
@@ -510,6 +579,8 @@ export function StructuredDiffApprovalRenderer({
     impactSummary,
     documentNo,
     counterpartyLabel,
+    hideRiskStrip = false,
+    rendererHandleRef,
 }: StructuredDiffApprovalProps) {
     const idPrefix = `structured-diff-${toAutomationIdSegment(documentType)}-${toAutomationIdSegment(documentNo || "snapshot")}`
 
@@ -522,6 +593,8 @@ export function StructuredDiffApprovalRenderer({
             submitterName={submitterName}
             impactSummary={impactSummary}
             counterpartyLabel={counterpartyLabel}
+            hideRiskStrip={hideRiskStrip}
+            rendererHandleRef={rendererHandleRef}
         />
     )
 }
@@ -533,7 +606,9 @@ function StructuredDiffReview({
     submitterName,
     impactSummary,
     counterpartyLabel,
-}: StructuredDiffApprovalProps & { idPrefix: string }) {
+    hideRiskStrip,
+    rendererHandleRef,
+}: StructuredDiffApprovalProps & { idPrefix: string; hideRiskStrip: boolean }) {
     const meta = DOCUMENT_META[documentType]
     const stock = documentType === "stock_adjustment"
     const { facts, comparisons, lineDiff, changed, unchanged, amount, lines } =
@@ -663,6 +738,10 @@ function StructuredDiffReview({
         })
     }
 
+    useImperativeHandle(rendererHandleRef, () => ({
+        locateChanges,
+    }))
+
     return (
         <div
             data-slot="structured-diff-approval"
@@ -671,7 +750,7 @@ function StructuredDiffReview({
             aria-label={`${meta.label}差异核对`}
             className="@container/structured-diff min-w-0 space-y-4 pt-3 pb-5"
         >
-            {showRisk ? (
+            {!hideRiskStrip && showRisk ? (
                 <div
                     role="alert"
                     data-slot="structured-diff-risk-strip"

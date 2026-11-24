@@ -9,10 +9,12 @@ import { useAppForm, toFieldErrors } from "@/components/form"
 import { FormalActionConfirmDialog } from "@/components/business"
 import { ReasonTextareaField } from "@/components/business/reason-textarea-field"
 import { Button } from "@/components/ui/button"
+import { type ReworkRejectionContext } from "@/features/approval-workflow/components/rework-rejection-echo"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { FinancialDraftEditor } from "@/features/financial-draft-edit/components/financial-draft-edit-dialog"
 import type { FinancialDraftKind } from "@/features/financial-draft-edit/types"
 import { AdjustmentEditDialog } from "@/features/inventory/pages/components/adjustment-edit-dialog"
+import { InvoiceRequestEditDialog } from "@/features/invoice-requests/components/request-edit-dialog"
 import { PurchaseChangeOrderEditDialog } from "@/features/purchase-orders/components/purchase-change-order-edit-dialog"
 import { SalesChangeOrderEditDialog } from "@/features/sales-orders/components/sales-change-order-edit-dialog"
 import { useSalesOrderDetailQuery } from "@/features/sales-orders/hooks/queries"
@@ -63,9 +65,16 @@ type ReworkActionsProps = {
     abandonOnly?: boolean
     /** 前提已失效时可将「放弃本次办理」升格为主按钮出口。 */
     abandonVariant?: "outline" | "default"
+    /** 前置体检判定受阻时将修改/重提主按钮退为次级样式，突出「放弃本次办理」。 */
+    reworkBlocked?: boolean
     /** 允许外部行动指挥卡复用同一放弃确认弹窗，避免重复挂载状态机。 */
     abandonOpen?: boolean
     onAbandonOpenChange?: (open: boolean) => void
+    /** 允许外部行动指挥卡复用同一就地编辑弹窗，避免重复挂载。 */
+    inlineEditOpen?: boolean
+    onInlineEditOpenChange?: (open: boolean) => void
+    /** 上轮驳回人、节点与原话，打开弹窗时轻量回显。 */
+    rejectionContext?: ReworkRejectionContext
 }
 
 function resolveFinancialDraftKind(
@@ -95,8 +104,12 @@ function ReworkActions({
     onTaskCompleted,
     abandonOnly = false,
     abandonVariant = "outline",
+    reworkBlocked = false,
     abandonOpen: controlledAbandonOpen,
     onAbandonOpenChange,
+    inlineEditOpen: controlledInlineEditOpen,
+    onInlineEditOpenChange,
+    rejectionContext,
 }: ReworkActionsProps) {
     const router = useRouter()
     const profile = useAccountProfileQuery()
@@ -111,7 +124,14 @@ function ReworkActions({
         setUncontrolledAbandonOpen(next)
         onAbandonOpenChange?.(next)
     }
-    const [inlineEditOpen, setInlineEditOpen] = useState(false)
+    const [uncontrolledInlineEditOpen, setUncontrolledInlineEditOpen] =
+        useState(false)
+    const inlineEditOpen =
+        controlledInlineEditOpen ?? uncontrolledInlineEditOpen
+    const setInlineEditOpen = (next: boolean) => {
+        setUncontrolledInlineEditOpen(next)
+        onInlineEditOpenChange?.(next)
+    }
     const [issue, setIssue] = useState<AbandonIssue | null>(null)
     const [refreshing, setRefreshing] = useState(false)
     const id = `workspace-rework-${toAutomationIdSegment(item.workItemId)}`
@@ -136,12 +156,30 @@ function ReworkActions({
     const isPurchaseChangeOrder =
         docType === "purchase_change_order" &&
         Boolean(item.rootBusinessObjectId?.trim())
+    const isSalesInvoiceRequest =
+        docType === "sales_invoice_request" &&
+        hasPermission(
+            profile.data?.permissions,
+            "sales_invoice_request:submit",
+        ) &&
+        (hasPermission(
+            profile.data?.permissions,
+            "sales_invoice_request:detail",
+        ) ||
+            hasPermission(
+                profile.data?.permissions,
+                "sales_invoice_request:list",
+            ))
     const supportsInlineEdit = Boolean(
         financialKind ||
         isStockAdjustment ||
         isSalesChangeOrder ||
-        isPurchaseChangeOrder,
+        isPurchaseChangeOrder ||
+        isSalesInvoiceRequest,
     )
+    const isRejectedTask =
+        item.workItemType === "APPROVAL_REWORK" ||
+        item.approval?.status === "REJECTED"
 
     const salesOrderForChangeQuery = useSalesOrderDetailQuery(
         isSalesChangeOrder && inlineEditOpen
@@ -374,7 +412,11 @@ function ReworkActions({
                         <Button
                             id={`${id}-inline-edit`}
                             type="button"
-                            variant="default"
+                            variant={
+                                reworkBlocked && canAbandon
+                                    ? "outline"
+                                    : "default"
+                            }
                             size="sm"
                             disabled={pending}
                             onClick={() => setInlineEditOpen(true)}
@@ -389,7 +431,11 @@ function ReworkActions({
                         <Button
                             id={`${id}-edit`}
                             type="button"
-                            variant="default"
+                            variant={
+                                reworkBlocked && canAbandon
+                                    ? "outline"
+                                    : "default"
+                            }
                             size="sm"
                             disabled={pending}
                             onClick={openInWorkspaceTab}
@@ -409,6 +455,7 @@ function ReworkActions({
                     key={`${financialKind}:${item.businessObjectId}`}
                     kind={financialKind}
                     documentId={item.businessObjectId}
+                    rejectionContext={rejectionContext}
                     onClose={() => setInlineEditOpen(false)}
                     onSubmitted={() => {
                         setInlineEditOpen(false)
@@ -422,7 +469,12 @@ function ReworkActions({
                     key={item.businessObjectId}
                     id={item.businessObjectId}
                     canSubmit={canSubmitStockAdjustment}
+                    rejectionContext={rejectionContext}
                     onClose={() => setInlineEditOpen(false)}
+                    onSaved={() => {
+                        setInlineEditOpen(false)
+                        void refreshTask()
+                    }}
                     onSubmitted={() => {
                         setInlineEditOpen(false)
                         onTaskCompleted?.(item.workItemId)
@@ -442,6 +494,8 @@ function ReworkActions({
                         salesOrderForChangeQuery.data?.nature ??
                         "physical_service"
                     }
+                    rejectionContext={rejectionContext}
+                    requireResubmissionReason={isRejectedTask}
                     onApplied={() => {
                         setInlineEditOpen(false)
                         onTaskCompleted?.(item.workItemId)
@@ -457,7 +511,26 @@ function ReworkActions({
                     onOpenChange={setInlineEditOpen}
                     purchaseOrderId={item.rootBusinessObjectId}
                     changeOrderId={item.businessObjectId}
+                    rejectionContext={rejectionContext}
+                    requireResubmissionReason={isRejectedTask}
                     onResult={() => {
+                        setInlineEditOpen(false)
+                        onTaskCompleted?.(item.workItemId)
+                    }}
+                />
+            ) : null}
+
+            {inlineEditOpen && isSalesInvoiceRequest ? (
+                <InvoiceRequestEditDialog
+                    key={item.businessObjectId}
+                    requestId={item.businessObjectId}
+                    rejectionContext={rejectionContext}
+                    onClose={() => setInlineEditOpen(false)}
+                    onSaved={() => {
+                        setInlineEditOpen(false)
+                        void refreshTask()
+                    }}
+                    onSubmitted={() => {
                         setInlineEditOpen(false)
                         onTaskCompleted?.(item.workItemId)
                     }}

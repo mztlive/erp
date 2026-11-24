@@ -1,6 +1,11 @@
 "use client"
 
 import * as React from "react"
+import {
+    ReworkRejectionEcho,
+    rejectionContextFromApprovalView,
+    type ReworkRejectionContext,
+} from "@/features/approval-workflow/components/rework-rejection-echo"
 import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
 import {
     SalesChangeBlockers,
@@ -42,6 +47,12 @@ import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { classifyFormalCommandError } from "@/lib/formal-command"
 
+const SALES_CHANGE_RESUBMISSION_PHRASES = [
+    "已按审批意见调整销售变更明细及金额，请复核",
+    "已补充改单原因与商业条款说明，请复核",
+    "已按审批意见修改完善，请复核",
+] as const
+
 /** 编辑原销售变更内容；提交继续消费同一变更单 ID。 */
 export function SalesChangeOrderEditDialog({
     open,
@@ -50,6 +61,8 @@ export function SalesChangeOrderEditDialog({
     changeOrderId,
     nature,
     approval,
+    rejectionContext,
+    requireResubmissionReason = false,
     onApplied,
 }: {
     open: boolean
@@ -58,6 +71,8 @@ export function SalesChangeOrderEditDialog({
     changeOrderId: string
     nature: SalesOrderNature
     approval?: DocumentApprovalView
+    rejectionContext?: ReworkRejectionContext
+    requireResubmissionReason?: boolean
     onApplied: () => void
 }) {
     const [busy, setBusy] = React.useState(false)
@@ -118,6 +133,8 @@ export function SalesChangeOrderEditDialog({
                         changeOrderId={changeOrderId}
                         nature={nature}
                         approval={approval}
+                        rejectionContext={rejectionContext}
+                        requireResubmissionReason={requireResubmissionReason}
                         onBusyChange={setCommandBusy}
                         onApplied={onApplied}
                         onClose={() => onOpenChange(false)}
@@ -150,6 +167,8 @@ function SalesChangeDraftForm({
     changeOrderId,
     nature,
     approval,
+    rejectionContext,
+    requireResubmissionReason,
     onBusyChange,
     onApplied,
     onClose,
@@ -161,6 +180,8 @@ function SalesChangeDraftForm({
     changeOrderId: string
     nature: SalesOrderNature
     approval?: DocumentApprovalView
+    rejectionContext?: ReworkRejectionContext
+    requireResubmissionReason: boolean
     onBusyChange: (busy: boolean) => void
     onApplied: () => void
     onClose: () => void
@@ -173,13 +194,18 @@ function SalesChangeDraftForm({
     const shouldSubmit = React.useRef(true)
     const [uncertain, setUncertain] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
+    const resolvedRejection =
+        rejectionContext ?? rejectionContextFromApprovalView(approval)
     const rework = useResubmissionReason({
         open: true,
-        required:
+        required: Boolean(
+            requireResubmissionReason ||
             draft.status === "REJECTED" ||
             approval?.instance?.status === "REJECTED",
+        ),
         id: `${id}-resubmission-reason`,
         disabled: pending || uncertain,
+        quickPhrases: SALES_CHANGE_RESUBMISSION_PHRASES,
     })
     const intent = React.useRef<EditIntent | null>(null)
     const inFlight = React.useRef(false)
@@ -329,6 +355,7 @@ function SalesChangeDraftForm({
             }}
         >
             <DialogBody className="space-y-6">
+                <ReworkRejectionEcho rejection={resolvedRejection} />
                 <SalesChangeDraftFields
                     form={form}
                     id={id}

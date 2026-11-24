@@ -300,9 +300,42 @@ export function buildReceiptDynamicRejectPhrases(
         .slice(0, 6)
 }
 
+export type ReceiptRiskItem = Readonly<ReceiptRisk>
+
+/** 供审批风险提示与驳回行动指挥卡共享同一份回款前置风险体检结论。 */
+export function inspectReceiptRisks(
+    source: ReceiptSource | null | undefined,
+    attachmentCount?: number,
+): ReceiptRiskItem[] {
+    if (!source) return []
+    const fields = new Map(
+        source.extra_sections.map((field) => [field.label, field]),
+    )
+    const lines = source.lines.map((line) => ({
+        title: line.title,
+        amount: receiptMoney(line.quantity),
+    }))
+    const amount =
+        receiptMoney(readField(fields, "回款金额")) ??
+        receiptMoney(source.amount_label)
+    const { balanceSign } = getAllocationTotals(
+        amount,
+        fields,
+        lines,
+        source.more_count,
+    )
+    return getReceiptRisks(
+        fields,
+        attachmentCount,
+        balanceSign,
+        lines.filter((line) => line.amount === undefined).length,
+    )
+}
+
 export interface WorkspaceReceiptApprovalHandle {
     /** 冻结摘要只提供行标题。同名分配定位到首条。 */
     locateLine: (title: string) => void
+    locateRisk: (riskId: string) => void
 }
 
 /** 回款审批只读作业面，展示本次提交资料或工作台绑定的提交摘要。 */
@@ -313,6 +346,7 @@ export function WorkspaceReceiptApproval({
     onOpenMaterials,
     activeFileId,
     hideEmbeddedMaterials = false,
+    hideTopBanners = false,
     approvalHandleRef,
 }: {
     item: WorkspaceWorkItem
@@ -321,6 +355,7 @@ export function WorkspaceReceiptApproval({
     onOpenMaterials?: () => void
     activeFileId?: string
     hideEmbeddedMaterials?: boolean
+    hideTopBanners?: boolean
     approvalHandleRef?: RefObject<WorkspaceReceiptApprovalHandle | null>
 }) {
     const profile = useAccountProfileQuery()
@@ -491,13 +526,6 @@ export function WorkspaceReceiptApproval({
         )
     }
 
-    useImperativeHandle(approvalHandleRef, () => ({
-        locateLine: (title) => {
-            const index = lines.findIndex((line) => line.title === title)
-            if (index >= 0) locateAllocation(index)
-        },
-    }))
-
     useEffect(() => {
         if (!locateTarget) return
         const reducedMotion = window.matchMedia?.(
@@ -574,6 +602,17 @@ export function WorkspaceReceiptApproval({
         }
     }
 
+    useImperativeHandle(approvalHandleRef, () => ({
+        locateLine: (title) => {
+            const index = lines.findIndex((line) => line.title === title)
+            if (index >= 0) locateAllocation(index)
+        },
+        locateRisk: (riskId) => {
+            const target = risks.find((entry) => entry.id === riskId)
+            if (target) locateRisk(target)
+        },
+    }))
+
     const renderSensitiveBankField = (
         kind: string,
         label: string,
@@ -614,7 +653,7 @@ export function WorkspaceReceiptApproval({
             data-slot="workspace-receipt-approval"
             className="@container/receipt-approval flex min-w-0 flex-col"
         >
-            {roundNo >= 2 || risks.length > 0 ? (
+            {!hideTopBanners && (roundNo >= 2 || risks.length > 0) ? (
                 <div className="space-y-2 pt-3">
                     {roundNo >= 2 ? (
                         <WorkspaceApprovalResubmissionBanner

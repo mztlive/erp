@@ -3,6 +3,11 @@
 import { PermissionGuard } from "@/features/auth/components/permission-guard"
 
 import * as React from "react"
+import {
+    ReworkRejectionEcho,
+    rejectionContextFromApprovalView,
+    type ReworkRejectionContext,
+} from "@/features/approval-workflow/components/rework-rejection-echo"
 import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 import { z } from "zod"
@@ -60,6 +65,37 @@ function positiveAmount(value: string) {
     }
 }
 
+const FINANCIAL_RESUBMISSION_PHRASES: Record<
+    FinancialDraftKind,
+    readonly string[]
+> = {
+    customer_receipt: [
+        "已按审批意见核对回款金额与银行流水，请复核",
+        "已调整拟核销分配明细，请复核",
+        "已按审批意见修改完善，请复核",
+    ],
+    customer_refund: [
+        "已按审批意见核对退款金额与原因说明，请复核",
+        "已核实原单依据并完善说明，请复核",
+        "已按审批意见修改完善，请复核",
+    ],
+    supplier_refund: [
+        "已按审批意见核对退款金额与原因说明，请复核",
+        "已核实原单依据并完善说明，请复核",
+        "已按审批意见修改完善，请复核",
+    ],
+    receipt_reversal: [
+        "已核实红字冲正金额与原单核销影响，请复核",
+        "已补充冲正原因及复核说明，请复核",
+        "已按审批意见修改完善，请复核",
+    ],
+    payment_reversal: [
+        "已核实红字冲正金额与原单核销影响，请复核",
+        "已补充冲正原因及复核说明，请复核",
+        "已按审批意见修改完善，请复核",
+    ],
+}
+
 /** 客户及供应商往来页的原单编辑深链窗口。 */
 export function FinancialDraftEditDialog({
     side,
@@ -95,11 +131,13 @@ export function FinancialDraftEditDialog({
 export function FinancialDraftEditor({
     kind,
     documentId,
+    rejectionContext,
     onClose,
     onSubmitted,
 }: {
     kind: FinancialDraftKind
     documentId: string
+    rejectionContext?: ReworkRejectionContext
     onClose: () => void
     onSubmitted?: () => void
 }) {
@@ -163,6 +201,7 @@ export function FinancialDraftEditor({
                         kind={kind}
                         draft={query.data}
                         id={id}
+                        rejectionContext={rejectionContext}
                         onClose={onClose}
                         onSubmitted={onSubmitted}
                         onBusyChange={setBusy}
@@ -183,6 +222,7 @@ function FinancialDraftForm({
     kind,
     draft,
     id,
+    rejectionContext,
     onClose,
     onSubmitted,
     onRefresh,
@@ -191,6 +231,7 @@ function FinancialDraftForm({
     kind: FinancialDraftKind
     draft: FinancialDraft
     id: string
+    rejectionContext?: ReworkRejectionContext
     onClose: () => void
     onSubmitted?: () => void
     onRefresh: () => Promise<FinancialDraft | undefined>
@@ -222,11 +263,14 @@ function FinancialDraftForm({
     const submissionInFlight = React.useRef(false)
     const commandInFlight = React.useRef(false)
     const pending = mutations.save.isPending || mutations.submit.isPending
+    const resolvedRejection =
+        rejectionContext ?? rejectionContextFromApprovalView(approval)
     const rework = useResubmissionReason({
         open: true,
         required: draft.status.toLowerCase() === "rejected",
         id: `${id}-resubmission-reason`,
         disabled: pending || Boolean(unknown),
+        quickPhrases: FINANCIAL_RESUBMISSION_PHRASES[kind],
     })
     const defaultValues = React.useMemo(
         () => financialDraftFormValues(draft),
@@ -478,6 +522,7 @@ function FinancialDraftForm({
                         draft.reversal_no ??
                         "—"}
                 </p>
+                <ReworkRejectionEcho rejection={resolvedRejection} />
                 {!editable ? (
                     <Alert>
                         <AlertTitle>原单当前不可编辑</AlertTitle>

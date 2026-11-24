@@ -31,15 +31,19 @@ import { ApprovalRouteStepper } from "@/features/approval-workflow/components/ap
 import { ApprovalSubmittedSummary } from "@/features/approval-workflow/components/approval-submitted-summary"
 import {
     FinancialApprovalRenderer,
+    type FinancialApprovalRendererHandle,
     buildFinancialDynamicRejectPhrases,
     isFinancialApprovalDocumentType,
     isReversalDocumentType,
 } from "@/features/approval-workflow/components/financial-approval-renderer"
+import type { ReworkRejectionContext } from "@/features/approval-workflow/components/rework-rejection-echo"
 import {
     StructuredDiffApprovalRenderer,
+    type StructuredDiffRendererHandle,
     buildStructuredDiffDynamicRejectPhrases,
     isStructuredDiffDocumentType,
 } from "@/features/approval-workflow/components/structured-diff-approval"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
     approvalSalesTaxPoint,
     displayUnixDate,
@@ -60,8 +64,10 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { displayName } from "@/lib/display-name"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import { hasPermission } from "@/lib/permissions"
+import { useRouter } from "@/lib/navigation"
 import { cn } from "@/lib/utils"
 import { subscribeWorkspaceHotkeyAction } from "@/lib/workspace-hotkeys"
+import { navigateWorkspace } from "@/lib/workspace-tabs"
 import { workspaceApprovalListFacts } from "../api/task-materials"
 import {
     workspaceDocumentName,
@@ -74,7 +80,9 @@ import { useWorkspaceDocumentFacts } from "../hooks/use-workspace-document-facts
 import { useWorkspaceSourceSalesOrder } from "../hooks/use-workspace-source-sales-order"
 import { buildDocumentHref } from "../lib/destination"
 import { type DetailSection, splitDetailSections } from "../lib/detail-facts"
+import { buildHandlerHref } from "../lib/handler-destination"
 import { isApprovalWorkbenchTask } from "../lib/navigation-eligibility"
+import { buildWorkspaceReworkTriage } from "../lib/rework-triage"
 import { workspacePaperKind } from "../lib/paper-kind"
 import {
     linkedDocumentHref,
@@ -98,7 +106,10 @@ import {
     type WorkspacePaperTarget,
 } from "./workspace-document-paper-dialog"
 import { WorkspaceFulfillmentProcessAction } from "./workspace-fulfillment-task"
-import { WorkspaceInvoiceApproval } from "./workspace-invoice-approval"
+import {
+    WorkspaceInvoiceApproval,
+    type WorkspaceInvoiceApprovalHandle,
+} from "./workspace-invoice-approval"
 import { buildInvoiceDynamicRejectPhrases } from "./workspace-invoice-approval-model"
 import { WorkspaceMoney } from "./workspace-money"
 import { WorkspaceProcessingPane } from "./workspace-processing-layout"
@@ -115,11 +126,17 @@ import { WorkspacePurchasePayment } from "./workspace-purchase-payment"
 import type { PurchaseSourceComparisonTarget } from "./workspace-purchase-source-comparison"
 import {
     WorkspaceReceiptApproval,
+    type WorkspaceReceiptApprovalHandle,
     buildReceiptDynamicRejectPhrases,
 } from "./workspace-receipt-approval"
-import { WorkspaceRejectionNotice } from "./workspace-rejection-notice"
+import {
+    WorkspaceRejectionNotice,
+    useWorkspaceRejectionInfo,
+} from "./workspace-rejection-notice"
+import { WorkspaceReworkCommandCard } from "./workspace-rework-command-card"
 import {
     WorkspaceSalesApproval,
+    type WorkspaceSalesApprovalHandle,
     assessSalesApprovalRisk,
 } from "./workspace-sales-approval"
 import { buildSalesDynamicRejectPhrases } from "../lib/sales-approval-model"
@@ -247,6 +264,8 @@ export function WorkspaceDocumentTaskDetail({
         item.workItemType,
         item.businessObjectType,
     )
+    const router = useRouter()
+    const profileQuery = useAccountProfileQuery()
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const returnTo = `${pathname}${searchParams.toString() ? `?${searchParams}` : ""}`
@@ -258,8 +277,23 @@ export function WorkspaceDocumentTaskDetail({
     >(undefined)
     const [sourceComparisonTarget, setSourceComparisonTarget] =
         useState<PurchaseSourceComparisonTarget>()
+    const [reworkAbandonOpen, setReworkAbandonOpen] = useState(false)
+    const [reworkInlineEditOpen, setReworkInlineEditOpen] = useState(false)
     const purchaseApprovalHandleRef =
         useRef<WorkspacePurchaseApprovalHandle | null>(null)
+    const invoiceApprovalHandleRef =
+        useRef<WorkspaceInvoiceApprovalHandle | null>(null)
+    const salesApprovalHandleRef = useRef<WorkspaceSalesApprovalHandle | null>(
+        null,
+    )
+    const receiptApprovalHandleRef =
+        useRef<WorkspaceReceiptApprovalHandle | null>(null)
+    const financialRendererHandleRef =
+        useRef<FinancialApprovalRendererHandle | null>(null)
+    const structuredDiffHandleRef = useRef<StructuredDiffRendererHandle | null>(
+        null,
+    )
+    const rejectionInfo = useWorkspaceRejectionInfo(item)
 
     const setRailCollapsed = (
         next: boolean | ((previous: boolean) => boolean),
@@ -296,6 +330,8 @@ export function WorkspaceDocumentTaskDetail({
         setPaper(null)
         setActiveMaterialFileId(undefined)
         setSourceComparisonTarget(undefined)
+        setReworkAbandonOpen(false)
+        setReworkInlineEditOpen(false)
         setRailTab((current) =>
             current === "source-sales" &&
             item.businessObjectType !== "purchase_order"
@@ -330,6 +366,24 @@ export function WorkspaceDocumentTaskDetail({
     const invoiceReviewQuery = useInvoiceApprovalReview(
         invoiceApproval && instanceId ? instanceId : "",
     )
+    const refreshInvoiceOnReturnRef = useRef(() => {})
+    refreshInvoiceOnReturnRef.current = () => {
+        void invoiceReviewQuery.refetch()
+        void materials.refetch()
+    }
+    useEffect(() => {
+        if (!rework || !invoiceApproval || !instanceId) return
+        const handleReturn = () => {
+            if (document.visibilityState === "hidden") return
+            refreshInvoiceOnReturnRef.current()
+        }
+        window.addEventListener("focus", handleReturn)
+        document.addEventListener("visibilitychange", handleReturn)
+        return () => {
+            window.removeEventListener("focus", handleReturn)
+            document.removeEventListener("visibilitychange", handleReturn)
+        }
+    }, [instanceId, invoiceApproval, rework])
 
     const downloadSubmittedMaterial = useDownloadApprovalMaterial(
         instanceId ?? "",
@@ -785,9 +839,146 @@ export function WorkspaceDocumentTaskDetail({
         submission,
     ])
 
+    const reworkTarget = reworkTask ?? item
+    const reworkDocType =
+        reworkTarget.routeContext?.documentType ??
+        reworkTarget.businessObjectType
+    const effectivePermissions =
+        profileQuery.data?.permissions ?? grantedPermissions
+    const supportsReworkInlineEdit = Boolean(
+        [
+            "customer_receipt",
+            "customer_refund",
+            "receipt_reversal",
+            "supplier_refund",
+            "payment_reversal",
+            "stock_adjustment",
+        ].includes(reworkDocType) ||
+        ((reworkDocType === "sales_change_order" ||
+            reworkDocType === "purchase_change_order") &&
+            Boolean(reworkTarget.rootBusinessObjectId?.trim())) ||
+        (reworkDocType === "sales_invoice_request" &&
+            hasPermission(
+                effectivePermissions,
+                "sales_invoice_request:submit",
+            ) &&
+            (hasPermission(
+                effectivePermissions,
+                "sales_invoice_request:detail",
+            ) ||
+                hasPermission(
+                    effectivePermissions,
+                    "sales_invoice_request:list",
+                ))),
+    )
+    const reworkDestination = buildHandlerHref({
+        ...reworkTarget,
+        approvalInstanceId: reworkTarget.approvalProcessInstanceId,
+    })
+    const reworkHref = (() => {
+        if (!reworkDestination) return null
+        const [destPath, destQuery] = reworkDestination.split("?", 2)
+        if (!destPath) return null
+        const params = new URLSearchParams(destQuery)
+        params.set("returnTo", returnTo)
+        return `${destPath}?${params.toString()}`
+    })()
+    const openReworkDestination = () => {
+        if (!reworkHref) return
+        if (!navigateWorkspace(reworkHref)) {
+            router.push(reworkHref)
+        }
+    }
+    const reworkCanProcess =
+        reworkTarget.status === "OPEN" &&
+        reworkTarget.allowedActions.includes("PROCESS")
+    const reworkCanAbandon =
+        reworkTarget.status === "OPEN" &&
+        reworkTarget.allowedActions.includes("ABANDON_REWORK")
+    const reworkTriage = rework
+        ? buildWorkspaceReworkTriage({
+              item,
+              reworkTask,
+              submission,
+              invoiceReview: invoiceReviewQuery.data,
+              invoiceReviewLoading: invoiceReviewQuery.isPending,
+              invoiceReviewError: invoiceReviewQuery.isError,
+              attachmentCount: dockedMaterialFiles.length,
+              canProcess: reworkCanProcess,
+              canAbandon: reworkCanAbandon,
+              supportsInlineEdit: supportsReworkInlineEdit,
+              hasDocumentHref: Boolean(reworkHref),
+              canOpenMaterials: Boolean(
+                  showDecisionRail ||
+                  item.businessObjectType === "sales_order" ||
+                  item.businessObjectType === "voucher_sales_order",
+              ),
+              refreshing:
+                  materials.isFetching ||
+                  (invoiceApproval && invoiceReviewQuery.isFetching) ||
+                  rejectionInfo.isFetching,
+              onRequestAbandon: reworkCanAbandon
+                  ? () => setReworkAbandonOpen(true)
+                  : undefined,
+              onOpenEdit: reworkCanProcess
+                  ? () => {
+                        if (supportsReworkInlineEdit) {
+                            setReworkInlineEditOpen(true)
+                        } else {
+                            openReworkDestination()
+                        }
+                    }
+                  : undefined,
+              onOpenDocument: reworkHref ? openReworkDestination : undefined,
+              onOpenMaterials: showDecisionRail
+                  ? () => {
+                        setRailTab("materials")
+                        setRailCollapsed(false)
+                    }
+                  : item.businessObjectType === "sales_order" ||
+                      item.businessObjectType === "voucher_sales_order"
+                    ? () => salesApprovalHandleRef.current?.openMaterials()
+                    : undefined,
+              onRefresh: () => {
+                  void materials.refetch()
+                  if (invoiceApproval) void invoiceReviewQuery.refetch()
+                  rejectionInfo.onRetry()
+              },
+              onLocateInvoiceRisk: (target) =>
+                  invoiceApprovalHandleRef.current?.locateRisk(target),
+              onFilterPurchaseRisks: () =>
+                  purchaseApprovalHandleRef.current?.filterToRisks(),
+              onFilterSalesRisks: () =>
+                  salesApprovalHandleRef.current?.filterToRisks(),
+              onLocateReceiptRisk: (riskId) =>
+                  receiptApprovalHandleRef.current?.locateRisk(riskId),
+              onLocateFinancialLines: () =>
+                  financialRendererHandleRef.current?.locateLines(),
+              onLocateDiffChanges: () =>
+                  structuredDiffHandleRef.current?.locateChanges(),
+          })
+        : null
+    const rejectionContext: ReworkRejectionContext | undefined = rework
+        ? {
+              rejector: rejectionInfo.rejector,
+              node: rejectionInfo.node,
+              rejectedAtLabel: rejectionInfo.rejectedAt?.label,
+              rejectedAtDateTime: rejectionInfo.rejectedAt?.dateTime,
+              reason: rejectionInfo.reason,
+          }
+        : undefined
+    const reworkBlocked = Boolean(rework && reworkTriage?.stance === "blocked")
+
     const actions = reworkTask ? (
         <WorkspaceApprovalReworkActions
             item={reworkTask}
+            rejectionContext={rejectionContext}
+            reworkBlocked={reworkBlocked}
+            abandonVariant={reworkBlocked ? "default" : "outline"}
+            abandonOpen={reworkAbandonOpen}
+            onAbandonOpenChange={setReworkAbandonOpen}
+            inlineEditOpen={reworkInlineEditOpen}
+            onInlineEditOpenChange={setReworkInlineEditOpen}
             onTaskCompleted={onTaskCompleted}
         />
     ) : approvalTask && !trackingTask ? (
@@ -902,7 +1093,7 @@ export function WorkspaceDocumentTaskDetail({
         usesPurchaseWorkbench
 
     const showRejectionAlertBanner = rework
-        ? canReadSubmission && Boolean(instanceId)
+        ? canReadSensitive
         : item.approval?.status === "REJECTED"
     const showRouteStepper = Boolean(
         routeStepperEnabled && compactStepperRoute?.nodes.length,
@@ -1165,7 +1356,13 @@ export function WorkspaceDocumentTaskDetail({
                 ) : null
             }
             alertBanner={
-                showRejectionAlertBanner ? (
+                rework && canReadSensitive && reworkTriage ? (
+                    <WorkspaceReworkCommandCard
+                        idPrefix={`workspace-rework-command-${toAutomationIdSegment(item.workItemId)}`}
+                        rejection={rejectionInfo}
+                        {...reworkTriage}
+                    />
+                ) : !rework && showRejectionAlertBanner ? (
                     <WorkspaceRejectionNotice
                         item={item}
                         actionable={Boolean(
@@ -1177,7 +1374,7 @@ export function WorkspaceDocumentTaskDetail({
             footer={actions}
             aria-label="当前任务"
         >
-            {blockers.length > 0 ? (
+            {!rework && blockers.length > 0 ? (
                 <div className="pt-4">
                     <Alert variant="warning">
                         <AlertTitle>当前无法继续办理</AlertTitle>
@@ -1278,6 +1475,8 @@ export function WorkspaceDocumentTaskDetail({
                         }
                         activeFileId={activeMaterialFileId}
                         hideEmbeddedMaterials={showDecisionRail}
+                        hideTopBanners={rework}
+                        approvalHandleRef={receiptApprovalHandleRef}
                     />
                 ) : null}
                 {deliveryBrief ? <WorkspaceDeliveryBrief item={item} /> : null}
@@ -1327,7 +1526,7 @@ export function WorkspaceDocumentTaskDetail({
                 submission &&
                 instanceId ? (
                     <>
-                        {genericResubmissionBanner ? (
+                        {!rework && genericResubmissionBanner ? (
                             <div className="pt-3">
                                 {genericResubmissionBanner}
                             </div>
@@ -1339,6 +1538,8 @@ export function WorkspaceDocumentTaskDetail({
                             impactSummary={submission.display.impact_summary}
                             documentNo={documentNumber}
                             counterpartyLabel={counterpartyName}
+                            hideRiskStrip={rework}
+                            rendererHandleRef={structuredDiffHandleRef}
                         />
                         {!showDecisionRail ? (
                             <DetailBlock
@@ -1371,7 +1572,11 @@ export function WorkspaceDocumentTaskDetail({
                             documentNo={documentNumber}
                             counterpartyLabel={counterpartyName}
                             instanceId={instanceId}
-                            resubmission={genericResubmissionBanner}
+                            resubmission={
+                                rework ? null : genericResubmissionBanner
+                            }
+                            hideRiskStrip={rework}
+                            rendererHandleRef={financialRendererHandleRef}
                         />
                         {!showDecisionRail ? (
                             <DetailBlock
@@ -1393,7 +1598,7 @@ export function WorkspaceDocumentTaskDetail({
                     </>
                 ) : useInlineGenericSummary && submission && instanceId ? (
                     <>
-                        {genericResubmissionBanner ? (
+                        {!rework && genericResubmissionBanner ? (
                             <div className="pt-3">
                                 {genericResubmissionBanner}
                             </div>
@@ -1486,6 +1691,8 @@ export function WorkspaceDocumentTaskDetail({
                         }
                         activeFileId={activeMaterialFileId}
                         hideEmbeddedMaterials={showDecisionRail}
+                        hideTopBanners={rework}
+                        approvalHandleRef={invoiceApprovalHandleRef}
                     />
                 ) : null}
 
@@ -1504,6 +1711,8 @@ export function WorkspaceDocumentTaskDetail({
                         }
                         activeFileId={activeMaterialFileId}
                         hideEmbeddedMaterials={showDecisionRail}
+                        hideTopBanners={rework}
+                        approvalHandleRef={salesApprovalHandleRef}
                     />
                 ) : null}
 
@@ -1531,6 +1740,7 @@ export function WorkspaceDocumentTaskDetail({
                         approvalHandleRef={purchaseApprovalHandleRef}
                         activeFileId={activeMaterialFileId}
                         hideEmbeddedMaterials={showDecisionRail}
+                        hideTopBanners={rework}
                     />
                 ) : null}
 

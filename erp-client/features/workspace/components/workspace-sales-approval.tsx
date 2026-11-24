@@ -1,6 +1,14 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import {
+    useEffect,
+    useImperativeHandle,
+    useMemo,
+    useRef,
+    useState,
+    type ReactNode,
+    type RefObject,
+} from "react"
 import {
     ChevronRightIcon,
     CircleQuestionMarkIcon,
@@ -70,6 +78,11 @@ import {
 
 export { assessSalesApprovalRisk }
 
+export interface WorkspaceSalesApprovalHandle {
+    filterToRisks: () => void
+    openMaterials: () => void
+}
+
 /** 审批页、分栏检查器与办理抽屉共用本次提交的销售明细。 */
 export function WorkspaceSalesApproval({
     instanceId,
@@ -78,6 +91,8 @@ export function WorkspaceSalesApproval({
     onOpenMaterials,
     activeFileId,
     hideEmbeddedMaterials = false,
+    hideTopBanners = false,
+    approvalHandleRef,
 }: {
     instanceId: string
     item: WorkspaceWorkItem
@@ -85,6 +100,8 @@ export function WorkspaceSalesApproval({
     onOpenMaterials?: () => void
     activeFileId?: string
     hideEmbeddedMaterials?: boolean
+    hideTopBanners?: boolean
+    approvalHandleRef?: RefObject<WorkspaceSalesApprovalHandle | null>
 }) {
     const query = useApprovalMaterials(instanceId, true, item)
     const submission = query.data?.sales_order
@@ -169,6 +186,20 @@ export function WorkspaceSalesApproval({
             ),
         [deliverySummary.itemGroups],
     )
+
+    const materialsSectionId = `${prefix}-materials-section`
+    useImperativeHandle(approvalHandleRef, () => ({
+        filterToRisks: () => {
+            tableHandle.current?.filterToRisks()
+        },
+        openMaterials: () => {
+            if (onOpenMaterials) {
+                onOpenMaterials()
+                return
+            }
+            setSectionPulse({ id: materialsSectionId })
+        },
+    }))
 
     if (query.isPending) {
         return (
@@ -280,7 +311,6 @@ export function WorkspaceSalesApproval({
         },
         { label: "业务备注", value: submission.business_remark?.trim() },
     ].filter(({ value }) => Boolean(value && value !== "—"))
-    const materialsSectionId = `${prefix}-materials-section`
     const inlineDeliverySectionId = `${prefix}-delivery-inline-section`
     const canOpenMaterials = Boolean(onOpenMaterials || !hideEmbeddedMaterials)
     const showAttachmentShortcut = attachments.length > 0 && canOpenMaterials
@@ -309,7 +339,7 @@ export function WorkspaceSalesApproval({
             data-slot="workspace-sales-approval"
             className="@container/sales-lines flex min-w-0 flex-col"
         >
-            {resubmission || riskSummary ? (
+            {!hideTopBanners && (resubmission || riskSummary) ? (
                 <div className="space-y-2 pt-3">
                     {resubmission ? (
                         <WorkspaceApprovalResubmissionBanner

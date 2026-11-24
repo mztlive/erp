@@ -1,6 +1,12 @@
 "use client"
 
-import { useEffect, useState, type ReactNode } from "react"
+import {
+    useEffect,
+    useImperativeHandle,
+    useState,
+    type ReactNode,
+    type RefObject,
+} from "react"
 import {
     ChevronRightIcon,
     FileTextIcon,
@@ -50,6 +56,11 @@ export { buildInvoiceDynamicRejectPhrases } from "./workspace-invoice-approval-m
 type EvidenceTabId = "source-sales" | "receipts" | "invoices"
 type RiskTarget = "source-warnings" | "quota-evidence" | "materials"
 
+export interface WorkspaceInvoiceApprovalHandle {
+    locateRisk: (target: RiskTarget) => void
+    refresh: () => void
+}
+
 const pulseDuration = 2200
 
 export function WorkspaceInvoiceApproval({
@@ -59,7 +70,9 @@ export function WorkspaceInvoiceApproval({
     onSelectFile,
     activeFileId,
     hideEmbeddedMaterials = false,
+    hideTopBanners = false,
     onOpenMaterials,
+    approvalHandleRef,
 }: {
     instanceId: string
     item: WorkspaceWorkItem
@@ -67,7 +80,9 @@ export function WorkspaceInvoiceApproval({
     onSelectFile?: (fileId: string) => void
     activeFileId?: string
     hideEmbeddedMaterials?: boolean
+    hideTopBanners?: boolean
     onOpenMaterials?: () => void
+    approvalHandleRef?: RefObject<WorkspaceInvoiceApprovalHandle | null>
 }) {
     const review = useInvoiceApprovalReview(instanceId)
     const materials = useApprovalMaterials(instanceId, true, item)
@@ -176,6 +191,10 @@ export function WorkspaceInvoiceApproval({
         void review.refetch()
         void materials.refetch()
     }
+    useImperativeHandle(approvalHandleRef, () => ({
+        locateRisk,
+        refresh,
+    }))
     const openEmbeddedMaterials =
         !hideEmbeddedMaterials && attachmentCount > 0
             ? () => locateRisk("materials")
@@ -190,11 +209,11 @@ export function WorkspaceInvoiceApproval({
             data-slot="workspace-invoice-approval"
             className="@container/invoice-approval flex min-w-0 flex-col gap-3 pt-3"
         >
-            {resubmission ? (
+            {!hideTopBanners && resubmission ? (
                 <WorkspaceApprovalResubmissionBanner {...resubmission} />
             ) : null}
 
-            {shortage || sourceWarnings.length ? (
+            {!hideTopBanners && (shortage || sourceWarnings.length) ? (
                 <div
                     role="alert"
                     data-slot="invoice-approval-risk-strip"

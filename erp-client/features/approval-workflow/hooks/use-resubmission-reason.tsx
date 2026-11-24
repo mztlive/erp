@@ -27,6 +27,12 @@ function firstErrorMessage(errors: readonly unknown[]): string | undefined {
     return undefined
 }
 
+/** 重提说明快捷回复默认短语。 */
+export const DEFAULT_RESUBMISSION_QUICK_PHRASES = [
+    "已按审批意见修改完善，请复核",
+    "已核对单据内容并补充说明，请复核",
+] as const
+
 /** 重提说明独立于业务内容；不改内容也须说明再次申请的依据（严格遵循 BPM 512 UTF-8 字节上限）。 */
 export function useResubmissionReason({
     open,
@@ -34,12 +40,14 @@ export function useResubmissionReason({
     id,
     disabled = false,
     initialReason = "",
+    quickPhrases,
 }: {
     open: boolean
     required: boolean
     id: string
     disabled?: boolean
     initialReason?: string
+    quickPhrases?: readonly string[]
 }) {
     const schema = useMemo(
         () => bpmReasonSchema({ required: true, label: "重新提交说明" }),
@@ -92,6 +100,10 @@ export function useResubmissionReason({
                             error={error}
                             invalid={Boolean(error)}
                             disabled={disabled}
+                            quickPhrases={
+                                quickPhrases ??
+                                DEFAULT_RESUBMISSION_QUICK_PHRASES
+                            }
                         />
                     )
                 }}

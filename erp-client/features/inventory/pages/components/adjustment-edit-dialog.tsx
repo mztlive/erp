@@ -1,6 +1,11 @@
 "use client"
 
 import * as React from "react"
+import {
+    ReworkRejectionEcho,
+    rejectionContextFromApprovalView,
+    type ReworkRejectionContext,
+} from "@/features/approval-workflow/components/rework-rejection-echo"
 import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
@@ -52,16 +57,26 @@ const editSchema = adjustSchema.omit({ quantity: true }).extend({
         .min(1),
 })
 
+const ADJUSTMENT_RESUBMISSION_PHRASES = [
+    "已按审批意见核对调整数量与库存盘点依据，请复核",
+    "已完善库存调整原因说明，请复核",
+    "已按审批意见修改完善，请复核",
+] as const
+
 /** 编辑撤回后的原调整单，所有原行与单据身份均保留。 */
 export function AdjustmentEditDialog({
     id,
     canSubmit,
+    rejectionContext,
     onClose,
+    onSaved,
     onSubmitted,
 }: {
     id: string
     canSubmit: boolean
+    rejectionContext?: ReworkRejectionContext
     onClose: () => void
+    onSaved?: () => void
     onSubmitted: () => void
 }) {
     const query = useEditableAdjustmentQuery(id)
@@ -109,8 +124,10 @@ export function AdjustmentEditDialog({
                             draft={query.data}
                             canSubmit={canSubmit}
                             prefix={prefix}
+                            rejectionContext={rejectionContext}
                             onBusyChange={setBusy}
                             onClose={onClose}
+                            onSaved={onSaved}
                             onSubmitted={onSubmitted}
                             onRefresh={() => query.refetch()}
                         />
@@ -146,16 +163,20 @@ function AdjustmentEditForm({
     draft,
     canSubmit,
     prefix,
+    rejectionContext,
     onBusyChange,
     onClose,
+    onSaved,
     onSubmitted,
     onRefresh,
 }: {
     draft: EditableAdjustment
     canSubmit: boolean
     prefix: string
+    rejectionContext?: ReworkRejectionContext
     onBusyChange: (busy: boolean) => void
     onClose: () => void
+    onSaved?: () => void
     onSubmitted: () => void
     onRefresh: () => Promise<unknown>
 }) {
@@ -183,12 +204,15 @@ function AdjustmentEditForm({
     )
     const pending = save.isPending || submit.isPending || resolve.isPending
     const locked = pending || Boolean(unknown)
+    const resolvedRejection =
+        rejectionContext ?? rejectionContextFromApprovalView(draft.approval)
     const rework = useResubmissionReason({
         open: true,
         required:
             draft.rejected || draft.approval.instance?.status === "REJECTED",
         id: `${prefix}-resubmission-reason`,
         disabled: locked,
+        quickPhrases: ADJUSTMENT_RESUBMISSION_PHRASES,
     })
 
     async function execute(command: FormalCommandIdentity<SubmitInput>) {
@@ -240,7 +264,11 @@ function AdjustmentEditForm({
                         id: draft.id,
                         version: draft.approval.submitCommand.expectedVersion,
                     })
-                    onSubmitted()
+                    if (onSaved) {
+                        onSaved()
+                    } else {
+                        onSubmitted()
+                    }
                     onClose()
                 } catch (cause) {
                     setError(
@@ -336,6 +364,7 @@ function AdjustmentEditForm({
             <p className="text-body-compact font-medium">
                 {draft.warehouseName} · {draft.lines.length} 项明细
             </p>
+            <ReworkRejectionEcho rejection={resolvedRejection} />
             {error ? (
                 <Alert variant={unknown ? "default" : "destructive"}>
                     <AlertDescription>{error}</AlertDescription>

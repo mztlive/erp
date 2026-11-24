@@ -69,6 +69,7 @@ export { purchaseApprovalRiskReasons }
 
 export interface WorkspacePurchaseApprovalHandle {
     locateLine: (lineId: string) => void
+    filterToRisks: () => void
 }
 
 function purchaseApprovalPrefix(instanceId: string) {
@@ -180,6 +181,7 @@ export function WorkspacePurchaseApproval({
     approvalHandleRef,
     activeFileId,
     hideEmbeddedMaterials,
+    hideTopBanners = false,
 }: {
     instanceId: string
     item: WorkspaceWorkItem
@@ -192,6 +194,7 @@ export function WorkspacePurchaseApproval({
     approvalHandleRef?: RefObject<WorkspacePurchaseApprovalHandle | null>
     activeFileId?: string
     hideEmbeddedMaterials: boolean
+    hideTopBanners?: boolean
 }) {
     const submission = materials.data
     const lines = submission?.purchase_lines
@@ -253,6 +256,19 @@ export function WorkspacePurchaseApproval({
     const materialsSectionId = `${prefix}-materials-section`
     const linesSectionId = `${prefix}-lines-section`
 
+    const handleFilterToRisks = () => {
+        if (tableHandleRef.current) {
+            tableHandleRef.current.filterToRisks()
+        } else {
+            setRiskOnly(true)
+        }
+        window.requestAnimationFrame(() => {
+            document
+                .getElementById(linesSectionId)
+                ?.scrollIntoView({ behavior: "smooth", block: "nearest" })
+        })
+    }
+
     useImperativeHandle(approvalHandleRef, () => ({
         locateLine: (lineId: string) => {
             tableHandleRef.current?.revealLine(lineId)
@@ -276,20 +292,8 @@ export function WorkspacePurchaseApproval({
                 })
             })
         },
+        filterToRisks: handleFilterToRisks,
     }))
-
-    const handleFilterToRisks = () => {
-        if (tableHandleRef.current) {
-            tableHandleRef.current.filterToRisks()
-        } else {
-            setRiskOnly(true)
-        }
-        window.requestAnimationFrame(() => {
-            document
-                .getElementById(linesSectionId)
-                ?.scrollIntoView({ behavior: "smooth", block: "nearest" })
-        })
-    }
 
     const handleOpenAttachmentShortcut = () => {
         if (onOpenMaterials) {
@@ -389,7 +393,8 @@ export function WorkspacePurchaseApproval({
             data-slot="workspace-purchase-approval"
             className="@container/purchase-lines flex min-w-0 flex-col"
         >
-            {parsedExtras.resubmission || riskReasons.length > 0 ? (
+            {!hideTopBanners &&
+            (parsedExtras.resubmission || riskReasons.length > 0) ? (
                 <div className="space-y-2 pt-3">
                     {parsedExtras.resubmission ? (
                         <WorkspaceApprovalResubmissionBanner

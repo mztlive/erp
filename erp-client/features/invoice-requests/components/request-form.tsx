@@ -56,6 +56,11 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import {
+    ReworkRejectionEcho,
+    rejectionContextFromApprovalView,
+    type ReworkRejectionContext,
+} from "@/features/approval-workflow/components/rework-rejection-echo"
 import { SubmissionRouteConfirmation } from "@/features/approval-workflow/components/submission-route-confirmation"
 import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
 import {
@@ -188,6 +193,12 @@ export type InvoiceRequestWorkspaceChromeConfig = {
     back?: DetailWorkspaceBackLink
 }
 
+const INVOICE_REQUEST_RESUBMISSION_PHRASES = [
+    "已按审批意见调整开票明细与申请金额，请复核",
+    "已核对可开票额度及申请事由，请复核",
+    "已按审批意见修改完善，请复核",
+] as const
+
 /**
  * 开票申请表单：
  * - `workspace`：独立新建/修改全页，采用纯白通栏左作业区 + 右参考侧栏 + 吸底核对栏；
@@ -201,6 +212,7 @@ export function InvoiceRequestForm({
     existing: original,
     presentation = "inline",
     workspaceChrome,
+    rejectionContext,
     onDone,
     onCancel,
 }: {
@@ -209,7 +221,8 @@ export function InvoiceRequestForm({
     existing?: InvoiceRequest
     presentation?: "workspace" | "inline" | "dialog"
     workspaceChrome?: InvoiceRequestWorkspaceChromeConfig
-    onDone: (request: InvoiceRequest) => void
+    rejectionContext?: ReworkRejectionContext
+    onDone: (request: InvoiceRequest, action?: "save" | "submit") => void
     onCancel: () => void
 }) {
     const permissions = useInvoiceRequestPermissions()
@@ -262,6 +275,7 @@ export function InvoiceRequestForm({
             commands.update.isPending ||
             uncertain ||
             saveUncertain,
+        quickPhrases: INVOICE_REQUEST_RESUBMISSION_PHRASES,
     })
 
     const form = useAppForm({
@@ -557,7 +571,7 @@ export function InvoiceRequestForm({
             const result = await commands.update.mutateAsync(input)
             pendingSave.current = null
             setSaveUncertain(false)
-            onDone(result)
+            onDone(result, "save")
         } catch (err) {
             setError(err)
             const unknown = classifyFormalCommandError(err) === "unknown"
@@ -574,7 +588,7 @@ export function InvoiceRequestForm({
             pending.current = null
             setUncertain(false)
             setCommittedUnreadable(false)
-            onDone(result)
+            onDone(result, "submit")
         } catch (err) {
             setError(err)
             const committed =
@@ -621,8 +635,31 @@ export function InvoiceRequestForm({
         if (amounts.isError) void amounts.refetch()
     }
 
+    const existingApproval: DocumentApprovalView | undefined = (() => {
+        const source = existing?.approval
+        if (
+            !source ||
+            (source.definition && !Array.isArray(source.definition.nodes)) ||
+            (source.recent_history != null &&
+                !Array.isArray(source.recent_history))
+        ) {
+            return undefined
+        }
+        return mapDocumentApprovalViewDto({
+            ...source,
+            recent_history: source.recent_history ?? [],
+            allowed_actions: source.allowed_actions ?? [],
+        })
+    })()
+
+    const resolvedRejection =
+        rejectionContext ?? rejectionContextFromApprovalView(existingApproval)
+
     const alertsNode = (
         <>
+            {presentation === "workspace" ? (
+                <ReworkRejectionEcho rejection={resolvedRejection} />
+            ) : null}
             {amounts.data?.unavailable_reason ? (
                 <Alert variant="warning">
                     <CircleAlertIcon aria-hidden="true" />
@@ -874,23 +911,6 @@ export function InvoiceRequestForm({
             onImport={handleImportSalesLines}
         />
     ) : null
-
-    const existingApproval: DocumentApprovalView | undefined = (() => {
-        const source = existing?.approval
-        if (
-            !source ||
-            (source.definition && !Array.isArray(source.definition.nodes)) ||
-            (source.recent_history != null &&
-                !Array.isArray(source.recent_history))
-        ) {
-            return undefined
-        }
-        return mapDocumentApprovalViewDto({
-            ...source,
-            recent_history: source.recent_history ?? [],
-            allowed_actions: source.allowed_actions ?? [],
-        })
-    })()
 
     const confirmOrderNo =
         existing?.sales_order_no ||
@@ -1152,6 +1172,7 @@ export function InvoiceRequestForm({
 
     const compactBodyContent = (
         <>
+            <ReworkRejectionEcho rejection={resolvedRejection} />
             {showSourceSection ? sourceFields : null}
 
             <InvoiceRequestDialogContext

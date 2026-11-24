@@ -1,6 +1,11 @@
 "use client"
 
 import * as React from "react"
+import {
+    ReworkRejectionEcho,
+    rejectionContextFromApprovalView,
+    type ReworkRejectionContext,
+} from "@/features/approval-workflow/components/rework-rejection-echo"
 import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
 import { useAppForm } from "@/components/form"
 import { BusinessFailureState } from "@/components/business"
@@ -51,12 +56,20 @@ import {
 
 type EditPayload = Omit<SubmitPurchaseChangeInput, "idempotencyKey">
 
+const PURCHASE_CHANGE_RESUBMISSION_PHRASES = [
+    "已按审批意见调整采购变更明细及单价交期，请复核",
+    "已核对付款条件及改单原因，请复核",
+    "已按审批意见修改完善，请复核",
+] as const
+
 /** 采购改单：修改原变更单的目标内容后提交审批；生效前采购单按当前版本执行。 */
 export function PurchaseChangeOrderEditDialog({
     open,
     changeOrderId,
     purchaseOrderId,
     approval,
+    rejectionContext,
+    requireResubmissionReason = false,
     paidAmount,
     onOpenChange,
     onResult,
@@ -65,6 +78,8 @@ export function PurchaseChangeOrderEditDialog({
     changeOrderId: string
     purchaseOrderId: string
     approval?: DocumentApprovalView
+    rejectionContext?: ReworkRejectionContext
+    requireResubmissionReason?: boolean
     /** 已付款金额；改后总额不得低于此金额。 */
     paidAmount?: string
     onOpenChange: (open: boolean) => void
@@ -162,6 +177,8 @@ export function PurchaseChangeOrderEditDialog({
                         purchaseOrderId={purchaseOrderId}
                         changeOrderId={changeOrderId}
                         approval={approval}
+                        rejectionContext={rejectionContext}
+                        requireResubmissionReason={requireResubmissionReason}
                         paidAmount={paidAmount}
                         onBusyChange={changeBusy}
                         onClose={() => onOpenChange(false)}
@@ -180,6 +197,8 @@ function PurchaseChangeEditForm({
     purchaseOrderId,
     changeOrderId,
     approval,
+    rejectionContext,
+    requireResubmissionReason,
     paidAmount,
     onBusyChange,
     onClose,
@@ -191,6 +210,8 @@ function PurchaseChangeEditForm({
     purchaseOrderId: string
     changeOrderId: string
     approval?: DocumentApprovalView
+    rejectionContext?: ReworkRejectionContext
+    requireResubmissionReason: boolean
     paidAmount?: string
     onBusyChange: (busy: boolean) => void
     onClose: () => void
@@ -352,11 +373,17 @@ function PurchaseChangeEditForm({
         }
     }
 
+    const resolvedRejection =
+        rejectionContext ?? rejectionContextFromApprovalView(approval)
     const rework = useResubmissionReason({
         open: true,
-        required: approval?.instance?.status === "REJECTED",
+        required: Boolean(
+            requireResubmissionReason ||
+            approval?.instance?.status === "REJECTED",
+        ),
         id: `${id}-resubmission-reason`,
         disabled: mutation.isPending || saveMutation.isPending || unknown,
+        quickPhrases: PURCHASE_CHANGE_RESUBMISSION_PHRASES,
     })
     const form = useAppForm({
         defaultValues: purchaseChangeDraftValues(draft, options),
@@ -422,6 +449,7 @@ function PurchaseChangeEditForm({
             }}
         >
             <DialogBody className="space-y-6">
+                <ReworkRejectionEcho rejection={resolvedRejection} />
                 {centerQuery.isError ||
                 (!centerQuery.isPending && !centerQuery.data) ? (
                     <BusinessFailureState

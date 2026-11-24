@@ -1,6 +1,13 @@
 "use client"
 
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import {
+    useEffect,
+    useImperativeHandle,
+    useRef,
+    useState,
+    type ReactNode,
+    type RefObject,
+} from "react"
 import {
     ChevronLeftIcon,
     ChevronRightIcon,
@@ -72,6 +79,10 @@ export function isReversalDocumentType(type?: string | null): boolean {
 type BriefSource = ApprovalMaterials["display"]["source"]
 type BriefSection = BriefSource["extra_sections"][number]
 
+export interface FinancialApprovalRendererHandle {
+    locateLines: () => void
+}
+
 export type FinancialApprovalRendererProps = Readonly<{
     documentType: FinancialApprovalDocumentType
     source: BriefSource
@@ -81,6 +92,8 @@ export type FinancialApprovalRendererProps = Readonly<{
     counterpartyLabel?: string | null
     instanceId?: string | null
     resubmission?: ReactNode
+    hideRiskStrip?: boolean
+    rendererHandleRef?: RefObject<FinancialApprovalRendererHandle | null>
 }>
 
 const AMOUNT_LABELS = [
@@ -281,6 +294,50 @@ export function buildFinancialDynamicRejectPhrases(
         .slice(0, 6)
 }
 
+export type FinancialApprovalRiskSummary = Readonly<{
+    severe: boolean
+    riskLabels: readonly string[]
+    impactDescriptions: readonly string[]
+    missingOriginalDocument: boolean
+    evidenceMissing: boolean
+    hasLines: boolean
+}>
+
+/** 提取退款/红字冲正单据的前置体检风险摘要，供行动指挥卡与审查条共用。 */
+export function inspectFinancialApprovalRisks(
+    documentType: FinancialApprovalDocumentType,
+    source: BriefSource,
+    impactSummary?: string | null,
+    attachmentCount?: number,
+): FinancialApprovalRiskSummary {
+    const facts = readFinancialSource(documentType, source)
+    const impactDescriptions = [
+        ...new Set([...facts.impacts, impactSummary?.trim() ?? ""]),
+    ].filter(Boolean)
+    const severe = facts.reversal || facts.largeRefund
+    const evidenceMissing =
+        attachmentCount === 0 ||
+        (attachmentCount == null &&
+            facts.sections.some(
+                ({ label, value }) =>
+                    label === "本单凭证附件" && value === "未上传",
+            ))
+    const riskLabels = [
+        facts.reversal && "红字冲正",
+        facts.largeRefund && "大额退款",
+        !facts.originalDocument && "原单号待补全",
+        impactDescriptions.length > 0 && "核销影响",
+    ].filter((value): value is string => Boolean(value))
+    return {
+        severe,
+        riskLabels,
+        impactDescriptions,
+        missingOriginalDocument: !facts.originalDocument,
+        evidenceMissing,
+        hasLines: source.lines.length + source.more_count > 0,
+    }
+}
+
 function balancePercent(balance?: string, originalAmount?: string) {
     const value = currencyDecimal(balance)
     const total = currencyDecimal(originalAmount)
@@ -415,6 +472,8 @@ function FinancialApprovalContent({
     documentNo,
     counterpartyLabel,
     resubmission,
+    hideRiskStrip = false,
+    rendererHandleRef,
 }: FinancialApprovalRendererProps & { prefix: string }) {
     const facts = readFinancialSource(documentType, source)
     const { reversal, amount, originalDocument, originalAmount, balance } =
@@ -580,6 +639,10 @@ function FinancialApprovalContent({
         })
     }
 
+    useImperativeHandle(rendererHandleRef, () => ({
+        locateLines,
+    }))
+
     return (
         <div
             data-slot="financial-approval-renderer"
@@ -589,7 +652,7 @@ function FinancialApprovalContent({
             className="@container/financial-approval flex min-w-0 flex-col gap-3 pt-3 pb-5"
         >
             {resubmission}
-            {riskLabels.length > 0 ? (
+            {!hideRiskStrip && riskLabels.length > 0 ? (
                 <div
                     data-slot="financial-approval-risk-strip"
                     className={cn(
