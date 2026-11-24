@@ -71,6 +71,19 @@ function calendarDay(value: string | null) {
         : null
 }
 
+export function purchaseDeliveryComparison(line: ApprovalPurchaseLine) {
+    const salesDate = purchaseSalesDate(line)
+    const salesDay = calendarDay(salesDate)
+    const purchaseDay = calendarDay(line.expected_delivery_date)
+    const daysFromDeadline =
+        salesDay == null || purchaseDay == null ? null : purchaseDay - salesDay
+    return { salesDate, daysFromDeadline }
+}
+
+export function isPurchaseFeeLine(line: ApprovalPurchaseLine) {
+    return !line.source && line.quantity == null && line.gross_amount != null
+}
+
 function calculatePurchaseMargin(
     salesAmount: string,
     purchaseCost: string,
@@ -115,12 +128,11 @@ function calculatePurchaseMargin(
 
 /** 只比较本次冻结材料，不推算其他采购覆盖量。 */
 export function purchaseComparison(line: ApprovalPurchaseLine) {
-    const fee =
-        !line.source && line.quantity == null && line.gross_amount != null
+    const fee = isPurchaseFeeLine(line)
     const highWarnings: string[] = []
     const mediumWarnings: string[] = []
     const infoWarnings: string[] = []
-    const salesDate = purchaseSalesDate(line)
+    const { salesDate, daysFromDeadline } = purchaseDeliveryComparison(line)
     let delayDays = 0
     let priceDifference: string | null = null
     let pricePercent: string | null = null
@@ -271,13 +283,11 @@ export function purchaseComparison(line: ApprovalPurchaseLine) {
             } catch {
                 highWarnings.push("数值格式需核对")
             }
-            const salesDay = calendarDay(salesDate)
-            const purchaseDay = calendarDay(line.expected_delivery_date)
-            if (salesDay == null || purchaseDay == null) {
+            if (daysFromDeadline == null) {
                 incompleteDeliveryDate = true
                 infoWarnings.push("交期资料不完整")
-            } else if (purchaseDay > salesDay) {
-                delayDays = purchaseDay - salesDay
+            } else if (daysFromDeadline > 0) {
+                delayDays = daysFromDeadline
                 mediumWarnings.push(`交期晚 ${delayDays} 天`)
             }
         }

@@ -1,21 +1,18 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type ComponentProps } from "react"
 
 import {
     UnifiedMaterialViewer,
     type MaterialFileItem,
 } from "@/components/business/unified-material-viewer"
-import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { ApprovalMaterials } from "@/features/approval-workflow/api/materials"
-import { ApprovalSalesOrderPaper } from "@/features/approval-workflow/components/approval-sales-order-paper"
 import { UnifiedAuditTrail } from "@/features/approval-workflow/components/unified-audit-trail"
 import type { ApprovalRuntimeInstance } from "@/features/approval-workflow/types"
 import type { TimelineTarget } from "@/features/document-timeline/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { displayBusinessText, displayName } from "@/lib/display-name"
 import { cn } from "@/lib/utils"
+import { WorkspacePurchaseSourceComparison } from "./workspace-purchase-source-comparison"
 
 export type ApprovalContextRailTab =
     | "trail"
@@ -32,11 +29,11 @@ export type WorkspaceApprovalContextRailProps = Readonly<{
     /** 右栏「附件对照」可预览的认证附件列表。 */
     materialFiles?: readonly MaterialFileItem[]
     materialsLoading?: boolean
-    /** 采购审批锁定的来源销售单完整快照（传入后启用「来源销售单」侧边对照页签）。 */
-    sourceSalesOrders?: ApprovalMaterials["source_sales_orders"]
-    sourceSalesSnapshots?: ApprovalMaterials["display"]["source_sales"]
-    activeSourceRevisionId?: string
-    onActiveSourceRevisionIdChange?: (revisionId: string) => void
+    /** 本次采购提交及锁定的销售依据。 */
+    sourceComparison?: Omit<
+        ComponentProps<typeof WorkspacePurchaseSourceComparison>,
+        "idPrefix"
+    >
     /** 需要滚动定位并高亮的审批执行 ID。 */
     highlightedExecutionId?: string | null
     /** 兼容保留字段；退回重办提示现由左侧单据顶部横幅承载。 */
@@ -51,10 +48,10 @@ export type WorkspaceApprovalContextRailProps = Readonly<{
 
 /**
  * 2 栏决策审批工作台右侧上下文轨（飞书细线单层页签）：
- * - 单层底线页签：「审批记录」|「附件对照 (N)」|「来源销售单」|「单据全动态」；
+ * - 单层底线页签：「审批记录」|「附件对照 (N)」|「采销对照」|「单据全动态」；
  * - 「审批记录」展示倒序 `UnifiedAuditTrail`；
  * - 「附件对照」侧边对接 `UnifiedMaterialViewer (mode="docked")`，切换时自动扩宽并支持拖拽拉宽至 50% 左右对照；
- * - 「来源销售单」在采购审批中支持左侧采销对照表 × 右侧冻结销售单无遮挡并排核对。
+ * - 「采销对照」优先展示品规、数量与交期差异。
  */
 export function WorkspaceApprovalContextRail({
     instanceId,
@@ -62,10 +59,7 @@ export function WorkspaceApprovalContextRail({
     currentDocument,
     materialFiles = [],
     materialsLoading = false,
-    sourceSalesOrders,
-    sourceSalesSnapshots,
-    activeSourceRevisionId,
-    onActiveSourceRevisionIdChange,
+    sourceComparison,
     highlightedExecutionId,
     activeTab,
     onActiveTabChange,
@@ -79,11 +73,7 @@ export function WorkspaceApprovalContextRail({
         `workspace-approval-rail-${toAutomationIdSegment(instanceId)}`
     const [internalTab, setInternalTab] =
         useState<ApprovalContextRailTab>("trail")
-    const [internalSourceRevisionId, setInternalSourceRevisionId] = useState<
-        string | undefined
-    >(undefined)
-
-    const hasSourceSalesTab = Boolean(sourceSalesOrders?.length)
+    const hasSourceSalesTab = Boolean(sourceComparison)
     const hasTimelineTab = Boolean(timelineTarget)
     const rawTab = activeTab ?? internalTab
     const currentTab: ApprovalContextRailTab =
@@ -96,25 +86,6 @@ export function WorkspaceApprovalContextRail({
     const setTab = (next: ApprovalContextRailTab) => {
         if (activeTab === undefined) setInternalTab(next)
         onActiveTabChange?.(next)
-    }
-
-    const selectedSourceRevisionId =
-        activeSourceRevisionId ??
-        internalSourceRevisionId ??
-        sourceSalesOrders?.[0]?.revision.id
-    const activeSourceOrder =
-        sourceSalesOrders?.find(
-            (order) => order.revision.id === selectedSourceRevisionId,
-        ) ?? sourceSalesOrders?.[0]
-    const activeSourceSnapshot = sourceSalesSnapshots?.find(
-        (snapshot) => snapshot.revision_id === activeSourceOrder?.revision.id,
-    )
-
-    const handleSelectSourceRevision = (revisionId: string) => {
-        if (activeSourceRevisionId === undefined) {
-            setInternalSourceRevisionId(revisionId)
-        }
-        onActiveSourceRevisionIdChange?.(revisionId)
     }
 
     return (
@@ -170,12 +141,7 @@ export function WorkspaceApprovalContextRail({
                                 value="source-sales"
                                 className="shrink-0 gap-1 text-xs"
                             >
-                                <span>来源销售单</span>
-                                {(sourceSalesOrders?.length ?? 0) > 1 ? (
-                                    <span className="num text-tiny text-muted-foreground">
-                                        ({sourceSalesOrders?.length})
-                                    </span>
-                                ) : null}
+                                采销对照
                             </TabsTrigger>
                         ) : null}
                         {hasTimelineTab ? (
@@ -229,77 +195,16 @@ export function WorkspaceApprovalContextRail({
                     )}
                 </TabsContent>
 
-                {hasSourceSalesTab ? (
+                {sourceComparison ? (
                     <TabsContent
                         value="source-sales"
                         className="mt-0 min-h-0 flex-1 overflow-y-auto overscroll-contain py-3.5"
                     >
-                        <div className="space-y-3">
-                            {sourceSalesOrders &&
-                            sourceSalesOrders.length > 1 ? (
-                                <div
-                                    role="group"
-                                    aria-label="切换来源销售单"
-                                    className="flex flex-wrap items-center gap-1.5"
-                                >
-                                    {sourceSalesOrders.map((order) => {
-                                        const selected =
-                                            order.revision.id ===
-                                            activeSourceOrder?.revision.id
-                                        const docNo =
-                                            displayBusinessText(
-                                                order.document_no,
-                                                order.revision.id,
-                                            ) || "销售单"
-                                        return (
-                                            <Button
-                                                key={order.revision.id}
-                                                id={`${resolvedPrefix}-source-sales-${toAutomationIdSegment(order.revision.id)}`}
-                                                type="button"
-                                                size="xs"
-                                                variant={
-                                                    selected
-                                                        ? "secondary"
-                                                        : "outline"
-                                                }
-                                                aria-pressed={selected}
-                                                className="num"
-                                                onClick={() =>
-                                                    handleSelectSourceRevision(
-                                                        order.revision.id,
-                                                    )
-                                                }
-                                            >
-                                                {docNo} · V
-                                                {order.revision.revision_no}
-                                            </Button>
-                                        )
-                                    })}
-                                </div>
-                            ) : null}
-
-                            {activeSourceOrder ? (
-                                <ApprovalSalesOrderPaper
-                                    submission={activeSourceOrder.revision}
-                                    documentNo={
-                                        displayBusinessText(
-                                            activeSourceOrder.document_no,
-                                            activeSourceSnapshot?.document_id,
-                                        ) || "未记录单据编号"
-                                    }
-                                    submitterName={
-                                        displayName(
-                                            activeSourceSnapshot?.source
-                                                .submitter_name,
-                                        ) ?? null
-                                    }
-                                />
-                            ) : (
-                                <p className="py-6 text-center text-xs text-muted-foreground">
-                                    暂无可对照的来源销售单快照。
-                                </p>
-                            )}
-                        </div>
+                        <WorkspacePurchaseSourceComparison
+                            key={instanceId}
+                            idPrefix={resolvedPrefix}
+                            {...sourceComparison}
+                        />
                     </TabsContent>
                 ) : null}
 

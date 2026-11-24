@@ -38,6 +38,7 @@ import {
     type PurchaseSource,
 } from "./workspace-purchase-comparison-model"
 import { PurchaseComparisonRow } from "./workspace-purchase-comparison-row"
+import type { PurchaseSourceComparisonTarget } from "./workspace-purchase-source-comparison"
 
 export interface PurchaseComparisonTableHandle {
     revealLine: (lineId: string) => void
@@ -71,7 +72,7 @@ export function WorkspacePurchaseComparisonTable({
     highlightedLineId?: string | null
     tableHandleRef?: RefObject<PurchaseComparisonTableHandle | null>
     onPreview: (revisionId: string) => void
-    onCompareSource?: (revisionId: string) => void
+    onCompareSource?: (target: PurchaseSourceComparisonTarget) => void
     onFocusDelivery: (lineId: string) => void
 }) {
     const [search, setSearch] = useState("")

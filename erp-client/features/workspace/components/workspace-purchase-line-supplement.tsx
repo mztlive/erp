@@ -1,4 +1,4 @@
-import { Columns2Icon, FileTextIcon, TriangleAlertIcon } from "lucide-react"
+import { FileTextIcon, TriangleAlertIcon } from "lucide-react"
 
 import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -43,7 +43,6 @@ export function PurchaseLineRiskStrip({
     source,
     prefix,
     onPreview,
-    onCompareSource,
 }: {
     line: ApprovalPurchaseLine
     comparison: PurchaseComparison
@@ -51,7 +50,6 @@ export function PurchaseLineRiskStrip({
     source?: PurchaseSource
     prefix: string
     onPreview: (revisionId: string) => void
-    onCompareSource?: (revisionId: string) => void
 }) {
     const mismatchedProduct = comparison.mismatchedProduct
     const otherWarnings = comparison.actionableWarnings.filter(
@@ -193,19 +191,6 @@ export function PurchaseLineRiskStrip({
                         ) || "未记录销售单号"}{" "}
                         · V{source.revision_no}
                     </span>
-                    {onCompareSource ? (
-                        <Button
-                            id={`${prefix}-source-compare`}
-                            type="button"
-                            variant="link"
-                            size="xs"
-                            className="h-auto px-0 text-xs text-primary"
-                            onClick={() => onCompareSource(source.revision_id)}
-                        >
-                            <Columns2Icon aria-hidden="true" />
-                            右侧对照
-                        </Button>
-                    ) : null}
                     <Button
                         id={`${prefix}-source`}
                         type="button"

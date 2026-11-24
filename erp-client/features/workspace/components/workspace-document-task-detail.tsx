@@ -104,6 +104,7 @@ import {
 } from "./workspace-purchase-approval"
 import { buildPurchaseDynamicRejectPhrases } from "./workspace-purchase-comparison-model"
 import { WorkspacePurchasePayment } from "./workspace-purchase-payment"
+import type { PurchaseSourceComparisonTarget } from "./workspace-purchase-source-comparison"
 import { WorkspaceReceiptApproval } from "./workspace-receipt-approval"
 import { WorkspaceRejectionNotice } from "./workspace-rejection-notice"
 import {
@@ -246,9 +247,8 @@ export function WorkspaceDocumentTaskDetail({
     const [activeMaterialFileId, setActiveMaterialFileId] = useState<
         string | undefined
     >(undefined)
-    const [activeSourceRevisionId, setActiveSourceRevisionId] = useState<
-        string | undefined
-    >(undefined)
+    const [sourceComparisonTarget, setSourceComparisonTarget] =
+        useState<PurchaseSourceComparisonTarget>()
     const [highlightedExecutionId, setHighlightedExecutionId] = useState<
         string | null
     >(null)
@@ -287,7 +287,7 @@ export function WorkspaceDocumentTaskDetail({
     useEffect(() => {
         setPaper(null)
         setActiveMaterialFileId(undefined)
-        setActiveSourceRevisionId(undefined)
+        setSourceComparisonTarget(undefined)
         setHighlightedExecutionId(null)
         setRailTab((current) =>
             current === "source-sales" &&
@@ -437,10 +437,19 @@ export function WorkspaceDocumentTaskDetail({
         setRailCollapsed(false)
     }
 
-    const handleCompareSourceSales = (revisionId: string) => {
-        setActiveSourceRevisionId(revisionId)
+    const handleCompareSourceSales = (
+        target: PurchaseSourceComparisonTarget,
+    ) => {
+        setSourceComparisonTarget(target)
         setRailTab("source-sales")
         setRailCollapsed(false)
+        window.requestAnimationFrame(() => {
+            const tab = document.getElementById(
+                `${railIdPrefix}-tab-source-sales`,
+            )
+            tab?.focus({ preventScroll: true })
+            tab?.scrollIntoView({ block: "start", inline: "nearest" })
+        })
     }
 
     const handleJumpToHistory = (executionId?: string) => {
@@ -899,9 +908,6 @@ export function WorkspaceDocumentTaskDetail({
         </WorkspaceTaskHeaderActions>
     )
 
-    const isComparisonRailTab =
-        railTab === "materials" || railTab === "source-sales"
-
     return (
         <WorkspaceProcessingPane
             archetype={
@@ -923,9 +929,12 @@ export function WorkspaceDocumentTaskDetail({
                           minWidthPercent: 24,
                           maxWidthPercent: 52,
                           storageKey: APPROVAL_RAIL_WIDTH_STORAGE_KEY,
-                          preferredMinWidthPercent: isComparisonRailTab
-                              ? 42
-                              : undefined,
+                          preferredMinWidthPercent:
+                              railTab === "materials"
+                                  ? 42
+                                  : railTab === "source-sales"
+                                    ? 35
+                                    : undefined,
                           collapsed: railCollapsed,
                           onCollapsedChange: setRailCollapsed,
                           label: "审批进度、轨迹与附件对照",
@@ -940,21 +949,31 @@ export function WorkspaceDocumentTaskDetail({
                                   }}
                                   materialFiles={dockedMaterialFiles}
                                   materialsLoading={materials.isPending}
-                                  sourceSalesOrders={
-                                      purchaseApproval
-                                          ? submission?.source_sales_orders
+                                  sourceComparison={
+                                      purchaseApproval && submission
+                                          ? {
+                                                orders:
+                                                    submission.source_sales_orders ??
+                                                    [],
+                                                snapshots:
+                                                    submission.display
+                                                        .source_sales,
+                                                purchaseLines:
+                                                    submission.purchase_lines,
+                                                target: sourceComparisonTarget,
+                                                onTargetChange:
+                                                    setSourceComparisonTarget,
+                                                onPreview: (revisionId) =>
+                                                    setPaper({
+                                                        kind: "approval_snapshot",
+                                                        objectId: instanceId,
+                                                        materialsView:
+                                                            "source-sales",
+                                                        sourceRevisionId:
+                                                            revisionId,
+                                                    }),
+                                            }
                                           : undefined
-                                  }
-                                  sourceSalesSnapshots={
-                                      purchaseApproval
-                                          ? submission?.display.source_sales
-                                          : undefined
-                                  }
-                                  activeSourceRevisionId={
-                                      activeSourceRevisionId
-                                  }
-                                  onActiveSourceRevisionIdChange={
-                                      setActiveSourceRevisionId
                                   }
                                   highlightedExecutionId={
                                       highlightedExecutionId
@@ -1383,8 +1402,7 @@ export function WorkspaceDocumentTaskDetail({
                             showDecisionRail ? handleOpenMaterials : undefined
                         }
                         onCompareSource={
-                            showDecisionRail &&
-                            Boolean(submission?.source_sales_orders?.length)
+                            showDecisionRail && submission
                                 ? handleCompareSourceSales
                                 : undefined
                         }

@@ -47,6 +47,7 @@ import {
     WorkspacePurchaseComparisonTable,
     type PurchaseComparisonTableHandle,
 } from "./workspace-purchase-comparison-table"
+import type { PurchaseSourceComparisonTarget } from "./workspace-purchase-source-comparison"
 import { WorkspaceSupplierRating } from "./workspace-supplier-rating"
 
 export { purchaseApprovalRiskReasons }
@@ -80,15 +81,13 @@ function fulfillmentSummaryLabel(
 export function WorkspacePurchaseApprovalSources({
     instanceId,
     sources,
-    availableCompareRevisionIds,
     onPreview,
     onCompareSource,
 }: {
     instanceId: string
     sources: PurchaseSource[]
-    availableCompareRevisionIds?: ReadonlySet<string>
     onPreview: (target: WorkspacePaperTarget) => void
-    onCompareSource?: (revisionId: string) => void
+    onCompareSource?: (target: PurchaseSourceComparisonTarget) => void
 }) {
     if (!sources.length) {
         return (
@@ -103,11 +102,6 @@ export function WorkspacePurchaseApprovalSources({
                 const documentNo =
                     displayBusinessText(sales.document_no, sales.document_id) ||
                     "未记录销售单号"
-                const canCompareInRail = Boolean(
-                    onCompareSource &&
-                    (!availableCompareRevisionIds ||
-                        availableCompareRevisionIds.has(sales.revision_id)),
-                )
                 const contractNotices = sales.source.extra_sections.filter(
                     (field) => field.label === "合同或凭证",
                 )
@@ -124,7 +118,7 @@ export function WorkspacePurchaseApprovalSources({
                                 "未记录客户名称"}{" "}
                             · V{sales.revision_no}
                         </span>
-                        {canCompareInRail ? (
+                        {onCompareSource ? (
                             <Button
                                 id={`${purchaseApprovalPrefix(instanceId)}-source-compare-${toAutomationIdSegment(sales.revision_id)}`}
                                 type="button"
@@ -134,11 +128,13 @@ export function WorkspacePurchaseApprovalSources({
                                     detailWorkspaceStyles.inlineLinkButton
                                 }
                                 onClick={() =>
-                                    onCompareSource?.(sales.revision_id)
+                                    onCompareSource({
+                                        revisionId: sales.revision_id,
+                                    })
                                 }
                             >
                                 <Columns2Icon aria-hidden="true" />
-                                右侧对照
+                                采销对照
                             </Button>
                         ) : null}
                         <Button
@@ -194,7 +190,7 @@ export function WorkspacePurchaseApproval({
     onPreview: (target: WorkspacePaperTarget) => void
     onSelectFile?: (fileId: string) => void
     onOpenMaterials?: () => void
-    onCompareSource?: (revisionId: string) => void
+    onCompareSource?: (target: PurchaseSourceComparisonTarget) => void
     activeFileId?: string
     hideEmbeddedMaterials: boolean
 }) {
@@ -239,16 +235,6 @@ export function WorkspacePurchaseApproval({
     const parsedExtras = useMemo(
         () => parsePurchaseExtraSections(extraSections, item),
         [extraSections, item],
-    )
-
-    const availableCompareRevisionIds = useMemo(
-        () =>
-            new Set(
-                (submission?.source_sales_orders ?? []).map(
-                    (entry) => entry.revision.id,
-                ),
-            ),
-        [submission?.source_sales_orders],
     )
 
     const deliveryLines = useMemo<
@@ -782,9 +768,6 @@ export function WorkspacePurchaseApproval({
                         <WorkspacePurchaseApprovalSources
                             instanceId={instanceId}
                             sources={sources}
-                            availableCompareRevisionIds={
-                                availableCompareRevisionIds
-                            }
                             onPreview={onPreview}
                             onCompareSource={onCompareSource}
                         />

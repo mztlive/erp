@@ -2,6 +2,7 @@ import { MapPinIcon } from "lucide-react"
 
 import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { TableCell, TableRow } from "@/components/ui/table"
 import type { ApprovalPurchaseLine } from "@/features/approval-workflow/api/materials"
 import { displayName } from "@/lib/display-name"
@@ -16,6 +17,7 @@ import {
     hasPurchaseRiskStrip,
     PurchaseLineRiskStrip,
 } from "./workspace-purchase-line-supplement"
+import type { PurchaseSourceComparisonTarget } from "./workspace-purchase-source-comparison"
 
 export function PurchaseComparisonRow({
     rowId,
@@ -39,7 +41,7 @@ export function PurchaseComparisonRow({
     deliveryHint: string | null
     prefix: string
     onPreview: (revisionId: string) => void
-    onCompareSource?: (revisionId: string) => void
+    onCompareSource?: (target: PurchaseSourceComparisonTarget) => void
     onFocusDelivery: () => void
 }) {
     const title = displayName(line.title) || "未记录商品名称"
@@ -286,6 +288,24 @@ export function PurchaseComparisonRow({
                                     </Badge>
                                 ) : null}
                             </div>
+                            {onCompareSource ? (
+                                <Button
+                                    id={`${prefix}-source-compare`}
+                                    type="button"
+                                    variant="link"
+                                    size="xs"
+                                    className="h-auto px-0"
+                                    aria-label={`对照第 ${line.line_no} 行采购与销售`}
+                                    onClick={() =>
+                                        onCompareSource({
+                                            revisionId: sales.revision_id,
+                                            purchaseLineId: line.id,
+                                        })
+                                    }
+                                >
+                                    对照本行
+                                </Button>
+                            ) : null}
                         </div>
                     ) : (
                         <span className="text-xs text-muted-foreground">—</span>
@@ -324,7 +344,6 @@ export function PurchaseComparisonRow({
                             source={source}
                             prefix={prefix}
                             onPreview={onPreview}
-                            onCompareSource={onCompareSource}
                         />
                     </TableCell>
                 </TableRow>
