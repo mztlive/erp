@@ -67,6 +67,11 @@ import {
 } from "./create-sourcing/sourcing-fields"
 import { SourcingRecommendationHint } from "./sourcing-recommendation-hint"
 
+const fulfillmentFieldLayout =
+    "grid min-w-0 gap-y-0.5 @min-[26rem]/source-card:grid-cols-[fit-content(55%)_minmax(0,1fr)] @min-[26rem]/source-card:gap-x-2"
+const fulfillmentFieldLabel =
+    "self-start text-xs font-medium text-foreground/75 @min-[26rem]/source-card:py-1.25"
+
 /**
  * 左侧供给池中的「已选用来源」精简卡片：
  * - 头部点击「源N」或「N 处地址」胶囊即可在右侧一键筛选只看本源地址（点击卡内输入框/选择器不触发切换）；
@@ -276,7 +281,7 @@ export function SourcingSourceRow({
         : `${warehouseCoveredCount} 处统筹`
 
     const formContent = (
-        <div className="space-y-2">
+        <div className="space-y-1.5 @container/source-card">
             {/* 卡顶行：点击「源N · 履约方式」或右侧「地址数」胶囊均可一键筛选右侧只看本源地址 */}
             <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -430,7 +435,7 @@ export function SourcingSourceRow({
             </div>
 
             {/* 供货方案选择器 + 一行核心商业摘要 */}
-            <div className="space-y-1.5">
+            <div className="space-y-1">
                 <SourcingOptionField
                     form={form}
                     order={order}
@@ -544,11 +549,16 @@ export function SourcingSourceRow({
 
             {/* 履约参数区 */}
             {option ? (
-                <div className="space-y-2 border-t border-border/50 pt-2">
+                <div className="space-y-1.5 border-t border-border/50 pt-1.5">
                     {needsWarehouse ? (
-                        <div className="space-y-1">
-                            <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs font-medium text-foreground/75">
+                        <div className={fulfillmentFieldLayout}>
+                            <div
+                                className={cn(
+                                    fulfillmentFieldLabel,
+                                    "flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 @min-[26rem]/source-card:flex-col @min-[26rem]/source-card:items-start",
+                                )}
+                            >
+                                <span>
                                     采购入库目标仓
                                     <RequiredMark />
                                 </span>
@@ -591,13 +601,13 @@ export function SourcingSourceRow({
 
                     <div
                         className={cn(
-                            "grid gap-2.5",
-                            isStock ? "grid-cols-1" : "grid-cols-2",
+                            "grid gap-x-2 gap-y-1.5",
+                            !isStock && "@xs/source-card:grid-cols-2",
                         )}
                     >
                         {!isStock ? (
-                            <div className="min-w-0 space-y-1">
-                                <p className="text-xs font-medium text-foreground/75">
+                            <div className={fulfillmentFieldLayout}>
+                                <p className={fulfillmentFieldLabel}>
                                     预计交付日
                                     <RequiredMark />
                                 </p>
@@ -614,12 +624,12 @@ export function SourcingSourceRow({
 
                         {/* 数量 / 直发承接 */}
                         {addressDriven ? (
-                            <div className="min-w-0 space-y-1">
-                                <p className="text-xs font-medium text-foreground/75">
+                            <div className={fulfillmentFieldLayout}>
+                                <p className={fulfillmentFieldLabel}>
                                     直发承接
                                 </p>
-                                <div className="flex min-h-control flex-wrap items-center justify-between gap-1.5 rounded-md border border-border/70 bg-surface-sunken/70 px-2.5">
-                                    <div className="flex items-baseline gap-1">
+                                <div className="flex min-h-control-sm flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 self-start rounded-md border border-border/70 bg-surface-sunken/70 px-2">
+                                    <div className="flex flex-wrap items-baseline gap-x-1">
                                         <span className="text-body-compact font-semibold text-foreground">
                                             <QuantityValue
                                                 value={line.quantity || "0"}
@@ -668,9 +678,14 @@ export function SourcingSourceRow({
                                 </div>
                             </div>
                         ) : (
-                            <div className="min-w-0 space-y-1">
-                                <div className="flex items-center justify-between gap-1">
-                                    <p className="text-xs font-medium text-foreground/75">
+                            <div className={fulfillmentFieldLayout}>
+                                <div
+                                    className={cn(
+                                        fulfillmentFieldLabel,
+                                        "flex flex-wrap items-center justify-between gap-x-1 gap-y-0.5 @min-[26rem]/source-card:flex-col @min-[26rem]/source-card:items-start",
+                                    )}
+                                >
+                                    <p className="wrap-anywhere">
                                         分配数量（{product.unit}）
                                         <RequiredMark />
                                     </p>
@@ -717,6 +732,7 @@ export function SourcingSourceRow({
                                             label={`本次分配数量，${product.itemName}`}
                                             required
                                             hideLabel
+                                            className="gap-1"
                                             type="number"
                                             inputMode="decimal"
                                             min="0"
@@ -725,7 +741,7 @@ export function SourcingSourceRow({
                                                     product.quantityScale,
                                                 ) ?? "1"
                                             }
-                                            inputClassName="num text-right"
+                                            inputClassName="num h-control-sm text-right"
                                             testId={`purchase-sourcing-quantity-${line.rowKey}`}
                                         />
                                     )}
@@ -811,7 +827,7 @@ export function SourcingSourceRow({
             onPointerDownCapture={onActivate}
             onFocusCapture={onActivate}
             className={cn(
-                "rounded-lg border bg-card p-2.5 shadow-2xs transition-colors",
+                "rounded-lg border bg-card px-2.5 py-2 shadow-2xs transition-colors",
                 hasError
                     ? "border-destructive/55 ring-1 ring-destructive/15"
                     : isAddressFiltered

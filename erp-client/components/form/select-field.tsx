@@ -29,6 +29,7 @@ type SelectFieldProps = ComboboxRefreshProps & {
     /** 输入框宽度等；历史 prop 名 selectClassName 仍可用 */
     selectClassName?: string
     inputClassName?: string
+    size?: React.ComponentProps<typeof OptionCombobox>["size"]
     allowClear?: boolean
     onValueChange?: (value: string) => void
     id?: string
@@ -53,6 +54,7 @@ export function SelectField({
     className,
     selectClassName,
     inputClassName,
+    size,
     allowClear = true,
     onValueChange,
     id,
@@ -82,6 +84,7 @@ export function SelectField({
         >
             <OptionCombobox
                 inInputGroup={inInputGroup}
+                size={size}
                 id={resolvedId}
                 options={options}
                 value={field.state.value || null}

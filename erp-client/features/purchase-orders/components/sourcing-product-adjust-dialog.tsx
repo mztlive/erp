@@ -815,7 +815,7 @@ export function SourcingProductAdjustDialog({
                                     <div
                                         id="sourcing-product-adjust-body"
                                         ref={sourcesScrollRef}
-                                        className="min-h-0 flex-1 space-y-2.5 overflow-y-auto overscroll-contain px-4 pt-1 pb-5"
+                                        className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-4 pt-1 pb-5"
                                     >
                                         {row.allocations.map(
                                             ({ line, index }, idx) => {

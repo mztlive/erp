@@ -79,6 +79,7 @@ export function SourcingTargetWarehouseField({
                                             )
                                         }
                                         purpose="purchase-receipt"
+                                        size="sm"
                                         placeholder="选择目标仓"
                                         emptyLabel="没有可用仓库"
                                         aria-label={`采购入库目标仓，${product?.itemName ?? "采购明细"}`}
@@ -143,6 +144,8 @@ export function SourcingExpectedDeliveryField({
                         {(field) => (
                             <field.DateField
                                 id={`procurement-orders-create-row-${toAutomationIdSegment(rowKey)}-delivery-date`}
+                                size="sm"
+                                className="gap-1"
                                 label="预计交付日"
                                 description={
                                     showDeadlineHint && validDeadline
@@ -195,6 +198,8 @@ export function SourcingOptionField({
             {(field) => (
                 <field.SelectField
                     onRefresh={onRefresh}
+                    size="sm"
+                    className="gap-1"
                     id={`procurement-orders-create-row-${toAutomationIdSegment(rowKey)}-sourcing-option`}
                     label={`履约方案，${product.itemName}`}
                     required

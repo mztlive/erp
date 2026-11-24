@@ -56,6 +56,7 @@ interface BusinessObjectComboboxProps extends ComboboxRefreshProps {
     "aria-invalid"?: boolean
     "aria-describedby"?: string
     className?: string
+    size?: "sm" | "default"
 }
 
 function BusinessObjectCombobox({
@@ -78,6 +79,7 @@ function BusinessObjectCombobox({
     "aria-invalid": ariaInvalid,
     "aria-describedby": ariaDescribedBy,
     className,
+    size = "default",
 }: BusinessObjectComboboxProps) {
     const resolved = useStickySelected(
         items,
@@ -149,7 +151,11 @@ function BusinessObjectCombobox({
                     showClear={allowClear}
                     onBlur={onBlur}
                     disabled={disabled}
-                    className="w-full"
+                    className={cn(
+                        "w-full",
+                        size === "sm" &&
+                            "h-control-sm min-h-control-sm *:data-[slot=input-group-control]:h-control-sm",
+                    )}
                 >
                     {filterLabel ? (
                         <InputGroupAddon className="shrink-0 whitespace-nowrap font-normal">
