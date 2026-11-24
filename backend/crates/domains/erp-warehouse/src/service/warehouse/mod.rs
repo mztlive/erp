@@ -22,7 +22,7 @@ use erp_core::common::time::BusinessDate;
 use erp_core::ids::{WarehouseId, WarehouseRevisionId};
 use erp_core::region::RegionCode;
 use erp_identity::{AccessTarget, AuthorizationService};
-use erp_permissions::warehouse;
+use erp_permissions::{Permission, warehouse};
 use mongodb::Database;
 use persistence_core::{Executor, PageResult, Transactional};
 use validator::Validate;
@@ -130,10 +130,26 @@ impl WarehouseService {
             .await
     }
 
-    /// 在查询快照中验证仓库配置资格，列出能登录管理端、至少具备一项入库或仓发资格的具体账号。未授权返回 `Forbidden`，其它授权、身份端口或事务失败保留原分类。
+    /// 在查询快照中验证更新仓库资格，列出可担任入库或仓发经办人的管理端账号。
     pub async fn warehouse_fulfillment_handler_options(
         &self,
         actor: &AuditActor,
+    ) -> Result<Vec<WarehouseFulfillmentHandlerOptionView>> {
+        self.handler_options(actor, warehouse::UPDATE).await
+    }
+
+    /// 在查询快照中验证创建仓库资格，列出可担任入库或仓发经办人的管理端账号。
+    pub async fn warehouse_create_handler_options(
+        &self,
+        actor: &AuditActor,
+    ) -> Result<Vec<WarehouseFulfillmentHandlerOptionView>> {
+        self.handler_options(actor, warehouse::CREATE).await
+    }
+
+    async fn handler_options(
+        &self,
+        actor: &AuditActor,
+        permission: Permission,
     ) -> Result<Vec<WarehouseFulfillmentHandlerOptionView>> {
         let service = self.clone();
         let actor = actor.clone();
@@ -141,7 +157,7 @@ impl WarehouseService {
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move { service.handler_options_snapshot(&actor, executor).await })
+                Box::pin(async move { service.handler_options_snapshot(&actor, &permission, executor).await })
             })
             .await
     }

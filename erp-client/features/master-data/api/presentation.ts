@@ -263,11 +263,6 @@ export const commonActions = (
             ],
             actionBlockers: [
                 {
-                    action: "CREATE",
-                    code: WAREHOUSE_WRITE_CODE,
-                    message: WAREHOUSE_WRITE_MESSAGE,
-                },
-                {
                     action: "CREATE_REVISION",
                     code: WAREHOUSE_WRITE_CODE,
                     message: WAREHOUSE_WRITE_MESSAGE,

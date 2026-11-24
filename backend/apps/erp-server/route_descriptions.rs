@@ -103,6 +103,7 @@ pub(crate) const DESCRIPTIONS: &[(&str, &str, &str)] = &[
     ("GET", "/warehouse-directory/selected", "回显warehouse目录"),
     ("PUT", "/warehouses/{id}/fulfillment-handlers", "配置仓库收发经办人"),
     ("GET", "/warehouse-fulfillment-handler-options", "查询仓库收发经办人选项"),
+    ("GET", "/warehouses/create/fulfillment-handler-options", "查询新建仓库收发经办人选项"),
     ("PUT", "/contracts/{id}/sales-access", "管理合同共享销售"),
     ("POST", "/contracts/upload", "上传识别合同"),
     ("POST", "/contracts/{id}/revisions", "归档合同新版本"),

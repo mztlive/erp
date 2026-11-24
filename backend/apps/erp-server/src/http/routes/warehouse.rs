@@ -43,6 +43,13 @@ fn warehouse_routes() -> Router<HttpState> {
 fn fulfillment_routes() -> Router<HttpState> {
     Router::new()
         .route(
+            "/warehouses/create/fulfillment-handler-options",
+            permission_route(
+                get(warehouse::warehouse_create_handler_options),
+                &permissions::warehouse::CREATE,
+            ),
+        )
+        .route(
             "/warehouses/{id}/fulfillment-handlers",
             permission_route(
                 put(warehouse::warehouse_fulfillment_handlers_update),

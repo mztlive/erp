@@ -28,7 +28,10 @@ import {
     filterNavGroupsByPermissions,
     WORKSPACE_NAV_GROUPS,
 } from "@/lib/workspace-registry"
-import { workspaceHost } from "@/lib/workspace-tabs"
+import {
+    isWorkspaceQuickSearchShortcut,
+    workspaceHost,
+} from "@/lib/workspace-tabs"
 import { useWorkspaceOpenTabs } from "./workspace-tabs"
 
 const QUICK_SEARCH_EVENT = "erp-workspace-quick-search"
@@ -137,17 +140,7 @@ export function WorkspaceQuickSearch() {
 
     React.useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
-            if (
-                event.defaultPrevented ||
-                event.isComposing ||
-                event.altKey ||
-                event.shiftKey
-            )
-                return
-            if (
-                event.key.toLowerCase() === "k" &&
-                (event.metaKey || event.ctrlKey)
-            ) {
+            if (isWorkspaceQuickSearchShortcut(event)) {
                 event.preventDefault()
                 setOpen((current) => !current)
             }

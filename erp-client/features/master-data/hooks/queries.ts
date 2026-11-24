@@ -31,10 +31,11 @@ import {
 } from "@/features/master-data/api"
 import { fetchFileAsset } from "@/features/master-data/api/media-assets"
 import { updateVoucherCategoryRevision } from "@/features/master-data/api/mutations/voucher"
+import { createWarehouse } from "@/features/master-data/api/mutations/warehouse"
 import {
     fetchWarehouseFulfillmentHandlerOptions,
     updateWarehouseFulfillmentHandlers,
-    type UpdateWarehouseFulfillmentHandlersInput,
+    type WarehouseFulfillmentHandlerOption,
 } from "@/features/master-data/api/warehouse-fulfillment"
 import type {
     CreateMasterDataInput,
@@ -53,8 +54,10 @@ export const masterDataKeys = {
     all: ["master-data"] as const,
     list: (query: MasterDataListQuery) =>
         [...masterDataKeys.all, "list", query] as const,
+    details: (resource: MasterDataResource) =>
+        [...masterDataKeys.all, "detail", resource] as const,
     detail: (resource: MasterDataResource, stableId: string) =>
-        [...masterDataKeys.all, "detail", resource, stableId] as const,
+        [...masterDataKeys.details(resource), stableId] as const,
 }
 
 const warehouseFulfillmentHandlerOptionsKey = [
@@ -62,31 +65,67 @@ const warehouseFulfillmentHandlerOptionsKey = [
     "warehouse-fulfillment-handler-options",
 ] as const
 
-/** 仓库责任配置候选；仅打开配置对话框时读取。 */
-export function useWarehouseFulfillmentHandlerOptionsQuery(enabled: boolean) {
+function selectWarehouseHandlerOptions(
+    options: WarehouseFulfillmentHandlerOption[],
+) {
+    const toOption = (option: WarehouseFulfillmentHandlerOption) => ({
+        value: option.user_id,
+        label: `${option.display_name} · ${option.account}`,
+        keywords: option.account,
+    })
+    return {
+        inbound: options
+            .filter((option) => option.inbound_eligible)
+            .map(toOption),
+        outbound: options
+            .filter((option) => option.outbound_eligible)
+            .map(toOption),
+    }
+}
+
+/** 按操作权限缓存经办人候选，打开对应弹窗后读取。 */
+export function useWarehouseFulfillmentHandlerOptionsQuery(
+    enabled: boolean,
+    operation: "create" | "update" = "update",
+) {
     return useQuery({
-        queryKey: warehouseFulfillmentHandlerOptionsKey,
-        queryFn: fetchWarehouseFulfillmentHandlerOptions,
+        queryKey: [...warehouseFulfillmentHandlerOptionsKey, operation],
+        queryFn: () => fetchWarehouseFulfillmentHandlerOptions(operation),
+        select: selectWarehouseHandlerOptions,
         enabled,
     })
 }
 
-/** 更新仓库收发责任后刷新列表与对象中心。 */
-export function useUpdateWarehouseFulfillmentHandlersMutation() {
+function useInvalidateWarehouseData() {
     const queryClient = useQueryClient()
+    return async () => {
+        await Promise.all([
+            queryClient.invalidateQueries({
+                queryKey: masterDataKeys.list({ resource: "warehouses" }),
+            }),
+            queryClient.invalidateQueries({
+                queryKey: masterDataKeys.details("warehouses"),
+            }),
+            queryClient.invalidateQueries({
+                queryKey: [...queryKeyRoots.entitySelectors, "warehouse"],
+            }),
+        ])
+    }
+}
+
+export function useCreateWarehouseMutation() {
+    const invalidate = useInvalidateWarehouseData()
     return useMutation({
-        mutationFn: (input: UpdateWarehouseFulfillmentHandlersInput) =>
-            updateWarehouseFulfillmentHandlers(input),
-        onSuccess: async () => {
-            await Promise.all([
-                queryClient.invalidateQueries({
-                    queryKey: masterDataKeys.all,
-                }),
-                queryClient.invalidateQueries({
-                    queryKey: [...queryKeyRoots.entitySelectors, "warehouse"],
-                }),
-            ])
-        },
+        mutationFn: createWarehouse,
+        onSuccess: invalidate,
+    })
+}
+
+export function useUpdateWarehouseFulfillmentHandlersMutation() {
+    const invalidate = useInvalidateWarehouseData()
+    return useMutation({
+        mutationFn: updateWarehouseFulfillmentHandlers,
+        onSuccess: invalidate,
     })
 }
 

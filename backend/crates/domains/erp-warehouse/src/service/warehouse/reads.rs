@@ -32,13 +32,14 @@ impl WarehouseService {
         Ok(filter)
     }
 
-    // 先在读取快照验证仓库配置资格，再通过身份端口取候选并转换为视图；缺资格、非快照或身份查询失败都不返回候选。
+    // 在同一快照检查调用入口的仓库操作资格，再读取具备履约资格的候选。
     pub(super) async fn handler_options_snapshot(
         &self,
         actor: &AuditActor,
+        permission: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<Vec<WarehouseFulfillmentHandlerOptionView>> {
-        self.authorization.require(actor, &warehouse::UPDATE, AccessTarget::Operation, executor).await?;
+        self.authorization.require(actor, permission, AccessTarget::Operation, executor).await?;
         Ok(handler_option_views(self.identity.admin_handler_identities(executor).await?))
     }
 }
@@ -88,18 +89,13 @@ mod tests {
         }
     }
 
-    async fn service(granted: bool, identities: Arc<Identities>) -> WarehouseService {
+    async fn service(permissions: &[Permission], identities: Arc<Identities>) -> WarehouseService {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")
             .await
             .unwrap()
             .database("warehouse_read_authorization");
-        let permissions = if granted {
-            vec![warehouse::UPDATE, warehouse::REVISION_LIST, warehouse::SKU_POLICY_LIST]
-        } else {
-            vec![]
-        };
         let authorization = fixed_authorization(
-            &permissions,
+            permissions,
             ResolvedScope { role_clauses: vec![], user_limit: None },
             vec![],
             vec![],
@@ -119,21 +115,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn handler_read_allows_authorized_actor_and_returns_port_results_in_snapshot() {
-        let identities = Arc::new(Identities::default());
-        let service = service(true, identities.clone()).await;
-        let rows =
-            service.handler_options_snapshot(&actor(), &mut SnapshotExecutor::default()).await.unwrap();
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].user_id, "handler");
-        assert!(rows[0].inbound_eligible);
-        assert!(!rows[0].outbound_eligible);
-        assert_eq!(identities.0.load(Ordering::SeqCst), 1);
+    async fn handler_read_requires_the_permission_for_its_operation() {
+        for (granted, denied) in
+            [(warehouse::CREATE, warehouse::UPDATE), (warehouse::UPDATE, warehouse::CREATE)]
+        {
+            let identities = Arc::new(Identities::default());
+            let service = service(std::slice::from_ref(&granted), identities.clone()).await;
+            let mut executor = SnapshotExecutor::default();
+            let rows = service.handler_options_snapshot(&actor(), &granted, &mut executor).await.unwrap();
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0].user_id, "handler");
+            assert!(rows[0].inbound_eligible);
+            assert!(!rows[0].outbound_eligible);
+            let denied = service.handler_options_snapshot(&actor(), &denied, &mut executor).await;
+            assert!(matches!(denied, Err(Error::Forbidden(_))));
+            assert_eq!(identities.0.load(Ordering::SeqCst), 1);
+        }
     }
 
     #[tokio::test]
     async fn revision_and_policy_reads_allow_permissions_and_prepare_production_filters() {
-        let service = service(true, Arc::new(Identities::default())).await;
+        let service =
+            service(&[warehouse::REVISION_LIST, warehouse::SKU_POLICY_LIST], Arc::new(Identities::default()))
+                .await;
         let mut executor = SnapshotExecutor::default();
 
         let params =
@@ -158,13 +162,17 @@ mod tests {
     #[tokio::test]
     async fn reads_reject_missing_permission_before_candidate_or_business_reads() {
         let identities = Arc::new(Identities::default());
-        let service = service(false, identities.clone()).await;
+        let service = service(&[], identities.clone()).await;
         let revisions = serde_json::from_value(serde_json::json!({})).unwrap();
         let policies = serde_json::from_value(serde_json::json!({})).unwrap();
         let mut executor = SnapshotExecutor::default();
 
         let errors = [
-            service.handler_options_snapshot(&actor(), &mut executor).await.map(|_| ()).unwrap_err(),
+            service
+                .handler_options_snapshot(&actor(), &warehouse::UPDATE, &mut executor)
+                .await
+                .map(|_| ())
+                .unwrap_err(),
             service
                 .warehouse_revision_list_snapshot(&actor(), &revisions, &mut executor)
                 .await
@@ -186,12 +194,25 @@ mod tests {
     #[tokio::test]
     async fn reads_reject_no_transaction_despite_valid_permissions() {
         let identities = Arc::new(Identities::default());
-        let service = service(true, identities.clone()).await;
+        let service = service(
+            &[warehouse::CREATE, warehouse::UPDATE, warehouse::REVISION_LIST, warehouse::SKU_POLICY_LIST],
+            identities.clone(),
+        )
+        .await;
         let revisions = serde_json::from_value(serde_json::json!({})).unwrap();
         let policies = serde_json::from_value(serde_json::json!({})).unwrap();
 
         let errors = [
-            service.handler_options_snapshot(&actor(), &mut NoTransaction).await.map(|_| ()).unwrap_err(),
+            service
+                .handler_options_snapshot(&actor(), &warehouse::CREATE, &mut NoTransaction)
+                .await
+                .map(|_| ())
+                .unwrap_err(),
+            service
+                .handler_options_snapshot(&actor(), &warehouse::UPDATE, &mut NoTransaction)
+                .await
+                .map(|_| ())
+                .unwrap_err(),
             service
                 .warehouse_revision_list_snapshot(&actor(), &revisions, &mut NoTransaction)
                 .await

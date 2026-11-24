@@ -7,10 +7,9 @@ import type {
     MasterDataResource,
 } from "@/features/master-data/types"
 
-/** Warehouse write always fail-closed while write ownership unconfirmed. */
+/** 仓库列表尚未开放的维护操作。 */
 export const WAREHOUSE_WRITE_CODE = "WAREHOUSE_WRITE_OWNER_UNCONFIRMED"
-export const WAREHOUSE_WRITE_MESSAGE =
-    "仓库资料暂不可维护：目前只能查看，不能新建、更新或停用。维护功能尚未开放。"
+export const WAREHOUSE_WRITE_MESSAGE = "当前页面暂不支持此项仓库维护操作。"
 
 export const masterDataListPermission = {
     "sellable-items": "sellable_sku:list",

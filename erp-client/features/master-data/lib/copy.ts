@@ -124,7 +124,6 @@ export const masterDataCopy = {
     actionUpdate: "更新资料",
     actionDisable: "停用",
     actionCreate: "新建",
-    actionCreateClosed: "新建（暂不可用）",
     actionExport: "导出",
     filterEmptyDescription: "没有记录符合当前筛选条件，可清除筛选后重试。",
     actionOpenDetail: "打开完整资料",
@@ -137,9 +136,6 @@ export const masterDataCopy = {
     permissionWriteOpen: "维护：可新建与更新",
     permissionWriteWarehouse: "维护：仓库暂不可改",
     permissionExport: (ok: boolean) => (ok ? "导出：允许" : "导出：无权限"),
-    warehouseWriteTitle: "仓库资料暂不可维护",
-    warehouseWriteBody:
-        "目前只能查看仓库信息和库存摘要，不能新建、更新或停用。维护功能尚未开放。",
     exportDone: "导出已完成",
     previewIdentity: "基本信息",
     previewKeyFacts: "关键信息",

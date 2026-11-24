@@ -1,7 +1,5 @@
 "use client"
 
-import { PlusIcon } from "lucide-react"
-
 import { BusinessFailureState, OptionCombobox } from "@/components/business"
 import {
     ListDataTable,
@@ -17,6 +15,7 @@ import {
     WarehouseDisableDialog,
     WarehouseReviseDialog,
 } from "@/features/master-data/components/warehouse/warehouse-action-dialogs"
+import { WarehouseCreateDialog } from "@/features/master-data/components/warehouse/warehouse-create-dialog"
 import { useWarehouseListColumns } from "@/features/master-data/hooks/use-dictionary-list-columns"
 import { useDictionaryListState } from "@/features/master-data/hooks/use-dictionary-list-state"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
@@ -25,7 +24,10 @@ import {
     masterDataSearchPlaceholder,
 } from "@/features/master-data/lib/copy"
 import { REVISION_TIMING_FILTER_OPTIONS } from "@/features/master-data/lib/list-filters"
-import { masterDataExportAction } from "@/features/master-data/lib/list-page-actions"
+import {
+    masterDataCreateAction,
+    masterDataExportAction,
+} from "@/features/master-data/lib/list-page-actions"
 import type { MasterDataListItem } from "@/features/master-data/types"
 import { hasPermission } from "@/lib/permissions"
 import { dictionaryListStyles } from "./dictionary-list-styles"
@@ -48,6 +50,7 @@ export function WarehousesListPage() {
         useListPageChrome()
     const state = useDictionaryListState({
         resource: "warehouses",
+        createPermission: "warehouse:create",
         searchInputRef,
         enablePreview: canReadRevisions,
         enableRevisionFilter: canReadRevisions,
@@ -85,6 +88,7 @@ export function WarehousesListPage() {
         lastFocusedRowId.current = row.stableId
         state.setPreviewId(row.stableId)
     }
+    const openCreate = () => state.setCreateOpen(true)
 
     return (
         <ListPageFrame
@@ -113,16 +117,12 @@ export function WarehousesListPage() {
                     }),
                     tier: "quiet",
                 },
-                {
+                masterDataCreateAction({
                     id: `${PREFIX}-create`,
-                    actionKey: "create",
-                    label: masterDataCopy.actionCreateClosed,
-                    icon: PlusIcon,
-                    variant: "secondary",
-                    hidden: !hasPermission(permissions, "warehouse:create"),
-                    disabled: true,
-                    title: masterDataCopy.warehouseWriteBody,
-                },
+                    canCreate: state.canCreate,
+                    blockedReason: state.createBlockedReason,
+                    onClick: openCreate,
+                }),
             ]}
             resultsLabel={`仓库 · ${state.rows.length} 条结果`}
             resultsHeadingRef={resultsHeadingRef}
@@ -255,12 +255,14 @@ export function WarehousesListPage() {
                             noScope ? undefined : filters.clearAllFilters
                         }
                         clearFiltersButtonId={`${TABLE}-clear-filters`}
+                        canCreate={state.canCreate}
+                        onCreate={state.canCreate ? openCreate : undefined}
+                        createLabel="新建仓库"
                         emptyCopy={{
                             filterDescription:
                                 masterDataCopy.filterEmptyDescription,
                             emptyTitle: "还没有仓库资料",
-                            emptyDescription:
-                                "仓库资料尚未建立，新建功能暂未开放。",
+                            emptyDescription: null,
                         }}
                         highlightedRowId={state.previewRow?.stableId}
                         onRowPreview={openPreview}
@@ -269,6 +271,12 @@ export function WarehousesListPage() {
                 ),
             }}
         >
+            {state.canCreate ? (
+                <WarehouseCreateDialog
+                    open={state.createOpen}
+                    onOpenChange={state.setCreateOpen}
+                />
+            ) : null}
             <WarehousePreviewSheet
                 previewRow={state.previewRow}
                 lastFocusedRowId={lastFocusedRowId}

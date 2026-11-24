@@ -78,8 +78,16 @@ pub async fn warehouse_fulfillment_handlers_update(
     Ok(ApiResponse::ok_with_data(view))
 }
 
-/// 查询可用的仓库收发经办人选项。
-/// 返回可登录账号及其入库、仓发资格。
+/// 查询新建仓库可选的收发经办人及其入库、仓发资格。
+pub async fn warehouse_create_handler_options(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+) -> Result<Vec<WarehouseFulfillmentHandlerOptionView>> {
+    let options = state.application().warehouse_service().warehouse_create_handler_options(&actor).await?;
+    Ok(ApiResponse::ok_with_data(options))
+}
+
+/// 查询更新仓库可选的收发经办人及其入库、仓发资格。
 pub async fn warehouse_fulfillment_handler_options(
     State(state): State<HttpState>,
     Extension(actor): Extension<AuditActor>,

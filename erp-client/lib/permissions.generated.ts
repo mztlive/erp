@@ -3037,6 +3037,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "GET",
+                path: "/admin/warehouses/create/fulfillment-handler-options",
+                description: "查询新建仓库收发经办人选项",
+                permission: {
+                    resource: "warehouse",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
                 method: "PUT",
                 path: "/admin/warehouses/{id}/fulfillment-handlers",
                 description: "配置仓库收发经办人",

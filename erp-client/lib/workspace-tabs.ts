@@ -71,9 +71,22 @@ export function subscribeWorkspaceOpenTabs(listener: () => void): () => void {
 
 export const WORKSPACE_CLOSE_SHORTCUT = "Alt+Shift+W"
 
+export function isWorkspaceQuickSearchShortcut(event: KeyboardEvent): boolean {
+    return (
+        typeof event.key === "string" &&
+        !event.defaultPrevented &&
+        !event.isComposing &&
+        !event.altKey &&
+        !event.shiftKey &&
+        (event.metaKey === true || event.ctrlKey === true) &&
+        event.key.toLowerCase() === "k"
+    )
+}
+
 /** Reserved Cmd/Ctrl+W is best-effort only: browsers may never dispatch it. */
 export function handleWorkspaceCloseShortcut(event: KeyboardEvent): void {
     if (
+        typeof event.key !== "string" ||
         event.defaultPrevented ||
         !event.cancelable ||
         event.isComposing ||

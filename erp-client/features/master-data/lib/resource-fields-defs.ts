@@ -77,7 +77,7 @@ export type ResourceFieldDef = Readonly<{
     hint?: string
 }>
 
-/** 按资源声明可维护专属字段；仓库在写门禁未确认前无维护字段。 */
+/** 按资源声明通用表单的专属字段；仓库新建使用专用表单。 */
 export const RESOURCE_FIELDS: Readonly<
     Record<MasterDataResource, readonly ResourceFieldDef[]>
 > = {

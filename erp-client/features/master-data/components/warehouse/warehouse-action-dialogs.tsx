@@ -20,6 +20,7 @@ import {
 import { FieldGroup } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
 import { FixedResourceDisableDialog } from "@/features/master-data/components/shared/disable-action-dialog"
+import { WarehouseHandlerField } from "@/features/master-data/components/warehouse/warehouse-handler-field"
 import {
     useUpdateWarehouseFulfillmentHandlersMutation,
     useWarehouseFulfillmentHandlerOptionsQuery,
@@ -61,7 +62,7 @@ export function WarehouseDisableDialog({
             blockedBanner={
                 <Alert variant="destructive">
                     <AlertTitle>
-                        {masterDataCopy.warehouseWriteTitle}
+                        {masterDataCopy.disableBlockedTitle}
                     </AlertTitle>
                     <AlertDescription>
                         {WAREHOUSE_WRITE_MESSAGE}
@@ -96,28 +97,8 @@ export function WarehouseReviseDialog({
     const initialInbound = handlers?.inboundUserId ?? ""
     const initialOutbound = handlers?.outboundUserId ?? ""
 
-    const inboundOptions = React.useMemo(
-        () =>
-            (optionsQuery.data ?? [])
-                .filter((option) => option.inbound_eligible)
-                .map((option) => ({
-                    value: option.user_id,
-                    label: `${option.display_name} · ${option.account}`,
-                    keywords: option.account,
-                })),
-        [optionsQuery.data],
-    )
-    const outboundOptions = React.useMemo(
-        () =>
-            (optionsQuery.data ?? [])
-                .filter((option) => option.outbound_eligible)
-                .map((option) => ({
-                    value: option.user_id,
-                    label: `${option.display_name} · ${option.account}`,
-                    keywords: option.account,
-                })),
-        [optionsQuery.data],
-    )
+    const inboundOptions = optionsQuery.data?.inbound ?? []
+    const outboundOptions = optionsQuery.data?.outbound ?? []
     const form = useAppForm({
         defaultValues: {
             inboundUserId: initialInbound,
@@ -227,48 +208,40 @@ export function WarehouseReviseDialog({
                             ) : null}
                             <FieldGroup>
                                 <form.AppField name="inboundUserId">
-                                    {(field) => (
-                                        <field.SelectField
+                                    {() => (
+                                        <WarehouseHandlerField
+                                            duty="inbound"
                                             id="master-data-warehouse-handler-inbound-combobox"
-                                            label="入库经办人"
                                             options={inboundOptions}
                                             onRefresh={() =>
                                                 optionsQuery.refetch({
                                                     throwOnError: true,
                                                 })
                                             }
-                                            placeholder="选择具备入库确认权限的账号"
-                                            description="负责该仓库的采购收货与入库过账。"
                                             loading={optionsQuery.isFetching}
                                             disabled={
                                                 optionsQuery.isPending ||
                                                 updateMutation.isPending
                                             }
-                                            allowClear={false}
-                                            required
                                         />
                                     )}
                                 </form.AppField>
                                 <form.AppField name="outboundUserId">
-                                    {(field) => (
-                                        <field.SelectField
+                                    {() => (
+                                        <WarehouseHandlerField
+                                            duty="outbound"
                                             id="master-data-warehouse-handler-outbound-combobox"
-                                            label="仓发经办人"
                                             options={outboundOptions}
                                             onRefresh={() =>
                                                 optionsQuery.refetch({
                                                     throwOnError: true,
                                                 })
                                             }
-                                            placeholder="选择具备发货确认权限的账号"
-                                            description="负责该仓库的现货发货与入库后发货；可与入库经办人为同一人。"
                                             loading={optionsQuery.isFetching}
                                             disabled={
                                                 optionsQuery.isPending ||
                                                 updateMutation.isPending
                                             }
-                                            allowClear={false}
-                                            required
                                         />
                                     )}
                                 </form.AppField>

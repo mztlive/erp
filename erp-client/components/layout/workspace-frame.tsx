@@ -7,6 +7,7 @@ import {
     applyWorkspaceViewportDensity,
     handleWorkspaceCloseShortcut,
     interceptWorkspaceLink,
+    isWorkspaceQuickSearchShortcut,
     resolveWorkspaceViewportDensity,
     tabHref,
     workspaceHost,
@@ -72,17 +73,7 @@ export function WorkspaceFrame({ children }: { children: React.ReactNode }) {
             characterData: true,
         })
         const handleQuickSearchShortcut = (event: KeyboardEvent) => {
-            if (
-                event.defaultPrevented ||
-                event.isComposing ||
-                event.altKey ||
-                event.shiftKey
-            )
-                return
-            if (
-                event.key.toLowerCase() === "k" &&
-                (event.metaKey || event.ctrlKey)
-            ) {
+            if (isWorkspaceQuickSearchShortcut(event)) {
                 event.preventDefault()
                 workspaceHost()?.openQuickSearch?.()
             }

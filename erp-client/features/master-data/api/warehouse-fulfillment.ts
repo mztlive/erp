@@ -17,12 +17,14 @@ export type UpdateWarehouseFulfillmentHandlersInput = Readonly<{
     outboundHandlerUserId: string
 }>
 
-/** 查询仓库更新权限范围内的收发经办人候选。 */
-export function fetchWarehouseFulfillmentHandlerOptions(): Promise<
-    WarehouseFulfillmentHandlerOption[]
-> {
+/** 按仓库操作读取具备相应履约资格的经办人候选。 */
+export function fetchWarehouseFulfillmentHandlerOptions(
+    operation: "create" | "update" = "update",
+): Promise<WarehouseFulfillmentHandlerOption[]> {
     return apiGet<WarehouseFulfillmentHandlerOption[]>(
-        "/admin/warehouse-fulfillment-handler-options",
+        operation === "create"
+            ? "/admin/warehouses/create/fulfillment-handler-options"
+            : "/admin/warehouse-fulfillment-handler-options",
     )
 }
 
