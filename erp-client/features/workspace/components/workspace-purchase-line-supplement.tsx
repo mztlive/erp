@@ -3,7 +3,6 @@ import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { ApprovalPurchaseLine } from "@/features/approval-workflow/api/materials"
 import { displayBusinessText, displayName } from "@/lib/display-name"
-import { multiplyFixed } from "@/lib/fixed-decimal"
 import {
     purchaseSpecification,
     type PurchaseComparison,
@@ -29,7 +28,6 @@ export function hasPurchaseSupplement(
 ) {
     return Boolean(
         comparison.warnings.length ||
-        line.input_tax_rate != null ||
         line.delivery_allocations?.length ||
         source,
     )
@@ -39,12 +37,14 @@ export function hasPurchaseSupplement(
 export function PurchaseLineSupplement({
     line,
     comparison,
+    negativeMargin,
     source,
     prefix,
     onPreview,
 }: {
     line: ApprovalPurchaseLine
     comparison: PurchaseComparison
+    negativeMargin: boolean
     source?: PurchaseSource
     prefix: string
     onPreview: (revisionId: string) => void
@@ -55,10 +55,13 @@ export function PurchaseLineSupplement({
     )
     return (
         <div className="grid gap-5 @min-[720px]/document:grid-cols-2">
-            {warnings.length > 0 && (
+            {(negativeMargin || warnings.length > 0) && (
                 <section className="space-y-2">
                     <h4 className="text-body-compact font-medium">异常说明</h4>
                     <ul className="space-y-2 text-body-compact text-warning-soft-foreground">
+                        {negativeMargin ? (
+                            <li>本次采购含税单价高于来源销售含税单价。</li>
+                        ) : null}
                         {warnings.map((warning) => (
                             <li key={warning}>
                                 {warning === "高于销售预估采购价" &&
@@ -149,22 +152,6 @@ export function PurchaseLineSupplement({
                             </dd>
                         </div>
                     </dl>
-                </section>
-            )}
-            {line.input_tax_rate != null && (
-                <section className="space-y-2 text-body-compact">
-                    <h4 className="font-medium">采购条件</h4>
-                    <p className="flex items-baseline gap-3">
-                        <span className="text-muted-foreground">进项税率</span>
-                        <RateValue
-                            value={multiplyFixed(line.input_tax_rate, "100", {
-                                leftMaxScale: 6,
-                                rightMaxScale: 0,
-                                outputScale: 2,
-                            })}
-                            precision={2}
-                        />
-                    </p>
                 </section>
             )}
             {source && (

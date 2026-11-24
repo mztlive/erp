@@ -21,6 +21,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { hasPermission } from "@/lib/permissions"
 import { AUTO_NEXT_LABEL } from "@/lib/task-status-dictionary"
 import { cn } from "@/lib/utils"
 import { workspaceHost } from "@/lib/workspace-tabs"
@@ -33,6 +34,7 @@ import { workspaceTaskPresentation } from "../lib/task-presentation"
 import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceMoney } from "./workspace-money"
+import { WorkspaceProcurementInspector } from "./workspace-procurement-inspector"
 import { WorkspaceTaskResponsibilityActions } from "./workspace-task-responsibility-actions"
 import { WorkspaceTaskSurface } from "./workspace-task-surface"
 import { WorkspaceTaskSurfaceBoundary } from "./workspace-task-surface-boundary"
@@ -302,7 +304,9 @@ function HeavyTaskSummaryCard({
  * 工作台原位任务检查器：运行于 `WorkspaceSplitQueue` 右分栏或窄屏 `TaskActionSheet` 内，
  * 直接共享当前页签的 TanStack Query 缓存（零 iframe 冷启动）。
  *
- * - 重型建单/超宽表单（`SALES_INQUIRY_PROCESSING` / `PROCUREMENT_ORDER_CREATION` / `SUPPLIER_PORTAL_REVIEW`）
+ * - 开放可办理的供给分配（`PROCUREMENT_ORDER_CREATION`）渲染专面向 768px 宽度的紧凑供给快览
+ *   `WorkspaceProcurementInspector`，复用 `useCreationBasesQuery` 缓存并支持一键进入完整作业面调整；
+ * - 其余重型建单/超宽表单（`SALES_INQUIRY_PROCESSING` / `SUPPLIER_PORTAL_REVIEW` 或只读态供给分配）
  *   展示高密度摘要卡与「进入完整作业面」直达主按钮；
  * - 常规审批、退回重办与标准执行事项直接挂载 `WorkspaceTaskSurface`，办理完成后按 `autoNext` 推进队列。
  */
@@ -318,6 +322,14 @@ export function WorkspaceTaskInspector({
     const [autoNext, setAutoNext] = useStoredAutoNext()
 
     const isHeavy = isHeavyFullPageWorkItem(item)
+    const isOpenProcurementCreation =
+        item.workItemType === "PROCUREMENT_ORDER_CREATION" &&
+        item.businessObjectType === "sales_order" &&
+        item.status === "OPEN" &&
+        item.allowedActions.includes("PROCESS")
+    const canInspectProcurementSourcing =
+        isOpenProcurementCreation &&
+        hasPermission(profile?.permissions, "purchase_order:create")
     const isApprovalInstance = item.workItemType === "APPROVAL_INSTANCE"
 
     const taskDetailQuery = useWorkspaceTaskDetailQuery(
@@ -370,6 +382,41 @@ export function WorkspaceTaskInspector({
     const segment = toAutomationIdSegment(item.workItemId)
 
     if (isHeavy) {
+        if (isOpenProcurementCreation && profileQuery.isPending) {
+            return (
+                <div
+                    aria-busy="true"
+                    className={cn(
+                        "flex min-h-0 flex-1 flex-col gap-4 py-5",
+                        padClass,
+                    )}
+                >
+                    <span role="status" className="sr-only">
+                        正在读取供给分配方案…
+                    </span>
+                    <Skeleton className="h-4 w-64" />
+                    <div className="grid grid-cols-2 gap-3 border-y border-border/60 py-3">
+                        <Skeleton className="h-11 w-full" />
+                        <Skeleton className="h-11 w-full" />
+                    </div>
+                    <Skeleton className="h-32 w-full" />
+                </div>
+            )
+        }
+        if (canInspectProcurementSourcing) {
+            return (
+                <WorkspaceProcurementInspector
+                    item={item}
+                    onOpenFullPage={onOpenFullPage}
+                    onCompleted={(completedId) =>
+                        notifyQueueCompleted(completedId)
+                    }
+                    presentation={presentation}
+                    userId={profile?.userid}
+                    permissions={profile?.permissions}
+                />
+            )
+        }
         return (
             <HeavyTaskSummaryCard
                 item={item}

@@ -15,10 +15,23 @@ export type PurchaseSource = NonNullable<
     ApprovalMaterials["display"]["source_sales"]
 >[number]
 
-export const purchaseAttentionClass =
-    "border-warning-border bg-warning-soft text-warning-soft-foreground"
-export const purchaseSelectedClass =
-    "border-info bg-info text-info-foreground hover:bg-info/90 hover:text-info-foreground"
+/** 只有单位可比时才用销售价格提示审批风险。 */
+export function isPurchaseCostAbove(
+    line: ApprovalPurchaseLine,
+    price: string | null | undefined,
+) {
+    const cost = line.unit_cost_gross
+    if (cost == null || cost === "" || price == null || price === "")
+        return false
+    const purchaseUnit = line.unit?.trim()
+    const salesUnit = line.source?.unit?.trim()
+    if (purchaseUnit && salesUnit && purchaseUnit !== salesUnit) return false
+    try {
+        return compareDecimal(cost, price, 6) > 0
+    } catch {
+        return false
+    }
+}
 
 export function purchaseSpecification(value: string | null) {
     return value?.trim() === "无规格" ? "" : (value?.trim() ?? "")

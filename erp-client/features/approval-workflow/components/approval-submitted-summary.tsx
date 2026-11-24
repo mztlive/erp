@@ -128,10 +128,13 @@ export function ApprovalSubmittedSummary({
     source,
     submitterName,
     impactSummary,
+    lineDetails,
 }: {
     source: BriefSource
     submitterName: string | null | undefined
     impactSummary: string | null
+    /** 完整冻结明细，存在时替换简报行。 */
+    lineDetails?: ReactNode
 }) {
     const { facts, comparisons, lineDiff } = partitionSections(
         source.extra_sections,
@@ -151,35 +154,38 @@ export function ApprovalSubmittedSummary({
                 }
             />
             {isChange && <ComparisonTable comparisons={comparisons} />}
-            <section className="space-y-3">
-                <MaterialSectionHeading
-                    title={isChange ? "明细变化" : "提交资料摘要"}
-                    note={source.lines.length ? lineDiff : null}
-                />
-                {source.lines.length ? (
-                    <ul className="divide-y rounded-lg border text-body-compact">
-                        {source.lines.map((line, index) => (
-                            <SummaryLine
-                                key={`${line.title}:${index}`}
-                                line={line}
-                            />
-                        ))}
-                    </ul>
-                ) : (
-                    <p className="rounded-lg border border-dashed px-4 py-3 text-xs text-muted-foreground">
-                        {lineDiff ?? "暂无明细概览，请核对下方单据信息及附件。"}
-                    </p>
-                )}
-                {source.more_count > 0 && (
-                    <Alert variant="warning">
-                        <AlertDescription>
-                            当前仅展示 {source.lines.length} 行摘要，另有{" "}
-                            {source.more_count}{" "}
-                            行未包含在摘要中。请核对提交附件；资料不足时请发起人补充后重新提交。
-                        </AlertDescription>
-                    </Alert>
-                )}
-            </section>
+            {lineDetails ?? (
+                <section className="space-y-3">
+                    <MaterialSectionHeading
+                        title={isChange ? "明细变化" : "提交资料摘要"}
+                        note={source.lines.length ? lineDiff : null}
+                    />
+                    {source.lines.length ? (
+                        <ul className="divide-y rounded-lg border text-body-compact">
+                            {source.lines.map((line, index) => (
+                                <SummaryLine
+                                    key={`${line.title}:${index}`}
+                                    line={line}
+                                />
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="rounded-lg border border-dashed px-4 py-3 text-xs text-muted-foreground">
+                            {lineDiff ??
+                                "暂无明细概览，请核对下方单据信息及附件。"}
+                        </p>
+                    )}
+                    {source.more_count > 0 && (
+                        <Alert variant="warning">
+                            <AlertDescription>
+                                当前仅展示 {source.lines.length} 行摘要，另有{" "}
+                                {source.more_count}{" "}
+                                行未包含在摘要中。请核对提交附件；资料不足时请发起人补充后重新提交。
+                            </AlertDescription>
+                        </Alert>
+                    )}
+                </section>
+            )}
             {impactSummary && (
                 <Alert variant="info" role="note">
                     <InfoIcon aria-hidden="true" />

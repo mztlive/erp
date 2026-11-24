@@ -1,6 +1,6 @@
 "use client"
 
-import type { ApprovalMaterials } from "../api/materials"
+import type { ApprovalMaterials, ApprovalPurchaseLine } from "../api/materials"
 import type { ReactNode } from "react"
 import { ApprovalMaterialFiles } from "./approval-material-files"
 import { ApprovalSalesOrderPaper } from "./approval-sales-order-paper"
@@ -9,8 +9,20 @@ import {
     MaterialSectionHeading,
     sectionValue,
 } from "./approval-submitted-summary"
-import { BusinessFailureState } from "@/components/business"
+import {
+    BusinessFailureState,
+    MoneyValue,
+    QuantityValue,
+} from "@/components/business"
 import { Spinner } from "@/components/ui/spinner"
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 import { displayBusinessText } from "@/lib/display-name"
 import {
@@ -164,6 +176,14 @@ export function ApprovalSubmittedMaterialsContent({
                     source={source}
                     submitterName={submitterName}
                     impactSummary={display.impact_summary}
+                    lineDetails={
+                        data.document_type === "purchase_order" &&
+                        data.purchase_lines ? (
+                            <ApprovalPurchaseLinesPreview
+                                lines={data.purchase_lines}
+                            />
+                        ) : undefined
+                    }
                 />
             )}
             {view === "all" && (display.source_sales ?? []).length > 0 && (
@@ -306,5 +326,92 @@ export function ApprovalSubmittedMaterialsContent({
                 </section>
             )}
         </article>
+    )
+}
+
+function ApprovalPurchaseLinesPreview({
+    lines,
+}: {
+    lines: ApprovalPurchaseLine[]
+}) {
+    return (
+        <section className="space-y-3">
+            <MaterialSectionHeading
+                title="采购明细"
+                note={`共 ${lines.length} 行`}
+            />
+            {lines.length ? (
+                <Table aria-label="本次提交的采购明细">
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead scope="col">序号</TableHead>
+                            <TableHead scope="col">商品 / 规格</TableHead>
+                            <TableHead scope="col" data-align="end">
+                                数量
+                            </TableHead>
+                            <TableHead scope="col" data-align="end">
+                                含税单价
+                            </TableHead>
+                            <TableHead scope="col" data-align="end">
+                                含税金额
+                            </TableHead>
+                            <TableHead scope="col">预计交付</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {lines.map((line) => {
+                            const spec = displayReadableName(line.specification)
+                            return (
+                                <TableRow key={line.id}>
+                                    <TableCell className="num">
+                                        {line.line_no}
+                                    </TableCell>
+                                    <TableCell className="min-w-36 whitespace-normal wrap-anywhere">
+                                        <p className="font-medium">
+                                            {displayReadableName(line.title) ||
+                                                "未记录商品名称"}
+                                        </p>
+                                        {spec && spec !== "无规格" ? (
+                                            <p className="text-xs text-muted-foreground">
+                                                {spec}
+                                            </p>
+                                        ) : null}
+                                    </TableCell>
+                                    <TableCell data-align="end">
+                                        {line.quantity == null ? (
+                                            "—"
+                                        ) : (
+                                            <QuantityValue
+                                                value={line.quantity}
+                                                unit={line.unitName}
+                                            />
+                                        )}
+                                    </TableCell>
+                                    <TableCell data-align="end">
+                                        <MoneyValue
+                                            display="exact"
+                                            value={line.unit_cost_gross}
+                                        />
+                                    </TableCell>
+                                    <TableCell data-align="end">
+                                        <MoneyValue
+                                            display="exact"
+                                            value={line.gross_amount}
+                                        />
+                                    </TableCell>
+                                    <TableCell className="num">
+                                        {line.expected_delivery_date ?? "—"}
+                                    </TableCell>
+                                </TableRow>
+                            )
+                        })}
+                    </TableBody>
+                </Table>
+            ) : (
+                <p className="text-xs text-muted-foreground">
+                    本次提交没有采购明细。
+                </p>
+            )}
+        </section>
     )
 }

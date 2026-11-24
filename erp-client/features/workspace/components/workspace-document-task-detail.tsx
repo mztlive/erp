@@ -71,10 +71,7 @@ import { useWorkspaceDocumentFacts } from "../hooks/use-workspace-document-facts
 import { useWorkspaceSourceSalesOrder } from "../hooks/use-workspace-source-sales-order"
 import { buildDocumentHref } from "../lib/destination"
 import { type DetailSection, splitDetailSections } from "../lib/detail-facts"
-import {
-    isApprovalWorkbenchTask,
-    isPurchaseApprovalTask,
-} from "../lib/navigation-eligibility"
+import { isApprovalWorkbenchTask } from "../lib/navigation-eligibility"
 import { workspacePaperKind } from "../lib/paper-kind"
 import {
     linkedDocumentHref,
@@ -102,7 +99,8 @@ import { WorkspaceMoney } from "./workspace-money"
 import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import {
     WorkspacePurchaseApproval,
-    assessPurchaseApprovalRisk,
+    WorkspacePurchaseApprovalSources,
+    purchaseApprovalRiskReasons,
 } from "./workspace-purchase-approval"
 import { WorkspacePurchasePayment } from "./workspace-purchase-payment"
 import { WorkspaceReceiptApproval } from "./workspace-receipt-approval"
@@ -111,6 +109,7 @@ import {
     WorkspaceSalesApproval,
     assessSalesApprovalRisk,
 } from "./workspace-sales-approval"
+import { WorkspaceSupplierRating } from "./workspace-supplier-rating"
 import { WorkspaceTaskHeaderActions } from "./workspace-task-context"
 import { WorkspaceCompactTaskHeader } from "./workspace-task-identity-header"
 import { WorkspaceTaskResponsibilityActions } from "./workspace-task-responsibility-actions"
@@ -127,6 +126,11 @@ const exactInvoiceFields = new Set([
 ])
 
 const HIGH_RISK_REFUND_THRESHOLD = "100000"
+
+type WorkspaceDetailField = DetailSection & {
+    content?: ReactNode
+    fullWidth?: boolean
+}
 
 function extractUnsignedDecimal(label?: string | null): string | null {
     if (!label) return null
@@ -181,14 +185,17 @@ export function WorkspaceDocumentTaskDetail({
     const currentPaperKind = workspacePaperKind(item.businessObjectType)
     const canReadPaper = Boolean(
         approvalDocument
-            ? instanceId && (!rework || canReadSubmission)
+            ? instanceId && canReadSubmission
             : currentPaperKind && item.businessObjectId.trim(),
     )
     const salesApproval =
         approvalDocument &&
         ["sales_order", "voucher_sales_order"].includes(item.businessObjectType)
     const purchaseApproval =
-        isPurchaseApprovalTask(item) && (!rework || canReadSubmission)
+        approvalDocument &&
+        item.businessObjectType === "purchase_order" &&
+        Boolean(instanceId) &&
+        canReadSubmission
     const receiptApproval =
         approvalDocument &&
         item.businessObjectType === "customer_receipt" &&
@@ -383,15 +390,17 @@ export function WorkspaceDocumentTaskDetail({
     )
     const compactStepperRoute = compactStepperHistoryQuery.data?.pages[0]?.route
 
-    const reworkFacts =
-        rework && submission
+    const submittedFacts =
+        (rework || purchaseApproval) && submission
             ? workspaceApprovalListFacts({
                   ...submission,
                   ...submission.display,
                   source_sales: submission.display.source_sales ?? [],
               })
             : undefined
-    const facts = rework ? reworkFacts : documentFacts.facts
+    const facts = rework
+        ? submittedFacts
+        : (submittedFacts ?? documentFacts.facts)
     const sections =
         facts?.sections ?? (rework ? [] : (item.summarySections ?? []))
     const summarySections = approvalDocument
@@ -409,7 +418,7 @@ export function WorkspaceDocumentTaskDetail({
         facts?.moreCount ?? (rework ? undefined : item.briefMoreCount)
     const counterpartyName = rework
         ? displayName(
-              salesSubmission?.customer_name ?? reworkFacts?.counterparty,
+              salesSubmission?.customer_name ?? submittedFacts?.counterparty,
               item.businessObjectId,
           )
         : (facts?.counterparty ?? item.counterpartyName)
@@ -458,7 +467,7 @@ export function WorkspaceDocumentTaskDetail({
     const applicantField = submitter
         ? [{ label: "申请人", value: submitter }]
         : []
-    const documentFields: readonly DetailSection[] = salesSubmission
+    const documentFields: readonly WorkspaceDetailField[] = salesSubmission
         ? [
               {
                   label: "客户",
@@ -526,16 +535,57 @@ export function WorkspaceDocumentTaskDetail({
               ...detailFacts.keyFields,
               ...detailFacts.moreFields,
           ]
-    const visibleDocumentFields = documentFields.filter(
-        ({ label }) =>
-            !(
-                item.businessObjectType === "sales_invoice_request" &&
-                label === "申请金额"
-            ) && !(invoiceApproval && exactInvoiceFields.has(label)),
+    const visibleDocumentFields: readonly WorkspaceDetailField[] =
+        documentFields.filter(
+            ({ label }) =>
+                !(
+                    item.businessObjectType === "sales_invoice_request" &&
+                    label === "申请金额"
+                ) &&
+                !(invoiceApproval && exactInvoiceFields.has(label)) &&
+                !(
+                    purchaseApproval &&
+                    (label === "供应商" || label === "提交号")
+                ) &&
+                !(purchaseApproval && submission && label === "来源销售单"),
+        )
+    const purchaseSupplier = submission?.display.source.extra_sections.find(
+        (field) => field.label === "供应商",
     )
-    const purchasePaymentTerm = documentFields.find(
-        (field) => field.label === "付款条件",
-    )?.value
+    const supplierName =
+        displayName(purchaseSupplier?.value, purchaseSupplier?.object_id) ??
+        displayName(submission?.display.counterparty_label) ??
+        "未记录供应商名称"
+    const informationFields: readonly WorkspaceDetailField[] =
+        purchaseApproval && instanceId && submission
+            ? [
+                  { label: "供应商", value: supplierName },
+                  ...visibleDocumentFields,
+                  {
+                      label: "最新供应商评估",
+                      value: "",
+                      fullWidth: true,
+                      content: (
+                          <WorkspaceSupplierRating
+                              rating={submission.latest_supplier_rating}
+                              compact
+                          />
+                      ),
+                  },
+                  {
+                      label: "来源销售单",
+                      value: "",
+                      fullWidth: true,
+                      content: (
+                          <WorkspacePurchaseApprovalSources
+                              instanceId={instanceId}
+                              sources={submission.display.source_sales ?? []}
+                              onPreview={setPaper}
+                          />
+                      ),
+                  },
+              ]
+            : visibleDocumentFields
     const lineCount = (briefLines?.length ?? 0) + (briefMoreCount ?? 0)
     const instance = item.approval
         ? {
@@ -565,8 +615,16 @@ export function WorkspaceDocumentTaskDetail({
         [item.actionBlockers],
     )
 
+    const purchaseRiskReasons = useMemo(
+        () =>
+            purchaseApproval
+                ? purchaseApprovalRiskReasons(submission?.purchase_lines)
+                : [],
+        [purchaseApproval, submission?.purchase_lines],
+    )
+
     const highRiskReasons = useMemo(() => {
-        const reasons: string[] = []
+        const reasons = [...purchaseRiskReasons]
         if (isReversalDocumentType(item.businessObjectType)) {
             reasons.push(
                 "红字冲正单据：审批通过后将冲回原收付款记录并同步调整往来余额。",
@@ -574,12 +632,6 @@ export function WorkspaceDocumentTaskDetail({
         }
         if (salesApproval && salesSubmission) {
             reasons.push(...assessSalesApprovalRisk(salesSubmission).reasons)
-        }
-        if (purchaseApproval && submission?.purchase_lines) {
-            reasons.push(
-                ...assessPurchaseApprovalRisk(submission.purchase_lines)
-                    .reasons,
-            )
         }
         if (invoiceApproval && invoiceReviewQuery.data) {
             const shortage = invoiceReviewQuery.data.amounts.shortage
@@ -617,11 +669,10 @@ export function WorkspaceDocumentTaskDetail({
         item.amountSummary?.value,
         item.businessObjectType,
         primaryAmount?.value,
-        purchaseApproval,
+        purchaseRiskReasons,
         salesApproval,
         salesSubmission,
         submission?.display.source.amount_label,
-        submission?.purchase_lines,
     ])
 
     const actions = reworkTask ? (
@@ -670,30 +721,6 @@ export function WorkspaceDocumentTaskDetail({
             item.allowedActions.includes("OPEN_DOCUMENT")),
     )
 
-    const purchaseInformation = purchaseApproval ? (
-        <FieldGrid
-            inline
-            className="border-t border-border/60 pt-3.5"
-            sections={documentFields.filter(
-                (field) =>
-                    field.label !== "供应商" &&
-                    field.label !== "来源销售单" &&
-                    field.label !== "提交号" &&
-                    !(primaryAmount && field.label === "付款条件"),
-            )}
-            returnTo={returnTo}
-            onPreview={(section) => {
-                const kind = linkedDocumentPaperKind(section.label)
-                if (!kind || !section.objectId) return
-                setPaper({
-                    kind,
-                    objectId: section.objectId,
-                    title: `${section.label} ${section.value}`,
-                })
-            }}
-        />
-    ) : null
-
     const timelineTarget = timelineDocumentTypes.has(item.businessObjectType)
         ? {
               kind: (item.workItemType === "APPROVAL_INSTANCE"
@@ -720,10 +747,7 @@ export function WorkspaceDocumentTaskDetail({
                     : "action"
             }
             idPrefix={`workspace-document-${toAutomationIdSegment(item.workItemId)}`}
-            className={cn(
-                "@container/document",
-                purchaseApproval && "purchase-approval-surface",
-            )}
+            className="@container/document"
             contextRail={
                 showDecisionRail && instanceId
                     ? {
@@ -944,6 +968,7 @@ export function WorkspaceDocumentTaskDetail({
                     />
                 ) : null}
                 {!salesSubmission &&
+                !purchaseApproval &&
                 !useInlineGenericSummary &&
                 !useStructuredDiffRenderer &&
                 !useFinancialRenderer &&
@@ -1022,28 +1047,7 @@ export function WorkspaceDocumentTaskDetail({
                                     </span>
                                 </div>
                             ))}
-                            {purchaseApproval && lineCount > 0 && (
-                                <div className="flex flex-col gap-0.5 border-l border-border/60 pl-6">
-                                    <span className="text-xs text-muted-foreground">
-                                        采购明细
-                                    </span>
-                                    <span className="num text-value-compact font-semibold tracking-tight text-foreground">
-                                        {lineCount} 项
-                                    </span>
-                                </div>
-                            )}
-                            {purchaseApproval && purchasePaymentTerm && (
-                                <div className="flex flex-col gap-0.5 border-l border-border/60 pl-6">
-                                    <span className="text-xs text-muted-foreground">
-                                        付款条件
-                                    </span>
-                                    <span className="mt-1 text-body-compact font-medium text-foreground">
-                                        {purchasePaymentTerm}
-                                    </span>
-                                </div>
-                            )}
                         </div>
-                        {purchaseInformation}
                     </DetailBlock>
                 ) : !hideCustomSummaryHeader && documentFacts.isPending ? (
                     <DetailBlock title="金额">
@@ -1053,27 +1057,10 @@ export function WorkspaceDocumentTaskDetail({
                     </DetailBlock>
                 ) : null}
 
-                {purchaseApproval && !primaryAmount && purchaseInformation ? (
-                    <DetailBlock compact>{purchaseInformation}</DetailBlock>
-                ) : null}
-                {purchaseApproval && instanceId ? (
-                    <WorkspacePurchaseApproval
-                        item={item}
-                        key={instanceId}
-                        instanceId={instanceId}
-                        onPreview={setPaper}
-                        onSelectFile={
-                            showDecisionRail
-                                ? handleSelectMaterialFile
-                                : undefined
-                        }
-                        activeFileId={activeMaterialFileId}
-                        hideEmbeddedMaterials={showDecisionRail}
-                    />
-                ) : useStructuredDiffRenderer &&
-                  structuredDiffDocType &&
-                  submission &&
-                  instanceId ? (
+                {useStructuredDiffRenderer &&
+                structuredDiffDocType &&
+                submission &&
+                instanceId ? (
                     <>
                         <StructuredDiffApprovalRenderer
                             documentType={structuredDiffDocType}
@@ -1167,15 +1154,23 @@ export function WorkspaceDocumentTaskDetail({
                     <>
                         {!receiptApproval &&
                         !deliveryBrief &&
-                        visibleDocumentFields.length > 0 ? (
+                        informationFields.length > 0 ? (
                             <DetailBlock
                                 title={
-                                    salesSubmission ? "销售单信息" : undefined
+                                    purchaseApproval
+                                        ? "采购单信息"
+                                        : salesSubmission
+                                          ? "销售单信息"
+                                          : undefined
                                 }
-                                width={salesSubmission ? "full" : "form"}
+                                width={
+                                    purchaseApproval || salesSubmission
+                                        ? "full"
+                                        : "form"
+                                }
                             >
                                 <FieldGrid
-                                    sections={visibleDocumentFields}
+                                    sections={informationFields}
                                     returnTo={returnTo}
                                     onPreview={(section) => {
                                         const kind = linkedDocumentPaperKind(
@@ -1222,6 +1217,17 @@ export function WorkspaceDocumentTaskDetail({
                                 : undefined
                         }
                         activeFileId={activeMaterialFileId}
+                        hideEmbeddedMaterials={showDecisionRail}
+                    />
+                ) : null}
+
+                {purchaseApproval && instanceId ? (
+                    <WorkspacePurchaseApproval
+                        key={instanceId}
+                        instanceId={instanceId}
+                        materials={materials}
+                        riskReasons={purchaseRiskReasons}
+                        onPreview={setPaper}
                         hideEmbeddedMaterials={showDecisionRail}
                     />
                 ) : null}
@@ -1352,34 +1358,23 @@ function FieldGrid({
     sections,
     returnTo,
     onPreview,
-    className,
-    inline = false,
 }: {
-    sections: readonly DetailSection[]
+    sections: readonly WorkspaceDetailField[]
     returnTo: string
     onPreview: (section: DetailSection) => void
-    className?: string
-    inline?: boolean
 }) {
     if (sections.length === 0) return null
     return (
         <DescriptionList
             columns="one"
-            className={cn(
-                inline
-                    ? "flex flex-wrap gap-x-8 gap-y-2"
-                    : "gap-y-2 @min-[640px]/document:grid-cols-2",
-                className,
-            )}
+            className="gap-y-2 @min-[640px]/document:grid-cols-2"
         >
             {sections.map((section) => (
                 <DescriptionItem
                     key={section.label}
                     className={cn(
-                        "items-baseline gap-3 space-y-0",
-                        inline
-                            ? "flex min-w-0"
-                            : "grid grid-cols-[6rem_minmax(0,1fr)]",
+                        "grid grid-cols-[6rem_minmax(0,1fr)] items-baseline gap-3 space-y-0",
+                        section.fullWidth && "col-span-full",
                     )}
                 >
                     <DescriptionTerm className="font-normal">
@@ -1387,17 +1382,18 @@ function FieldGrid({
                     </DescriptionTerm>
                     <DescriptionDetails
                         className={cn(section.numeric && "num")}
-                        title={section.value}
+                        title={section.value || undefined}
                     >
-                        {section.objectId ? (
-                            <LinkedDocumentValue
-                                section={section}
-                                returnTo={returnTo}
-                                onPreview={onPreview}
-                            />
-                        ) : (
-                            section.value
-                        )}
+                        {section.content ??
+                            (section.objectId ? (
+                                <LinkedDocumentValue
+                                    section={section}
+                                    returnTo={returnTo}
+                                    onPreview={onPreview}
+                                />
+                            ) : (
+                                section.value
+                            ))}
                     </DescriptionDetails>
                 </DescriptionItem>
             ))}

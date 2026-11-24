@@ -175,6 +175,10 @@ function WorkspaceQueueContent({
     const started = urlState.view === "started"
     const history = urlState.view === "history"
     const materials = useWorkspaceListMaterials(view.items)
+    const materialItems = useMemo(
+        () => materials.map((entry) => entry.item),
+        [materials],
+    )
     const rows = useMemo(
         () =>
             materials.map(({ item, materialNotice, retryMaterials }) =>
@@ -270,8 +274,8 @@ function WorkspaceQueueContent({
     const visibleSelectedItems = useMemo(() => {
         if (visibleSelectedIds.length === 0) return []
         const idSet = new Set(visibleSelectedIds)
-        return view.items.filter((item) => idSet.has(item.workItemId))
-    }, [view.items, visibleSelectedIds])
+        return materialItems.filter((item) => idSet.has(item.workItemId))
+    }, [materialItems, visibleSelectedIds])
 
     const allSelectedCanReassign =
         visibleSelectedItems.length > 0 &&
@@ -494,7 +498,7 @@ function WorkspaceQueueContent({
                 idPrefix="workspace-queue"
                 ariaLabel="我的事项"
                 layoutMode={layoutMode}
-                items={view.items}
+                items={materialItems}
                 getItemId={(item) => item.workItemId}
                 selectedId={activeInspectorId}
                 onSelectedIdChange={setActiveInspectorId}

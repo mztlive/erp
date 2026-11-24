@@ -28,31 +28,13 @@ import {
 } from "@/components/ui/table"
 import type { ApprovalPurchaseLine } from "@/features/approval-workflow/api/materials"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { compareDecimal } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 import {
+    isPurchaseCostAbove,
     purchaseComparison,
     type PurchaseSource,
 } from "./workspace-purchase-comparison-model"
 import { PurchaseComparisonRow } from "./workspace-purchase-comparison-row"
-
-function hasNegativeMargin(line: ApprovalPurchaseLine): boolean {
-    const cost = line.unit_cost_gross
-    const salesPrice = line.source?.unit_price_gross
-    if (cost == null || cost === "" || salesPrice == null || salesPrice === "")
-        return false
-    const unitMismatch = Boolean(
-        line.unit?.trim() &&
-        line.source?.unit?.trim() &&
-        line.unit.trim() !== line.source.unit.trim(),
-    )
-    if (unitMismatch) return false
-    try {
-        return compareDecimal(cost, salesPrice, 6) > 0
-    } catch {
-        return false
-    }
-}
 
 /** 搜索、提示计数和分页均基于本次审批返回的全部冻结明细。 */
 export function WorkspacePurchaseComparisonTable({
@@ -86,7 +68,10 @@ export function WorkspacePurchaseComparisonTable({
             lines.map((line) => ({
                 line,
                 comparison: purchaseComparison(line),
-                negativeMargin: hasNegativeMargin(line),
+                negativeMargin: isPurchaseCostAbove(
+                    line,
+                    line.source?.unit_price_gross,
+                ),
             })),
         [lines],
     )
@@ -198,38 +183,38 @@ export function WorkspacePurchaseComparisonTable({
                         />
                     </div>
                 </div>
-                <TableToolbar
-                    actions={
-                        search || attentionOnly ? (
-                            <Button
-                                id={`${prefix}-clear-filters`}
-                                variant="ghost"
-                                size="sm"
-                                className={detailWorkspaceStyles.quietButton}
-                                onClick={clearFilters}
-                            >
-                                清除筛选
-                            </Button>
-                        ) : undefined
-                    }
-                >
-                    <span
-                        className="text-xs text-muted-foreground"
-                        role="status"
-                        aria-live="polite"
+                {search || attentionOnly || showPagination ? (
+                    <TableToolbar
+                        actions={
+                            search || attentionOnly ? (
+                                <Button
+                                    id={`${prefix}-clear-filters`}
+                                    variant="ghost"
+                                    size="sm"
+                                    className={
+                                        detailWorkspaceStyles.quietButton
+                                    }
+                                    onClick={clearFilters}
+                                >
+                                    清除筛选
+                                </Button>
+                            ) : undefined
+                        }
                     >
-                        共 {lines.length} 项
-                        {search || attentionOnly
-                            ? ` · 筛选结果 ${filtered.length} 项`
-                            : ""}
-                        {showPagination
-                            ? ` · 当前显示 ${visible.length ? (currentPage - 1) * pageSize + 1 : 0}–${Math.min(currentPage * pageSize, filtered.length)} 项`
-                            : ""}
-                        {attentionCount > 0
-                            ? " · 点击异常行可展开明细对比"
-                            : ""}
-                    </span>
-                </TableToolbar>
+                        <span
+                            className="text-xs text-muted-foreground"
+                            role="status"
+                            aria-live="polite"
+                        >
+                            {search || attentionOnly
+                                ? `筛选结果 ${filtered.length} 行`
+                                : `共 ${filtered.length} 行`}
+                            {showPagination
+                                ? ` · 当前显示 ${visible.length ? (currentPage - 1) * pageSize + 1 : 0}–${Math.min(currentPage * pageSize, filtered.length)} 行`
+                                : ""}
+                        </span>
+                    </TableToolbar>
+                ) : null}
                 <div
                     id={`${prefix}-table-scroll`}
                     data-slot="detail-inline-table"
@@ -237,29 +222,30 @@ export function WorkspacePurchaseComparisonTable({
                     aria-label="采购与销售明细对照"
                     className={detailWorkspaceStyles.inlineTableWrapper}
                 >
-                    <Table className="w-full [&_:is(th,td):first-child]:ps-0">
+                    <Table
+                        aria-label="采购明细"
+                        className="w-full [&_:is(th,td):first-child]:ps-0"
+                    >
                         <TableCaption className="sr-only">
-                            本次提交的采购与来源销售逐行对照；筛选及分页不改变整单审批范围。
+                            销售数量为来源行全部需求，供给价为销售填写的预计采购含税单价。审批适用于整份采购单。
                         </TableCaption>
                         <TableHeader>
                             <TableRow>
                                 <TableHead scope="col" className="w-9">
-                                    <span className="sr-only">行号</span>
+                                    序号
                                 </TableHead>
                                 <TableHead scope="col">商品 / 规格</TableHead>
                                 <TableHead scope="col" data-align="end">
-                                    数量（销 / 采）
-                                </TableHead>
-                                <TableHead scope="col">售价 / 供给价</TableHead>
-                                <TableHead scope="col" data-align="end">
-                                    本次采购单价
+                                    数量
                                 </TableHead>
                                 <TableHead scope="col">
-                                    交期（销 / 采）
+                                    含税单价 / 供给价
                                 </TableHead>
-                                <TableHead scope="col">核对提示</TableHead>
-                                <TableHead scope="col" className="w-9">
-                                    <span className="sr-only">补充信息</span>
+                                <TableHead scope="col" data-align="end">
+                                    金额 / 税率
+                                </TableHead>
+                                <TableHead scope="col" data-align="end">
+                                    明细对照
                                 </TableHead>
                             </TableRow>
                         </TableHeader>
@@ -291,7 +277,7 @@ export function WorkspacePurchaseComparisonTable({
                             {!visible.length && (
                                 <TableRow>
                                     <TableCell
-                                        colSpan={8}
+                                        colSpan={6}
                                         className="py-12 text-center text-muted-foreground"
                                     >
                                         {attentionOnly && !search
@@ -303,9 +289,6 @@ export function WorkspacePurchaseComparisonTable({
                         </TableBody>
                     </Table>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                    供给价为销售开单时填写的预计采购含税单价；销售数量为来源行全部需求，本次采购仅覆盖其中的采购数量。部分数量采购不直接视为异常。销售日期为客户承诺交期，采购日期为预计交付日。
-                </p>
                 {showPagination ? (
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
